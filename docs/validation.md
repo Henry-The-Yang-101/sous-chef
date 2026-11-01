@@ -310,3 +310,20 @@ scales retained locomotion by native surface slippiness while continuing to
 check wind/platform drift and native settled velocity before arrival. Build/audit
 checks still pass. Evidence: `.local/contact-navigation.ndjson` and
 `.local/contact-before.json` / `.local/contact-after.json`.
+
+After loading the arrival projection fix, a different Arcade Couch kitchen passed
+both dispenser checks: orange in 0.927 seconds and flour in 4.201 seconds. Each
+recorded exactly one walking → aligning → idle sequence, with alignment lasting
+0.17–0.23 seconds, native target selection, zero facing error and pickup allowed.
+The flour arrival settled at 0.221 units of stance error within the hysteresis band.
+Neither route required a second command.
+
+A deliberate 0.30-second Player 2 movement into the flour dispenser counter left
+the chef resting at approximately `[6.018, 0, -9.4]`. The catalogue still exposed
+23 destinations and ten valid start connectors. One navigate command from that
+wall contact to the dried-fruit dispenser completed in 0.391 seconds, with one
+alignment phase, 0.087-unit stance error, zero facing error and pickup allowed.
+No pickup or dash buttons were sent during these follow-up checks. This verifies
+the tested contact/arrival cases, not every wall shape, slippery surface or cause
+of cancellation. Evidence: `.local/contact-final-navigation.ndjson`,
+`.local/wall-contact.json`, and `.local/wall-contact-result.json`.
