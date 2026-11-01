@@ -5,7 +5,7 @@ namespace SousChef.Core
 {
     public sealed class ControlCommand
     {
-        public string Operation, Id, Destination;
+        public string Operation, Id, Destination, Condition, DesiredState;
         public long Sequence;
         public int Milliseconds, Buttons;
         public float X, Y;
@@ -23,10 +23,32 @@ namespace SousChef.Core
                 if (p.Length != 2) throw new ArgumentException("invalid_arguments");
                 return result;
             }
-            if (p[0] == "navigate_to")
+            if (p[0] == "navigate_to" || p[0] == "pick_up" || p[0] == "place_at" ||
+                p[0] == "add_ingredient" || p[0] == "discard" || p[0] == "throw_to" ||
+                p[0] == "work_at" || p[0] == "activate" || p[0] == "wait_until")
             {
-                if (p.Length != 3 || p[2].Length < 2 || p[2].Length > 32 || p[2][0] != 'd') throw new ArgumentException("invalid_destination");
+                int count = p[0] == "work_at" || p[0] == "wait_until" ? 5 : p[0] == "activate" ? 4 : 3;
+                if (p.Length != count || p[2].Length < 2 || p[2].Length > 32 || p[2][0] != 'd') throw new ArgumentException("invalid_destination");
                 for (int i = 1; i < p[2].Length; i++) if (p[2][i] < '0' || p[2][i] > '9') throw new ArgumentException("invalid_destination");
+                result.Destination = p[2];
+                if (p[0] == "activate")
+                {
+                    if (p[3] != "on" && p[3] != "off" && p[3] != "trigger") throw new ArgumentException("invalid_state");
+                    result.DesiredState = p[3];
+                }
+                if (count == 5)
+                {
+                    string[] conditions = p[0] == "work_at" ? ActionRun.WorkConditions : ActionRun.WaitConditions;
+                    if (Array.IndexOf(conditions, p[3]) < 0) throw new ArgumentException("invalid_condition");
+                    if (!Int32.TryParse(p[4], NumberStyles.None, CultureInfo.InvariantCulture, out result.Milliseconds) ||
+                        result.Milliseconds < 100 || result.Milliseconds > 120000) throw new ArgumentException("invalid_timeout");
+                    result.Condition = p[3];
+                }
+                return result;
+            }
+            if (p[0] == "throw_to_player")
+            {
+                if (p.Length != 3 || (p[2] != "1" && p[2] != "3" && p[2] != "4")) throw new ArgumentException("invalid_player");
                 result.Destination = p[2]; return result;
             }
             if (p[0] != "input" || p.Length != 7) throw new ArgumentException("invalid_command");

@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems><TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../src/Core/Navigation.cs" /><Compile Include="../../src/Core/Json.cs" />
+    <Compile Include="../../src/Core/ActionRun.cs" /><Compile Include="../../src/Core/ControlLease.cs" /><Compile Include="../../src/Core/ThrowTrajectory.cs" />
+    <Compile Include="../../src/Plugin/Navigation/*.cs" /><Compile Include="../../src/Plugin/Actions/*.cs" />
+    <Compile Include="../navigation/Stubs.cs" /><Compile Include="ActionStubs.cs" /><Compile Include="Program.cs" />
+  </ItemGroup>
+</Project>

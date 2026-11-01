@@ -10,6 +10,9 @@ namespace UnityEngine
     public class Object
     {
         private static int next;
+        internal static readonly List<Object> All = new List<Object>();
+        public Object() { All.Add(this); }
+        public static T[] FindObjectsOfType<T>() { return All.OfType<T>().ToArray(); }
         private readonly int id = ++next;
         public int GetInstanceID() { return id; }
     }
@@ -24,6 +27,7 @@ namespace UnityEngine
         public T Add<T>(T component) where T : Component { component.gameObject = this; components.Add(component); return component; }
         public T GetComponent<T>() where T : class { return components.OfType<T>().FirstOrDefault(); }
         public T[] GetComponents<T>() { return components.OfType<T>().ToArray(); }
+        public T[] GetComponentsInChildren<T>() { return Object.All.OfType<Component>().Where(c => c.gameObject != null && c.transform.IsChildOf(transform)).OfType<T>().ToArray(); }
         public T GetComponentInParent<T>() where T : class
         { for (Transform t = transform; t != null; t = t.parent) { T c = t.GetComponent<T>(); if (c != null) return c; } return null; }
         public bool CompareTag(string value) { return tag == value; }
@@ -67,6 +71,8 @@ namespace UnityEngine
         public Vector3 normalized { get { return magnitude < .000001f ? zero : this/magnitude; } }
         public void Normalize() { this = normalized; }
         public static Vector3 operator +(Vector3 a, Vector3 b) { return new Vector3(a.x+b.x,a.y+b.y,a.z+b.z); }
+        public static Vector3 operator -(Vector3 a) { return a * -1; }
+        public static float Angle(Vector3 a,Vector3 b) { return (float)Math.Acos(Math.Clamp(Dot(a.normalized,b.normalized),-1,1))*Mathf.Rad2Deg; }
         public static Vector3 operator -(Vector3 a, Vector3 b) { return new Vector3(a.x-b.x,a.y-b.y,a.z-b.z); }
         public static Vector3 operator *(Vector3 a, float b) { return new Vector3(a.x*b,a.y*b,a.z*b); }
         public static Vector3 operator /(Vector3 a, float b) { return a*(1/b); }
@@ -76,7 +82,8 @@ namespace UnityEngine
         public override bool Equals(object obj) { return obj is Vector3 v && x==v.x && y==v.y && z==v.z; }
         public override int GetHashCode() { return HashCode.Combine(x,y,z); }
     }
-    public struct Vector2 { public float x,y; public Vector2(float a,float b) { x=a;y=b; } }
+    public struct Vector2 { public float x,y; public Vector2(float a,float b) { x=a;y=b; } public float magnitude { get { return (float)Math.Sqrt(x*x+y*y); } } }
+    public struct Quaternion { public float Yaw; public static Quaternion LookRotation(Vector3 d) { return new Quaternion { Yaw=(float)Math.Atan2(d.x,d.z) }; } public static Vector3 operator *(Quaternion q,Vector3 p) { float c=(float)Math.Cos(q.Yaw),s=(float)Math.Sin(q.Yaw);return new Vector3(p.x*c+p.z*s,p.y,p.z*c-p.x*s); } }
     public struct Matrix4x4
     {
         public Vector3 Position; public float Yaw;
@@ -89,6 +96,9 @@ namespace UnityEngine
     {
         public Vector3 center, extents;
         public Bounds(Vector3 c,Vector3 size) { center=c;extents=size*.5f; }
+        public Vector3 size { get { return extents*2; } }
+        public bool Contains(Vector3 p) { return p.x>=min.x && p.x<=max.x && p.y>=min.y && p.y<=max.y && p.z>=min.z && p.z<=max.z; }
+        public void Encapsulate(Bounds b) { Vector3 low=new Vector3(Math.Min(min.x,b.min.x),Math.Min(min.y,b.min.y),Math.Min(min.z,b.min.z)), high=new Vector3(Math.Max(max.x,b.max.x),Math.Max(max.y,b.max.y),Math.Max(max.z,b.max.z));center=(low+high)*.5f;extents=(high-low)*.5f; }
         public Vector3 min { get { return center-extents; } }
         public Vector3 max { get { return center+extents; } }
         public Vector3 ClosestPoint(Vector3 p) { return new Vector3(Mathf.Clamp(p.x,min.x,max.x),Mathf.Clamp(p.y,min.y,max.y),Mathf.Clamp(p.z,min.z,max.z)); }
@@ -111,7 +121,10 @@ namespace UnityEngine
     public enum QueryTriggerInteraction { Collide, Ignore }
     public static class Physics
     {
+        public static Vector3 gravity = new Vector3(0,-9.81f,0);
         public static Func<Vector3,float,Collider[]> Nearby;
+        public static Func<Vector3,float,Vector3,float,RaycastHit[]> Sphere = (p,r,d,length) => new RaycastHit[0];
+        public static int SphereCastNonAlloc(Vector3 p,float r,Vector3 d,RaycastHit[] output,float length,int mask,QueryTriggerInteraction q) { return Copy(Sphere(p,r,d,length),output); }
         public static Func<Vector3,Vector3,float,int,RaycastHit[]> Ray;
         public static Func<Vector3,Vector3,float,Collider[]> Overlap;
         public static Func<Vector3,Vector3,float,Vector3,float,RaycastHit[]> Cast;
@@ -124,7 +137,10 @@ namespace UnityEngine
     }
     public static class Mathf
     {
-        public const float Rad2Deg = 57.29578f;
+        public const float Rad2Deg = 57.29578f, Deg2Rad = .017453292f, PI = (float)Math.PI;
+        public static float Tan(float x) { return (float)Math.Tan(x); }
+        public static float Sin(float x) { return (float)Math.Sin(x); }
+        public static float Cos(float x) { return (float)Math.Cos(x); }
         public static float Abs(float x) { return Math.Abs(x); }
         public static float Min(float a,float b) { return Math.Min(a,b); }
         public static int Min(int a,int b) { return Math.Min(a,b); }
@@ -137,7 +153,7 @@ namespace UnityEngine
         public static int CeilToInt(float x) { return (int)Math.Ceiling(x); }
         public static float Acos(float x) { return (float)Math.Acos(x); }
     }
-    public static class Time { public static float realtimeSinceStartup, deltaTime=1f/60, unscaledDeltaTime=1f/60; }
+    public static class Time { public static int frameCount; public static float realtimeSinceStartup, deltaTime=1f/60, unscaledDeltaTime=1f/60, fixedDeltaTime=.02f; }
 }
 
 #pragma warning disable CS0414 // Reflection fields must match the installed game.
@@ -150,6 +166,8 @@ public class PlayerControls : UnityEngine.MonoBehaviour
     public sealed class MovementData { public float StepHeightMax=.65f,RunSpeed=4,MaxSpeed=4,TurnSpeed=360; }
     public MovementData Movement = new MovementData();
     public float MovementScale = 1;
+    public bool m_bRespawning;
+    public bool GetDirectlyUnderPlayerControl() { return true; }
     public UnityEngine.Collider GroundCollider;
     public PlayerIDProvider PlayerIDProvider { get { return GetComponent<PlayerIDProvider>(); } }
     public WindAccumulator WindReceiver = new WindAccumulator();
@@ -159,7 +177,7 @@ public class PlayerControls : UnityEngine.MonoBehaviour
     public InteractionObjects CurrentInteractionObjects = new InteractionObjects();
     public object GetActiveControlsImpl() { return new PlayerControlsImpl_Default(); }
 }
-public class PlayerIDProvider : UnityEngine.Component { public int GetID() { return 2; } }
+public class PlayerIDProvider : UnityEngine.Component { public int Id=1; public int GetID() { return Id; } }
 public static class PlayerInputLookup
 {
     public class Entry { public bool IsLocal() { return true; } }
@@ -169,8 +187,8 @@ public static class PlayerInputLookup
 public class WindVolume : UnityEngine.MonoBehaviour { private UnityEngine.LayerMask m_windFilter = ~0; public UnityEngine.Vector3 Velocity; public UnityEngine.Vector3 GetVelocity() { return Velocity; } }
 #pragma warning restore CS0414
 public class WindAccumulator { public UnityEngine.Vector3 Velocity; public UnityEngine.Vector3 GetVelocity() { return Velocity; } }
-public class SurfaceMovable { public UnityEngine.Vector3 Velocity; public UnityEngine.Vector3 GetVelocity() { return Velocity; } }
-public class RigidbodyMotion { public UnityEngine.Vector3 Velocity; public UnityEngine.Vector3 GetVelocityXZ() { return Velocity; } }
+public class SurfaceMovable : UnityEngine.MonoBehaviour { public UnityEngine.Vector3 Velocity; public UnityEngine.Vector3 GetVelocity() { return Velocity; } }
+public class RigidbodyMotion { public UnityEngine.Vector3 Velocity; public UnityEngine.Vector3 GetVelocity() { return Velocity; } public UnityEngine.Vector3 GetVelocityXZ() { return Velocity; } }
 public interface IMovingSurface { UnityEngine.Vector3 CalculateVelocityAtPoint(UnityEngine.Vector3 point, IMovingSurface previous); }
 public class PlayerPhysicsSurfaceProperties { public bool UseOverrideGravityNormal; public float Slidiness,Slippiness,SpeedMultiplier=1; }
 public class PlayerPhysicsSurface : UnityEngine.MonoBehaviour { public PlayerPhysicsSurfaceProperties Properties = new PlayerPhysicsSurfaceProperties(); }
@@ -184,13 +202,13 @@ public class PickupItemSpawner : UnityEngine.MonoBehaviour { public UnityEngine.
 public class CookingStation : UnityEngine.MonoBehaviour { }
 public class PlateReturnStation : UnityEngine.MonoBehaviour { }
 public class PlateStackBase : UnityEngine.MonoBehaviour { }
-public class PhysicalAttachment : UnityEngine.MonoBehaviour { }
+public class PhysicalAttachment : UnityEngine.MonoBehaviour { public RigidbodyParams m_rigidBodyParams = new RigidbodyParams(); public class RigidbodyParams { public float m_drag;public bool m_useGravity=true; } }
 public class AttachStation : UnityEngine.MonoBehaviour { }
 public interface IPickup { bool CanHandlePickup(ClientPlayerAttachmentCarrier carrier); }
 public interface IPlacement { bool CanHandlePlacement(ClientPlayerAttachmentCarrier carrier,UnityEngine.Vector2 forward,PlacementContext context); }
 public class PlacementContext { public enum Source { Player } public PlacementContext(Source s) { } }
 public class ClientPlayerAttachmentCarrier : UnityEngine.MonoBehaviour { public UnityEngine.GameObject Item; public UnityEngine.GameObject InspectCarriedItem() { return Item; } }
-public class ClientInteractable : UnityEngine.MonoBehaviour { public bool CanInteract(UnityEngine.GameObject chef) { return true; } }
+public class ClientInteractable : UnityEngine.MonoBehaviour { public bool UsePlacementButton, Allowed=true; public bool CanInteract(UnityEngine.GameObject chef) { return Allowed; } }
 public class InteractionObjects
 {
     public UnityEngine.GameObject m_TheOriginalHandlePickup;

@@ -16,6 +16,7 @@ namespace SousChef.Plugin.Navigation
             public WalkCell Goal;
             public Vector3 Approach, LocalApproach;
             public float Distance;
+            public bool IsPoint;
         }
         private readonly WalkPhysics physics = new WalkPhysics();
         public readonly ChefActionState Action = new ChefActionState();
@@ -43,6 +44,58 @@ namespace SousChef.Plugin.Navigation
         private string observationError;
         private bool planning;
         public NavigationActions(Action<Vector3, int> walk, Action halt) { move = walk; neutral = halt; }
+        public GameObject Resolve(string id)
+        {
+            foreach (Destination d in identities.Values) if (d.Id == id && d.Object != null && d.Object.activeInHierarchy) return d.Object;
+            return null;
+        }
+        public List<GameObject> Targets()
+        {
+            var result = new List<GameObject>();
+            foreach (Destination d in identities.Values) if (d.Object != null && d.Object.activeInHierarchy) result.Add(d.Object);
+            return result;
+        }
+        public string IdFor(GameObject go)
+        {
+            Destination d;
+            return go != null && identities.TryGetValue(go.GetInstanceID(), out d) && d.Object == go ? d.Id : null;
+        }
+        public string StartPosition(PlayerControls player, int owner, GameObject aim, Vector3 position)
+        {
+            if (Action.State != "idle") return "action_in_progress";
+            chef = player;
+            var chosen = new Destination { Id = "throw_stance", Object = aim, Kind = "throw_stance", IsPoint = true, Approach = position };
+            if (!Action.Start(owner, chosen.Id, true)) return "action_in_progress";
+            target = chosen; started = lastProgress = Time.realtimeSinceStartup; progressPosition = player.transform.position;
+            arrivalDetails = null; arrival.Reset(); facingSince = -1; haveMotion = motionSampleValid = false;
+            Refresh(player, true);
+            if (!ApplyPlan()) return Action.Reason;
+            return null;
+        }
+        public bool CanStand(PlayerControls player, Vector3 point, out Vector3 stance)
+        {
+            stance = Vector3.zero;
+            if (physics.Refresh(player) != null) return false;
+            Collider ground;
+            return physics.Stand(point, out stance, out ground);
+        }
+        public void PrepareStances(PlayerControls player) { Refresh(player, true); }
+        public bool TryStance(Vector3 point, out Vector3 stance)
+        { Collider ground; return physics.Stand(point, out stance, out ground); }
+        public float RouteCost(Vector3 stance)
+        {
+            float best = Single.MaxValue;
+            if (Vector3.Distance(physics.Position, stance) < .01f && physics.Segment(physics.Position, stance)) return 0;
+            if (search == null) return best;
+            foreach (WalkCell cell in search.Settled)
+            {
+                Vector3 p = physics.Point(cell); float distance = Vector3.Distance(p, stance);
+                if (distance > WalkPhysics.Spacing * 2) continue;
+                float cost = search.Distances[cell] + distance;
+                if (cost < best && physics.Segment(p, stance)) best = cost;
+            }
+            return best;
+        }
         public void Reset(string reason)
         {
             Stop(reason); lastDestination = arrivalDetails = null; identities.Clear(); available.Clear(); physics.Reset(); search = null; chef = null; lastPlan = -1; unavailable = reason;
@@ -90,6 +143,7 @@ namespace SousChef.Plugin.Navigation
             var destinations = new List<object>();
             foreach (Destination d in available.Values)
             {
+                if (d.IsPoint) continue; // Generated release stances are internal, never wire target IDs.
                 Vector3 offset = d.Object.transform.position - physics.Position; offset.y = 0;
                 destinations.Add(Json.Object("id", d.Id, "label", d.Object.name, "kind", d.Kind,
                     "foodName", FoodName(d.Object),
@@ -154,7 +208,8 @@ namespace SousChef.Plugin.Navigation
                 { warmTicks--; Refresh(player, true); }
                 return;
             }
-            if (player != chef || target == null || !Eligible(target.Object, player, out target.Kind)) { Stop("destination_unavailable"); return; }
+            if (player != chef || target == null || target.Object == null ||
+                (!target.IsPoint && !Eligible(target.Object, player, out target.Kind))) { Stop("destination_unavailable"); return; }
             int commandMilliseconds = WalkingCommand.Milliseconds(Time.unscaledDeltaTime);
             if (commandMilliseconds == 0) { Stop("unsafe_update_interval"); return; }
             string error = physics.Refresh(player);
@@ -224,6 +279,11 @@ namespace SousChef.Plugin.Navigation
         private bool TargetMoved()
         {
             if (target == null || route == null || route.Count == 0) return true;
+            if (target.IsPoint)
+            {
+                Vector3 point; Collider support;
+                return !physics.Stand(target.Approach, out point, out support) || Vector3.Distance(point, target.Approach) > .04f;
+            }
             foreach (Collider c in target.Colliders)
             {
                 Vector3 stance;
@@ -240,7 +300,7 @@ namespace SousChef.Plugin.Navigation
                 // Transport the previous chef pose with the destination. This
                 // measures translation/rotation of a shared moving platform
                 // without mistaking it for movement past the target.
-                Vector3 transported = target.Object.transform.TransformPoint(motionLocalPosition);
+                Vector3 transported = target.IsPoint ? motionPosition : target.Object.transform.TransformPoint(motionLocalPosition);
                 targetVelocity = (transported - motionPosition) / elapsed; targetVelocity.y = 0;
                 Vector3 relative = position - transported; relative.y = 0;
                 observedRelativeSpeed = relative.magnitude / elapsed;
@@ -274,9 +334,9 @@ namespace SousChef.Plugin.Navigation
                 chef.Movement.TurnSpeed, Mathf.Min(Time.deltaTime, .05f));
             float distance = Vector3.Distance(position, target.Approach);
             float dot = Vector3.Dot(chef.transform.forward.normalized, direction.normalized);
-            bool selected = Selected(target.Object), canPickup, canPlace, canUse;
+            bool selected = target.IsPoint || Selected(target.Object), canPickup, canPlace, canUse;
             Readiness(out canPickup, out canPlace, out canUse);
-            bool ready = canPickup || canPlace || canUse;
+            bool ready = target.IsPoint || canPickup || canPlace || canUse;
             Vector3 relativeVelocity = velocity + drift - targetVelocity; relativeVelocity.y = 0;
             float relativeSpeed = Mathf.Max(observedRelativeSpeed, relativeVelocity.magnitude);
             bool positioned = arrival.Observe(now, distance, dot, relativeSpeed, selected);
@@ -383,7 +443,7 @@ namespace SousChef.Plugin.Navigation
                 string error = alreadyRefreshed ? null : physics.Refresh(player);
                 if (error != null) { unavailable = error; return; }
                 observationError = null;
-                List<Destination> candidates = Discover(player); candidateCount = candidates.Count;
+                List<Destination> candidates = target != null && target.IsPoint ? new List<Destination> { target } : Discover(player); candidateCount = candidates.Count;
                 var starts = new List<WalkEdge>(physics.Starts()); startCount = starts.Count;
                 if (startCount == 0) { unavailable = "no_safe_start"; return; }
                 prepareMilliseconds = watch.Elapsed.TotalMilliseconds;
@@ -404,6 +464,20 @@ namespace SousChef.Plugin.Navigation
                 }
                 foreach (Destination d in candidates)
                 {
+                    if (d.IsPoint)
+                    {
+                        float pointBest = Single.MaxValue; WalkCell pointGoal = new WalkCell();
+                        foreach (WalkCell cell in search.Settled)
+                        {
+                            Vector3 point = physics.Point(cell); float connector = Vector3.Distance(point, d.Approach);
+                            if (connector > WalkPhysics.Spacing * 2) continue;
+                            float cost = search.Distances[cell] + connector;
+                            if (cost < pointBest && physics.Segment(point, d.Approach)) { pointBest = cost; pointGoal = cell; }
+                        }
+                        if (pointBest < Single.MaxValue)
+                        { d.Goal = pointGoal; d.Distance = pointBest; d.LocalApproach = d.Object.transform.InverseTransformPoint(d.Approach); available[d.Id] = d; }
+                        continue;
+                    }
                     float best = Single.MaxValue; WalkCell goal = new WalkCell(); Vector3 bestApproach = Vector3.zero;
                     float preferred = Single.MaxValue; WalkCell preferredGoal = new WalkCell(); Vector3 preferredApproach = Vector3.zero;
                     // Do not chase a newly cheapest side/stance on every refresh

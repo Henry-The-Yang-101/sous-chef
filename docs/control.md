@@ -1,6 +1,7 @@
 # Direct Player 2 control
 
 For autonomous walking and interruption, use [navigation actions](navigation.md).
+For autonomous interactions and targeted throws, use [first-layer actions](actions.md).
 The raw input API below remains available for low-level mechanics.
 
 Create two local players manually using the game's Split Controller option,
@@ -33,6 +34,9 @@ Buttons are `pickup` (pickup/drop), `use` (work/interact/aim/throw according to
 native context), and `dash`. Hold `use` for chopping/washing; throwing uses the
 game's ordinary press/hold/release behavior. No direct object pickup, teleport,
 forced interaction, menu, pause, or chef-switch command is exposed.
+First-layer actions additionally use the native interaction-end protocol to
+clean up their own sticky work when finishing or cancelling; raw input does not
+invoke this cleanup for unrelated interactions.
 
 ```sh
 python3 clients/control.py                         # status only

@@ -28,6 +28,29 @@ def reply(n, **fields):
 
 
 class ActionsTests(unittest.TestCase):
+    def test_first_layer_actions_have_typed_wire_commands(self):
+        c = client(*(reply(i) for i in range(1, 10)))
+        c.pick_up('d1'); c.place_at('d2'); c.add_ingredient('d3')
+        c.work_at('d4', 'one_plate_clean', 12.5); c.activate('d5', 'off')
+        c.discard('d6'); c.wait_until('d7', 'cooked', 30)
+        c.throw_to('d8'); c.throw_to_player(1)
+        self.assertEqual(c.socket.sent, [
+            b'pick_up 1 d1\n', b'place_at 2 d2\n', b'add_ingredient 3 d3\n',
+            b'work_at 4 d4 one_plate_clean 12500\n', b'activate 5 d5 off\n',
+            b'discard 6 d6\n', b'wait_until 7 d7 cooked 30000\n',
+            b'throw_to 8 d8\n', b'throw_to_player 9 1\n'])
+
+    def test_action_arguments_reject_injection_and_unbounded_waits(self):
+        c = client()
+        calls = [lambda: c.activate('d1', 'on\nstop r'), lambda: c.work_at('d1', 'forever'),
+                 lambda: c.wait_until('d1', 'arbitrary_expression'), lambda: c.throw_to('d1 stop r')]
+        calls += [lambda value=v: c.wait_until('d1', 'empty', value)
+                  for v in (True, 0, -.1, 120.001, float('inf'), float('nan'), '60')]
+        calls += [lambda value=v: c.throw_to_player(value) for v in (True, 2, 0, '1', 1.0)]
+        for call in calls:
+            with self.assertRaises(ValueError): call()
+        self.assertEqual(c.socket.sent, [])
+
     def test_catalog_is_typed_and_navigation_sends_only_target(self):
         catalog = {'actions': [{'name': 'stop'}, {'name': 'navigate_to'}], 'destinations': [{'id': 'd7'}]}
         c = client(reply(1, availableActions=catalog), reply(2), reply(3))

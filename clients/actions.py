@@ -2,6 +2,7 @@
 """Typed autonomous Player 2 actions; the caller never supplies steering input."""
 import argparse
 import json
+import math
 import time
 try:
     from .control import ControlClient, ControlError
@@ -10,16 +11,66 @@ except ImportError:
 
 
 class ActionClient(ControlClient):
+    WORK_CONDITIONS = ('work_complete', 'one_plate_clean', 'sink_empty')
+    WAIT_CONDITIONS = (*WORK_CONDITIONS, 'occupied', 'empty', 'cooked', 'mixed', 'reachable', 'ready')
+
     def available_actions(self):
         self._request('actions')
         return self.last_response['availableActions']
 
     def navigate_to(self, destination_id):
+        return self._target('navigate_to', destination_id)
+
+    def _target(self, operation, destination_id, *arguments):
         if (not isinstance(destination_id, str) or not 2 <= len(destination_id) <= 32
                 or destination_id[0] != 'd' or not destination_id[1:].isascii()
                 or not destination_id[1:].isdigit()):
             raise ValueError('Use a destination ID from available_actions()')
-        return self._request('navigate_to', destination_id)
+        return self._request(operation, destination_id, *arguments)
+
+    def pick_up(self, target_id):
+        return self._target('pick_up', target_id)
+
+    def place_at(self, target_id):
+        return self._target('place_at', target_id)
+
+    def add_ingredient(self, target_id):
+        """Add the held single ingredient; container transfers are a higher layer."""
+        return self._target('add_ingredient', target_id)
+
+    def discard(self, bin_id):
+        """Dispose of the held item/contents at the specified native rubbish bin."""
+        return self._target('discard', bin_id)
+
+    def throw_to(self, target_id):
+        """Plan, navigate, aim and throw the held object to a native receiver."""
+        return self._target('throw_to', target_id)
+
+    def throw_to_player(self, player_id):
+        if type(player_id) is not int or player_id not in (1, 3, 4):
+            raise ValueError('player_id must be another local player: 1, 3, or 4')
+        return self._request('throw_to_player', player_id)
+
+    @staticmethod
+    def _timeout(seconds):
+        if isinstance(seconds, bool) or not isinstance(seconds, (int, float)) or not math.isfinite(seconds) or not .1 <= seconds <= 120:
+            raise ValueError('timeout must be finite seconds in 0.1..120')
+        return round(seconds * 1000)
+
+    def work_at(self, target_id, until='work_complete', timeout=60):
+        if until not in self.WORK_CONDITIONS:
+            raise ValueError('Unknown work completion condition')
+        return self._target('work_at', target_id, until, self._timeout(timeout))
+
+    def activate(self, target_id, desired_state='trigger'):
+        if desired_state not in ('on', 'off', 'trigger'):
+            raise ValueError('desired_state must be on, off, or trigger')
+        return self._target('activate', target_id, desired_state)
+
+    def wait_until(self, target_id, condition, timeout=60):
+        if condition not in self.WAIT_CONDITIONS:
+            raise ValueError('Unknown wait condition')
+        return self._target('wait_until', target_id, condition, self._timeout(timeout))
 
     def stop(self):
         """Interrupt the current bridge action/input, including from another client."""
@@ -33,8 +84,20 @@ if __name__ == '__main__':
     commands.add_parser('list')
     commands.add_parser('status')
     commands.add_parser('stop')
-    navigate = commands.add_parser('navigate_to')
-    navigate.add_argument('destination_id')
+    for operation in ('navigate_to', 'pick_up', 'place_at', 'add_ingredient', 'discard', 'throw_to'):
+        commands.add_parser(operation).add_argument('target_id')
+    work = commands.add_parser('work_at')
+    work.add_argument('target_id')
+    work.add_argument('--until', choices=ActionClient.WORK_CONDITIONS, default='work_complete')
+    work.add_argument('--timeout', type=float, default=60)
+    activate = commands.add_parser('activate')
+    activate.add_argument('target_id')
+    activate.add_argument('desired_state', choices=('on', 'off', 'trigger'), default='trigger', nargs='?')
+    wait = commands.add_parser('wait_until')
+    wait.add_argument('target_id')
+    wait.add_argument('condition', choices=ActionClient.WAIT_CONDITIONS)
+    wait.add_argument('--timeout', type=float, default=60)
+    commands.add_parser('throw_to_player').add_argument('player_id', type=int, choices=(1, 3, 4))
     args = parser.parse_args()
     try:
         with ActionClient(args.port) as client:
@@ -42,11 +105,17 @@ if __name__ == '__main__':
             elif args.operation == 'stop': print(json.dumps(client.stop(), indent=2))
             elif args.operation == 'status': print(json.dumps(client.status(), indent=2))
             else:
-                print(json.dumps(client.navigate_to(args.destination_id)), flush=True)
+                if args.operation == 'work_at': result = client.work_at(args.target_id, args.until, args.timeout)
+                elif args.operation == 'wait_until': result = client.wait_until(args.target_id, args.condition, args.timeout)
+                elif args.operation == 'activate': result = client.activate(args.target_id, args.desired_state)
+                elif args.operation == 'throw_to_player': result = client.throw_to_player(args.player_id)
+                else: result = getattr(client, args.operation)(args.target_id)
+                print(json.dumps(result), flush=True)
                 try:
                     while True:
-                        state = client.status()['navigation']
-                        if state['state'] == 'idle':
+                        control = client.status()
+                        state = control['navigation'] if args.operation == 'navigate_to' else control['action']
+                        if state['state'] != ('navigating' if args.operation == 'navigate_to' else 'running'):
                             print(json.dumps(state), flush=True)
                             break
                         time.sleep(.1)  # Observe completion; does not drive navigation.

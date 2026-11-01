@@ -1,0 +1,379 @@
+using System;
+using System.Collections.Generic;
+using SousChef.Core;
+using SousChef.Plugin.Navigation;
+using UnityEngine;
+
+namespace SousChef.Plugin.Actions
+{
+    // First-layer skills use ordinary logical button edges. Navigation is a child
+    // action under the same lease; no ownership gap occurs at station arrival.
+    internal sealed class InteractionActions
+    {
+        public readonly ActionRun Run = new ActionRun();
+        private readonly NavigationActions navigation;
+        private readonly Action<int> input;
+        private readonly Action release;
+        private readonly ThrowPlanner throws = new ThrowPlanner();
+        private PlayerControls chef;
+        private ControlCommand command;
+        private GameObject target, held, receiver, expectedPickup, initialOccupant;
+        private ServerIngredientContainer container;
+        private AssembledDefinitionNode ingredient, expectedOutput;
+        private ServerWorkableItem workable;
+        private ServerInteractable interactable;
+        private ServerInteractable.BeginInteractCallback triggered;
+        private int initialDirty, initialClean, initialStack, initialMatches, initialContents, pressFrame;
+        private float phaseStarted, lastProgressTime, lastProgress;
+        private bool triggeredByChef, pressed, throwReleased;
+        private ThrowPlan throwPlan;
+        private object evidence;
+
+        public InteractionActions(NavigationActions walking, Action<int> buttons, Action finished)
+        { navigation = walking; input = buttons; release = finished; }
+        public object Describe() { return Run.Describe(evidence); }
+        public static bool Handles(string operation)
+        { return Array.IndexOf(ActionRun.Names, operation) >= 0 && operation != "navigate_to" && operation != "stop"; }
+
+        public string Start(PlayerControls player, int owner, ControlCommand request)
+        {
+            if (Run.Running || navigation.Action.State != "idle") return "action_in_progress";
+            chef = player; command = request; target = null;
+            if (request.Operation == "throw_to_player")
+            {
+                foreach (PlayerControls candidate in UnityEngine.Object.FindObjectsOfType<PlayerControls>())
+                {
+                    var id = candidate.PlayerIDProvider;
+                    if (id != null && ((int)id.GetID() + 1).ToString() == request.Destination && candidate != chef)
+                    { if (target != null) return "player_ambiguous"; target = candidate.gameObject; }
+                }
+            }
+            else target = navigation.Resolve(request.Destination);
+            if (target == null) return "target_unavailable";
+            held = ActionObservations.Held(chef); receiver = ActionObservations.Receiver(target);
+            initialOccupant = ActionObservations.Occupant(target); expectedPickup = initialOccupant;
+            container = ActionObservations.Container(target); ingredient = expectedOutput = null;
+            initialDirty = ActionObservations.DirtyCount(target); initialClean = ActionObservations.CleanCount(target);
+            initialStack = ActionObservations.StackCount(receiver); initialMatches = 0;
+            initialContents = held == null || held.GetComponent<ServerIngredientContainer>() == null ? 0 : held.GetComponent<ServerIngredientContainer>().GetContentsCount();
+            pressed = throwReleased = triggeredByChef = false; evidence = null; throwPlan = null; workable = null;
+            string error = ValidateRequest();
+            if (error != null) return error;
+            if (!Run.Start(owner, request, Time.realtimeSinceStartup)) return "action_in_progress";
+            try
+            {
+                if (request.Operation == "wait_until") { Run.Advance("waiting"); input(0); return null; }
+                if (request.Operation == "throw_to" || request.Operation == "throw_to_player")
+                {
+                    error = throws.Prepare(chef, held, target);
+                    if (error == null) error = throws.Find(navigation, out throwPlan);
+                    if (error == null)
+                    {
+                        evidence = throwPlan.Describe(); Run.Advance("navigating");
+                        error = navigation.StartPosition(chef, owner, target, throwPlan.Stance);
+                    }
+                }
+                else
+                {
+                    Run.Advance("navigating");
+                    error = navigation.Start(chef, owner, request.Destination);
+                }
+                if (error != null) Finish("blocked", error);
+                return error;
+            }
+            catch (Exception) { Finish("failed", "observation_unavailable"); throw; }
+        }
+        private string ValidateRequest()
+        {
+            string op = command.Operation;
+            if (op == "pick_up")
+            {
+                if (held != null) return "hands_full";
+                if (expectedPickup == null && target.GetComponent<PhysicalAttachment>() != null) expectedPickup = target;
+                if (expectedPickup == null && target.GetComponent<PickupItemSpawner>() == null && target.GetComponent<PlateStackBase>() == null)
+                    return "nothing_to_pick_up";
+            }
+            if (op == "place_at" || op == "add_ingredient" || op == "discard" || op == "throw_to" || op == "throw_to_player")
+                if (held == null) return "hands_empty";
+            if (op == "place_at" && target.GetComponent<ServerRubbishBin>() != null) return "use_discard";
+            if (op == "add_ingredient")
+            {
+                // Container-to-container transfer belongs to the higher layer.
+                if (held.GetComponent<IngredientPropertiesComponent>() == null) return "held_item_is_not_single_ingredient";
+                ingredient = ActionObservations.Composition(held);
+                if (container == null || ingredient == null) return "target_is_not_ingredient_container";
+                var transfer = GameObjectUtils.RequestInterface<IContainerTransferBehaviour>(held);
+                if (transfer == null || !transfer.CanTransferToContainer(container) || !container.CanAddIngredient(ingredient)) return "incompatible_ingredient";
+                initialMatches = ActionObservations.MatchingCount(container, ingredient);
+            }
+            if (op == "discard" && target.GetComponent<ServerRubbishBin>() == null) return "target_is_not_disposal";
+            if (op == "throw_to" || op == "throw_to_player")
+            {
+                ingredient = ActionObservations.Composition(held);
+                initialMatches = ActionObservations.MatchingCount(container, ingredient);
+            }
+            if (op == "work_at" || op == "activate")
+            {
+                if (held != null) return "hands_full"; // Releasing use with a held throwable would throw it.
+                if (target.GetComponent<ClientInteractable>() == null) return "target_is_not_interactable";
+            }
+            if (op == "activate" && command.DesiredState != "trigger" && !ActionObservations.ToggleState(target).HasValue)
+                return "unsupported_activation_state";
+            if (op == "work_at" || op == "wait_until")
+            {
+                if (command.Condition == "work_complete")
+                {
+                    GameObject item = ActionObservations.Receiver(target);
+                    workable = item == null ? null : item.GetComponent<ServerWorkableItem>();
+                    var definition = item == null ? null : item.GetComponent<WorkableItem>();
+                    if (workable == null || definition == null) return "no_workable_item";
+                    expectedOutput = ActionObservations.Composition(definition.GetNextPrefab());
+                }
+                if ((command.Condition == "sink_empty" || command.Condition == "one_plate_clean") && initialDirty < 0) return "target_is_not_sink";
+                if (command.Condition == "one_plate_clean" && initialDirty == 0) return "sink_empty";
+                if (command.Condition == "cooked" && receiver.GetComponent<ClientCookingHandler>() == null) return "target_is_not_cookable";
+                if (command.Condition == "mixed" && receiver.GetComponent<ClientMixingHandler>() == null) return "target_is_not_mixable";
+            }
+            return null;
+        }
+        public void Tick()
+        {
+            if (!Run.Running) return;
+            try
+            {
+                if (Run.Expired(Time.realtimeSinceStartup)) { Finish("failed", "action_timeout"); return; }
+                if (target == null || !target.activeInHierarchy) { Finish("blocked", "target_unavailable"); return; }
+                if (Run.Phase == "navigating")
+                {
+                    if (navigation.Action.State == "navigating") return;
+                    input(0);
+                    if (navigation.Action.Reason != "arrived" && navigation.Action.Reason != "positioned_no_action")
+                    { Finish("blocked", navigation.Action.Reason); return; }
+                    if (command.Operation == "throw_to" || command.Operation == "throw_to_player") { SetPhase("aiming"); return; }
+                    if (!BeforePress()) return;
+                    if (Run.Running) SetPhase(command.Operation == "work_at" ? "working" : "pressing");
+                }
+                if (Run.Phase == "waiting")
+                {
+                    input(0); if (Condition()) Finish("succeeded", "condition_met"); return;
+                }
+                if (Run.Phase == "aiming") { Aim(); return; }
+                if (Run.Phase == "throw_hold")
+                {
+                    if (ActionObservations.Held(chef) != held) { Finish("blocked", "held_item_changed"); return; }
+                    if (Time.frameCount <= pressFrame + 1 || Time.realtimeSinceStartup - phaseStarted < .08f) { input(2); return; }
+                    ThrowPlan fresh; string error = throws.Prepare(chef, held, target);
+                    if (error != null || !throws.From(Foot(), true, out fresh)) { Finish("blocked", error ?? "throw_became_invalid"); return; }
+                    throwPlan = fresh; evidence = fresh.Describe(); throwReleased = true; input(0); SetPhase("flight"); return;
+                }
+                if (Run.Phase == "flight")
+                {
+                    input(0);
+                    if (ThrowReceived()) { Finish("succeeded", "throw_received"); return; }
+                    if (Time.realtimeSinceStartup - phaseStarted > throwPlan.FlightSeconds + 1.5f) Finish("failed", "throw_missed");
+                    return;
+                }
+                if (Run.Phase == "working") { Work(); return; }
+                if (Run.Phase == "pressing")
+                {
+                    if (!pressed)
+                    {
+                        if (!BeforePress()) return;
+                        pressed = true; pressFrame = Time.frameCount; phaseStarted = Time.realtimeSinceStartup;
+                    }
+                    if (Time.frameCount <= pressFrame + 1 && Time.realtimeSinceStartup - phaseStarted < .15f) { input(Button()); return; }
+                    input(0); SetPhase("verifying");
+                }
+                if (Run.Phase == "verifying")
+                {
+                    input(0);
+                    if (Outcome()) { Finish("succeeded", "outcome_observed"); return; }
+                    if (Time.realtimeSinceStartup - phaseStarted > 2) Finish("failed", "outcome_not_observed");
+                }
+            }
+            catch (Exception) { Finish("failed", "observation_unavailable"); }
+        }
+        private void SetPhase(string phase) { Run.Advance(phase); phaseStarted = Time.realtimeSinceStartup; }
+        private int Button()
+        {
+            if (command.Operation != "activate") return 1;
+            var interact = target.GetComponent<ClientInteractable>(); return interact != null && interact.UsePlacementButton ? 1 : 2;
+        }
+        private bool BeforePress()
+        {
+            string op = command.Operation;
+            if (op == "activate" && command.DesiredState != "trigger" && ActionObservations.ToggleState(target) == (command.DesiredState == "on"))
+            { Finish("succeeded", "already_in_desired_state"); return false; }
+            if (op == "work_at" && Condition()) { Finish("succeeded", "condition_met"); return false; }
+            if (op == "pick_up")
+            {
+                if (ActionObservations.Held(chef) != null) { Finish("blocked", "hands_full"); return false; }
+                if (initialOccupant != ActionObservations.Occupant(target) || !ActionObservations.CanPickUp(chef, target))
+                { Finish("blocked", "pickup_target_changed"); return false; }
+            }
+            else if (op == "work_at" || op == "activate")
+            {
+                if (ActionObservations.Held(chef) != null || !ActionObservations.CanUse(chef, target)) { Finish("blocked", "interaction_unavailable"); return false; }
+                var client = target.GetComponent<ClientInteractable>();
+                if (op == "activate" && client.UsePlacementButton && ActionObservations.CanPickUp(chef, target))
+                { Finish("blocked", "pickup_would_take_precedence"); return false; }
+                Subscribe();
+            }
+            else
+            {
+                if (ActionObservations.Held(chef) != held) { Finish("blocked", "held_item_changed"); return false; }
+                if (!ActionObservations.CanPlace(chef, target)) { Finish("blocked", "placement_unavailable"); return false; }
+                if (op == "add_ingredient" && ActionObservations.Container(target) != container) { Finish("blocked", "container_changed"); return false; }
+                if (op == "place_at" && initialOccupant != ActionObservations.Occupant(target)) { Finish("blocked", "station_contents_changed"); return false; }
+                if (op == "place_at" && initialOccupant != null && initialStack == 0) { Finish("blocked", "station_occupied_use_add_ingredient"); return false; }
+            }
+            return true;
+        }
+        private void Subscribe()
+        {
+            if (interactable != null) return;
+            interactable = target.GetComponent<ServerInteractable>();
+            if (interactable == null) return;
+            triggered = delegate(GameObject actor, Vector2 direction) { if (chef != null && actor == chef.gameObject) triggeredByChef = true; };
+            interactable.RegisterTriggerCallbacks(triggered);
+        }
+        private bool Outcome()
+        {
+            string op = command.Operation; GameObject carrying = ActionObservations.Held(chef);
+            if (op == "pick_up")
+            {
+                if (carrying == null) return false;
+                bool matches = carrying == expectedPickup;
+                if (!matches && expectedPickup != null && expectedPickup.GetComponent<ServerStack>() != null)
+                    matches = ActionObservations.StackCount(expectedPickup) < initialStack && carrying.GetComponent<ServerPlate>() != null;
+                var supply = target.GetComponent<PickupItemSpawner>();
+                if (!matches && supply != null)
+                {
+                    AssembledDefinitionNode expected = ActionObservations.Composition(supply.m_itemPrefab), actual = ActionObservations.Composition(carrying);
+                    matches = expected != null && actual != null && AssembledDefinitionNode.Matching(expected, actual);
+                }
+                if (matches) evidence = ItemEvidence(carrying); return matches;
+            }
+            if (op == "add_ingredient")
+            {
+                bool added = container != null && ActionObservations.Container(target) == container &&
+                    ActionObservations.MatchingCount(container, ingredient) > initialMatches;
+                if (added) evidence = Json.Object("containerInstanceId", container.gameObject.GetInstanceID(), "matchingIngredients", ActionObservations.MatchingCount(container, ingredient));
+                return added && carrying != held;
+            }
+            if (op == "place_at")
+            {
+                bool placed = carrying != held && (ActionObservations.Occupant(target) == held ||
+                    (initialDirty >= 0 && ActionObservations.DirtyCount(target) > initialDirty) ||
+                    (initialStack > 0 && ActionObservations.StackCount(ActionObservations.Receiver(target)) > initialStack));
+                if (placed) evidence = Json.Object("targetInstanceId", target.GetInstanceID(), "heldItem", ItemEvidence(carrying));
+                return placed;
+            }
+            if (op == "discard")
+            {
+                var contents = held == null ? null : held.GetComponent<ServerIngredientContainer>();
+                bool disposed = held == null || !held.activeInHierarchy ||
+                    (initialContents > 0 && contents != null && contents.GetContentsCount() == 0);
+                if (disposed) evidence = Json.Object("disposed", true, "heldItem", ItemEvidence(carrying)); return disposed;
+            }
+            if (op == "activate")
+            {
+                bool done = command.DesiredState == "trigger" ? triggeredByChef : ActionObservations.ToggleState(target) == (command.DesiredState == "on");
+                if (done) evidence = Json.Object("nativeTriggerObserved", triggeredByChef, "desiredState", command.DesiredState); return done;
+            }
+            return false;
+        }
+        private bool Condition()
+        {
+            string condition = command.Condition;
+            if (condition == "work_complete")
+            {
+                if (workable != null && workable.HasFinished()) return true;
+                var actual = ActionObservations.Composition(ActionObservations.Receiver(target));
+                return expectedOutput != null && actual != null && AssembledDefinitionNode.Matching(expectedOutput, actual);
+            }
+            if (condition == "sink_empty") return ActionObservations.DirtyCount(target) == 0;
+            if (condition == "one_plate_clean") return ActionObservations.DirtyCount(target) < initialDirty;
+            if (condition == "occupied") return ActionObservations.Occupant(target) != null || ActionObservations.DirtyCount(target) > 0;
+            if (condition == "empty") return target.GetComponent<ServerWashingStation>() != null ? ActionObservations.DirtyCount(target) == 0 : target.GetComponent<ServerAttachStation>() != null && ActionObservations.Occupant(target) == null;
+            if (condition == "ready") return ActionObservations.CanPickUp(chef, target) || ActionObservations.CanPlace(chef, target) || ActionObservations.CanUse(chef, target);
+            if (condition == "reachable")
+            {
+                var catalog = (Json.Record)navigation.Available(chef);
+                foreach (Json.Record d in (List<object>)catalog["destinations"]) if ((string)d["id"] == command.Destination) return true;
+                return false;
+            }
+            if (condition == "cooked")
+            {
+                var cooking = receiver.GetComponent<ClientCookingHandler>();
+                return cooking != null && ActionObservations.Read<object>(cooking, "m_cachedCookingState").ToString() == "Completed";
+            }
+            if (condition == "mixed")
+            {
+                var mixing = receiver.GetComponent<ClientMixingHandler>();
+                return mixing != null && ActionObservations.Read<object>(mixing, "m_cachedMixingState").ToString() == "Completed";
+            }
+            return false;
+        }
+        private void Work()
+        {
+            if (Condition())
+            {
+                evidence = Json.Object("condition", command.Condition, "dirtyPlatesBefore", initialDirty,
+                    "dirtyPlatesAfter", ActionObservations.DirtyCount(target), "cleanPlatesBefore", initialClean, "cleanPlatesAfter", ActionObservations.CleanCount(target));
+                Finish("succeeded", "condition_met"); return;
+            }
+            if (ActionObservations.Held(chef) != null || !ActionObservations.CanUse(chef, target)) { Finish("blocked", "interaction_unavailable"); return; }
+            if (command.Condition == "work_complete" && workable == null) { Finish("blocked", "work_item_changed"); return; }
+            float progress = workable != null ? workable.GetProgress() + ActionObservations.Read<int>(workable, "m_subProgress") * .001f :
+                ActionObservations.Read<float>(target.GetComponent<ServerWashingStation>(), "m_cleaningTimer") - ActionObservations.DirtyCount(target);
+            if (!pressed || progress != lastProgress) { lastProgressTime = Time.realtimeSinceStartup; lastProgress = progress; }
+            if (Time.realtimeSinceStartup - lastProgressTime > 5) { Finish("failed", "no_work_progress"); return; }
+            pressed = true; input(2);
+        }
+        private Vector3 Foot()
+        { return chef.transform.position - Vector3.up * (chef.transform.position.y - chef.GetComponent<CapsuleCollider>().bounds.min.y); }
+        private void Aim()
+        {
+            input(0);
+            if (ActionObservations.Held(chef) != held) { Finish("blocked", "held_item_changed"); return; }
+            string error = throws.Prepare(chef, held, target); ThrowPlan current;
+            if (error != null || !throws.From(Foot(), false, out current)) { Finish("blocked", error ?? "throw_became_invalid"); return; }
+            PlayerControlsHelper.TurnTowardsDirection(chef.gameObject, current.Direction, chef.Movement.TurnSpeed, Mathf.Min(Time.deltaTime, .05f));
+            if (chef.Motion.GetVelocityXZ().magnitude > .1f || Vector3.Angle(chef.transform.forward, current.Direction) > .5f)
+            { if (Time.realtimeSinceStartup - phaseStarted > 2) Finish("failed", "throw_alignment_failed"); return; }
+            if (!throws.From(Foot(), true, out current)) return;
+            throwPlan = current; evidence = current.Describe(); SetPhase("throw_hold"); pressFrame = Time.frameCount; input(2);
+        }
+        private bool ThrowReceived()
+        {
+            var player = target.GetComponent<PlayerControls>();
+            bool received = player != null ? ActionObservations.Held(player) == held :
+                (held != null && ActionObservations.Occupant(target) == held);
+            if (!received && container != null && ingredient != null)
+                received = ActionObservations.MatchingCount(container, ingredient) > initialMatches && (held == null || !held.activeInHierarchy);
+            if (received) evidence = Json.Object("throw", throwPlan.Describe(), "receivedByInstanceId", target.GetInstanceID(), "item", ItemEvidence(held));
+            return received;
+        }
+        private static object ItemEvidence(GameObject item)
+        { return item == null ? null : Json.Object("objectInstanceId", item.GetInstanceID(), "label", item.name); }
+        public void Cancel(string reason) { if (Run.Running) Finish("cancelled", reason); }
+        private void Finish(string state, string reason)
+        {
+            // Ending a sticky interaction uses the game's own ordinary end-event;
+            // no progress, item ownership, position or station state is forced.
+            try
+            {
+                if (chef != null && pressed && (command.Operation == "work_at" || command.Operation == "activate"))
+                    ActionObservations.EndOwnedInteraction(chef, target);
+            }
+            catch (Exception) { state = "failed"; reason = "interaction_cleanup_failed"; }
+            if (interactable != null && triggered != null) interactable.UnregisterTriggerCallbacks(triggered);
+            interactable = null; triggered = null;
+            if (throwReleased && state != "succeeded") evidence = Json.Object("throwReleased", true, "throw", throwPlan.Describe());
+            // Cancel the child while the parent still owns the input lease.
+            if (navigation.Action.State == "navigating") navigation.Stop(reason);
+            Run.Finish(state, reason); release();
+        }
+    }
+}
