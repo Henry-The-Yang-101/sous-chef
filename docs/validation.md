@@ -230,3 +230,54 @@ remains a known issue, rather than a passing cross-level navigation result.
 Evidence: `.local/navigation-arcade-second-checks.ndjson`,
 `.local/navigation-lunar-snapshot.json`, and `.local/navigation-lunar-retry.ndjson`
 (the last file records the Mine round despite its original retry filename).
+
+### Live harness, usable arrival and less conservative catalogues
+
+The browser harness was exercised in Arcade Couch on 2026-11-01 with Split
+Controller Player 2. Clicking a live destination started native navigation, and
+the browser Stop button interrupted an active action. The early Mine checks
+reported arrival using native target selection alone. User observation showed
+that this could still leave the chef short of a useful position or facing the
+wrong way, so those results do **not** establish action-ready arrival.
+
+Arrival now requires the checked working stance, facing, settled motion and stable
+native selection. A continuous navigation-then-pickup check in `s_balloon_1_5`
+verified the result without a manual movement gap:
+
+| Check | Observation |
+| --- | --- |
+| Requested target | `utensil_pot_01 (1)`, destination `d16`, Unity instance 547518 |
+| Planned walk | 1.770 world units to the approach stance |
+| Arrival | `idle`, reason `arrived`; native selection matched; pickup allowed |
+| Position and facing | 0.1184 units from the stance; 0.028 degrees from the target |
+| Actual action | A separate pickup press immediately after arrival put that exact pot in Player 2's authoritative held-item relationship |
+| Sampled planner refresh | 9.842 ms total, 7.458 ms search, 367 nodes |
+
+Navigation itself still sends no pickup or work input. The separate attempt to
+return the pot exceeded the raw input lease and was rejected with `not_owner`;
+replacement was not verified before the round ended. Only Player 2 received
+gameplay commands from this test; concurrent Player 1 position was not held fixed
+or used as an isolation assertion.
+
+Local chefs and their carried descendants are now ignored as route obstacles.
+Non-player solid colliders and hazards remain checked. Budget-limited searches
+publish destinations whose shortest routes are already certified instead of
+clearing the whole catalogue. Automated tests cover a blocked direct branch with
+an available alternate route and partial-search certification. The exact reported
+fire-blockage scenario and a pedestrian kitchen have **not** been replayed live.
+
+The current round initially reported `no_safe_start` while Player 2 rested against
+a counter; routes became available later without a test-issued movement nudge.
+The native-radius contact escape reduces over-conservatism, but this observation
+does not prove every legal wall-contact pose can seed a route. Discovery remains
+bounded to 60 world units, walking cells to 58 units, and narrow or unusual
+geometry may still be omitted. An empty catalogue is not proof that the entire
+visible kitchen is physically unreachable.
+
+The final `python3 scripts/check.py` run passes 730 C# assertions, 42 Python tests
+and the 151-type installed-assembly audit, including the concurrent harness
+sharing/metadata additions. Local evidence is `.local/final-continuous-result.json`,
+`.local/final-continuous-route.json`, `.local/final-continuous-pickup.json` and
+`.local/final-start-failure.json`. The full pickup snapshot records the authoritative
+held-item relationship; the result file records the target identity and arrival
+metrics together.
