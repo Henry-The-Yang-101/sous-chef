@@ -20,9 +20,24 @@ internal static class Program
     }
     private static void Main(string[] args)
     {
-        TestJson(); TestIdentity(); TestStream(); TestControl();
+        TestSchedule(); TestJson(); TestIdentity(); TestStream(); TestControl();
         if (args.Length > 0) Audit(args[0]);
         Console.WriteLine("PASS: " + checks + " assertions");
+    }
+
+    private static void TestSchedule()
+    {
+        float deadline = 0; int samples = 0;
+        // Slightly inexact 60 Hz render boundaries must still deliver ~20 Hz.
+        for (int frame = 0; frame < 600; frame++)
+        {
+            float now = frame / 60f;
+            if (now < deadline) continue;
+            samples++; deadline = SampleSchedule.Next(deadline, now, .05f);
+            Assert(deadline > now, "no duplicate capture/catch-up on same frame");
+        }
+        Assert(samples >= 199 && samples <= 201, "20 Hz cadence without frame-quantization drift");
+        Assert(SampleSchedule.Next(.05f, 10f, .05f) > 10f, "skip missed samples after stall");
     }
 
     private static void TestJson()

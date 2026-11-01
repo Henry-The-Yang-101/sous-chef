@@ -32,3 +32,16 @@ class World:
         for chef, component, fields in self.observations('ServerPlayerAttachmentCarrier'):
             for reference in fields['m_carriedObjects']:
                 if reference: yield chef, self.resolve(reference)
+
+
+class GameplayWorld(World):
+    """Indexes a complete gameplay sample, not map geometry or a merged full world.
+
+    parentId may refer outside this subset. Use a matching session/epoch full
+    snapshot for map structure; never treat old map transforms as current motion.
+    """
+    def __init__(self, sample):
+        if sample.get('type') != 'gameplay' or not sample.get('inRound'):
+            raise ValueError('GameplayWorld requires an active gameplay sample')
+        super().__init__(dict(sample, type='snapshot'))
+        self.snapshot = sample

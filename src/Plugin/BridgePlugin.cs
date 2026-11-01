@@ -9,10 +9,12 @@ using UnityEngine;
 
 namespace SousChef.Plugin
 {
-    [BepInPlugin("dev.souschef.observer", "Sous Chef Observer", "0.2.0")]
+    [BepInPlugin("dev.souschef.observer", "Sous Chef Observer", "0.3.0")]
     public sealed class BridgePlugin : BaseUnityPlugin
     {
-        private StreamServer server;
+        private StreamServer server, gameplayServer;
+        private long gameplaySequence;
+        private float nextGameplay, gameplayInterval;
         private SceneCapture capture;
         private Player2Control control;
         private readonly string session = Guid.NewGuid().ToString("N");
@@ -30,22 +32,29 @@ namespace SousChef.Plugin
                 if (port < 1024 || port > 65535) throw new ArgumentException("Port must be in 1024..65535");
                 int hz = Math.Max(1, Math.Min(30, Config.Bind("Capture", "Hz", 5, "Snapshot rate, 1..30. Profile before increasing.").Value));
                 interval = 1f / hz;
+                int gameplayHz = Math.Max(1, Math.Min(30, Config.Bind("Gameplay", "Hz", 20, "Compact gameplay samples per second, 1..30; render-frame limited.").Value));
+                int gameplayPort = Config.Bind("Gameplay", "Port", 24704, "Loopback gameplay stream, independent of full snapshots.").Value;
+                gameplayInterval = 1f / gameplayHz;
                 string assembly = typeof(PlayerControls).Assembly.Location;
                 string hash;
                 using (var sha = SHA256.Create()) using (var file = File.OpenRead(assembly))
                     hash = BitConverter.ToString(sha.ComputeHash(file)).Replace("-", "").ToLowerInvariant();
                 capture = new SceneCapture(session);
                 int controlPort = Config.Bind("Control", "Port", 24703, "Loopback port for direct control of existing local Player 2.").Value;
-                if (controlPort < 1024 || controlPort > 65535 || controlPort == port) throw new ArgumentException("Invalid control port");
+                if (controlPort < 1024 || controlPort > 65535 || controlPort == port || gameplayPort < 1024 || gameplayPort > 65535 || gameplayPort == port || gameplayPort == controlPort) throw new ArgumentException("Invalid control port");
                 control = new Player2Control(controlPort, session);
                 server = new StreamServer(port, Json.Object("type", "hello", "protocolVersion", 1,
-                    "bridgeVersion", "0.2.0", "sessionId", session, "unityVersion", Application.unityVersion,
-                    "gameAssemblySha256", hash, "captureHz", hz, "readOnly", false, "controlPort", controlPort, "controlPlayer", 2), LogWorkerError);
+                    "bridgeVersion", "0.3.0", "sessionId", session, "unityVersion", Application.unityVersion,
+                    "gameAssemblySha256", hash, "captureHz", hz, "gameplayPort", gameplayPort, "gameplayHz", gameplayHz, "readOnly", false, "controlPort", controlPort, "controlPlayer", 2), LogWorkerError);
                 server.Start();
+                gameplayServer = new StreamServer(gameplayPort, Json.Object("type", "hello", "protocolVersion", 1,
+                    "bridgeVersion", "0.3.0", "sessionId", session, "stream", "gameplay", "captureHz", gameplayHz,
+                    "fullSnapshotPort", port), LogWorkerError);
+                gameplayServer.Start();
                 Logger.LogInfo("Observer listening on 127.0.0.1:" + port + "; active rounds only; assembly=" + hash);
                 StartCoroutine(CaptureLoop());
             }
-            catch (Exception e) { Logger.LogError("Observer startup failed: " + e); if (server != null) server.Dispose(); if (control != null) control.Dispose(); control = null; server = null; }
+            catch (Exception e) { Logger.LogError("Observer startup failed: " + e); if (server != null) server.Dispose(); if (gameplayServer != null) gameplayServer.Dispose(); if (control != null) control.Dispose(); control = null; server = null; }
         }
 
         private void FixedUpdate() { fixedTicks++; }
@@ -68,18 +77,30 @@ namespace SousChef.Plugin
             while (true)
             {
                 yield return boundary;
-                if (server == null || Time.realtimeSinceStartup < nextCapture) continue;
-                nextCapture = Time.realtimeSinceStartup + interval;
+                if (server == null) continue;
+                float now = Time.realtimeSinceStartup;
+                if (now < nextCapture && now < nextGameplay) continue;
                 try
                 {
                     KitchenGate gate = KitchenGate.Inspect();
                     if (gate.InRound)
                     {
-                        server.Publish(capture.Capture(gate, ++sequence, fixedTicks, server.CoalescedCaptures));
+                        if (now >= nextCapture || !capture.Matches(gate))
+                        {
+                            server.Publish(capture.Capture(gate, ++sequence, fixedTicks, server.CoalescedCaptures));
+                            nextCapture = SampleSchedule.Next(nextCapture, now, interval);
+                        }
+                        if (now >= nextGameplay)
+                        {
+                            gameplayServer.Publish(capture.Gameplay.Capture(gate, capture.Epoch, ++gameplaySequence,
+                                fixedTicks, gameplayServer.CoalescedCaptures));
+                            nextGameplay = SampleSchedule.Next(nextGameplay, now, gameplayInterval);
+                        }
                     }
                     else
                     {
                         if (wasInRound) capture.EndRound();
+                        nextCapture = now + interval; nextGameplay = now + gameplayInterval;
                         if (wasInRound || Time.realtimeSinceStartup >= nextStatus)
                         {
                             nextStatus = Time.realtimeSinceStartup + 1f;
@@ -93,6 +114,8 @@ namespace SousChef.Plugin
                     Logger.LogWarning("Capture failed: " + e);
                     // Invalidate downstream state instead of silently leaving stale
                     // kitchen data as the most recently published frame.
+                    capture.EndRound();
+                    nextCapture = now + interval; nextGameplay = now + gameplayInterval;
                     PublishStatus("capture_error", "unknown");
                 }
             }
@@ -100,12 +123,19 @@ namespace SousChef.Plugin
 
         private void PublishStatus(string reason, string role)
         {
-            server.Publish(new CapturePacket { Sequence = ++sequence, Epoch = capture.Epoch,
+            PublishStatusTo(server, ++sequence, reason, role);
+            PublishStatusTo(gameplayServer, ++gameplaySequence, reason, role);
+        }
+
+        private void PublishStatusTo(StreamServer target, long seq, string reason, string role)
+        {
+            if (target == null) return;
+            target.Publish(new CapturePacket { Sequence = seq, Epoch = capture.Epoch,
                 Frame = Json.Object("type", "status", "protocolVersion", 1, "sessionId", session,
-                    "sequence", sequence, "levelEpoch", capture.Epoch, "inRound", false, "reason", reason,
+                    "sequence", seq, "levelEpoch", capture.Epoch, "inRound", false, "reason", reason,
                     "role", role, "realtime", Time.realtimeSinceStartup) });
         }
 
-        private void OnDestroy() { StopAllCoroutines(); if (control != null) { control.Dispose(); control = null; } if (server != null) { server.Dispose(); server = null; } }
+        private void OnDestroy() { StopAllCoroutines(); if (gameplayServer != null) { gameplayServer.Dispose(); gameplayServer = null; } if (control != null) { control.Dispose(); control = null; } if (server != null) { server.Dispose(); server = null; } }
     }
 }

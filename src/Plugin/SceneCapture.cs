@@ -12,6 +12,7 @@ namespace SousChef.Plugin
     internal sealed class SceneCapture
     {
         private readonly IdentityBook identities;
+        public readonly GameplayCapture Gameplay;
         private readonly FieldReader reader;
         private readonly GeometryCapture geometry;
         private readonly HashSet<int> seen = new HashSet<int>();
@@ -25,12 +26,18 @@ namespace SousChef.Plugin
         public SceneCapture(string sessionId)
         {
             session = sessionId; identities = new IdentityBook(sessionId);
+            Gameplay = new GameplayCapture(sessionId, Id);
             reader = new FieldReader(Reference); geometry = new GeometryCapture(Reference);
+        }
+
+        public bool Matches(KitchenGate gate)
+        {
+            return flowIdentity == gate.Flow.gameObject.scene.GetHashCode() + ":" + gate.Flow.GetInstanceID();
         }
 
         public void EndRound()
         {
-            flowIdentity = null; previousParents.Clear(); geometry.Reset();
+            flowIdentity = null; previousParents.Clear(); geometry.Reset(); Gameplay.Reset();
         }
 
         public CapturePacket Capture(KitchenGate gate, long sequence, long fixedTicks, long coalesced)
@@ -39,8 +46,9 @@ namespace SousChef.Plugin
             string key = gate.Flow.gameObject.scene.GetHashCode() + ":" + gate.Flow.GetInstanceID();
             if (flowIdentity != key)
             {
-                identities.NewEpoch(); geometry.Reset(); previousParents.Clear(); flowIdentity = key;
+                identities.NewEpoch(); geometry.Reset(); Gameplay.Reset(); previousParents.Clear(); flowIdentity = key;
             }
+            Gameplay.BeginReconciliation();
             seen.Clear(); included.Clear(); referenced.Clear(); reader.BeginFrame(); geometry.BeginFrame();
             var objects = new List<object>(); var scenes = new List<object>();
             var inventory = new Dictionary<string, int>(); var unsupported = new Dictionary<string, int>();
@@ -76,7 +84,9 @@ namespace SousChef.Plugin
                         "activeInHierarchy", go.activeInHierarchy, "layer", go.layer, "tag", go.tag, "isStatic", go.isStatic,
                         "transform", Values.Transform(t));
                     var components = new List<object>(); var colliders = new List<object>();
-                    foreach (Component component in go.GetComponents<Component>())
+                    Component[] discovered = go.GetComponents<Component>();
+                    Gameplay.Register(go, discovered);
+                    foreach (Component component in discovered)
                     {
                         if (component == null) { missingScripts++; continue; }
                         string type = component.GetType().FullName; Increment(inventory, type);
@@ -138,7 +148,8 @@ namespace SousChef.Plugin
             foreach (string id in previousParents.Keys) if (!parents.ContainsKey(id)) removed.Add(id);
             previousParents = parents; identities.Retain(seen);
             geometry.EndFrame();
-            object physics = GeometryCapture.PhysicsSettings(); watch.Stop();
+            object physics = GeometryCapture.PhysicsSettings();
+            Gameplay.Reconciled(sequence); watch.Stop();
             var snapshot = Json.Object("type", "snapshot", "protocolVersion", 1, "sessionId", session,
                 "sequence", sequence, "levelEpoch", Epoch, "role", gate.Role, "inRound", true,
                 "flowId", Id(gate.Flow.gameObject), "scenes", scenes, "paused", TimeManager.IsPaused(TimeManager.PauseLayer.Main),

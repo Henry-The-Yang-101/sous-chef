@@ -38,15 +38,15 @@ class BridgeClient:
                     self.assets.clear(); self.snapshot = None; self.last_sequence = None
                 elif kind == 'asset':
                     self.assets[message['id']] = message
-                elif kind in ('snapshot', 'status'):
+                elif kind in ('snapshot', 'gameplay', 'status'):
                     if message.get('sessionId') != self.session_id: raise ValueError('Session changed without hello')
                     sequence = message['sequence']
                     if self.last_sequence is not None and sequence <= self.last_sequence:
                         raise ValueError('Non-monotonic sequence')
                     self.last_sequence = sequence
-                    self.snapshot = message if kind == 'snapshot' and message.get('inRound') else None
+                    self.snapshot = message if kind in ('snapshot', 'gameplay') and message.get('inRound') else None
                     self.last_received = time.monotonic()
-                    if self.snapshot:
+                    if self.snapshot and kind == 'snapshot':
                         needed = {c['shape'][key]['assetId'] for o in message['objects'] for c in o['colliders']
                                   for key in ('mesh', 'terrain') if c.get('shape', {}).get(key)}
                         if not needed.issubset(self.assets): raise ValueError('Missing geometry assets')
@@ -64,10 +64,10 @@ class BridgeClient:
 
 
 def summary(message):
-    if message['type'] != 'snapshot':
+    if message['type'] not in ('snapshot', 'gameplay'):
         return {k: v for k, v in message.items() if k != 'data'}
     objects = message['objects']
-    return {'type': 'snapshot', 'sequence': message['sequence'], 'epoch': message['levelEpoch'],
+    return {'type': message['type'], 'sequence': message['sequence'], 'epoch': message['levelEpoch'],
             'objects': len(objects), 'colliders': sum(len(o['colliders']) for o in objects),
             'chefs': sum(any(c['type'] == 'PlayerControls' for c in o['components']) for o in objects),
             'role': message['role'], 'captureMs': message['diagnostics']['captureMilliseconds'],
@@ -89,7 +89,7 @@ if __name__ == '__main__':
                 if recording: recording.write(json.dumps(message, separators=(',', ':')) + '\n')
                 if message['type'] == 'asset': continue
                 print(json.dumps(summary(message)), flush=True)
-                if message['type'] in ('snapshot', 'status'):
+                if message['type'] in ('snapshot', 'gameplay', 'status'):
                     count += 1
                     if args.frames and count >= args.frames: break
     except (OSError, EOFError, ValueError) as error:

@@ -8,7 +8,7 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'clients'))
 from bridge import BridgeClient
 from validate_recording import validate_snapshot
-from world import World
+from world import World, GameplayWorld
 
 
 def snapshot(sequence=1):
@@ -31,6 +31,34 @@ def client_for(*messages):
 
 
 class ClientTests(unittest.TestCase):
+    def test_gameplay_samples_replace_and_recover_after_gap(self):
+        first = snapshot(); first['type'] = 'gameplay'
+        first['objects'][0]['colliders'] = [{'componentInstanceId': 44, 'worldBounds': {}}]
+        second = snapshot(5); second['type'] = 'gameplay'; second['levelEpoch'] = 2
+        second['objects'] = []
+        client = client_for({'type': 'hello', 'protocolVersion': 1, 'sessionId': 'test'}, first,
+                            {'type': 'gap', 'afterSequence': 1, 'beforeSequence': 5}, second,
+                            {'type': 'status', 'sessionId': 'test', 'sequence': 6, 'inRound': False})
+        stream = client.messages(); next(stream); next(stream)
+        chef, plate = next(GameplayWorld(client.current()).held_items())
+        self.assertEqual(plate['id'], 'plate')
+        with self.assertRaises(ValueError): World(client.current())
+        next(stream); next(stream)
+        self.assertEqual(GameplayWorld(client.current()).objects, {})
+        self.assertEqual(client.current()['levelEpoch'], 2)
+        next(stream); self.assertIsNone(client.current())
+        with self.assertRaises(EOFError): next(stream)
+        self.assertIsNone(client.current())
+
+    def test_gameplay_disconnect_and_staleness(self):
+        value = snapshot(); value['type'] = 'gameplay'
+        client = client_for({'type': 'hello', 'protocolVersion': 1, 'sessionId': 'test'}, value)
+        stream = client.messages(); next(stream); next(stream)
+        client.last_received = time.monotonic() - 1
+        self.assertIsNone(client.current(max_age=.2))
+        with self.assertRaises(EOFError): next(stream)
+        self.assertIsNone(client.snapshot)
+
     def test_graph_and_carried_relationship(self):
         value = snapshot(); validate_snapshot(value, {})
         chef, plate = next(World(value).held_items())
