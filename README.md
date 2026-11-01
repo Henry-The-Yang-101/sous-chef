@@ -121,6 +121,21 @@ Game assemblies are local build inputs and are never included in this repository
 The bridge implementation is original. The harness bundles Project Nayuki's
 MIT-licensed QR encoder; see [its attribution](harness/vendor/README.md).
 
+### Try Apple's speech recognition
+
+On macOS 27+, with Xcode 27's Swift tools installed, run:
+
+```sh
+python3 scripts/test_apple_speech.py
+```
+
+Allow microphone access when prompted, speak, and press Ctrl+C to stop. Provisional
+text updates in place; final text stays on screen. This uses Apple's on-device
+`SpeechTranscriber`, saves no microphone audio, and installs language assets if
+needed. The launcher caches its native executable in `.local/apple-speech-test/`.
+Use `--locale en-CA` to change language, `--check` to check availability without
+opening the microphone, or `--file recording.wav` to transcribe an existing file.
+
 ### Faster gameplay observations
 
 Bridge 0.3.0 adds a compact gameplay stream on **127.0.0.1:24704**, targeting
