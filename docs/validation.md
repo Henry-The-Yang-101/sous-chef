@@ -281,3 +281,18 @@ sharing/metadata additions. Local evidence is `.local/final-continuous-result.js
 `.local/final-start-failure.json`. The full pickup snapshot records the authoritative
 held-item relationship; the result file records the target identity and arrival
 metrics together.
+
+### Wall contact and final-approach stability follow-up
+
+The next revision replaces the growing start capsule with consistent native
+contact clearance and expands start discovery to a 5×5 neighbourhood. It also
+retains a valid final stance near the target and adds positional hysteresis
+(enter settling at 0.20 units, leave above 0.28). Native selection, facing and
+velocity checks still gate arrival. A partial replan can retain an active route
+only after rechecking the entire remaining route and its target stance.
+
+Build/audit validation passes 738 C# assertions and 42 Python tests. New regression
+checks cover braking drift without walking reversals, leaving and re-entering the
+settling band, and resetting it between actions. Unity wall/corner contacts and
+physical settling still require live testing; these unit checks do not emulate
+PhysX or establish that all reported cancellations are resolved.

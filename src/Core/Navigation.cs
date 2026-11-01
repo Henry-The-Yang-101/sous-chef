@@ -141,14 +141,21 @@ namespace SousChef.Core
     // Nearby native grid selection alone is not proof of usable alignment.
     public sealed class ArrivalCheck
     {
-        public const float PositionTolerance = .12f;
+        public const float PositionTolerance = .20f;
+        public const float ReleaseTolerance = .28f;
         public const float FacingCosine = .9961947f; // five degrees
         private double readySince = -1;
-        public void Reset() { readySince = -1; }
+        private bool settling;
+        public void Reset() { readySince = -1; settling = false; }
+        public bool ShouldSettle(float distance)
+        {
+            settling = distance <= (settling ? ReleaseTolerance : PositionTolerance);
+            return settling;
+        }
         public bool Observe(double now, float distance, float facingDot, float speed, bool selected)
         {
-            if (!(distance <= PositionTolerance && facingDot >= FacingCosine && speed <= .2f && selected))
-            { Reset(); return false; }
+            if (!(ShouldSettle(distance) && facingDot >= FacingCosine && speed <= .2f && selected))
+            { readySince = -1; return false; }
             if (readySince < 0) readySince = now;
             return now - readySince >= .1;
         }

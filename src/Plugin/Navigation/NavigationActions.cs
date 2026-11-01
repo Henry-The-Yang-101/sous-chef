@@ -115,8 +115,26 @@ namespace SousChef.Plugin.Navigation
         {
             Destination current;
             if (!available.TryGetValue(Action.Destination ?? "", out current))
-            { Stop(unavailable ?? "destination_unreachable"); return false; }
+            {
+                // Budget exhaustion is not evidence of a blocked route. Retain only
+                // a fully rechecked remaining route; actual obstruction still stops
+                // in this update. Never retain a route after observation failures.
+                if (unavailable == "planning_in_progress" && RemainingRouteClear()) return true;
+                Stop(unavailable ?? "destination_unreachable"); return false;
+            }
             target = current; SetRoute(current); return true;
+        }
+        private bool RemainingRouteClear()
+        {
+            if (target == null || target.Object == null || route == null || TargetMoved()) return false;
+            Vector3 from = physics.Position;
+            for (int i = waypoint; i < route.Count; i++)
+            {
+                if (i < route.Count - 1 && Vector3.Distance(from, route[i]) < .18f) continue;
+                if (!physics.Segment(from, route[i])) return false;
+                from = route[i];
+            }
+            return !physics.Overflow;
         }
         private void SetRoute(Destination chosen)
         {
@@ -129,7 +147,7 @@ namespace SousChef.Plugin.Navigation
             if (Action.State != "navigating")
             {
                 // A cold physics graph may take several bounded updates to warm.
-                // Keep all destinations unavailable until a complete search passes.
+                // Publish certified destinations while the remaining graph warms.
                 if (chef == player && (unavailable == "planning_budget_exceeded" || unavailable == "planning_in_progress") && warmTicks > 0)
                 { warmTicks--; Refresh(player, true); }
                 return;
@@ -151,9 +169,9 @@ namespace SousChef.Plugin.Navigation
             // actual displacement for the stall watchdog, not Euclidean goal distance.
             if (Vector3.Distance(position, progressPosition) > .15f)
             { progressPosition = position; lastProgress = Time.realtimeSinceStartup; }
-            if (Time.realtimeSinceStartup - lastProgress > 2f) { Stop("no_progress"); return; }
-            if (Vector3.Distance(position, target.Approach) <= ArrivalCheck.PositionTolerance)
+            if (arrival.ShouldSettle(Vector3.Distance(position, target.Approach)))
             { Align(position); return; }
+            if (Time.realtimeSinceStartup - lastProgress > 2f) { Stop("no_progress"); return; }
             facingSince = -1; arrival.Reset(); arrivalDetails = null;
             while (waypoint < route.Count - 1 && Vector3.Distance(position, route[waypoint]) < .18f) waypoint++;
             Vector3 goal = route[waypoint];
@@ -344,6 +362,18 @@ namespace SousChef.Plugin.Navigation
                 foreach (Destination d in candidates)
                 {
                     float best = Single.MaxValue; WalkCell goal = new WalkCell(); Vector3 bestApproach = Vector3.zero;
+                    // Do not chase a newly cheapest side/stance on every refresh
+                    // while braking and turning. Retain the selected stance only
+                    // while native geometry still validates it.
+                    Vector3 retained = d.Approach;
+                    bool retainApproach = false;
+                    if (target == d && Vector3.Distance(physics.Position, retained) < 1f)
+                        foreach (Collider c in d.Colliders)
+                        {
+                            Vector3 checkedStance;
+                            if (physics.Approach(retained, c, out checkedStance) && Vector3.Distance(retained, checkedStance) < .04f)
+                            { retainApproach = true; break; }
+                        }
                     foreach (Collider c in d.Colliders)
                     {
                         Bounds b = c.bounds;
@@ -358,6 +388,7 @@ namespace SousChef.Plugin.Navigation
                             {
                                 float distance = search.Distances[cell]; Vector3 stance, point = physics.Point(cell);
                                 if (distance >= best || !physics.Approach(point, c, out stance)) continue;
+                                if (retainApproach && Vector3.Distance(stance, retained) >= .04f) continue;
                                 distance += Vector3.Distance(point, stance);
                                 if (distance >= best) continue;
                                 best = distance; goal = cell; bestApproach = stance;

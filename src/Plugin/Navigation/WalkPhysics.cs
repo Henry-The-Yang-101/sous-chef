@@ -296,7 +296,9 @@ namespace SousChef.Plugin.Navigation
         {
             var result = new List<WalkEdge>(); Vector3 start = Position;
             int x = Mathf.RoundToInt(start.x / Spacing), z = Mathf.RoundToInt(start.z / Spacing), y = Mathf.RoundToInt(start.y / HeightBand);
-            for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++)
+            // A corner contact may have no padded node in the immediate 3x3 ring.
+            // Longer connectors still undergo complete support and collision checks.
+            for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++)
             {
                 var key = new WalkCell(x + dx, y, z + dz); Probe probe = Sample(key);
                 if (probe.Valid && Segment(start, probe.Point)) result.Add(new WalkEdge(key, Vector3.Distance(start, probe.Point)));
@@ -348,25 +350,22 @@ namespace SousChef.Plugin.Navigation
             {
                 Vector3 point; Collider ground;
                 Vector3 guess = Vector3.Lerp(from, to, (float)i / steps);
-                // A legal resting wall contact can lie inside the extra planning
-                // margin. Use the native capsule (with tiny contact skin) at the
-                // actual starting pose, growing back to full clearance over 0.15 m.
-                float clearance = entering ? Mathf.Lerp(Mathf.Max(.01f, nativeRadius - .005f), radius, Mathf.Clamp01(length * i / steps / .15f)) : radius;
+                // Only the connector from the actual chef uses contact clearance.
+                // Growing a capsule while sliding away from a wall invents a
+                // collision: use consistent native clearance along this connector.
+                // Lattice nodes and edges retain padded clearance. The contact skin
+                // is bounded, and every sample still checks support and hazards.
+                float clearance = entering ? ContactRadius : radius;
                 if (!Stand(guess, out point, out ground, clearance) || Mathf.Abs(point.y - guess.y) > .22f || !CanWalkDirection(from, to, ground)) return false;
             }
             if (length < .001f) return true;
-            if (entering)
-            {
-                float entryLength = Mathf.Min(.15f, length);
-                if (!Sweep(from, from + delta / length * entryLength, Mathf.Max(.01f, nativeRadius - .005f))) return false;
-                if (entryLength >= length) return true;
-                from += delta / length * entryLength;
-            }
-            return Sweep(from, to, radius);
+            return Sweep(from, to, entering ? ContactRadius : radius);
         }
+        private float ContactRadius { get { return Mathf.Max(.01f, nativeRadius - .02f); } }
         private bool Sweep(Vector3 from, Vector3 to, float clearance)
         {
             Vector3 delta = to - from, low, high; float length = delta.magnitude;
+            if (length < .0001f) return true;
             Capsule(from, out low, out high, clearance);
             int count = Physics.CapsuleCastNonAlloc(low, high, clearance, delta / length, hits, length, ~0, QueryTriggerInteraction.Collide); Queries++;
             if (count == hits.Length) { Overflow = true; return false; }

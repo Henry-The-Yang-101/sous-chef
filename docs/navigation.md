@@ -69,10 +69,11 @@ colliders and are rechecked as they move. A fully jammed chef can still hit the
 no-progress watchdog; ignoring a chef does not teleport through a physical jam.
 
 The lattice uses an extra 0.025-unit body clearance margin. A chef already resting
-against a wall may legally be inside that margin. The first 0.15 units of a route
-from the current pose use native body dimensions (with 0.005 contact skin), then
-return to the padded checks. Support, collisions and hazards are still checked;
-this is an escape from legal contact, not an unchecked step through a wall.
+against a wall may legally be inside that margin. Connectors from the current pose use consistent native body clearance with a
+0.02-unit contact skin, rather than expanding the capsule while it slides away
+from a wall. Start discovery checks a 5×5 lattice neighbourhood; lattice nodes
+and edges retain the padded clearance. Every connector still checks support,
+collisions and hazards.
 
 A single Dijkstra search builds shortest-distance routes from Player 2 to **all**
 reachable destinations, including a checked final connector to a centred working
@@ -106,8 +107,11 @@ The 12 ms budget applies to graph search, after geometry preparation and discove
 It is not a hard bound on the entire request: Unity queries, discovery, runtime
 initialization and destination matching also take time. `planMilliseconds`
 reports the complete measured refresh duration. Heavy geometry changes can still
-exhaust the budget. An active action stops if its target's route is no longer
-certified; other certified destinations remain available.
+exhaust the budget. If a search is incomplete, an active action can retain its previous route only
+when the target stance and every remaining segment pass fresh physics checks.
+An observed blockage, moved/invalid target or observation failure still stops the
+action in that update. This does not republish an unresolved destination or claim
+that the retained route is newly optimal; other certified destinations remain available.
 
 The search lattice is 0.4 world units horizontally with height-aware keys. Routes
 are shortest on that sampled graph, not guaranteed continuous-world geodesics.
@@ -139,10 +143,14 @@ and state becomes `idle` in that detecting update. It does not wait for a bridge
 or door to reopen, silently resume, or choose a different semantic task.
 
 The next walking step is checked against live support and collision. The chef must
-reach within 0.12 units of the checked working stance, face the target within five
+reach within 0.20 units of the checked working stance, face the target within five
 degrees, settle below 0.2 units/second, and retain exact native selection for at
 least 0.1 seconds. An adjacent grid selection by itself cannot finish navigation.
-At the stance, walking input is neutral and the game's own turn helper rotates
+Once settling begins, up to 0.28 units of stance error is allowed so small braking
+drift does not repeatedly restart full-speed walking. A larger displacement resets
+this latch. Near the destination, the chosen approach is retained while it remains
+valid, instead of changing sides during alignment. The final route is shortest
+to that retained stance. At the stance, walking input is neutral and the game's own turn helper rotates
 Player 2 at the native turn rate. Position is never teleported; a nonzero movement
 axis cannot be used as a slow turning pulse because the game normalizes it to full
 walking speed.

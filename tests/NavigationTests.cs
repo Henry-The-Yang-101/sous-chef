@@ -63,6 +63,16 @@ internal static class NavigationTests
         check(!arrival.Observe(6, .05f, 1, 0, false), "losing selection resets arrival latch");
         check(!arrival.Observe(6.2, .05f, 1, 0, true), "old stable time cannot survive target loss");
         check(!arrival.Observe(7, Single.NaN, 1, 0, true), "invalid observation cannot confirm arrival");
+        arrival.Reset();
+        check(!arrival.ShouldSettle(.24f), "wide release band cannot initiate premature arrival");
+        check(arrival.ShouldSettle(.19f), "capture final approach before a full-speed reversal");
+        check(arrival.ShouldSettle(.24f), "small braking drift does not restart walking");
+        check(!arrival.Observe(8, .24f, 1, 0, true), "captured stance still needs stable native selection");
+        check(arrival.Observe(8.11, .24f, 1, 0, true), "settled braking drift can finish without oscillation");
+        check(!arrival.ShouldSettle(.29f), "larger displacement releases settling latch");
+        check(!arrival.ShouldSettle(.24f), "released latch requires close approach again");
+        arrival.ShouldSettle(.19f); arrival.Reset();
+        check(!arrival.ShouldSettle(.24f), "stop or new action clears positional hysteresis");
         var action = new ChefActionState();
         check(!action.Start(1, "d1", false) && action.State == "idle", "unavailable target never starts");
         check(action.Start(1, "d1", true) && action.State == "navigating", "accepted action owns lifecycle");
