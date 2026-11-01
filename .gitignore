@@ -1,0 +1,10 @@
+.DS_Store
+.tools/
+.local/
+artifacts/
+**/bin/
+**/obj/
+**/__pycache__/
+*.pyc
+*.user
+
