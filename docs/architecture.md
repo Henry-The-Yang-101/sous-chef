@@ -48,7 +48,9 @@ not behavioral coverage of every mechanic. The catalog is the exact field list.
 
 - Sampling cannot observe actions/objects that begin and end between captures.
   The default 5 Hz favors breadth over event fidelity.
-- Couch co-op is the supported scope; online multiplayer is out of scope.
+- The target is two simultaneous local players, each controlling one chef.
+  Single-player chef switching is not the intended co-op setup. Online multiplayer
+  is out of scope. Independent player control through the bridge is not implemented.
   Existing client-role metadata is diagnostic, not a promise of online support.
   Horde, DLC, terrain-heavy levels and many special mechanics remain unvalidated.
 - Unity 2017.4 lacks the public per-collider ignore-pair reader. Layer filtering

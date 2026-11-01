@@ -34,7 +34,11 @@ Launched through the installed BepInEx wrapper with Steam running. The loader
 reported one plugin, and the client received the expected fingerprint, session
 and protocol greeting. Main-menu, local arcade selection and loading produced
 inactive status without map data. Entering Arcade Couch / Sushi City produced
-host snapshots only once the round began.
+host snapshots only once the round began. This run used one local player with
+two switchable chefs, not two independently controlled local players. It verifies
+observation of two chef entities, but does not validate the intended two-player
+couch co-op setup. Movement and pickup were performed through UI test inputs,
+not through a bridge command or virtual controller.
 
 The scene was `s_sushi_1_1`, alongside `InGameMenu`. Local recordings (ignored by
 Git because they contain game geometry) are `.local/baseline.ndjson` and
@@ -79,7 +83,7 @@ pause menu was absent.
 ## Remaining validation scope
 
 Online multiplayer is outside the supported scope. Within couch co-op,
-scene-to-scene round transitions, delivery/plate-return
+two independently controlled local player seats, scene-to-scene round transitions, delivery/plate-return
 progression, food-processing completion, fire, moving platforms, wind, portals,
 cannons, piloting, Horde, DLC and terrain still need dedicated live scenarios.
 No broad runtime coverage is claimed from member existence alone. The core
