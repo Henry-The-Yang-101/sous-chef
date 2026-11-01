@@ -14,7 +14,7 @@ namespace SousChef.Plugin.Navigation
             public GameObject Object;
             public readonly List<Collider> Colliders = new List<Collider>();
             public WalkCell Goal;
-            public Vector3 Approach;
+            public Vector3 Approach, LocalApproach;
             public float Distance;
         }
         private readonly WalkPhysics physics = new WalkPhysics();
@@ -33,6 +33,9 @@ namespace SousChef.Plugin.Navigation
         private PlayerControls chef;
         private float lastPlan = -1, started, lastProgress, facingSince = -1;
         private Vector3 progressPosition;
+        private Vector3 motionPosition, motionLocalPosition, targetVelocity;
+        private float motionTime, observedRelativeSpeed;
+        private bool haveMotion, motionSampleValid;
         private long revision;
         private string unavailable = "not_ready";
         private double planMilliseconds, prepareMilliseconds, searchMilliseconds, matchMilliseconds;
@@ -49,7 +52,7 @@ namespace SousChef.Plugin.Navigation
             // Neutral first; callers must not observe idle with stale movement input.
             neutral();
             if (target != null && target.Object != null) lastDestination = Identity(target);
-            Action.Stop(reason); target = null; route = null; facingSince = -1; arrival.Reset();
+            Action.Stop(reason); target = null; route = null; facingSince = -1; arrival.Reset(); haveMotion = motionSampleValid = false;
         }
         public void Invalidate(string reason)
         {
@@ -108,7 +111,7 @@ namespace SousChef.Plugin.Navigation
             if (!available.TryGetValue(destination, out chosen)) return unavailable ?? "destination_unavailable";
             if (!Action.Start(owner, destination, true)) return "action_in_progress";
             target = chosen; lastDestination = Identity(chosen); started = lastProgress = Time.realtimeSinceStartup; progressPosition = physics.Position;
-            arrivalDetails = null; arrival.Reset(); facingSince = -1;
+            arrivalDetails = null; arrival.Reset(); facingSince = -1; haveMotion = motionSampleValid = false;
             SetRoute(chosen); return null;
         }
         private bool ApplyPlan()
@@ -163,6 +166,7 @@ namespace SousChef.Plugin.Navigation
             }
             if (route == null || route.Count == 0) { Stop("destination_unreachable"); return; }
             Vector3 position = physics.Position;
+            SampleMotion(position);
             if (Time.realtimeSinceStartup - started > 45f) { Stop("navigation_timeout"); return; }
             // A valid detour can initially move away from the destination. Measure
             // actual displacement for the stall watchdog, not Euclidean goal distance.
@@ -225,6 +229,24 @@ namespace SousChef.Plugin.Navigation
             }
             return true;
         }
+        private void SampleMotion(Vector3 position)
+        {
+            float now = Time.realtimeSinceStartup, elapsed = now - motionTime;
+            motionSampleValid = haveMotion && elapsed > .00001f;
+            if (motionSampleValid)
+            {
+                // Transport the previous chef pose with the destination. This
+                // measures translation/rotation of a shared moving platform
+                // without mistaking it for movement past the target.
+                Vector3 transported = target.Object.transform.TransformPoint(motionLocalPosition);
+                targetVelocity = (transported - motionPosition) / elapsed; targetVelocity.y = 0;
+                Vector3 relative = position - transported; relative.y = 0;
+                observedRelativeSpeed = relative.magnitude / elapsed;
+            }
+            else { targetVelocity = Vector3.zero; observedRelativeSpeed = Single.PositiveInfinity; }
+            motionPosition = position; motionLocalPosition = target.Object.transform.InverseTransformPoint(position);
+            motionTime = now; haveMotion = true;
+        }
         private void Align(Vector3 position)
         {
             float now = Time.realtimeSinceStartup;
@@ -252,8 +274,11 @@ namespace SousChef.Plugin.Navigation
             bool selected = Selected(target.Object), canPickup, canPlace, canUse;
             Readiness(out canPickup, out canPlace, out canUse);
             bool ready = canPickup || canPlace || canUse;
-            bool positioned = arrival.Observe(now, distance, dot, velocity.magnitude, selected);
+            Vector3 relativeVelocity = velocity + drift - targetVelocity; relativeVelocity.y = 0;
+            float relativeSpeed = Mathf.Max(observedRelativeSpeed, relativeVelocity.magnitude);
+            bool positioned = arrival.Observe(now, distance, dot, relativeSpeed, selected);
             arrivalDetails = Json.Object("stanceError", distance, "facingErrorDegrees", Mathf.Acos(Mathf.Clamp(dot, -1, 1)) * Mathf.Rad2Deg,
+                "relativeSpeed", motionSampleValid ? (object)relativeSpeed : null,
                 "nativeSelected", selected, "positioned", positioned, "canPickup", canPickup, "canPlace", canPlace, "canUse", canUse, "readyForAction", positioned && ready);
             if (positioned) Stop(ready ? "arrived" : "positioned_no_action");
         }
@@ -377,10 +402,11 @@ namespace SousChef.Plugin.Navigation
                 foreach (Destination d in candidates)
                 {
                     float best = Single.MaxValue; WalkCell goal = new WalkCell(); Vector3 bestApproach = Vector3.zero;
+                    float preferred = Single.MaxValue; WalkCell preferredGoal = new WalkCell(); Vector3 preferredApproach = Vector3.zero;
                     // Do not chase a newly cheapest side/stance on every refresh
                     // while braking and turning. Retain the selected stance only
                     // while native geometry still validates it.
-                    Vector3 retained = d.Approach;
+                    Vector3 retained = d.Object.transform.TransformPoint(d.LocalApproach);
                     bool retainApproach = false;
                     if (target == d && Vector3.Distance(physics.Position, retained) < 1f)
                         foreach (Collider c in d.Colliders)
@@ -402,18 +428,30 @@ namespace SousChef.Plugin.Navigation
                             foreach (WalkCell cell in bucket)
                             {
                                 float distance = search.Distances[cell]; Vector3 stance, point = physics.Point(cell);
-                                if (distance >= best || !physics.Approach(point, c, out stance)) continue;
-                                if (retainApproach && Vector3.Distance(stance, retained) >= .04f) continue;
+                                if ((distance >= best && (!retainApproach || distance >= preferred)) || !physics.Approach(point, c, out stance)) continue;
                                 distance += Vector3.Distance(point, stance);
-                                if (distance >= best) continue;
-                                best = distance; goal = cell; bestApproach = stance;
+                                if (distance < best) { best = distance; goal = cell; bestApproach = stance; }
+                                if (retainApproach && distance < preferred && Vector3.Distance(stance, retained) < .04f)
+                                { preferred = distance; preferredGoal = cell; preferredApproach = stance; }
                             }
                         }
                     }
+                    // A valid stance is a preference, not evidence that its side
+                    // is reachable. Fall back to another certified approach when
+                    // the retained route is blocked. An incomplete search can
+                    // still preserve a freshly checked previous route.
+                    if (retainApproach && preferred != Single.MaxValue && preferred <= search.MinimumPendingDistance)
+                    { best = preferred; goal = preferredGoal; bestApproach = preferredApproach; }
+                    else if (retainApproach && !search.Complete && RemainingRouteClear()) continue;
                     // Any unsettled approach costs at least the frontier distance.
                     // Publish only when even an unseen approach cannot beat this one.
                     if (best != Single.MaxValue && best <= search.MinimumPendingDistance)
-                    { d.Goal = goal; d.Approach = bestApproach; d.Distance = best; available[d.Id] = d; }
+                    {
+                        Vector3 localApproach = d.Object.transform.InverseTransformPoint(bestApproach);
+                        if (target == d && d.Object.transform.TransformVector(localApproach - d.LocalApproach).magnitude >= .04f)
+                        { arrival.Reset(); facingSince = -1; arrivalDetails = null; }
+                        d.Goal = goal; d.Approach = bestApproach; d.LocalApproach = localApproach; d.Distance = best; available[d.Id] = d;
+                    }
                 }
                 if (physics.Overflow) { available.Clear(); unavailable = "physics_query_overflow"; }
                 else unavailable = search.Complete ? null : "planning_in_progress";

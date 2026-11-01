@@ -19,6 +19,12 @@ internal static class Program
         public Vector3 Velocity;
         public Vector3 CalculateVelocityAtPoint(Vector3 point, IMovingSurface previous) { return Velocity; }
     }
+    private sealed class StationGrid : MonoBehaviour, IGridLocation
+    {
+        public GridManager Manager;
+        public GridManager AccessGridManager { get { return Manager; } }
+        public GridIndex GridIndex { get { return new GridIndex(); } }
+    }
     private sealed class World
     {
         public readonly List<Collider> Colliders = new List<Collider>();
@@ -55,6 +61,29 @@ internal static class Program
         public WalkPhysics Ready()
         {
             var physics = new WalkPhysics(); Check(physics.Refresh(Chef) == null,"fixture refresh succeeds"); return physics;
+        }
+        public GameObject AddStation()
+        {
+            var station=new GameObject("workstation"); station.Add(new ServerWorkstation());
+            var manager=station.Add(new GridManager { Station=station });
+            var grid=station.Add(new StationGrid { Manager=manager });
+            var interact=station.Add(new ClientInteractable());
+            Colliders.Add(station.Add(new BoxCollider { center=new Vector3(0,.5f,0),size=new Vector3(.8f,1,.8f) }));
+            Chef.CurrentInteractionObjects.m_gridLocation=grid; Chef.CurrentInteractionObjects.m_interactable=interact;
+            return station;
+        }
+        public NavigationActions Navigate(GameObject station)
+        {
+            var navigation=new NavigationActions(v => {},() => {}); string id=null;
+            for (int i=0; i<8; i++)
+            {
+                var catalog=(Json.Record)navigation.Available(Chef);
+                foreach (Json.Record d in (List<object>)catalog["destinations"])
+                    if ((int)d["objectInstanceId"] == station.GetInstanceID()) id=(string)d["id"];
+                if ((bool)catalog["complete"]) break;
+            }
+            Check(id != null,"station is published by production discovery/search/matching");
+            Check(navigation.Start(Chef,1,id) == null,"production action starts"); return navigation;
         }
     }
     private static void StepsAndRamps()
@@ -106,9 +135,81 @@ internal static class Program
         w.Chef.transform.position=Vector3.zero; Time.realtimeSinceStartup += .02f; physics.Refresh(w.Chef);
         Check(!physics.Neighbours(boundary).Any(e => e.Cell.Equals(outside)),"moving away reapplies live radius to cached edge");
     }
+    private static void ArrivalMotion()
+    {
+        var w=new World(); w.AddFloor((x,z) => Math.Abs(x)<2 && Math.Abs(z)<2 ? 0 : (float?)null);
+        w.Chef.transform.position=new Vector3(0,0,-1); var station=w.AddStation(); var navigation=w.Navigate(station);
+        w.Chef.WindReceiver.Velocity=new Vector3(.5f,0,0);
+        for (int i=0; i<4; i++)
+        {
+            Time.realtimeSinceStartup += .06f; w.Chef.transform.position += new Vector3(.03f,0,0); navigation.Tick(w.Chef);
+        }
+        Check(navigation.Action.State == "navigating","wind drift past a stationary station cannot finish arrival");
+        var details=(Json.Record)((Json.Record)navigation.Describe())["arrival"];
+        Check((float)details["relativeSpeed"] > .4f,"arrival reports motion including wind drift");
+        w.Chef.WindReceiver.Velocity=Vector3.zero;
+        for (int i=0; i<4; i++) { Time.realtimeSinceStartup += .06f; navigation.Tick(w.Chef); }
+        Check(navigation.Action.Reason == "arrived","settling after drift stops can finish");
+
+        w=new World(); w.AddFloor((x,z) => Math.Abs(x)<3 && Math.Abs(z)<3 ? 0 : (float?)null);
+        w.Chef.transform.position=new Vector3(0,0,-1); station=w.AddStation(); navigation=w.Navigate(station);
+        w.Chef.SurfaceMovable.Velocity=new Vector3(.5f,0,0);
+        for (int i=0; i<4; i++)
+        {
+            Time.realtimeSinceStartup += .06f; var shift=new Vector3(.03f,0,0);
+            w.Chef.transform.position += shift; station.transform.position += shift; navigation.Tick(w.Chef);
+        }
+        Check(navigation.Action.Reason == "arrived","chef and station sharing platform motion can finish relative arrival");
+
+        w=new World(); w.AddFloor((x,z) => Math.Abs(x)<3 && Math.Abs(z)<3 ? 0 : (float?)null);
+        w.Chef.transform.position=new Vector3(0,0,-1); station=w.AddStation(); navigation=w.Navigate(station);
+        for (int i=0; i<4; i++)
+        {
+            Vector3 previous=w.Chef.transform.position; Time.realtimeSinceStartup += .06f;
+            station.transform.yaw += .03f; w.Chef.transform.position=station.transform.TransformPoint(new Vector3(0,0,-1));
+            w.Chef.SurfaceMovable.Velocity=(w.Chef.transform.position-previous)/.06f; navigation.Tick(w.Chef);
+        }
+        Check(navigation.Action.Reason == "arrived","shared platform rotation preserves relative settling and the retained side");
+
+        w=new World(); w.AddFloor((x,z) => Math.Abs(x)<2 && Math.Abs(z)<2 ? 0 : (float?)null);
+        w.Chef.transform.position=new Vector3(0,0,-1); station=w.AddStation(); navigation=w.Navigate(station);
+        for (int i=0; i<4; i++)
+        {
+            Time.realtimeSinceStartup += .06f; w.Chef.transform.position += new Vector3(.03f,0,0); navigation.Tick(w.Chef);
+        }
+        Check(navigation.Action.State == "navigating","observed displacement catches external pushes even with zero motion velocity");
+    }
+    private static void ApproachFallback()
+    {
+        var w=new World(); bool bridge=true;
+        Floor floor=w.AddFloor((x,z) =>
+        {
+            if (Math.Abs(x)>=2 || Math.Abs(z)>=2) return null;
+            if (bridge || z<=-.6f || x>=-.3f || (x>=-1.4f && x<=-.6f && Math.Abs(z)<=.3f)) return 0;
+            return null;
+        });
+        w.Chef.transform.position=new Vector3(-1,0,0); var station=w.AddStation(); var navigation=w.Navigate(station);
+        string id=navigation.Action.Destination;
+        bridge=false; floor.testBounds=new Bounds(Vector3.zero,new Vector3(201,2,201));
+        w.Chef.transform.position=new Vector3(-1,0,-.85f); Time.realtimeSinceStartup += .21f;
+        var catalog=(Json.Record)navigation.Available(w.Chef);
+        var destination=((List<object>)catalog["destinations"]).Cast<Json.Record>().FirstOrDefault(d => (string)d["id"]==id);
+        Check(destination != null,"reachable destination survives loss of retained side");
+        float[] approach=(float[])destination["approachPosition"];
+        Check(approach[0] > -.5f && approach[2] < -.5f,"matching falls back to the connected south side");
+        Check(navigation.Action.State == "navigating","approach fallback preserves the active semantic target");
+
+        w=new World(); w.AddFloor((x,z) => Math.Abs(x)<2 && Math.Abs(z)<2 ? 0 : (float?)null);
+        w.Chef.transform.position=new Vector3(-1,0,0); station=w.AddStation(); navigation=w.Navigate(station); id=navigation.Action.Destination;
+        w.Chef.transform.position=new Vector3(-.3f,0,-.7f); Time.realtimeSinceStartup += .02f;
+        catalog=(Json.Record)navigation.Available(w.Chef);
+        destination=((List<object>)catalog["destinations"]).Cast<Json.Record>().First(d => (string)d["id"]==id);
+        approach=(float[])destination["approachPosition"];
+        Check(approach[0] < -.9f && Math.Abs(approach[2]) < .1f,"reachable retained side remains preferred while aligning");
+    }
     private static void Main()
     {
-        StepsAndRamps(); InteriorFlow(); MovingBoundary();
+        StepsAndRamps(); InteriorFlow(); MovingBoundary(); ArrivalMotion(); ApproachFallback();
         Console.WriteLine("PASS: " + checks + " navigator integration checks (analytical geometry; not PhysX)");
     }
 }
