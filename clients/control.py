@@ -41,6 +41,7 @@ class ControlClient:
         response = self._read()
         if response.get('id') != ident: raise ControlError('Control response ID mismatch')
         if not response.get('ok'): raise ControlError(response.get('error', 'Command failed'))
+        self.last_response = response
         self.claimed = response['control']['ownedByYou']
         return response['control']
 

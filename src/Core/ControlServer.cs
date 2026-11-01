@@ -60,7 +60,7 @@ namespace SousChef.Core
         {
             try
             {
-                client.NoDelay = true; client.ReceiveTimeout = 5000; client.SendTimeout = 2000;
+                client.NoDelay = true; client.ReceiveTimeout = 0; client.SendTimeout = 2000;
                 NetworkStream stream = client.GetStream(); Write(stream, hello);
                 while (!stopping)
                 {

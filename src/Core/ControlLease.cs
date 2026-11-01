@@ -5,7 +5,7 @@ namespace SousChef.Core
 {
     public sealed class ControlCommand
     {
-        public string Operation, Id;
+        public string Operation, Id, Destination;
         public long Sequence;
         public int Milliseconds, Buttons;
         public float X, Y;
@@ -18,10 +18,16 @@ namespace SousChef.Core
             if (p.Length < 2 || p[1].Length > 32) throw new ArgumentException("invalid_command");
             foreach (char c in p[1]) if (!Char.IsLetterOrDigit(c) && c != '-' && c != '_') throw new ArgumentException("invalid_id");
             var result = new ControlCommand { Operation = p[0], Id = p[1] };
-            if (p[0] == "status" || p[0] == "claim" || p[0] == "release")
+            if (p[0] == "status" || p[0] == "claim" || p[0] == "release" || p[0] == "actions" || p[0] == "stop")
             {
                 if (p.Length != 2) throw new ArgumentException("invalid_arguments");
                 return result;
+            }
+            if (p[0] == "navigate_to")
+            {
+                if (p.Length != 3 || p[2].Length < 2 || p[2].Length > 32 || p[2][0] != 'd') throw new ArgumentException("invalid_destination");
+                for (int i = 1; i < p[2].Length; i++) if (p[2][i] < '0' || p[2][i] > '9') throw new ArgumentException("invalid_destination");
+                result.Destination = p[2]; return result;
             }
             if (p[0] != "input" || p.Length != 7) throw new ArgumentException("invalid_command");
             if (!Int64.TryParse(p[2], NumberStyles.None, CultureInfo.InvariantCulture, out result.Sequence) || result.Sequence < 1 ||

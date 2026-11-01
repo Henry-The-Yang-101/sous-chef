@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using SousChef.Core;
+using SousChef.Plugin.Navigation;
 using UnityEngine;
 
 namespace SousChef.Plugin.Control
@@ -9,6 +10,8 @@ namespace SousChef.Plugin.Control
     // players, global lookup patches, menu bindings or P1 fields are modified.
     internal sealed class Player2Control : IDisposable
     {
+        private readonly NavigationActions navigation;
+        private long navigationSequence;
         private readonly ControlLease lease = new ControlLease();
         private readonly ControlServer server;
         private readonly Stopwatch clock = Stopwatch.StartNew();
@@ -25,8 +28,9 @@ namespace SousChef.Plugin.Control
 
         public Player2Control(int port, string session)
         {
+            navigation = new NavigationActions(Walk, NeutralNavigation);
             server = new ControlServer(port, Json.Object("type", "hello", "controlProtocolVersion", 1,
-                "sessionId", session, "player", 2, "mode", "direct_logical_input", "maxHoldMs", 1000),
+                "sessionId", session, "player", 2, "mode", "direct_logical_input", "maxHoldMs", 1000, "actions", new[] { "navigate_to", "stop" }),
                 delegate(int client) { lease.Release(client, "disconnected"); });
             server.Start();
         }
@@ -35,13 +39,15 @@ namespace SousChef.Plugin.Control
         {
             if (disposed) return;
             KitchenGate gate = KitchenGate.Inspect();
-            if (flow != gate.Flow) { Revoke("round_changed"); flow = gate.Flow; nextScan = 0; }
+            if (flow != gate.Flow) { navigation.Reset("round_changed"); Revoke("round_changed"); flow = gate.Flow; nextScan = 0; }
             if (Now >= nextScan) { Discover(); nextScan = Now + 0.25; }
             string reason = Check(gate);
-            if (reason != null) Revoke(reason);
+            if (reason != null) { navigation.Invalidate(reason); Revoke(reason); }
             else if (lease.Owner(Now) == 0) Restore();
             unavailable = reason;
+            if (navigation.Action.State == "navigating" && lease.Owner(Now) != navigation.Action.Owner) navigation.Stop("control_lost");
             server.Pump(Handle);
+            if (reason == null) navigation.Tick(target);
         }
 
         private void Discover()
@@ -91,7 +97,28 @@ namespace SousChef.Plugin.Control
         private object Handle(int client, ControlCommand command)
         {
             string error = null;
-            if (command.Operation == "claim")
+            object actions = null;
+            if (command.Operation == "stop") { navigation.Stop("stopped"); Revoke("stopped"); }
+            else if (command.Operation == "actions")
+            {
+                Discover(); unavailable = Check(KitchenGate.Inspect());
+                if (unavailable != null) { navigation.Invalidate(unavailable); actions = Json.Object("actions", new[] { Json.Object("name", "stop") }, "destinations", new object[0], "navigation", navigation.Describe()); }
+                else actions = navigation.Available(target);
+            }
+            else if (command.Operation == "navigate_to")
+            {
+                Discover(); unavailable = Check(KitchenGate.Inspect());
+                if (unavailable != null) error = unavailable;
+                else if (navigation.Action.State != "idle") error = "action_in_progress";
+                else if (!lease.Claim(client, Now)) error = "already_claimed";
+                else
+                {
+                    Restore(); Install(); navigationSequence = 0;
+                    error = navigation.Start(target, client, command.Destination);
+                    if (error != null) Revoke(error);
+                }
+            }
+            else if (command.Operation == "claim")
             {
                 Discover(); unavailable = Check(KitchenGate.Inspect());
                 if (unavailable != null) error = unavailable;
@@ -101,25 +128,41 @@ namespace SousChef.Plugin.Control
             else if (command.Operation == "input")
             {
                 unavailable = Check(KitchenGate.Inspect());
-                if (unavailable != null) { Revoke(unavailable); error = unavailable; }
+                if (navigation.Action.State == "navigating") error = "action_in_progress";
+                else if (unavailable != null) { Revoke(unavailable); error = unavailable; }
                 else error = lease.Set(client, command, Now);
             }
             else if (command.Operation == "release")
             {
-                if (lease.Release(client, "released")) Restore(); else error = "not_owner";
+                if (lease.Release(client, "released")) { navigation.Stop("released"); Restore(); } else error = "not_owner";
             }
             return Json.Object("type", "reply", "id", command.Id, "ok", error == null,
-                "error", error, "control", Describe(client));
+                "error", error, "control", Describe(client), "availableActions", actions);
         }
 
         public object Describe(int client)
         {
             int owner = lease.Owner(Now);
-            return Json.Object("player", 2, "available", unavailable == null, "reason", unavailable,
+            return Json.Object("player", 2, "navigation", navigation.Describe(), "available", unavailable == null, "reason", unavailable,
                 "claimed", owner != 0, "ownedByYou", client != 0 && owner == client,
                 "lastRelease", lease.LastRelease, "chefInstanceId", target == null ? null : (object)target.GetInstanceID(),
                 "chefObjectInstanceId", target == null ? null : (object)target.gameObject.GetInstanceID(),
                 "pad", config == null ? null : config.Pad.ToString(), "side", config == null ? null : config.Side.ToString());
+        }
+        private void Walk(Vector3 direction)
+        {
+            int owner = navigation.Action.Owner;
+            if (owner == 0 || lease.Owner(Now) != owner) { navigation.Stop("control_lost"); return; }
+            float x = direction.x * (target.Movement.XAxisAllignment == PlayerControls.InversionType.Normal ? 1 : -1);
+            float y = -direction.z * (target.Movement.YAxisAllignment == PlayerControls.InversionType.Normal ? 1 : -1);
+            string error = lease.Set(owner, new ControlCommand { Sequence = ++navigationSequence, Milliseconds = 150,
+                X = x, Y = y, Buttons = 0 }, Now);
+            if (error != null) navigation.Stop(error);
+        }
+        private void NeutralNavigation()
+        {
+            int owner = navigation.Action.Owner;
+            if (owner != 0 && lease.Release(owner, "action_finished")) Restore();
         }
         private void Install()
         {
@@ -149,7 +192,7 @@ namespace SousChef.Plugin.Control
             if (scheme.m_dashButton == bridgeDash) scheme.m_dashButton = oldDash;
             scheme = null;
         }
-        private void Revoke(string reason) { lease.Revoke(reason); Restore(); }
+        private void Revoke(string reason) { if (navigation.Action.State == "navigating") navigation.Stop(reason); lease.Revoke(reason); Restore(); }
         public void Dispose() { disposed = true; Revoke("shutdown"); server.Dispose(); }
 
         private sealed class Axis : ILogicalValue

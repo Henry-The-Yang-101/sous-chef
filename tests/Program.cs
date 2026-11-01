@@ -20,6 +20,7 @@ internal static class Program
     }
     private static void Main(string[] args)
     {
+        checks += NavigationTests.Run();
         TestSchedule(); TestJson(); TestIdentity(); TestStream(); TestControl();
         if (args.Length > 0) Audit(args[0]);
         Console.WriteLine("PASS: " + checks + " assertions");
