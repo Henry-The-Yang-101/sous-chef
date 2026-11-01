@@ -16,4 +16,5 @@ if __name__ == '__main__':
     env = dict(os.environ, DOTNET_CLI_TELEMETRY_OPTOUT='1', DOTNET_SKIP_FIRST_TIME_EXPERIENCE='1')
     subprocess.run([str(bootstrap()), 'run', '--project', 'tests/Bridge.Tests.csproj', '--',
                     str(args.game.resolve() / 'Contents/Resources/Data/Managed')], cwd=ROOT, env=env, check=True)
+    subprocess.run([str(bootstrap()), 'run', '--project', 'tests/navigation/Navigation.Tests.csproj'], cwd=ROOT, env=env, check=True)
     subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_*.py', '-v'], cwd=ROOT, check=True)

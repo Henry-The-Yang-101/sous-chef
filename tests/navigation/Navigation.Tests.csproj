@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../src/Core/Navigation.cs" />
+    <Compile Include="../../src/Core/Json.cs" />
+    <Compile Include="../../src/Plugin/Navigation/*.cs" />
+    <Compile Include="Stubs.cs" />
+    <Compile Include="Program.cs" />
+  </ItemGroup>
+</Project>
