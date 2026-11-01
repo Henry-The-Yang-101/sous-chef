@@ -48,6 +48,8 @@ td { padding: 13px 18px; border-top: 1px solid #e7ebe4; vertical-align: middle; 
 td:last-child { text-align: right; }
 td small { display: block; font-size: 11px; color: #6b7365; font-weight: 400; margin-top: 5px; }
 td .raw { max-width: 480px; overflow-wrap: anywhere; color: #7a8075; }
+td .contents { color: #294527; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+td .contents.unknown { color: #6b7365; font-weight: 400; }
 tr.active { background: #f0f7e9; }
 #empty { padding: 32px 24px; background: #fff; border: 1px dashed #c8d0c2; color: #65715d; text-align: center; font-size: 14px; }
 footer { margin-top: 24px; color: #6f7769; font-size: 12px; }

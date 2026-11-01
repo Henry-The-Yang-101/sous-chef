@@ -41,6 +41,7 @@ const reasons = {
 const explain = reason => reasons[reason] || (reason ? reason.replaceAll('_', ' ') : '');
 const kindName = kind => (kind || 'destination').replaceAll('_', ' ');
 const number = value => Number.isFinite(value) ? value.toFixed(1) : '—';
+const contentsOf = d => d.contents?.summary || '';
 function nameOf(d) {
   if (d.foodName) return `${d.foodName.replaceAll('_', ' ')} dispenser`;
   if (d.kind === 'ingredient_supply') return 'Food dispenser (name unavailable)';
@@ -66,7 +67,7 @@ function render() {
   el('freshness').textContent = live ? `Updated ${Math.max(0, Math.round((state.ageMs || 0) + performance.now() - receivedAt))} ms ago` : 'Waiting for a fresh sample';
   el('action').textContent = moving ? `${nav.phase === 'aligning' ? 'Aligning with' : 'Walking to'} ${active ? nameOf(active) : nav.destinationId}` : live ? 'Player 2 is idle' : 'Waiting for the bridge';
   el('target').textContent = active
-    ? `${active.label} · ${active.id} · object ${active.objectInstanceId} · x ${number(active.position?.[0])}, z ${number(active.position?.[2])}${Number.isFinite(active.routeDistance) ? ` · ${number(active.routeDistance)} units to walk` : ''}`
+    ? `${active.label}${contentsOf(active) ? ` · Contents: ${contentsOf(active)}` : ''} · ${active.id} · object ${active.objectInstanceId} · x ${number(active.position?.[0])}, z ${number(active.position?.[2])}${Number.isFinite(active.routeDistance) ? ` · ${number(active.routeDistance)} units to walk` : ''}`
     : 'Join Player 2 with Split Controller, then enter an unpaused Arcade → Couch kitchen.';
   const ready = nav.arrival;
   const possible = ready ? [['canPickup', 'pickup'], ['canPlace', 'place'], ['canUse', 'use']].filter(([key]) => ready[key]).map(([,name]) => name).join(', ') : '';
@@ -77,7 +78,7 @@ function render() {
   el('error').textContent = error;
   el('stop').disabled = !token;
   const query = el('filter').value.toLowerCase().trim();
-  const shown = destinations.filter(d => `${nameOf(d)} ${d.label} ${kindName(d.kind)} ${d.id}`.toLowerCase().includes(query));
+  const shown = destinations.filter(d => `${nameOf(d)} ${contentsOf(d)} ${d.label} ${kindName(d.kind)} ${d.id}`.toLowerCase().includes(query));
   el('count').textContent = (query ? `${shown.length} of ${destinations.length}` : String(destinations.length)) + (catalog.complete === false && destinations.length ? ' · still checking' : '');
   el('empty').hidden = shown.length > 0;
   el('table-wrap').hidden = !shown.length;
@@ -95,9 +96,10 @@ function render() {
       const tr = document.createElement('tr');
       const titleCell = document.createElement('td');
       const title = document.createElement('strong');
+      const contents = document.createElement('small'); contents.className = 'contents';
       const meta = document.createElement('small');
       const raw = document.createElement('small'); raw.className = 'raw';
-      titleCell.append(title, meta, raw);
+      titleCell.append(title, contents, meta, raw);
       const position = document.createElement('td');
       const distance = document.createElement('td'); distance.className = 'distance';
       const walkDistance = document.createElement('strong');
@@ -106,19 +108,23 @@ function render() {
       const action = document.createElement('td');
       const button = document.createElement('button'); button.type = 'button';
       action.append(button); tr.append(titleCell, position, distance, action);
-      row = {tr, title, meta, raw, position, walkDistance, directDistance, button, destination};
+      row = {tr, title, contents, meta, raw, position, walkDistance, directDistance, button, destination};
       button.addEventListener('click', () => navigate(row.destination));
       rows.set(destination.id, row);
     }
     row.destination = destination;
     row.title.textContent = nameOf(destination);
+    const contents = destination.contents;
+    row.contents.hidden = !contentsOf(destination);
+    row.contents.textContent = contents?.status === 'occupied' ? `Contents: ${contents.summary}` : contentsOf(destination);
+    row.contents.classList.toggle('unknown', contents?.status === 'unknown');
     row.meta.textContent = `${kindName(destination.kind)} · ${destination.id} · object ${destination.objectInstanceId}`;
     row.raw.textContent = `${destination.foodName ? `Dispenses: ${destination.foodName} · ` : ''}${destination.label}`;
     row.position.textContent = `${number(destination.position?.[0])} / ${number(destination.position?.[2])}`;
     row.walkDistance.textContent = Number.isFinite(destination.routeDistance) ? `${number(destination.routeDistance)} units walk` : 'Walk distance unavailable';
     row.directDistance.textContent = Number.isFinite(destination.directDistance) ? `${number(destination.directDistance)} units direct` : 'Direct distance unavailable';
     row.button.textContent = moving && nav.destinationId === destination.id ? 'Walking…' : 'Navigate';
-    row.button.setAttribute('aria-label', `Navigate to ${nameOf(destination)} ${destination.id}`);
+    row.button.setAttribute('aria-label', `Navigate to ${nameOf(destination)}${contentsOf(destination) ? `, ${contentsOf(destination)}` : ''} ${destination.id}`);
     row.button.disabled = pending || moving || (!control.available && control.reason !== 'game_unfocused') || !live;
     row.tr.classList.toggle('active', moving && nav.destinationId === destination.id);
     const atIndex = el('rows').children[index];

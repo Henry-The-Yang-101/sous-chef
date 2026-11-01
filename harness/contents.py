@@ -91,8 +91,11 @@ class ContentsIndex:
                 # only the explicitly exported server relation is consumed.
                 if key not in fields:
                     continue
-                known = True
                 reference = read(fields, key)
+                if (suffix in {'PlateReturnStation', 'PlateStackBase'} and
+                        isinstance(reference, dict) and reference.get('objectId') == obj['id']):
+                    continue
+                known = True
                 if reference is not None:
                     references.append(reference)
         fields = fields_for('Stack')

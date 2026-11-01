@@ -30,6 +30,14 @@ the menus.
   `PickupItemSpawner.m_itemPrefab.name` (for example, Flour, Egg or Cheese_Raw),
   rather than just `DispenserCrate`. Names are observed, never inferred from crate
   numbers. A missing prefab is shown as unavailable.
+- A **Contents** line shows the item on a counter, cooker or chopping station,
+  and the ingredients inside pots, pans, bowls and plates. Nested contents are
+  included (for example, `pot (Rice, Tomato)`), along with plate-stack and dirty
+  sink-plate counts. Contents are searchable, so filtering for an ingredient or
+  utensil also finds the station holding it. Known empty holders say **Empty**;
+  missing or stale observations say **Contents unavailable**. If the held item
+  is known but its ingredients are not, its name stays visible with that qualifier.
+  Dispenser supplies remain separate from items currently resting on a station.
 - Each row shows the stable destination ID, object instance, live x/z position
   and two distances from Player 2, in game world units. **Walk** is the planner's
   route to a usable approach stance; **direct** is the horizontal straight-line
@@ -83,6 +91,16 @@ loopback-only.
 A single persistent connection polls the plugin up to **5 Hz**, shared across all
 browser tabs. The page reads that cache every 250 ms; more viewers do not increase
 game-side planning frequency. This is a target rate, bounded by game response time.
+One additional read-only connection consumes the existing full observation stream
+on port **24702** (`--state-port` to override), shared by all viewers. Contents
+follow explicit attachment, workstation, cooking, stack and ingredient-container
+fields from a fresh sample of the same bridge session, joined by exact Unity
+object instance and name. They are not inferred from proximity or model children.
+Host observations prefer server fields; client observations use client fields.
+Every sample replaces the previous contents, including item removals and round
+changes. A disconnected, missing or over-1.5-second-old contents sample cannot
+describe a holder as empty. Content enrichment does not change navigation targets
+or perform pickup, placement or cooking actions, and requires no plugin restart.
 Destinations are replaced on each observation, including removals caused by moving
 geometry. No options are shown when data is over 1.5 seconds old, the game is outside
 a round or Player 2 is missing. During a budget-limited search, confirmed shortest
@@ -122,7 +140,7 @@ with the QR token can control Player 2.
 ## Verification
 
 ```sh
-python3 -m unittest discover -s tests -p 'test_harness.py' -v
+python3 -m unittest discover -s tests -p 'test_*.py' -v
 python3 scripts/check.py
 ```
 
@@ -139,3 +157,11 @@ page rendered without horizontal overflow at phone width. Apple's Vision QR
 decoder read a screenshot of the displayed QR and recovered the exact access
 URL. The full check passed 730 C# assertions, the 151-type installed assembly
 audit and 42 Python tests. A physical phone camera/network was not exercised.
+
+Contents checks added later the same day passed all 53 Python tests, including
+nested ingredients, attachment de-duplication, plate stacks, dirty sink plates,
+item movement, stale/missing data, authority selection and unchanged navigation
+targeting. A browser preview using an actual recorded kitchen showed pans on
+cookers, plates and a fire extinguisher on counters; filtering by `plate` found
+the holding counters. The contents lines also fit phone width without horizontal
+overflow. The live game was outside a kitchen during this verification.

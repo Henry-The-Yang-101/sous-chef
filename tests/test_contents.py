@@ -105,6 +105,11 @@ class ContentsTests(unittest.TestCase):
         self.pot['components'][0]['adapters']['ServerIngredientContainer']['fields']['m_contents'] = [node]
         self.assertEqual(self.describe(self.counter, self.pot)['summary'], 'pot (Rice × 2, Fish Raw)')
 
+    def test_wrapper_without_observed_stack_contents_cannot_claim_empty(self):
+        stack = obj('stack', 77, 'plate_stack', ServerPlateStackBase={'m_stack': ref('stack')})
+        result = self.describe(stack, dest=destination(label='plate_stack', kind='plate_station'))
+        self.assertEqual(result['status'], 'unknown')
+
     def test_live_move_stale_session_and_round_replacement(self):
         now = [100]
         observer = ContentsObserver(clock=lambda: now[0])
