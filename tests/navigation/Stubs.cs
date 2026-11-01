@@ -56,6 +56,7 @@ namespace UnityEngine
     {
         public Vector3 position, lossyScale = Vector3.one;
         public float yaw;
+        public Quaternion rotation { get { return new Quaternion {Yaw=yaw}; } }
         public Transform parent;
         public Vector3 up { get { return Vector3.up; } }
         public Vector3 forward { get { return Rotate(Vector3.forward, yaw); } }
@@ -93,7 +94,7 @@ namespace UnityEngine
         public override int GetHashCode() { return HashCode.Combine(x,y,z); }
     }
     public struct Vector2 { public float x,y; public Vector2(float a,float b) { x=a;y=b; } public float magnitude { get { return (float)Math.Sqrt(x*x+y*y); } } }
-    public struct Quaternion { public float Yaw; public static Quaternion LookRotation(Vector3 d) { return new Quaternion { Yaw=(float)Math.Atan2(d.x,d.z) }; } public static Vector3 operator *(Quaternion q,Vector3 p) { float c=(float)Math.Cos(q.Yaw),s=(float)Math.Sin(q.Yaw);return new Vector3(p.x*c+p.z*s,p.y,p.z*c-p.x*s); } }
+    public struct Quaternion { public float Yaw; public static Quaternion Inverse(Quaternion q) {return new Quaternion {Yaw=-q.Yaw};} public static Quaternion operator *(Quaternion a,Quaternion b) {return new Quaternion {Yaw=a.Yaw+b.Yaw};} public static Quaternion LookRotation(Vector3 d) { return new Quaternion { Yaw=(float)Math.Atan2(d.x,d.z) }; } public static Vector3 operator *(Quaternion q,Vector3 p) { float c=(float)Math.Cos(q.Yaw),s=(float)Math.Sin(q.Yaw);return new Vector3(p.x*c+p.z*s,p.y,p.z*c-p.x*s); } }
     public struct Matrix4x4
     {
         public Vector3 Position; public float Yaw;
@@ -124,6 +125,7 @@ namespace UnityEngine
     public class SphereCollider : Collider { public Vector3 center; public float radius; }
     public class CapsuleCollider : Collider { public Vector3 center = new Vector3(0,.5f,0); public float radius=.2f,height=1; public int direction=1; public override Bounds bounds { get { return new Bounds(transform.position+center,new Vector3(radius*2,height,radius*2)); } } }
     public class TerrainCollider : Collider { }
+    public class Rigidbody : Component { public bool useGravity=true;public float drag;public int constraints; }
     public class MeshCollider : Collider { public Mesh sharedMesh; public bool convex; }
     public class Mesh : Object { public bool isReadable; public Vector3[] vertices = new Vector3[0]; public int[] triangles = new int[0]; public int vertexCount { get { return vertices.Length; } } }
     public struct RaycastHit { public Collider collider; public Vector3 point, normal; public float distance; }
@@ -133,6 +135,8 @@ namespace UnityEngine
     {
         public static Vector3 gravity = new Vector3(0,-9.81f,0);
         public static Func<Vector3,float,Collider[]> Nearby;
+        public static Func<Collider,Vector3,Quaternion,Collider,Vector3,Quaternion,bool> Penetration=(a,p,q,b,r,s)=>false;
+        public static bool ComputePenetration(Collider a,Vector3 p,Quaternion q,Collider b,Vector3 r,Quaternion s,out Vector3 direction,out float distance) { direction=Vector3.zero;distance=0;return Penetration(a,p,q,b,r,s); }
         public static Func<Vector3,float,Vector3,float,RaycastHit[]> Sphere = (p,r,d,length) => new RaycastHit[0];
         public static int SphereCastNonAlloc(Vector3 p,float r,Vector3 d,RaycastHit[] output,float length,int mask,QueryTriggerInteraction q) { return Copy(Sphere(p,r,d,length),output); }
         public static Func<Vector3,Vector3,float,int,RaycastHit[]> Ray;
@@ -196,7 +200,7 @@ public static class PlayerInputLookup
 }
 public class WindVolume : UnityEngine.MonoBehaviour { private UnityEngine.LayerMask m_windFilter = ~0; public UnityEngine.Vector3 Velocity; public UnityEngine.Vector3 GetVelocity() { return Velocity; } }
 #pragma warning restore CS0414
-public class WindAccumulator { public UnityEngine.Vector3 Velocity; public UnityEngine.Vector3 GetVelocity() { return Velocity; } }
+public class WindAccumulator : UnityEngine.MonoBehaviour { public UnityEngine.Vector3 Velocity; public UnityEngine.Vector3 GetVelocity() { return Velocity; } }
 public class SurfaceMovable : UnityEngine.MonoBehaviour { public UnityEngine.Vector3 Velocity; public UnityEngine.Vector3 GetVelocity() { return Velocity; } }
 public class RigidbodyMotion { public UnityEngine.Vector3 Velocity; public UnityEngine.Vector3 GetVelocity() { return Velocity; } public UnityEngine.Vector3 GetVelocityXZ() { return Velocity; } }
 public interface IMovingSurface { UnityEngine.Vector3 CalculateVelocityAtPoint(UnityEngine.Vector3 point, IMovingSurface previous); }
@@ -212,7 +216,7 @@ public class PickupItemSpawner : UnityEngine.MonoBehaviour { public UnityEngine.
 public class CookingStation : UnityEngine.MonoBehaviour { }
 public class PlateReturnStation : UnityEngine.MonoBehaviour { }
 public class PlateStackBase : UnityEngine.MonoBehaviour { }
-public class PhysicalAttachment : UnityEngine.MonoBehaviour { public RigidbodyParams m_rigidBodyParams = new RigidbodyParams(); public class RigidbodyParams { public float m_drag; public int m_constraints; public bool m_useGravity=true; } }
+public class PhysicalAttachment : UnityEngine.MonoBehaviour { public UnityEngine.Rigidbody m_container; public RigidbodyMotion m_motion; public RigidbodyParams m_rigidBodyParams = new RigidbodyParams(); public class RigidbodyParams { public float m_drag; public int m_constraints; public bool m_useGravity=true; } }
 public class AttachStation : UnityEngine.MonoBehaviour { }
 public interface IPickup { bool CanHandlePickup(ClientPlayerAttachmentCarrier carrier); }
 public interface IPlacement { bool CanHandlePlacement(ClientPlayerAttachmentCarrier carrier,UnityEngine.Vector2 forward,PlacementContext context); }

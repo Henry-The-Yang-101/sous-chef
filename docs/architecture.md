@@ -157,3 +157,17 @@ reachable release stances rather than accepting caller coordinates. Moving-chef
 passes include a constant-velocity intercept and native catch constraints.
 The planner does not modify thrown-object physics or manufacture a catch.
 See [first-layer actions](actions.md) for protocol details and validation limits.
+
+
+`LogisticsActions` composes finite pickup/delivery jobs under a parent `ActionRun`.
+Child completion neutralizes inputs while preserving the parent lease; parent
+completion releases ownership. `LogisticsInventory` resolves native definitions,
+clean plates, empty utensils and explicit station/holder relationships. Observed
+utensil homes and source identities are scoped to the current round.
+
+`WindField` queries native collider overlap and layer-filtered volume velocity.
+`ThrowFlight` combines fixed-step gravity/damping with native positional wind
+and the exit-velocity addition. Launch vectors come from the native calculator,
+with a throw-event observer recording the actual post-setter velocity.
+`DropHandoff` checks nearby placement or supported ground drops before asking a
+nearby human to catch a throw. All outcome verification still uses native state.

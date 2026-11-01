@@ -43,7 +43,39 @@ const kindName = kind => (kind || 'destination').replaceAll('_', ' ');
 const number = value => Number.isFinite(value) ? value.toFixed(1) : '—';
 const contentsOf = d => d.contents?.summary || '';
 const actionNames = {navigate_to: 'Navigate', pick_up: 'Pick up', place_at: 'Place held item', add_ingredient: 'Add held ingredient',
-  work_at: 'Work', activate: 'Activate', discard: 'Discard held item', wait_until: 'Wait', throw_to: 'Throw held item', throw_to_player: 'Pass held item'};
+  work_at: 'Work', activate: 'Activate', discard: 'Discard held item', wait_until: 'Wait', throw_to: 'Throw held item', throw_to_player: 'Pass held item',
+  move_item: 'Move item', fetch_ingredient: 'Fetch ingredient', get_plate: 'Get clean plate', get_utensil: 'Get empty utensil', stage_item: 'Stage item', return_utensil: 'Return utensil', clear_station: 'Clear station'};
+const phaseNames = {picking_up: 'collecting', drop_press: 'placing nearby', dropping: 'checking nearby handoff', throw_hold: 'aiming', flight: 'checking arrival'};
+function setJobOptions(select, choices) {
+  const signature = JSON.stringify(choices);
+  if (select.dataset.choices === signature) return;
+  const selected = select.value;
+  const placeholder = document.createElement('option'); placeholder.value = ''; placeholder.textContent = 'Choose…';
+  select.replaceChildren(placeholder, ...choices.map(choice => {
+    const option = document.createElement('option'); option.value = choice.value; option.textContent = choice.label; return option;
+  }));
+  select.value = choices.some(choice => choice.value === selected) ? selected : '';
+  select.dataset.choices = signature;
+}
+function renderJobs(catalog, busy, live) {
+  const kind = el('job-kind').value;
+  const names = (catalog.actions || []).map(action => action.name);
+  const blocked = !live || pending || busy || !names.includes(kind);
+  el('job-kind').disabled = !live || pending || busy;
+  const items = (catalog.items || []).filter(item => !item.supply && !item.inUse);
+  let sources = items.map(item => ({value: item.id, label: nameOf(item)}));
+  el('job-source-name').textContent = kind === 'fetch_ingredient' ? 'Ingredient' : kind === 'get_utensil' ? 'Utensil type' : kind === 'clear_station' ? 'Station' : 'Item';
+  if (kind === 'fetch_ingredient') sources = (catalog.ingredients || []).map(item => ({value: item.id, label: item.label.replaceAll('_', ' ')}));
+  if (kind === 'get_utensil') sources = (catalog.utensilTypes || []).map(type => ({value: type, label: type.replaceAll('_', ' ')}));
+  if (kind === 'return_utensil') sources = items.filter(item => item.utensilType && item.empty).map(item => ({value: item.id, label: nameOf(item)}));
+  if (kind === 'clear_station') sources = (catalog.deliveryDestinations || []).filter(item => item.kind !== 'item').map(item => ({value: item.id, label: nameOf(item)}));
+  setJobOptions(el('job-source'), sources);
+  setJobOptions(el('job-destination'), (catalog.deliveryDestinations || []).filter(item => kind !== 'clear_station' || item.id !== el('job-source').value).map(item => ({value: item.id, label: nameOf(item)})));
+  el('job-source-label').hidden = kind === 'get_plate';
+  el('job-destination-label').hidden = kind === 'return_utensil';
+  el('job-source').disabled = blocked; el('job-destination').disabled = blocked;
+  el('job-run').disabled = blocked || (kind !== 'get_plate' && !el('job-source').value) || (kind !== 'return_utensil' && !el('job-destination').value);
+}
 function actionChoices(d) {
   const choices = d.walkReachable ? [{value: 'navigate_to', label: 'Navigate'}] : [];
   for (const operation of d.operations || []) {
@@ -77,6 +109,7 @@ function render() {
   const acting = live && receipt.state === 'running';
   const busy = moving || acting;
   const catalog = live ? state.catalog || {} : {};
+  renderJobs(catalog, busy, live);
   const byId = new Map((catalog.destinations || []).map(d => [d.id, {...d, walkReachable: true}]));
   for (const d of [...(catalog.targets || []), ...(catalog.players || [])]) byId.set(d.id, {...byId.get(d.id), ...d});
   const destinations = Array.from(byId.values());
@@ -88,7 +121,7 @@ function render() {
   el('connection').textContent = live ? 'Bridge connected' : state?.connected ? 'State stale' : 'Bridge disconnected';
   el('light').className = 'light ' + (live ? 'live' : 'offline');
   el('freshness').textContent = live ? `Updated ${Math.max(0, Math.round((state.ageMs || 0) + performance.now() - receivedAt))} ms ago` : 'Waiting for a fresh sample';
-  el('action').textContent = acting ? `${actionNames[receipt.operation] || receipt.operation} · ${receipt.phase.replaceAll('_', ' ')}` : moving ? `${nav.phase === 'aligning' ? 'Aligning with' : 'Walking to'} ${active ? nameOf(active) : nav.destinationId}` : live ? 'Player 2 is idle' : 'Waiting for the bridge';
+  el('action').textContent = acting ? `${actionNames[receipt.operation] || receipt.operation} · ${phaseNames[receipt.phase] || receipt.phase.replaceAll('_', ' ')}` : moving ? `${nav.phase === 'aligning' ? 'Aligning with' : 'Walking to'} ${active ? nameOf(active) : nav.destinationId}` : live ? 'Player 2 is idle' : 'Waiting for the bridge';
   el('target').textContent = active
     ? `${active.label}${contentsOf(active) ? ` · Contents: ${contentsOf(active)}` : ''} · ${active.id} · object ${active.objectInstanceId} · x ${number(active.position?.[0])}, z ${number(active.position?.[2])}${Number.isFinite(active.routeDistance) ? ` · ${number(active.routeDistance)} units to walk` : ''}`
     : 'Join Player 2 with Split Controller, then enter an unpaused Arcade → Couch kitchen.';
@@ -188,6 +221,28 @@ async function perform(d, choice) {
   } catch (error) { lastError = error.message; }
   finally { pending = false; render(); }
 }
+async function runJob(event) {
+  event.preventDefault();
+  if (pending || !fresh() || el('job-run').disabled) return;
+  const operation = el('job-kind').value, sourceId = el('job-source').value, destinationId = el('job-destination').value;
+  const catalog = state.catalog || {}; let args = {};
+  const target = operation === 'return_utensil' ? (catalog.items || []).find(item => item.id === sourceId)
+    : (catalog.deliveryDestinations || []).find(item => item.id === destinationId);
+  if (!target) return;
+  if (operation === 'fetch_ingredient') args = {ingredient: sourceId};
+  else if (operation === 'get_utensil') args = {utensil_type: sourceId};
+  else if (['move_item', 'stage_item', 'clear_station'].includes(operation)) {
+    const source = (operation === 'clear_station' ? catalog.targets || [] : catalog.items || []).find(item => item.id === sourceId);
+    if (!source) return;
+    args = {[operation === 'clear_station' ? 'station_id' : 'item_id']: sourceId, source_instance_id: source.objectInstanceId};
+  }
+  pending = true; lastError = ''; render();
+  try {
+    state = await post('/api/action', {destinationId: target.id, objectInstanceId: target.objectInstanceId, sessionId: state.sessionId, operation, arguments: args});
+    receivedAt = performance.now();
+  } catch (error) { lastError = error.message; }
+  finally { pending = false; render(); }
+}
 async function stop() {
   if (!token) return;
   lastError = '';
@@ -259,6 +314,10 @@ async function pollSharing() {
 el('phone-network').addEventListener('change', showPhoneLink);
 if (matchMedia('(max-width: 650px)').matches) el('phone-share').open = false;
 el('filter').addEventListener('input', render);
+el('job-kind').addEventListener('change', render);
+el('job-source').addEventListener('change', render);
+el('job-destination').addEventListener('change', render);
+el('job-form').addEventListener('submit', runJob);
 el('stop').addEventListener('click', stop);
 document.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); stop(); } });
 window.addEventListener('pagehide', () => {

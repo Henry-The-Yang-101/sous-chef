@@ -47,6 +47,11 @@ th small { font-weight: 400; }
 td { padding: 13px 18px; border-top: 1px solid #e7ebe4; vertical-align: middle; font-variant-numeric: tabular-nums; }
 td:last-child { text-align: right; }
 .action-controls select { max-width: 220px; margin-right: 8px; }
+.logistics { margin-bottom: 30px; }
+.logistics p { font-size: 13px; color: #636b5e; }
+#job-form { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+#job-form label { display: grid; gap: 6px; font-size: 12px; min-width: 160px; flex: 1; }
+#job-form select { width: 100%; min-width: 0; }
 td small { display: block; font-size: 11px; color: #6b7365; font-weight: 400; margin-top: 5px; }
 td .raw { max-width: 480px; overflow-wrap: anywhere; color: #7a8075; }
 td .contents { color: #294527; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }

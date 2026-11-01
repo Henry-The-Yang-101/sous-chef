@@ -22,6 +22,7 @@ class FakeBridge:
         self.reject = None
         self.targets = None
         self.players = []
+        self.items, self.ingredients, self.utensil_types, self.delivery_destinations, self.jobs = [], [], [], [], []
 
     def available_actions(self):
         if self.failure:
@@ -29,7 +30,23 @@ class FakeBridge:
         self.last_response = {'control': copy.deepcopy(self.control)}
         targets = self.targets if self.targets is not None else [dict(d, operations=['pick_up', 'work_at', 'wait_until']) for d in self.destinations]
         return {'destinations': copy.deepcopy(self.destinations), 'targets': copy.deepcopy(targets),
-                'players': copy.deepcopy(self.players), 'navigation': self.control['navigation']}
+                'players': copy.deepcopy(self.players), 'navigation': self.control['navigation'],
+                'items': copy.deepcopy(self.items), 'ingredients': copy.deepcopy(self.ingredients),
+                'utensilTypes': self.utensil_types[:], 'deliveryDestinations': copy.deepcopy(self.delivery_destinations),
+                'actions': [{'name': name} for name in self.jobs]}
+
+    def _job(self, operation, *arguments):
+        self.calls.append((operation, *arguments))
+        self.control.update(ownedByYou=True, action={'state': 'running', 'operation': operation, 'phase': 'picking_up', 'targetId': arguments[-1]})
+        return copy.deepcopy(self.control)
+
+    def move_item(self, item, destination): return self._job('move_item', item, destination)
+    def stage_item(self, item, destination): return self._job('stage_item', item, destination)
+    def clear_station(self, station, destination): return self._job('clear_station', station, destination)
+    def fetch_ingredient(self, ingredient, destination): return self._job('fetch_ingredient', ingredient, destination)
+    def get_plate(self, destination): return self._job('get_plate', destination)
+    def get_utensil(self, utensil_type, destination): return self._job('get_utensil', utensil_type, destination)
+    def return_utensil(self, item): return self._job('return_utensil', item)
 
     def pick_up(self, target):
         self.calls.append(('pick_up', target))
@@ -59,6 +76,8 @@ class FakeBridge:
     def stop(self):
         self.calls.append(('stop',))
         self.control.update(ownedByYou=False, navigation={'state': 'idle', 'reason': 'stopped'})
+        if 'action' in self.control:
+            self.control['action'].update(state='cancelled', phase='idle', reason='stopped')
         return copy.deepcopy(self.control)
 
     def release(self):
@@ -155,6 +174,35 @@ class HarnessTests(unittest.TestCase):
             self.bridge.act('tab-a', 'test-session', 'p1', 999, 'throw_to_player')
         self.bridge.act('tab-a', 'test-session', 'p1', 123, 'throw_to_player')
         self.assertEqual(self.native.calls, [('throw_to_player', 1)])
+
+    def test_logistics_dispatch_validates_both_item_and_destination_identity(self):
+        self.native.jobs = ['move_item']
+        self.native.items = [dict(id='d8', objectInstanceId=88, label='Tomato')]
+        self.native.delivery_destinations = self.native.destinations[:]
+        with self.assertRaisesRegex(HarnessError, 'source item or station changed'):
+            self.bridge.act('tab-a', 'test-session', 'd7', 77, 'move_item', {'item_id': 'd8', 'source_instance_id': 99})
+        self.bridge.act('tab-a', 'test-session', 'd7', 77, 'move_item', {'item_id': 'd8', 'source_instance_id': 88})
+        self.assertEqual(self.native.calls, [('move_item', 'd8', 'd7')])
+
+    def test_fetch_jobs_use_only_current_ingredient_and_utensil_options(self):
+        self.native.jobs = ['fetch_ingredient', 'get_utensil', 'get_plate']
+        self.native.ingredients = [dict(id='i4', label='Tomato_Raw')]
+        self.native.utensil_types = ['pan']
+        self.native.delivery_destinations = self.native.destinations[:]
+        with self.assertRaisesRegex(HarnessError, 'currently observed ingredient'):
+            self.bridge.act('tab-a', 'test-session', 'd7', 77, 'fetch_ingredient', {'ingredient': 'invented'})
+        self.bridge.act('tab-a', 'test-session', 'd7', 77, 'fetch_ingredient', {'ingredient': 'i4'})
+        self.bridge.act('tab-a', 'test-session', 'd7', 77, 'get_utensil', {'utensil_type': 'pan'})
+        self.bridge.act('tab-a', 'test-session', 'd7', 77, 'get_plate')
+        self.assertEqual(self.native.calls, [('fetch_ingredient', 'i4', 'd7'), ('get_utensil', 'pan', 'd7'), ('get_plate', 'd7')])
+
+    def test_return_and_clear_jobs_use_their_correct_source_catalogues(self):
+        self.native.jobs = ['return_utensil', 'clear_station']
+        self.native.items = [dict(id='d8', objectInstanceId=88, label='Pan')]
+        self.native.delivery_destinations = [dict(id='d9', objectInstanceId=99, label='Counter')]
+        self.bridge.act('tab-a', 'test-session', 'd8', 88, 'return_utensil')
+        self.bridge.act('tab-a', 'test-session', 'd9', 99, 'clear_station', {'station_id': 'd7', 'source_instance_id': 77})
+        self.assertEqual(self.native.calls, [('return_utensil', 'd8'), ('clear_station', 'd7', 'd9')])
 
     def test_rejected_command_is_not_retried(self):
         self.native.reject = 'planning_budget_exceeded'

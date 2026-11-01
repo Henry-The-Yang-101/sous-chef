@@ -1,11 +1,11 @@
-# First-layer Player 2 actions
+# Player 2 actions
 
 Bridge 0.5 adds outcome-checked interactions on the existing control endpoint.
 These run inside Unity, including navigation and alignment. No Python heartbeat
 or model call drives their execution. Placement, ingredient addition, disposal
-and throwing use Player 2's **currently held** item. Fetch-and-deliver jobs and
-container-to-container `transfer_contents` belong to a higher layer and are not
-implemented here.
+and throwing use Player 2's **currently held** item. Bridge 0.6 adds the finite
+logistics jobs below. Container-to-container `transfer_contents` remains a
+separate higher-layer operation and is not implemented.
 
 | Python call | Scope and success evidence |
 | --- | --- |
@@ -55,6 +55,64 @@ python3 clients/actions.py throw_to d8
 python3 clients/actions.py throw_to_player 1
 ```
 
+## Logistics jobs (bridge 0.6)
+
+These jobs retain one ownership lease through child pickup, navigation and
+verified delivery. They have a 120-second overall deadline, including travel;
+child navigation and interaction watchdogs still apply. An unrelated held item
+causes `hands_full`. Failure preserves cargo and reports the completed delivery
+count, chosen source/destination and the child receipt. Stop, disconnect and all
+normal native control gates cancel the complete job.
+
+| Python call | Behavior |
+| --- | --- |
+| `move_item(item, destination)` | Move the exact observed item, or a station's current occupant, to the destination. Already-delivered items succeed without another pickup. |
+| `fetch_ingredient(ingredient, destination)` | Resolve a native ingredient definition, prefer an existing reachable unused matching ingredient over a dispenser, then deliver one. A single ingredient delivered into a compatible container uses `add_ingredient`. |
+| `get_plate(destination)` | Retrieve one observed clean, empty plate, including from a clean stack. Filled dishes and dirty stacks are excluded. |
+| `get_utensil(utensil_type, destination)` | Retrieve an empty utensil of the requested native item-definition type. Deterministic aliases include `pan`/`frying pan`, `pot`/`cooking pot`, and `bowl`/`mixing bowl`. |
+| `stage_item(item, handoff_location)` | Move an intact item to the specified handoff surface. It does not merge ingredient contents into a container. |
+| `return_utensil(utensil)` | Return an empty utensil to its first observed station, otherwise a compatible empty cooker or counter. Native attachment restrictions are checked; occupied stations are not cleared automatically. |
+| `clear_station(station, destination)` | Move the current occupant and verify the source station is free. Clean plate stacks are handled as a finite batch of original plate identities, up to 64. New arrivals or changed contents block further collection rather than extending the job indefinitely. |
+
+Items and stations use current `d...` IDs. `available_actions()` now also returns
+`items`, `ingredients`, `utensilTypes` and `deliveryDestinations`, plus explicit
+`logisticsObservationErrors` where a definition/contents read is unavailable.
+Item records include source identity, definition, empty/clean/in-use state and
+route distance where known. Empty counters receive stable target IDs even when
+P2 has empty hands; the walking destination list keeps its existing eligibility.
+
+Use a catalogue ingredient ID such as `i42` for an exact definition, or its
+observed name. A raw name such as `tomato` also matches `Tomato_Raw`; it does not
+silently substitute chopped/cooked states. Ambiguous names require the catalogue
+ID. Utensil types come from native item definitions, not guessed object names.
+Home locations are observed holder relationships, retained only within the round.
+
+```python
+chef.move_item(item_id, counter_id)
+chef.fetch_ingredient('tomato', pan_or_counter_id)
+chef.get_plate(counter_id)
+chef.get_utensil('pan', cooker_id)
+chef.stage_item(item_id, handoff_counter_id)
+chef.return_utensil(pan_id)
+chef.clear_station(board_id, spare_counter_id)
+```
+
+The CLI uses the same positional arguments:
+
+```sh
+python3 clients/actions.py fetch_ingredient tomato d12
+python3 clients/actions.py move_item d7 d12
+python3 clients/actions.py get_utensil 'mixing bowl' d12
+python3 clients/actions.py return_utensil d7
+```
+
+Wire additions are `move_item request item_id destination_id`, `stage_item`
+and `clear_station` with the same two-ID structure, `get_plate request destination_id`,
+`return_utensil request item_id`, and `fetch_ingredient`/`get_utensil request selector destination_id`.
+Selectors use `s` plus unpadded base64url UTF-8, bounded to 64 characters / 96 UTF-8
+bytes; `ActionClient` handles this encoding. Control characters, malformed tokens,
+invalid IDs and extra arguments are rejected before dispatch.
+
 ## Conditions and lifecycle
 
 Work conditions: `work_complete`, `one_plate_clean`, `sink_empty`.
@@ -89,15 +147,19 @@ without directly changing progress, inventory or station state.
 
 ## Throw planning and limitations
 
-Static inspection of this installed build establishes that
-`ServerAttachmentThrower.CalculateThrowVelocity` uses horizontal `m_throwForce`
-and vertical `force * tan(m_throwInclination)`. Hold duration does not charge
-throw strength. The native input implementation throws on **use release**.
+The planner invokes the installed game's read-only
+`ServerAttachmentThrower.CalculateThrowVelocity` for the actual direction. Its
+returned vector is the exact velocity passed to the native velocity setter;
+there is no assumed throw speed or inherited chef velocity. A temporary native
+throw callback also records `observedLaunchVelocity` immediately after the
+velocity setter. The callback is removed on completion/cancellation. Hold
+duration does not charge throw strength; throwing occurs on **use release**.
 
 The planner inverts the flight to form candidate release rings, also trying the
 chef's current position. It checks live supported stances and walking routes,
-the carried item's release offset and collider size, gravity, drag, and the
-fixed physics interval. Free-flight damping and gravity follow an independent
+the carried item's release offset and collider size, supported source-floor
+heights, receiving height, gravity, live rigidbody drag, and the fixed physics
+interval. Updrafts participate in inverse flight-time and release-position solving. Free-flight damping and gravity follow an independent
 implementation of the integration in
 [NVIDIA's PhysX 3.4 source](https://github.com/NVIDIAGameWorks/PhysX-3.4/blob/master/PhysX_3.4/Source/LowLevelDynamics/src/DyBodyCoreIntegrator.h).
 Flight sweeps check obstructions; receiver-specific native predicates check
@@ -107,17 +169,32 @@ preparation. Exhaustion can return `throw_planning_budget_exceeded`.
 Generated walking stances are internal, not caller-supplied coordinates. Before
 release the executor rechecks the trajectory from the actual held-item pose and
 requires tight aim. Player passes use a constant-velocity intercept and the
-native catch cone, available hands and catch distance. Wind along the arc,
-unsupported gravity/timestep/geometry and incompatible receivers are rejected.
+native catch cone, available hands and catch distance. For items with native
+attachment wind receivers, collider overlap queries apply each volume's layer
+filter and velocity. Native wind translates a detached item each fixed step;
+leaving a volume additionally adds that source's velocity to the rigidbody.
+The solver models both effects, including vertical wind and overlapping volumes.
+Items without those native receivers do not gain invented wind forces.
+Unsupported gravity/timestep/geometry and incompatible receivers are rejected.
 No angle, force, transform, item ownership or velocity is directly changed to
 make a throw succeed. Facing uses the same native turn helper as navigation.
 
-Success requires an observed holder relationship or the expected ingredient
+For `throw_to_player`, a player within 1.6 world units on the same deck first
+gets a nearby handoff attempt: native placement onto a usable empty counter,
+or a checked ground drop within reach. Ground drops require predicted floor
+support, compatible elevation and no detected fire/respawn/portal hazard along
+the drop. The executor uses pickup/drop rather than use/throw and verifies the
+item on that counter, in the player's hands, or stably supported nearby. An
+occupied-handed player can still receive a staged nearby item. A blocked drop
+falls back to throw planning; the action never drops blindly over an edge.
+
+Throw success requires an observed holder relationship or the expected ingredient
 appearing in the receiving container with its source consumed. Release alone
 is not success. A missed catch reports `throw_missed`; an interrupted throw
 already in flight records `throwReleased: true`. Stop cannot recall a projectile.
-Human movement after release and changing collision geometry can invalidate a
-prediction. The implementation is **not a live-verified perfect-throw guarantee**.
+Wind volumes are sampled from current native state; future changes, native
+Update/FixedUpdate ordering, human movement after release and changing collision
+geometry can invalidate a prediction. The implementation is **not a live-verified perfect-throw guarantee**.
 
 ## Wire additions
 

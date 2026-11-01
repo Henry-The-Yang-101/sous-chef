@@ -1,5 +1,11 @@
 # Player 2 navigation actions
 
+Bridge 0.6 keeps discovered empty counters in the `targets` registry even when
+the chef has empty hands, so logistics jobs can name a delivery surface before
+pickup. The `destinations` list still applies walking eligibility and verified
+reachability. Internally generated throw stances use supported heights from the
+same walking graph; callers continue to supply semantic IDs rather than coordinates.
+
 `navigate_to(destination_id)` chooses its approach, route, steering and termination
 inside the game. The caller supplies only a destination from `available_actions()`.
 `stop()` interrupts the current action or raw bridge input and returns the chef's

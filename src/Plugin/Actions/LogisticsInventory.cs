@@ -25,11 +25,12 @@ namespace SousChef.Plugin.Actions
     internal sealed class LogisticsInventory
     {
         public readonly List<LogisticsItem> Items = new List<LogisticsItem>();
+        public readonly List<object> Errors = new List<object>();
         private readonly Dictionary<int, GameObject> homes = new Dictionary<int, GameObject>();
         private readonly Dictionary<int, GameObject> homeItems = new Dictionary<int, GameObject>();
         private readonly NavigationActions navigation;
         public LogisticsInventory(NavigationActions nav) { navigation = nav; }
-        public void Reset() { Items.Clear(); homes.Clear(); homeItems.Clear(); }
+        public void Reset() { Items.Clear(); Errors.Clear(); homes.Clear(); homeItems.Clear(); }
         public static string Normalize(string text)
         {
             var result = new StringBuilder();
@@ -74,10 +75,10 @@ namespace SousChef.Plugin.Actions
                 if (player != chef && System.Object.ReferenceEquals(ActionObservations.Held(player), item)) return true;
             return false;
         }
-        public void Refresh(PlayerControls chef)
+        public void Refresh(PlayerControls chef, Json.Record currentCatalog = null)
         {
-            Items.Clear(); var distances = new Dictionary<string, float>();
-            var catalog = (Json.Record)navigation.Available(chef);
+            Items.Clear(); Errors.Clear(); var distances = new Dictionary<string, float>();
+            var catalog = currentCatalog ?? (Json.Record)navigation.Available(chef);
             foreach (Json.Record d in (List<object>)catalog["destinations"]) distances[(string)d["id"]] = (float)d["routeDistance"];
             GameObject held = ActionObservations.Held(chef);
             if (held != null) navigation.RegisterItem(held);
@@ -87,15 +88,20 @@ namespace SousChef.Plugin.Actions
             foreach (GameObject source in targets)
             {
                 GameObject occupant = ActionObservations.Occupant(source);
-                if (occupant != null) Add(chef, occupant, source, false, distances, seen);
+                if (occupant != null) TryAdd(chef, occupant, source, false, distances, seen);
             }
             foreach (GameObject source in targets)
             {
                 var supply = source.GetComponent<PickupItemSpawner>();
-                if (supply != null && supply.m_itemPrefab != null) Add(chef, supply.m_itemPrefab, source, true, distances, seen);
+                if (supply != null && supply.m_itemPrefab != null) TryAdd(chef, supply.m_itemPrefab, source, true, distances, seen);
                 else if (source.GetComponent<PhysicalAttachment>() != null || source.GetComponent<ServerStack>() != null || System.Object.ReferenceEquals(source, held))
-                    Add(chef, source, source, false, distances, seen);
+                    TryAdd(chef, source, source, false, distances, seen);
             }
+        }
+        private void TryAdd(PlayerControls chef, GameObject item, GameObject source, bool supply, Dictionary<string, float> distances, HashSet<int> seen)
+        {
+            try { Add(chef, item, source, supply, distances, seen); }
+            catch (Exception) { Errors.Add(Json.Object("sourceId", Id(source), "reason", "logistics_observation_unavailable")); }
         }
         private void Add(PlayerControls chef, GameObject item, GameObject source, bool supply, Dictionary<string, float> distances, HashSet<int> seen)
         {

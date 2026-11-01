@@ -97,6 +97,23 @@ namespace SousChef.Plugin.Navigation
             }
             return best;
         }
+        public List<float> ReleaseHeights(Vector3 around, float range)
+        {
+            var values = new List<float> { physics.Position.y };
+            if (search == null) return values;
+            var nearbyHeights = new List<float>();
+            foreach (WalkCell cell in search.Settled)
+            {
+                Vector3 point = physics.Point(cell); Vector3 delta = point - around; delta.y = 0;
+                if (delta.magnitude > range) continue;
+                bool found = false;
+                foreach (float height in nearbyHeights) if (Mathf.Abs(height - point.y) < .15f) { found = true; break; }
+                if (!found) nearbyHeights.Add(point.y);
+            }
+            nearbyHeights.Sort(delegate(float a, float b) { return Mathf.Abs(a - around.y).CompareTo(Mathf.Abs(b - around.y)); });
+            foreach (float height in nearbyHeights) if (values.Count < 8 && Mathf.Abs(height - values[0]) > .15f) values.Add(height);
+            return values;
+        }
         public void Reset(string reason)
         {
             Stop(reason); lastDestination = arrivalDetails = null; identities.Clear(); available.Clear(); physics.Reset(); search = null; chef = null; lastPlan = -1; unavailable = reason;

@@ -15,6 +15,7 @@ namespace SousChef.Plugin.Actions
         private readonly Action<int> input;
         private readonly Action release;
         private readonly ThrowPlanner throws = new ThrowPlanner();
+        private readonly DropHandoff drops = new DropHandoff();
         private PlayerControls chef;
         private ControlCommand command;
         private GameObject target, held, receiver, expectedPickup, expectedTopPlate, initialOccupant;
@@ -27,11 +28,21 @@ namespace SousChef.Plugin.Actions
         private float phaseStarted, lastProgressTime, lastProgress;
         private bool triggeredByChef, pressed, throwReleased;
         private ThrowPlan throwPlan;
+        private DropPlan dropPlan;
+        private float dropStableSince = -1;
+        private Vector3 lastDropPosition;
+        private ServerAttachmentThrower launchObserver;
+        private GenericVoid<GameObject> launchCallback;
+        private bool sawLaunch;
+        private Vector3 observedLaunchVelocity;
         private object evidence;
 
         public InteractionActions(NavigationActions walking, Action<int> buttons, Action finished)
         { navigation = walking; input = buttons; release = finished; }
-        public object Describe() { return Run.Describe(evidence); }
+        public object Describe()
+        {
+            return Run.Describe(sawLaunch ? Json.Object("result", evidence, "observedLaunchVelocity", Values.Vector(observedLaunchVelocity)) : evidence);
+        }
         public static bool Handles(string operation)
         { return Array.IndexOf(ActionRun.Names, operation) >= 0 && operation != "navigate_to" && operation != "stop"; }
         public static string[] Offered(PlayerControls chef, GameObject go)
@@ -104,19 +115,29 @@ namespace SousChef.Plugin.Actions
             var stack = receiver == null ? null : receiver.GetComponent<ServerStack>();
             expectedTopPlate = stack == null ? null : stack.InspectTopOfStack();
             initialContents = held == null || held.GetComponent<ServerIngredientContainer>() == null ? 0 : held.GetComponent<ServerIngredientContainer>().GetContentsCount();
-            pressed = throwReleased = triggeredByChef = false; evidence = null; throwPlan = null; workable = null;
+            pressed = throwReleased = triggeredByChef = sawLaunch = false; evidence = null; throwPlan = null; dropPlan = null; dropStableSince = -1; workable = null;
             string error = ValidateRequest();
             if (error != null) return error;
             if (!Run.Start(owner, request, Time.realtimeSinceStartup)) return "action_in_progress";
             try
             {
                 if (request.Operation == "wait_until") { Run.Advance("waiting"); input(0); return null; }
+                if (request.Operation == "throw_to_player" && drops.Plan(chef, held, target.GetComponent<PlayerControls>(), out dropPlan))
+                { evidence = dropPlan.Describe(); SetPhase("drop_press"); return null; }
                 if (request.Operation == "throw_to" || request.Operation == "throw_to_player")
                 {
                     error = throws.Prepare(chef, held, target);
                     if (error == null) error = throws.Find(navigation, out throwPlan);
                     if (error == null)
                     {
+                        launchObserver = chef.GetComponent<ServerAttachmentThrower>();
+                        launchCallback = delegate(GameObject launched)
+                        {
+                            if (!System.Object.ReferenceEquals(launched, held)) return;
+                            var physical = launched.GetComponent<PhysicalAttachment>();
+                            if (physical != null && physical.m_motion != null) { observedLaunchVelocity = physical.m_motion.GetVelocity(); sawLaunch = true; }
+                        };
+                        launchObserver.RegisterThrowCallback(launchCallback);
                         evidence = throwPlan.Describe(); Run.Advance("navigating");
                         error = navigation.StartPosition(chef, owner, target, throwPlan.Stance);
                     }
@@ -211,6 +232,32 @@ namespace SousChef.Plugin.Actions
                     if (Condition()) Finish("succeeded", "condition_met");
                     else if ((command.Condition == "work_complete" || command.Condition == "cooked" || command.Condition == "mixed") && ActionObservations.Receiver(target) != receiver)
                         Finish("blocked", "station_contents_changed");
+                    return;
+                }
+                if (Run.Phase == "drop_press")
+                {
+                    if (!pressed)
+                    {
+                        if (!System.Object.ReferenceEquals(ActionObservations.Held(chef), held) || !drops.Plan(chef, held, target.GetComponent<PlayerControls>(), out dropPlan))
+                        { Finish("blocked", "nearby_handoff_became_invalid"); return; }
+                        pressed = true; pressFrame = Time.frameCount; phaseStarted = Time.realtimeSinceStartup; evidence = dropPlan.Describe();
+                    }
+                    if (Time.frameCount <= pressFrame + 1 && Time.realtimeSinceStartup - phaseStarted < .15f) { input(1); return; }
+                    input(0); SetPhase("dropping");
+                }
+                if (Run.Phase == "dropping")
+                {
+                    input(0);
+                    if (!System.Object.ReferenceEquals(ActionObservations.Held(chef), held) && drops.Received(held, target.GetComponent<PlayerControls>(), dropPlan))
+                    {
+                        if (dropPlan.Counter != null || System.Object.ReferenceEquals(ActionObservations.Held(target.GetComponent<PlayerControls>()), held))
+                        { Finish("succeeded", "item_handed_off_nearby"); return; }
+                        if (dropStableSince < 0 || Vector3.Distance(lastDropPosition, held.transform.position) > .03f) dropStableSince = Time.realtimeSinceStartup;
+                        lastDropPosition = held.transform.position;
+                        if (Time.realtimeSinceStartup - dropStableSince >= .1f) { Finish("succeeded", "item_dropped_near_player"); return; }
+                    }
+                    else dropStableSince = -1;
+                    if (Time.realtimeSinceStartup - phaseStarted > dropPlan.FlightSeconds + 2) Finish("failed", "nearby_handoff_not_observed");
                     return;
                 }
                 if (Run.Phase == "aiming") { Aim(); return; }
@@ -439,7 +486,10 @@ namespace SousChef.Plugin.Actions
             catch (Exception) { state = "failed"; reason = "interaction_cleanup_failed"; }
             if (interactable != null && triggered != null) interactable.UnregisterTriggerCallbacks(triggered);
             interactable = null; triggered = null;
+            if (launchObserver != null && launchCallback != null) launchObserver.UnregisterThrowCallback(launchCallback);
+            launchObserver = null; launchCallback = null;
             if (throwReleased && state != "succeeded") evidence = Json.Object("throwReleased", true, "throw", throwPlan.Describe());
+            if (dropPlan != null && pressed && state != "succeeded") evidence = Json.Object("handoffRequested", true, "handoff", dropPlan.Describe());
             // Cancel the child while the parent still owns the input lease.
             if (navigation.Action.State == "navigating") navigation.Stop(reason);
             Run.Finish(state, reason); release();

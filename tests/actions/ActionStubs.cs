@@ -63,6 +63,25 @@ public class ClientMixingHandler : MonoBehaviour { public float m_cachedMixingPr
 public interface IClientThrowable { bool CanHandleThrow(ClientAttachmentThrower thrower,Vector2 direction); }
 public class ClientAttachmentThrower : MonoBehaviour { }
 public class AttachmentThrower : MonoBehaviour { public float m_throwForce=8,m_throwInclination=15; }
+public class ServerAttachmentThrower : MonoBehaviour
+{
+    public int Calls;
+    public Func<Vector2,Vector3> Override;
+    public GenericVoid<GameObject> Launched;
+    public void RegisterThrowCallback(GenericVoid<GameObject> callback) { Launched+=callback; }
+    public void UnregisterThrowCallback(GenericVoid<GameObject> callback) { Launched-=callback; }
+    private Vector3 CalculateThrowVelocity(Vector2 direction)
+    {
+        Calls++;if(Override!=null)return Override(direction);
+        var data=GetComponent<AttachmentThrower>();return new Vector3(direction.x*data.m_throwForce,data.m_throwForce*Mathf.Tan(data.m_throwInclination*Mathf.Deg2Rad),direction.y*data.m_throwForce);
+    }
+}
+public delegate void GenericVoid<T>(T value);
+public class AttachmentWindReceiver : WindAccumulator { }
+public class ServerAttachmentWindReceiver : MonoBehaviour { }
+public interface IAttachment { bool IsAttached(); }
+public class ServerPhysicalAttachment : MonoBehaviour, IAttachment { public bool Attached;public bool IsAttached() { return Attached; } }
+public static class TimeManager { public static float Scale=1;public static float GetDeltaTime(GameObject item) { return Time.deltaTime*Scale; } }
 public class AttachmentCatcher : MonoBehaviour { public float m_catchDistance=.8f,m_catchAngleMax=60; }
 public interface ICatchable { }
 public interface IHandleCatch { bool CanHandleCatch(ICatchable item,Vector2 direction); }

@@ -24,6 +24,8 @@ namespace SousChef.Plugin.Actions
         private string destinationId, sourceId, deliveryOperation;
         private int delivered, batchLimit;
         private bool supply;
+        private bool spawnedChild;
+        private readonly Queue<GameObject> plates = new Queue<GameObject>();
         public LogisticsActions(NavigationActions nav, InteractionActions primitive, Action<int> buttons, Action finished)
         { navigation = nav; child = primitive; input = buttons; release = finished; Inventory = new LogisticsInventory(nav); }
         public static bool Handles(string operation) { return Array.IndexOf(ActionRun.LogisticsNames, operation) >= 0; }
@@ -33,14 +35,14 @@ namespace SousChef.Plugin.Actions
             return Run.Describe(Json.Object("sourceId", sourceId, "destinationId", destinationId,
                 "sourceInstanceId", originalSource == null ? null : (object)originalSource.GetInstanceID(),
                 "cargo", cargo == null ? null : Json.Object("objectInstanceId", cargo.GetInstanceID(), "label", cargo.name),
-                "deliveredCount", delivered, "batchLimit", batchLimit, "deliveryOperation", deliveryOperation, "child", child.Describe()));
+                "deliveredCount", delivered, "batchLimit", batchLimit, "deliveryOperation", deliveryOperation, "child", spawnedChild ? child.Describe() : null));
         }
         public string Start(PlayerControls actor, int owner, ControlCommand command)
         {
             if (Run.Running || child.Run.Running || navigation.Action.State != "idle") return "action_in_progress";
             chef = actor; request = command; Inventory.Refresh(chef);
             selected = null; cargo = expected = originalSource = sourceStation = destination = null;
-            sourceId = null; destinationId = command.Destination; delivered = 0; batchLimit = 1;
+            sourceId = deliveryOperation = null; destinationId = command.Destination; delivered = 0; batchLimit = 1; spawnedChild = false; plates.Clear();
             string error = Select(); if (error != null) return error;
             if (command.Milliseconds == 0) command.Milliseconds = 120000;
             if (!Run.Start(owner, command, Time.realtimeSinceStartup)) return "action_in_progress";
@@ -53,7 +55,12 @@ namespace SousChef.Plugin.Actions
             if (cleanStack)
             {
                 var stack = selected.Item.GetComponent<ServerStack>(); expected = stack == null ? null : stack.InspectTopOfStack();
-                if (command.Operation == "clear_station" && stack != null) batchLimit = Math.Min(64, stack.GetSize());
+                if (command.Operation == "clear_station" && stack != null)
+                {
+                    var contents = ActionObservations.Read<IList>(stack, "m_stackItems");
+                    for (int i = contents.Count - 1; i >= 0 && plates.Count < 64; i--) plates.Enqueue((GameObject)contents[i]);
+                    batchLimit = plates.Count;
+                }
                 if (expected == null) { Finish("blocked", "source_empty"); return "source_empty"; }
             }
             if (AtDestination(expected)) { Finish("succeeded", "already_at_destination"); return null; }
@@ -155,6 +162,7 @@ namespace SousChef.Plugin.Actions
         private string StartPickup()
         {
             Run.Advance("picking_up");
+            spawnedChild = true;
             string error = child.Start(chef, Run.Owner, new ControlCommand { Id = request.Id, Operation = "pick_up", Destination = sourceId });
             if (error != null) Finish("blocked", error); return error;
         }
@@ -164,6 +172,7 @@ namespace SousChef.Plugin.Actions
             if (error == null)
             {
                 Run.Advance("delivering");
+                spawnedChild = true;
                 error = child.Start(chef, Run.Owner, new ControlCommand { Id = request.Id, Operation = deliveryOperation, Destination = destinationId });
             }
             if (error != null) Finish("blocked", error); return error;
@@ -198,12 +207,14 @@ namespace SousChef.Plugin.Actions
                 if (Run.Phase == "delivering")
                 {
                     delivered++;
+                    if (plates.Count > 0) plates.Dequeue();
                     if (request.Operation != "clear_station") { Finish("succeeded", "item_delivered"); return; }
                     if (sourceStation == null || !sourceStation.activeInHierarchy || ActionObservations.Occupant(sourceStation) == null) { Finish("succeeded", "station_cleared"); return; }
                     if (delivered >= batchLimit) { Finish("blocked", "station_repopulated"); return; }
                     if (!System.Object.ReferenceEquals(ActionObservations.Occupant(sourceStation), originalSource)) { Finish("blocked", "station_contents_changed"); return; }
                     var stack = originalSource == null ? null : originalSource.GetComponent<ServerStack>();
-                    expected = stack == null ? null : stack.InspectTopOfStack(); cargo = null;
+                    expected = plates.Count == 0 ? null : plates.Peek(); cargo = null;
+                    if (stack == null || !System.Object.ReferenceEquals(stack.InspectTopOfStack(), expected)) { Finish("blocked", "station_contents_changed"); return; }
                     if (expected == null) { Finish("blocked", "station_contents_changed"); return; }
                     StartPickup();
                 }
@@ -217,8 +228,11 @@ namespace SousChef.Plugin.Actions
         }
         public void Decorate(Json.Record catalog, PlayerControls actor)
         {
-            if (!Run.Running && !child.Run.Running) Inventory.Refresh(actor);
+            if (!Run.Running && !child.Run.Running) Inventory.Refresh(actor, catalog);
             var items = new List<object>(); var ingredients = new List<object>(); var utensils = new List<string>(); var known = new HashSet<string>();
+            var destinations = new List<object>();
+            foreach (GameObject go in navigation.Targets())
+                if (go.GetComponent<ServerRubbishBin>() == null && (go.GetComponent<ServerAttachStation>() != null || go.GetComponent<ServerIngredientContainer>() != null)) destinations.Add(navigation.TargetIdentity(go));
             foreach (LogisticsItem entry in Inventory.Items)
             {
                 if (entry.Item == null || entry.Source == null) continue;
@@ -227,6 +241,7 @@ namespace SousChef.Plugin.Actions
                 if (entry.UtensilType != null && !utensils.Contains(entry.UtensilType)) utensils.Add(entry.UtensilType);
             }
             catalog["items"] = items; catalog["ingredients"] = ingredients; catalog["utensilTypes"] = utensils;
+            catalog["deliveryDestinations"] = destinations; catalog["logisticsObservationErrors"] = Inventory.Errors;
             if (Run.Running || child.Run.Running || navigation.Action.State != "idle") return;
             var actions = (List<object>)catalog["actions"];
             foreach (string name in ActionRun.LogisticsNames)
@@ -236,7 +251,7 @@ namespace SousChef.Plugin.Actions
                 if (name == "clear_station") parameters["station_id"] = Json.Object("type", "enum", "options", catalog["targets"]);
                 if (name == "fetch_ingredient") parameters["ingredient"] = Json.Object("type", "enum", "options", ingredients);
                 if (name == "get_utensil") parameters["utensil_type"] = Json.Object("type", "enum", "options", utensils);
-                if (name != "return_utensil") parameters["destination_id"] = Json.Object("type", "enum", "options", catalog["targets"]);
+                if (name != "return_utensil") parameters["destination_id"] = Json.Object("type", "enum", "options", destinations);
                 actions.Add(Json.Object("name", name, "parameters", parameters));
             }
         }

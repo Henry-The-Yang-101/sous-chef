@@ -32,6 +32,16 @@
         </div>
       </div>
     </details>
+    <section class="logistics" aria-labelledby="logistics-title">
+      <h2 id="logistics-title">Move supplies</h2>
+      <p>Choose a job. Player 2 collects and delivers the item, then checks that it reached the destination.</p>
+      <form id="job-form">
+        <label>Job<select id="job-kind"><option value="move_item">Move item</option><option value="fetch_ingredient">Fetch ingredient</option><option value="get_plate">Get clean plate</option><option value="get_utensil">Get empty utensil</option><option value="stage_item">Stage item</option><option value="return_utensil">Return utensil</option><option value="clear_station">Clear station</option></select></label>
+        <label id="job-source-label"><span id="job-source-name">Item</span><select id="job-source"></select></label>
+        <label id="job-destination-label">Destination<select id="job-destination"></select></label>
+        <button id="job-run" type="submit" disabled>Run job</button>
+      </form>
+    </section>
     <section class="destinations" aria-labelledby="destinations-title">
       <div class="toolbar">
         <div><h2 id="destinations-title">Action targets <span id="count">0</span></h2><p>Choose an action for a live target. Interactions handle walking and alignment; throws find a release position.</p></div>

@@ -317,6 +317,11 @@ internal static class Program
         Assert(messenger?.GetMethods(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic).Any(m => m.Name == "ChefEventMessage" && m.GetParameters().Length == 3 && m.GetParameters()[2].ParameterType.FullName == "UnityEngine.MonoBehaviour") == true, "native interaction-end message overload exists");
         Type cooking = assembly.GetType("ClientCookingHandler")?.GetField("m_cachedCookingState", BindingFlags.Instance | BindingFlags.NonPublic)?.FieldType;
         Assert(cooking != null && Enum.GetNames(cooking).Contains("Completed"), "cooked/mixed completion uses installed enum names");
+        Type launch = assembly.GetType("ServerAttachmentThrower"), windReceiver = assembly.GetType("ServerAttachmentWindReceiver");
+        Assert(launch?.GetMethod("CalculateThrowVelocity", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic) != null, "exact launch calculator is bound from the installed native implementation");
+        Assert(launch?.GetMethod("RegisterThrowCallback") != null && launch.GetMethod("UnregisterThrowCallback") != null, "native actual-launch observer has matching registration and cleanup");
+        Assert(windReceiver?.GetMethod("FixedUpdate", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic) != null &&
+            windReceiver.GetMethod("OnWindVolumeExited", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic) != null, "native wind drift and exit velocity contracts exist");
         Console.WriteLine("Audited " + AdapterCatalog.Specs.Count + " adapter types against installed assembly.");
     }
 }

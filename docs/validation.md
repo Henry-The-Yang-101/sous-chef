@@ -486,3 +486,38 @@ plugin was replaced. Throw physics and native interaction behavior remain
 unverified in a live kitchen; the analytical fixtures do not establish perfect
 throws under arbitrary human movement or changing native collision geometry.
 Check log: `.local/first-layer-final-check.log`.
+
+### Logistics jobs and native wind-aware handoffs — 2026-11-01
+
+Bridge 0.6 adds `move_item`, `fetch_ingredient`, `get_plate`, `get_utensil`,
+`stage_item`, `return_utensil`, and `clear_station`. Jobs retain one lease across
+native child pickup/delivery, bind concrete source identities, preserve unrelated
+cargo, and report partial progress on blockage/cancellation. Ingredient and
+utensil selection uses native definitions; plate fetching requires observed clean,
+empty plates. Clear-station plate batches retain original plate identities.
+
+Static inspection of `ServerAttachmentThrower.ThrowItem` and
+`CalculateThrowVelocity` establishes the native launch setter path. The planner
+calls that calculator and observes actual post-setter velocity through a scoped
+native throw callback. Inspection of `ServerAttachmentWindReceiver.FixedUpdate`,
+`OnWindVolumeExited`, `RigidbodyMotion.Movement`, `WindVolume` and `TimeManager`
+establishes positional wind drift, layer filtering/time multipliers and the
+exit-velocity addition; these are included in the fixed-step simulation and
+inverse source-height/release-position search. Nearby handoffs prefer checked
+counter placement or supported ground drops, including when the human has full
+hands. Predicted and observed outcomes remain distinct.
+
+`python3 scripts/check.py` passes the installed-profile build and audit,
+815 core/API assertions, 56 navigation integration checks, 172 action checks
+and 65 Python tests. New fixtures cover multi-step ownership/cancellation,
+blocked destinations, source substitutions, clean/filled plates, utensil homes,
+finite plate batches, native-calculator overrides, actual-launch observation,
+crosswind compensation, vertical wind, elevated receiving surfaces, wind exit
+velocity, layer time multipliers and nearby drop/hazard checks. Browser controls
+were inspected with a local mocked kitchen and reported no JavaScript errors;
+the preview tab/server were closed afterward.
+
+No game was opened or controlled and no installed plugin was replaced. Native
+Update/FixedUpdate/trigger timing, changing wind fields, future human movement
+and collision behavior still require live validation before claiming perfect
+throws. Check log: `.local/logistics-wind-final-check.log`.

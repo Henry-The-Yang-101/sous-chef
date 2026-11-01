@@ -135,9 +135,11 @@ namespace SousChef.Plugin.Control
                 else
                 {
                     Restore(); Install(); navigationSequence = 0;
-                    lastWasLogistics = LogisticsActions.Handles(command.Operation);
+                    bool requestedLogistics = LogisticsActions.Handles(command.Operation);
+                    long priorRevision = requestedLogistics ? logistics.Run.Revision : interactions.Run.Revision;
                     error = command.Operation == "navigate_to" ? navigation.Start(target, client, command.Destination) :
-                        lastWasLogistics ? logistics.Start(target, client, command) : interactions.Start(target, client, command);
+                        requestedLogistics ? logistics.Start(target, client, command) : interactions.Start(target, client, command);
+                    if (error == null || (requestedLogistics ? logistics.Run.Revision : interactions.Run.Revision) != priorRevision) lastWasLogistics = requestedLogistics;
                     if (error != null) Revoke(error);
                 }
             }
@@ -223,8 +225,9 @@ namespace SousChef.Plugin.Control
                 if (entry == null || !entry.IsLocal()) continue;
                 players.Add(Json.Object("id", "p" + playerId, "playerId", playerId, "kind", "player", "label", "Player " + playerId,
                     "objectInstanceId", player.gameObject.GetInstanceID(), "position", Values.Vector(player.transform.position),
-                    "operations", ActionObservations.Held(target) != null && GameObjectUtils.RequestInterface<IClientThrowable>(ActionObservations.Held(target)) != null &&
-                    ActionObservations.Held(player) == null && player.GetComponent<AttachmentCatcher>() != null ? new[] { "throw_to_player" } : new string[0]));
+                    "operations", ActionObservations.Held(target) != null &&
+                    ((GameObjectUtils.RequestInterface<IClientThrowable>(ActionObservations.Held(target)) != null && ActionObservations.Held(player) == null && player.GetComponent<AttachmentCatcher>() != null) ||
+                    (ActionObservations.Held(target).GetComponent<PhysicalAttachment>() != null && Vector3.Distance(target.transform.position, player.transform.position) <= 1.6f)) ? new[] { "throw_to_player" } : new string[0]));
             }
             var actions = (System.Collections.Generic.List<object>)catalog["actions"];
             if (!interactions.Run.Running && !logistics.Run.Running && navigation.Action.State == "idle")

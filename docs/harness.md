@@ -19,6 +19,15 @@ the menus.
 
 ## Use
 
+The **Move supplies** form exposes the seven finite logistics jobs. Choose the
+job, an observed item/ingredient/type/station where required, and its delivery
+surface. Return utensil chooses an observed home or compatible empty station.
+Source and destination object identities are both rechecked before dispatch;
+removed selections clear rather than silently switching to another item.
+Parent and child phases remain visible through pickup and delivery. Stop and
+browser-disconnect cleanup cancel the entire job.
+
+
 - Select an action in a target's dropdown, then **Run**. **Navigate** sends the
   exact chosen destination to `navigate_to`. Other options include pickup,
   placement, ingredient addition, work, activation, disposal, waits and targeted

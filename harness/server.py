@@ -141,12 +141,16 @@ class HarnessBridge:
 
     def act(self, viewer, session, destination, instance, operation, arguments=None):
         allowed = {'navigate_to', 'pick_up', 'place_at', 'add_ingredient', 'work_at',
-                   'activate', 'discard', 'wait_until', 'throw_to', 'throw_to_player'}
+                   'activate', 'discard', 'wait_until', 'throw_to', 'throw_to_player',
+                   'move_item', 'fetch_ingredient', 'get_plate', 'get_utensil', 'stage_item', 'return_utensil', 'clear_station'}
+        jobs = {'move_item', 'fetch_ingredient', 'get_plate', 'get_utensil', 'stage_item', 'return_utensil', 'clear_station'}
         if not isinstance(operation, str):
             raise HarnessError('Unsupported action')
         arguments = {} if arguments is None else arguments
         keys = {'work_at': {'until', 'timeout'}, 'wait_until': {'condition', 'timeout'},
-                'activate': {'desired_state'}}.get(operation, set())
+                'activate': {'desired_state'}, 'move_item': {'item_id', 'source_instance_id'},
+                'stage_item': {'item_id', 'source_instance_id'}, 'clear_station': {'station_id', 'source_instance_id'},
+                'fetch_ingredient': {'ingredient'}, 'get_utensil': {'utensil_type'}}.get(operation, set())
         if operation not in allowed or not isinstance(arguments, dict) or arguments.keys() - keys:
             raise HarnessError('Unsupported action or arguments')
         if operation == 'wait_until' and 'condition' not in arguments:
@@ -184,19 +188,44 @@ class HarnessBridge:
                     catalog = self.client.available_actions()
                     self._publish(catalog, self.client.last_response['control'])
                 options = catalog.get('destinations', []) if operation == 'navigate_to' else (
-                    catalog.get('players', []) if operation == 'throw_to_player' else catalog.get('targets', []))
+                    catalog.get('players', []) if operation == 'throw_to_player' else
+                    catalog.get('items', []) if operation == 'return_utensil' else
+                    catalog.get('deliveryDestinations', []) if operation in jobs else catalog.get('targets', []))
                 chosen = next((d for d in options
                                if d['id'] == destination and d['objectInstanceId'] == instance), None)
                 if chosen is None:
                     reason = catalog.get('navigation', {}).get('catalogReason')
                     raise HarnessError(reason or 'That destination is no longer reachable')
-                if operation != 'navigate_to' and operation not in chosen.get('operations', []):
+                if operation not in jobs and operation != 'navigate_to' and operation not in chosen.get('operations', []):
                     raise HarnessError('That action is no longer available for this target')
+                job_args = None
+                if operation in jobs:
+                    if not any(a.get('name') == operation for a in catalog.get('actions', [])):
+                        raise HarnessError('That job is no longer available')
+                    if operation in {'move_item', 'stage_item', 'clear_station'}:
+                        key = 'station_id' if operation == 'clear_station' else 'item_id'
+                        sources = catalog.get('targets', []) if operation == 'clear_station' else catalog.get('items', [])
+                        source = next((s for s in sources if s['id'] == arguments.get(key) and
+                                       type(arguments.get('source_instance_id')) is int and s['objectInstanceId'] == arguments['source_instance_id']), None)
+                        if source is None:
+                            raise HarnessError('That source item or station changed; choose it again')
+                        job_args = (source['id'], destination)
+                    elif operation == 'fetch_ingredient':
+                        ingredient = next((i for i in catalog.get('ingredients', []) if i['id'] == arguments.get('ingredient')), None)
+                        if ingredient is None:
+                            raise HarnessError('Choose a currently observed ingredient')
+                        job_args = (ingredient['id'], destination)
+                    elif operation == 'get_utensil':
+                        if arguments.get('utensil_type') not in catalog.get('utensilTypes', []):
+                            raise HarnessError('Choose a currently observed utensil type')
+                        job_args = (arguments['utensil_type'], destination)
+                    else:
+                        job_args = (destination,)
                 with self.state_lock:
                     if generation != self.generation:
                         raise HarnessError('Cancelled by Stop')
                 target = chosen['playerId'] if operation == 'throw_to_player' else destination
-                control = getattr(self.client, operation)(target, **arguments)
+                control = getattr(self.client, operation)(*job_args) if job_args is not None else getattr(self.client, operation)(target, **arguments)
                 with self.state_lock:
                     self.owner = viewer
                     self.owner_seen = self.clock()

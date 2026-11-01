@@ -29,6 +29,7 @@ internal static class Program
         public World(Action<GameObject> configure = null)
         {
             UnityEngine.Object.All.Clear(); Time.realtimeSinceStartup=10;Time.frameCount=1;
+            TimeManager.Scale=1;
             var actor=new GameObject("chef"); Chef=actor.Add(new PlayerControls());
             actor.Add(new CapsuleCollider());actor.Add(new GroundCast());actor.Add(new PlayerIDProvider());
             actor.Add(new ClientPlayerAttachmentCarrier());Carrier=actor.Add(new ServerPlayerAttachmentCarrier());
@@ -43,6 +44,7 @@ internal static class Program
             Physics.Nearby=(p,r)=>Colliders.ToArray();
             Physics.Ray=(p,d,length,mask)=>d.y<-.9f && p.y>=0 && p.y<=length ? new[] {new RaycastHit {collider=floor,point=new Vector3(p.x,0,p.z),normal=Vector3.up,distance=p.y}} : new RaycastHit[0];
             Physics.Overlap=(a,b,r)=>new Collider[0];Physics.Cast=(a,b,r,d,l)=>new RaycastHit[0];
+            Physics.Penetration=(a,p,q,b,r,s)=>false;Physics.gravity=new Vector3(0,-9.81f,0);
             Chef.CurrentInteractionObjects.m_TheOriginalHandlePickup=Target;
             Chef.CurrentInteractionObjects.m_iHandlePickup=Target.GetComponent<IPickup>();
             Chef.CurrentInteractionObjects.m_iHandlePlacement=Target.GetComponent<IPlacement>();
@@ -233,7 +235,7 @@ internal static class Program
     {
         var w=new World(t=>t.Add(new Catcher()));var item=w.Ingredient("tomato");item.Add(new Throwable());
         var body=item.Add(new PhysicalAttachment());body.m_rigidBodyParams.m_drag=.2f;item.Add(new BoxCollider {size=Vector3.one*.2f});
-        w.Chef.gameObject.Add(new AttachmentThrower());w.Chef.gameObject.Add(new ClientAttachmentThrower());
+        w.Chef.gameObject.Add(new AttachmentThrower());w.Chef.gameObject.Add(new ClientAttachmentThrower());w.Chef.gameObject.Add(new ServerAttachmentThrower());
         float flight;ThrowTrajectory.FlightTime(.1f,8*Mathf.Tan(15*Mathf.Deg2Rad),-9.81f,.2f,.02f,out flight);
         float distance=ThrowTrajectory.Displacement(8,0,.2f,flight,.02f);
         w.Chef.transform.position=new Vector3(0,0,-distance-.4f);item.transform.position=w.Chef.transform.position+new Vector3(0,1,.4f);w.Hold(item);
@@ -249,8 +251,12 @@ internal static class Program
         w.Chef.CurrentInteractionObjects.m_interactable=null;
         Check(w.Start("throw_to")==null,"targeted throw starts with a planned release stance");w.Arrive();w.Tick();w.Tick();w.Tick();
         Check(w.Skills.Run.Phase=="flight" && w.Skills.Run.State=="running","release is tracked separately from successful receipt");
+        body.m_motion=new RigidbodyMotion {Velocity=new Vector3(1,2,3)};w.Chef.GetComponent<ServerAttachmentThrower>().Launched(item);
+        var observed=(float[])((Json.Record)((Json.Record)w.Skills.Describe())["details"])["observedLaunchVelocity"];
+        Check(observed[0]==1 && observed[1]==2 && observed[2]==3,"native throw callback records actual launch velocity rather than reusing a prediction");
         w.Hold(null);w.Target.GetComponent<ServerAttachStation>().Item=item;w.Tick();
         Check(w.Skills.Run.State=="succeeded" && w.Skills.Run.Reason=="throw_received","native holder edge confirms throw receipt");
+        Check(w.Chef.GetComponent<ServerAttachmentThrower>().Launched==null,"throw observation callback is removed after completion");
 
         var human=new GameObject("human");var player=human.Add(new PlayerControls());human.Add(new PlayerIDProvider {Id=0});
         human.Add(new AttachmentCatcher());human.Add(new ServerPlayerAttachmentCarrier());human.transform.yaw=Mathf.PI;
@@ -312,6 +318,15 @@ internal static class Program
         w.ArriveAt(destination);w.Hold(null);destination.GetComponent<ServerAttachStation>().Item=item;w.Verify();
         Check(w.Logistics.Run.Reason=="station_cleared","clear_station verifies the source is freed after delivery");
 
+        w=new World();destination=w.Delivery();var cleanStack=new GameObject("clean stack");cleanStack.Add(new CleanPlateStack());var plateStack=cleanStack.Add(new ServerStack());
+        var bottom=new GameObject("original bottom plate");bottom.Add(new ServerPlate {m_ingredientContainer=bottom.Add(new ServerIngredientContainer())});
+        var top=new GameObject("original top plate");top.Add(new ServerPlate {m_ingredientContainer=top.Add(new ServerIngredientContainer())});plateStack.m_stackItems.Add(bottom);plateStack.m_stackItems.Add(top);
+        w.Target.GetComponent<ServerAttachStation>().Item=cleanStack;w.Logistics.Start(w.Chef,1,new ControlCommand {Operation="clear_station",Source=w.Id,Destination=w.IdOf(destination)});
+        w.Arrive();plateStack.m_stackItems.Remove(top);w.Hold(top);w.Tick();w.ArriveAt(destination);
+        var arrival=new GameObject("newly arrived plate");arrival.Add(new ServerPlate());plateStack.m_stackItems.Add(arrival);
+        destination.GetComponent<ServerAttachStation>().Item=top;w.Hold(null);w.Verify();
+        Check(w.Logistics.Run.Reason=="station_contents_changed" && w.Skills.Run.State=="succeeded","clear_station binds its original plate batch and does not silently collect new arrivals");
+
         w=new World();destination=w.Delivery();var plate=new GameObject("clean plate");var contents=plate.Add(new ServerIngredientContainer());plate.Add(new ServerPlate {m_ingredientContainer=contents});w.Target.GetComponent<ServerAttachStation>().Item=plate;
         Check(w.Logistics.Start(w.Chef,1,new ControlCommand {Operation="get_plate",Destination=w.IdOf(destination)})==null,"get_plate selects observed clean empty plate");w.Logistics.Cancel("test_end");
         contents.Contents.Add(new AssembledDefinitionNode("finished dinner"));
@@ -328,6 +343,77 @@ internal static class Program
         foreach(string command in new[] {"clear_station r d1 d2 extra","move_item r d1 nope","get_utensil r s%%% d2","fetch_ingredient r sCg d2","return_utensil r d1 d2"})
         {bool failed=false;try{ControlCommand.Parse(command);}catch(ArgumentException){failed=true;}Check(failed,"malformed logistics command is rejected");}
     }
-    private static void Main() { Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();Throws();GeneratedStances();LogisticsJobs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
+    private static void WindAndHeight()
+    {
+        var w=new World();var item=w.Ingredient("test");item.Add(new BoxCollider {size=Vector3.one*.2f});
+        item.Add(new AttachmentWindReceiver());item.Add(new ServerAttachmentWindReceiver());
+        var zone=new GameObject("wind zone");var volume=zone.Add(new WindVolume {Velocity=new Vector3(1,0,0)});var box=zone.Add(new BoxCollider {size=Vector3.one*100});
+        Physics.Penetration=(a,p,q,b,r,s)=>b.bounds.Contains(p);
+        var wind=new WindField();Check(wind.Prepare(w.Chef,item)==null,"native item wind receiver and layer-filtered volumes are modeled");
+        var path=ThrowFlight.Simulate(Vector3.zero,Vector3.forward,new Vector3(0,0,2),Vector3.zero,0,1,.1f,wind);
+        Check(Vector3.Distance(path.End,new Vector3(1,0,2))<.0001f && path.FinalVelocity.x==0,"wind adds native positional drift rather than invented continuous acceleration");
+        TimeManager.Scale=.5f;wind.Prepare(w.Chef,item);path=ThrowFlight.Simulate(Vector3.zero,Vector3.forward,new Vector3(0,0,2),Vector3.zero,0,1,.1f,wind);
+        Check(Math.Abs(path.End.x-.5f)<.0001f,"wind positional drift uses the native per-layer time multiplier");TimeManager.Scale=1;
+        box.size=new Vector3(.9f,100,100);
+        wind.Prepare(w.Chef,item);path=ThrowFlight.Simulate(Vector3.zero,Vector3.right,new Vector3(2,0,0),Vector3.zero,0,1,.1f,wind);
+        Check(Math.Abs(path.End.x-3)<.0001f && Math.Abs(path.FinalVelocity.x-3)<.0001f,"exiting a wind volume adds that source's velocity exactly once");
+        box.size=Vector3.one*100;volume.Velocity=new Vector3(0,1,0);wind.Prepare(w.Chef,item);
+        path=ThrowFlight.Simulate(new Vector3(0,2,0),Vector3.forward,new Vector3(0,2,2),Physics.gravity,.2f,.6f,.02f,wind);
+        float calm=2+ThrowTrajectory.Displacement(2,-9.81f,.2f,.6f,.02f);
+        Check(Math.Abs(path.End.y-calm-.6f)<.0001f && path.PeakHeight>2,"vertical wind and release height participate in the same damped trajectory");
+        typeof(WindVolume).GetField("m_windFilter",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic).SetValue(volume,(LayerMask)0);
+        wind.Prepare(w.Chef,item);path=ThrowFlight.Simulate(Vector3.zero,Vector3.forward,Vector3.forward,Vector3.zero,0,1,.1f,wind);
+        Check(Math.Abs(path.End.y)<.0001f,"wind layer filtering is applied to the thrown item");
+
+        w=new World(t=>t.Add(new Catcher()));item=w.Ingredient("tomato");item.Add(new Throwable());item.Add(new PhysicalAttachment());item.Add(new BoxCollider {size=Vector3.one*.2f});
+        w.Chef.gameObject.Add(new AttachmentThrower {m_throwForce=99,m_throwInclination=1});w.Chef.gameObject.Add(new ClientAttachmentThrower());
+        var server=w.Chef.gameObject.Add(new ServerAttachmentThrower {Override=d=>new Vector3(d.x*5,3,d.y*5)});
+        float time;ThrowTrajectory.FlightTime((float)Math.Sqrt(.03),3,-9.81f,0,.02f,out time);
+        w.Target.transform.position=new Vector3(0,2,0);w.Chef.transform.position=new Vector3(0,2,-5*time-.4f);item.transform.position=w.Chef.transform.position+new Vector3(0,1,.4f);w.Hold(item);
+        Physics.Nearby=(p,r)=>w.Colliders.Where(c=>Vector3.Distance(p,c.bounds.ClosestPoint(p))<=r).ToArray();
+        var planner=new ThrowPlanner();ThrowPlan plan;
+        Check(planner.Prepare(w.Chef,item,w.Target)==null && planner.From(w.Chef.transform.position,false,out plan),"throw solver uses elevated release and target geometry");
+        planner.From(w.Chef.transform.position,false,out plan);
+        Check(Math.Abs(plan.InitialVelocity.z-5)<.0001f && plan.InitialVelocity.y==3 && server.Calls>0,"launch velocity comes from native calculator even when public launch settings disagree");
+        item.Add(new AttachmentWindReceiver());item.Add(new ServerAttachmentWindReceiver());
+        var crosswind=new GameObject("crosswind");var crossVolume=crosswind.Add(new WindVolume {Velocity=new Vector3(1,0,0)});crosswind.Add(new BoxCollider {size=Vector3.one*100});
+        Physics.Penetration=(a,p,q,b,r,s)=>b.bounds.Contains(p);planner.Prepare(w.Chef,item,w.Target);
+        Check(planner.From(w.Chef.transform.position,false,out plan) && plan.Direction.x<0 && plan.WindDisplacement.x>0,"production targeting compensates crosswind while retaining native launch speed");
+        crossVolume.Velocity=new Vector3(0,1,0);
+        // A higher source floor belongs to the same production walking graph.
+        var elevatedFloor=w.Colliders[0];elevatedFloor.transform.position=new Vector3(0,2,0);
+        Physics.Ray=(p,d,length,mask)=>d.y<-.9f && p.y>=2 && p.y-2<=length ? new[] {new RaycastHit {collider=elevatedFloor,point=new Vector3(p.x,2,p.z),normal=Vector3.up,distance=p.y-2}} : new RaycastHit[0];
+        planner.Prepare(w.Chef,item,w.Target);
+        Check(planner.Find(w.Navigation,out plan)==null && plan.Arrival.y>3 && plan.WindDisplacement.y>0,"inverse release search adjusts flight time and positions for an updraft and elevated receiving surface");
+        crossVolume.enabled=false;
+        w.Chef.transform.position=new Vector3(0,0,w.Chef.transform.position.z);item.transform.position=w.Chef.transform.position+new Vector3(0,1,.4f);planner.Prepare(w.Chef,item,w.Target);
+        Check(!planner.From(w.Chef.transform.position,false,out plan),"unreachable target height is rejected instead of projecting a flat throw");
+    }
+    private static void NearbyHandoffs()
+    {
+        var w=new World();var item=w.Ingredient("tomato");item.Add(new PhysicalAttachment {m_motion=new RigidbodyMotion()});item.Add(new BoxCollider {size=Vector3.one*.2f});w.Hold(item);
+        var human=new GameObject("human");var player=human.Add(new PlayerControls());human.Add(new PlayerIDProvider {Id=0});human.Add(new CapsuleCollider());human.Add(new ServerPlayerAttachmentCarrier {Item=new GameObject("already holding food")});human.transform.position=new Vector3(.5f,0,0);
+        Check(w.Skills.Start(w.Chef,1,new ControlCommand {Operation="throw_to_player",Destination="1"})==null && w.Skills.Run.Phase=="drop_press","nearby handoff prefers a usable counter even when the player cannot catch");
+        w.Tick();w.Target.GetComponent<ServerAttachStation>().Item=item;w.Hold(null);w.Verify();
+        Check(w.Skills.Run.State=="succeeded" && w.Skills.Run.Reason=="item_handed_off_nearby" && !w.Inputs.Contains(2),"nearby counter delivery uses pickup placement, not a charged throw");
+
+        w=new World();item=w.Ingredient("tomato");var physical=item.Add(new PhysicalAttachment {m_motion=new RigidbodyMotion()});var attachment=item.Add(new ServerPhysicalAttachment {Attached=true});item.Add(new BoxCollider {size=Vector3.one*.2f});item.transform.position=new Vector3(0,1,-.6f);w.Hold(item);
+        human=new GameObject("human");player=human.Add(new PlayerControls());human.Add(new PlayerIDProvider {Id=0});human.Add(new CapsuleCollider());human.Add(new ServerPlayerAttachmentCarrier());human.transform.position=new Vector3(0,0,-.2f);
+        w.Chef.CurrentInteractionObjects.m_iHandlePlacement=null;w.Chef.CurrentInteractionObjects.m_TheOriginalHandlePickup=null;
+        var floor=w.Colliders[0];
+        Physics.Sphere=(p,r,d,length)=>d.y<-.001f && p.y-r>=0 && p.y+d.y*length-r<=0 ? new[] {new RaycastHit {collider=floor,point=new Vector3(p.x,0,p.z),normal=Vector3.up,distance=(p.y-r)/-d.y}} : new RaycastHit[0];
+        var drops=new DropHandoff();DropPlan drop;
+        Check(drops.Plan(w.Chef,item,player,out drop) && drop.Counter==null,"nearby ground drop requires a predicted supported landing within player reach");
+        Check(w.Skills.Start(w.Chef,1,new ControlCommand {Operation="throw_to_player",Destination="1"})==null,"close ground handoff starts without requiring a throwable item or catcher");
+        w.Tick();w.Hold(null);attachment.Attached=false;item.transform.position=new Vector3(0,.1f,-.6f);
+        for(int i=0;i<10 && w.Skills.Run.Running;i++)w.Tick();
+        Check(w.Skills.Run.Reason=="item_dropped_near_player" && !w.Inputs.Contains(2),"ground handoff verifies stable item and support near the player");
+        floor.gameObject.Add(new RespawnCollider());w.Hold(item);item.transform.position=new Vector3(0,1,-.6f);
+        Check(!drops.Plan(w.Chef,item,player,out drop),"nearby optimization cannot drop into a respawn hazard");
+        human.transform.position=new Vector3(0,3,-.2f);
+        Check(!drops.Plan(w.Chef,item,player,out drop),"nearby horizontal position on a different deck is not a valid drop handoff");
+        Physics.Sphere=(p,r,d,length)=>new RaycastHit[0];
+    }
+    private static void Main() { Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();Throws();GeneratedStances();LogisticsJobs();WindAndHeight();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
     private static ClientInteractable GetCurrentlyInteractingForTest(this PlayerControls chef) { return chef.GetComponent<ClientPlayerControlsImpl_Default>().Current; }
 }
