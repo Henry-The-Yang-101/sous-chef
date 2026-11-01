@@ -20,7 +20,7 @@ internal static class Program
     }
     private static void Main(string[] args)
     {
-        TestJson(); TestIdentity(); TestStream();
+        TestJson(); TestIdentity(); TestStream(); TestControl();
         if (args.Length > 0) Audit(args[0]);
         Console.WriteLine("PASS: " + checks + " assertions");
     }
@@ -116,6 +116,60 @@ internal static class Program
                 Assert(server.CoalescedCaptures > 0, "bounded mailbox coalesces captures");
             }
             lock (failures) Assert(failures.Count == 0, "background errors: " + String.Join(",", failures));
+        }
+    }
+
+    private static void TestControl()
+    {
+        var command = ControlCommand.Parse("input r1 1 300 1 1 3");
+        Assert(Math.Abs(command.X * command.X + command.Y * command.Y - 1) < 0.001, "diagonal normalized");
+        foreach (string invalid in new[] { "input x 1 300 NaN 0 0", "input x 1 300 Infinity 0 0",
+            "input x 1 300 2 0 0", "input x 1 1001 0 0 0", "input x 1 300 0 0 8",
+            "input x 0 300 0 0 0", "claim x extra", "join x", "input x 1 300 0 0", "claim a/b" })
+        {
+            bool rejected = false;
+            try { ControlCommand.Parse(invalid); } catch (ArgumentException) { rejected = true; }
+            Assert(rejected, "reject malformed control: " + invalid);
+        }
+        var lease = new ControlLease();
+        Assert(lease.Set(1, command, 0) == "not_owner", "no unclaimed input");
+        Assert(lease.Claim(1, 0) && !lease.Claim(2, 0), "exclusive ownership");
+        Assert(!lease.Claim(1, 0), "claim cannot reset sequence on active owner");
+        Assert(lease.Set(2, command, 0) == "not_owner", "other client cannot drive P2");
+        Assert(lease.Set(1, command, 0) == null, "owned input accepted");
+        Assert(lease.Set(1, command, 0.1) == "stale_sequence", "duplicate input rejected");
+        Assert(!lease.Release(2, "disconnect"), "other client's disconnect cannot release owner");
+        Assert(lease.Read(0.299).Buttons == 3, "held input remains live");
+        Assert(lease.Read(0.3).Buttons == 0 && lease.Owner(0.3) == 0, "deadline neutralizes and revokes");
+        Assert(lease.Set(1, command, 0.4) == "not_owner", "expired input cannot resume");
+        Assert(lease.Claim(2, 1), "new owner after expiry");
+        lease.Revoke("paused");
+        Assert(lease.Owner(1) == 0 && lease.LastRelease == "paused", "pause revokes ownership");
+        Assert(lease.Claim(3, 2) && lease.Release(3, "disconnected"), "disconnect releases");
+        Assert(lease.Read(2).X == 0, "disconnect neutralizes movement");
+
+        int disconnected = 0;
+        using (var server = new ControlServer(0, Json.Object("type", "hello"), id => Interlocked.Increment(ref disconnected)))
+        using (var client = new TcpClient())
+        {
+            server.Start(); client.Connect("127.0.0.1", server.Port); client.ReceiveTimeout = 3000;
+            var reader = new StreamReader(client.GetStream());
+            Assert(Read(reader).GetProperty("type").GetString() == "hello", "control hello");
+            byte[] bytes = System.Text.Encoding.ASCII.GetBytes("status request1\n");
+            client.GetStream().Write(bytes, 0, bytes.Length);
+            bool dispatched = false; int mainThread = Thread.CurrentThread.ManagedThreadId;
+            for (int i = 0; i < 100 && !dispatched; i++)
+            {
+                server.Pump((id, request) => {
+                    Assert(Thread.CurrentThread.ManagedThreadId == mainThread, "control dispatch stays on caller thread");
+                    dispatched = true; return Json.Object("id", request.Id, "ok", true);
+                });
+                Thread.Sleep(5);
+            }
+            Assert(dispatched && Read(reader).GetProperty("id").GetString() == "request1", "control roundtrip");
+            client.Close();
+            for (int i = 0; i < 100 && disconnected == 0; i++) Thread.Sleep(5);
+            Assert(disconnected == 1, "socket disconnect callback");
         }
     }
 

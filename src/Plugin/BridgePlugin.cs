@@ -4,15 +4,17 @@ using System.IO;
 using System.Security.Cryptography;
 using BepInEx;
 using SousChef.Core;
+using SousChef.Plugin.Control;
 using UnityEngine;
 
 namespace SousChef.Plugin
 {
-    [BepInPlugin("dev.souschef.observer", "Sous Chef Observer", "0.1.0")]
+    [BepInPlugin("dev.souschef.observer", "Sous Chef Observer", "0.2.0")]
     public sealed class BridgePlugin : BaseUnityPlugin
     {
         private StreamServer server;
         private SceneCapture capture;
+        private Player2Control control;
         private readonly string session = Guid.NewGuid().ToString("N");
         private long sequence, fixedTicks;
         private bool wasInRound;
@@ -33,19 +35,27 @@ namespace SousChef.Plugin
                 using (var sha = SHA256.Create()) using (var file = File.OpenRead(assembly))
                     hash = BitConverter.ToString(sha.ComputeHash(file)).Replace("-", "").ToLowerInvariant();
                 capture = new SceneCapture(session);
+                int controlPort = Config.Bind("Control", "Port", 24703, "Loopback port for direct control of existing local Player 2.").Value;
+                if (controlPort < 1024 || controlPort > 65535 || controlPort == port) throw new ArgumentException("Invalid control port");
+                control = new Player2Control(controlPort, session);
                 server = new StreamServer(port, Json.Object("type", "hello", "protocolVersion", 1,
-                    "bridgeVersion", "0.1.0", "sessionId", session, "unityVersion", Application.unityVersion,
-                    "gameAssemblySha256", hash, "captureHz", hz, "readOnly", true), LogWorkerError);
+                    "bridgeVersion", "0.2.0", "sessionId", session, "unityVersion", Application.unityVersion,
+                    "gameAssemblySha256", hash, "captureHz", hz, "readOnly", false, "controlPort", controlPort, "controlPlayer", 2), LogWorkerError);
                 server.Start();
                 Logger.LogInfo("Observer listening on 127.0.0.1:" + port + "; active rounds only; assembly=" + hash);
                 StartCoroutine(CaptureLoop());
             }
-            catch (Exception e) { Logger.LogError("Observer startup failed: " + e); if (server != null) server.Dispose(); server = null; }
+            catch (Exception e) { Logger.LogError("Observer startup failed: " + e); if (server != null) server.Dispose(); if (control != null) control.Dispose(); control = null; server = null; }
         }
 
         private void FixedUpdate() { fixedTicks++; }
         private void Update()
         {
+            if (control != null)
+            {
+                try { control.Tick(); }
+                catch (Exception e) { Logger.LogError("Control disabled: " + e); control.Dispose(); control = null; }
+            }
             // Unity logging is also kept off worker threads.
             string error = System.Threading.Interlocked.Exchange(ref lastError, null);
             if (error != null) Logger.LogWarning(error);
@@ -96,6 +106,6 @@ namespace SousChef.Plugin
                     "role", role, "realtime", Time.realtimeSinceStartup) });
         }
 
-        private void OnDestroy() { StopAllCoroutines(); if (server != null) { server.Dispose(); server = null; } }
+        private void OnDestroy() { StopAllCoroutines(); if (control != null) { control.Dispose(); control = null; } if (server != null) { server.Dispose(); server = null; } }
     }
 }
