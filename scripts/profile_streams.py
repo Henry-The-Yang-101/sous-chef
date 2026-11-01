@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read both observation streams concurrently; never send gameplay controls."""
+"""Profile selected observation streams; never send gameplay controls."""
 import argparse
 import json
 from pathlib import Path
@@ -18,7 +18,7 @@ def percentile(values, fraction):
 
 
 def measure(port, seconds):
-    captures, clocks, arrivals, sizes, discovery = [], [], [], [], []
+    captures, clocks, frames, arrivals, sizes, discovery = [], [], [], [], [], []
     gaps = 0
     start = time.monotonic()
     with BridgeClient(port, timeout=3) as client:
@@ -28,15 +28,18 @@ def measure(port, seconds):
             if message['type'] in ('snapshot', 'gameplay'):
                 captures.append(message['diagnostics']['captureMilliseconds'])
                 clocks.append(message['clock']['realtime'])
+                frames.append(message['clock']['renderFrame'])
                 arrivals.append(time.monotonic())
                 sizes.append(len(json.dumps(message, separators=(',', ':')).encode()))
                 discovery.append(message.get('coverage', {}).get('discoveryAgeSeconds', 0))
             if time.monotonic() - start >= seconds:
                 break
     intervals = [b - a for a, b in zip(clocks, clocks[1:]) if b >= a]
+    elapsed = clocks[-1] - clocks[0] if len(clocks) > 1 else 0
     return {'port': port, 'samples': len(captures), 'skippedSequences': gaps,
             'observedCaptureHz': (len(clocks) - 1) / (clocks[-1] - clocks[0]) if len(clocks) > 1 and clocks[-1] > clocks[0] else None,
             'receivedHz': (len(arrivals) - 1) / (arrivals[-1] - arrivals[0]) if len(arrivals) > 1 else None,
+            'averageRenderFps': (frames[-1] - frames[0]) / elapsed if elapsed > 0 else None,
             'captureMsMedian': statistics.median(captures) if captures else None,
             'captureMsP95': percentile(captures, .95), 'captureMsMax': max(captures) if captures else None,
             'sampleIntervalSecondsP95': percentile(intervals, .95),
@@ -49,6 +52,8 @@ def main():
     parser.add_argument('--seconds', type=float, default=15)
     parser.add_argument('--full-port', type=int, default=24702)
     parser.add_argument('--gameplay-port', type=int, default=24704)
+    parser.add_argument('--stream', choices=('both', 'full', 'gameplay'), default='both',
+                        help='Only subscribe to these streams; unused streams suspend capture.')
     args = parser.parse_args()
     if args.seconds <= 0: parser.error('--seconds must be positive')
     results = {}
@@ -58,7 +63,8 @@ def main():
         except (OSError, EOFError, ValueError) as error: results[name] = {'error': str(error)}
 
     workers = [threading.Thread(target=run, args=(name, port)) for name, port in
-               [('full', args.full_port), ('gameplay', args.gameplay_port)]]
+               [('full', args.full_port), ('gameplay', args.gameplay_port)]
+               if args.stream in ('both', name)]
     for worker in workers: worker.start()
     for worker in workers: worker.join()
     print(json.dumps(results, indent=2))

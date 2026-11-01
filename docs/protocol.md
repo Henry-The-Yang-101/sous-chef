@@ -6,6 +6,13 @@ This observation socket is send-only. A separate [Player 2 control endpoint](con
 accepts commands. Four observation clients can connect; the Python client limits
 individual lines to 64 MiB.
 
+Capture runs only while a stream needs it. The first reader after an idle period
+receives `hello` immediately, then freshly captured state (or an inactive status),
+never a snapshot retained from before the idle period. Additional concurrent
+readers receive the current latest state as before. Gameplay subscribers also
+keep full scene discovery active; control-only clients do not enable observation
+capture. Configured sampling rates and message fields are unchanged.
+
 ## Messages
 
 | Type | Meaning |

@@ -25,6 +25,12 @@ All Unity reads occur on the main thread. Frozen plain DTOs pass to a serializer
 worker and independent socket writers. A single pending capture and single
 latest encoded frame bound the backlog; slow consumers cannot block Unity.
 Socket writers have a two-second timeout. Asset caches and identities are pruned.
+Small records retain their existing key/value arrays instead of allocating an
+additional dictionary per record. Primitive-array encoding avoids boxing each
+transform/mesh scalar. Wire fields, numeric precision and capture rates are
+unchanged; published records are never reused or mutated by a later capture.
+Reflection bindings cache qualified field names, and reader traversal scratch
+storage is reused only on the main thread.
 The observation path makes no gameplay/input calls. The separate
 [Player 2 control adapter](control.md) temporarily replaces only the selected
 chef's logical input fields; it adds no gameplay Harmony patches.
@@ -113,6 +119,14 @@ share CPU and the main-thread capture budget. Input ticking remains independent.
 The scheduler retains phase across render-frame quantization and skips missed
 slots. Fast sample completeness permits latest-state backpressure without a
 baseline-dependent delta protocol.
+
+Capture is demand-driven: no observation readers means no scene/gameplay
+extraction or encoding. A full-only reader leaves the fast sampler asleep;
+a gameplay reader still requires full discovery at the full capture rate.
+Observation sockets detect disconnects even without new publications. When the
+last reader leaves, pending/latest frames are discarded; a new first reader
+waits for fresh state, with a generation check rejecting old in-flight encoding.
+Control leases and navigation do not depend on observation subscriptions.
 
 ## Autonomous Player 2 actions
 

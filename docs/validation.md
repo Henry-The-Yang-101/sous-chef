@@ -327,3 +327,49 @@ No pickup or dash buttons were sent during these follow-up checks. This verifies
 the tested contact/arrival cases, not every wall shape, slippery surface or cause
 of cancellation. Evidence: `.local/contact-final-navigation.ndjson`,
 `.local/wall-contact.json`, and `.local/wall-contact-result.json`.
+
+### Capture overhead and unused streams
+
+The 2026-11-01 FPS investigation measured the original plugin in an active
+`s_wonderland_1_4` round. Both streams ran even with no observation readers.
+Full capture median/p95/max was 33.720/63.489/79.803 ms; gameplay capture was
+8.314/18.063/25.483 ms. A separate overlapping frame-counter sample averaged
+108.29 rendering FPS. That average does not describe the visible periodic stalls.
+
+The fix retains small records as key/value arrays, removes primitive-array
+boxing during encoding, caches qualified reflection names and reuses reader
+scratch storage. It suspends captures without subscribers and skips the fast
+sampler for full-only consumers, including the harness. No observation fields,
+configured sampling rates, navigation checks or control capabilities were removed.
+
+After installing and relaunching, the user entered `s_sushi_1_3` and reported
+the game was **noticeably smoother**. The kitchens differ, so these timings are
+not a controlled before/after speedup or proof of a specific FPS gain:
+
+| Updated build | Full capture median / p95 / max | Gameplay capture median / p95 / max | Average rendering FPS |
+| --- | --- | --- | --- |
+| Both streams | 18.275 / 25.157 / 104.858 ms | 5.060 / 9.450 / 29.447 ms | 148.2 |
+| Full only | 23.886 / 25.193 / 26.189 ms | Suspended | 172.2 |
+
+Both-stream sampling sustained approximately 5.00 / 19.85 Hz with no skipped
+sequences. The larger maximum shows that capture stalls are not eliminated in
+every case. Twelve subsequent full snapshots passed the recording validator:
+1,738–1,739 objects, 144 colliders, resolved references/parents/geometry assets,
+zero read errors and no unsupported values. A read-only navigation catalogue
+request returned 19 destinations and a complete search without an observation
+error. No test-issued movement was used for this investigation.
+
+Closing and reopening the gameplay reader across 2.063 seconds advanced its
+sequence by only two, rather than about 41 samples, and returned a fresh render
+frame in the same epoch. The user's full-stream harness stayed connected.
+Automated transport tests additionally cover all readers disconnecting while
+idle, fresh state/assets on resubscription, and rejection of old in-flight frames.
+
+`python3 scripts/check.py` passes 759 C# assertions, 53 Python tests and the
+151-type installed-assembly audit. The installed DLL matches the checked build;
+the loader log contains no capture, serialization or control failures from this
+run. Local evidence: `.local/fps-before.json`, `.local/fps-before-clocks.json`,
+`.local/fps-after-both.json`, `.local/fps-after-full.json`,
+`.local/fps-after-validation.ndjson`, `.local/fps-after-catalog.json` and
+`.local/fps-reconnect.json`. `profile_streams.py --stream full` measures just the
+full subscription; its new `averageRenderFps` field uses Unity frame counters.

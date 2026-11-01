@@ -83,6 +83,12 @@ game while it is closed. `Stream.Port` selects the port; `Capture.Hz` is clamped
 to 1–30. Start at 5 Hz: broad main-thread capture has measurable cost. Match a
 custom port with the client's `--port` argument.
 
+Observation capture follows connected readers. With no observation clients,
+both captures sleep; Player 2 control/navigation still work. A full-stream-only
+client (including the harness) no longer pays for unused 20 Hz gameplay samples.
+Gameplay-only readers still need full scene reconciliation at the configured
+full rate. Connecting resumes capture automatically with fresh state and assets.
+
 ```sh
 python3 scripts/build.py             # artifacts/plugin/SousChef.Bridge.dll
 python3 scripts/check.py             # build, core tests, field audit, client tests
@@ -127,8 +133,12 @@ original stream. Rates depend on live game performance.
 ```sh
 python3 clients/bridge.py --port 24704 --frames 100
 python3 scripts/profile_streams.py --seconds 15
+python3 scripts/profile_streams.py --seconds 15 --stream full
 ```
 
 Use `GameplayWorld` from `clients/world.py` to index fast samples. See
 [the protocol](docs/protocol.md#gameplay-stream-bridge-030) for identity,
 freshness, discovery delay and recovery semantics.
+The profiler includes average rendering FPS from Unity frame counters. This
+average can hide stutters; compare capture p95/max as well, in the same kitchen
+and with the same clients connected.
