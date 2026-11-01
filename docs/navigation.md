@@ -69,7 +69,12 @@ The first catalogue query can return `planning_budget_exceeded` while a cold
 graph warms. Up to eight bounded background updates continue that work; query
 again for the complete catalogue. A persistently oversized graph stays
 unavailable and does not cause unlimited background retries. Unchanged primitive
-colliders retain probes; mesh/terrain regions are periodically reconciled.
+colliders retain probes. Readable collision meshes compare their vertices and
+triangle indices every 0.2 seconds, sharing that comparison across colliders
+using the same mesh. Unchanged meshes retain probes; in-place geometry edits
+invalidate them even when the bounds stay the same. Terrain, unreadable meshes,
+and meshes beyond the comparison limits (65,536 vertices / 524,288 indices)
+remain conservatively invalidated on reconciliation.
 The 12 ms search budget is not a hard bound on the entire first request: Unity
 queries, discovery, runtime initialization and destination matching also take
 time. `planMilliseconds` reports the complete measured refresh duration.

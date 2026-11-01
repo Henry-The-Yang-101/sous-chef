@@ -21,6 +21,7 @@ namespace SousChef.Plugin.Navigation
         private readonly Dictionary<WalkCell, Probe> probes = new Dictionary<WalkCell, Probe>();
         private readonly Dictionary<WalkCell, List<WalkEdge>> edges = new Dictionary<WalkCell, List<WalkEdge>>();
         private readonly Dictionary<int, GeometryStamp> stamps = new Dictionary<int, GeometryStamp>();
+        private readonly Dictionary<int, MeshStamp> meshes = new Dictionary<int, MeshStamp>();
         private readonly List<Bounds> changed = new List<Bounds>();
         private readonly Dictionary<int, WindVolume> winds = new Dictionary<int, WindVolume>();
         private readonly List<Collider> people = new List<Collider>();
@@ -41,12 +42,14 @@ namespace SousChef.Plugin.Navigation
         public Vector3 Position { get { Vector3 p = chef.transform.position; p.y -= pivotToFoot; return p; } }
         public IEnumerable<Collider> Colliders { get { for (int i = 0; i < nearbyCount; i++) yield return nearby[i]; } }
         private int nearbyCount;
+        private int geometryScan, meshRevision;
         private sealed class Probe { public bool Valid; public Vector3 Point; public Collider Ground; }
         private sealed class GeometryStamp { public Collider Collider; public Bounds Bounds; public Matrix4x4 Matrix; public int Layer, Shape; public bool Trigger, Danger; }
+        private sealed class MeshStamp { public Mesh Mesh; public Vector3[] Vertices; public int[] Triangles; public int Scan, Seen, Revision; }
 
         public void Reset()
         {
-            chef = null; probes.Clear(); edges.Clear(); stamps.Clear(); dangers.Clear(); surfaces.Clear(); properties.Clear(); grids.Clear();
+            chef = null; probes.Clear(); edges.Clear(); stamps.Clear(); meshes.Clear(); dangers.Clear(); surfaces.Clear(); properties.Clear(); grids.Clear();
         }
         public string Refresh(PlayerControls player)
         {
@@ -82,6 +85,7 @@ namespace SousChef.Plugin.Navigation
             nearbyCount = Physics.OverlapSphereNonAlloc(chef.transform.position, Range, nearby, ~0, QueryTriggerInteraction.Collide); Queries++;
             if (nearbyCount == nearby.Length) { Overflow = true; return "physics_query_overflow"; }
             changed.Clear(); winds.Clear(); people.Clear();
+            geometryScan++;
             bool reconcile = Time.realtimeSinceStartup - lastReconcile >= .2f;
             if (reconcile)
             {
@@ -99,10 +103,10 @@ namespace SousChef.Plugin.Navigation
                 if (c.GetComponentInParent<PlayerControls>() != null) people.Add(c);
                 GeometryStamp old;
                 Bounds bounds = c.bounds; Matrix4x4 matrix = c.transform.localToWorldMatrix;
-                int shapeKey = ShapeKey(c); bool danger = Dangerous(c);
+                int shapeKey = ShapeKey(c, reconcile); bool danger = Dangerous(c);
                 if (!stamps.TryGetValue(id, out old) || old.Collider != c || !old.Bounds.Equals(bounds) ||
                     old.Matrix != matrix || old.Layer != c.gameObject.layer || old.Trigger != c.isTrigger || old.Shape != shapeKey || old.Danger != danger ||
-                    (reconcile && (c is MeshCollider || c is TerrainCollider)))
+                    (reconcile && c is TerrainCollider))
                 {
                     if (old != null) changed.Add(old.Bounds);
                     changed.Add(bounds);
@@ -112,9 +116,15 @@ namespace SousChef.Plugin.Navigation
             var removed = new List<int>();
             foreach (var pair in stamps) if (!present.Contains(pair.Key)) { changed.Add(pair.Value.Bounds); removed.Add(pair.Key); }
             foreach (int id in removed) { stamps.Remove(id); dangers.Remove(id); surfaces.Remove(id); properties.Remove(id); }
-            // Primitive shapes are compared directly, so a stationary kitchen does
-            // not throw away its complete graph five times a second. Mesh/terrain
-            // regions still reconcile for in-place geometry edits preserving bounds.
+            if (reconcile)
+            {
+                removed.Clear();
+                foreach (var pair in meshes) if (pair.Value.Seen != geometryScan) removed.Add(pair.Key);
+                foreach (int id in removed) meshes.Remove(id);
+            }
+            // Compare readable mesh contents at reconciliation rather than treating
+            // every unchanged mesh as a geometry edit. Large kill-plane meshes can
+            // otherwise invalidate an entire kitchen before its graph finishes warming.
             if (changed.Count > 0)
             {
                 var dirty = new List<WalkCell>();
@@ -142,7 +152,7 @@ namespace SousChef.Plugin.Navigation
             }
             return null;
         }
-        private static int ShapeKey(Collider c)
+        private int ShapeKey(Collider c, bool reconcile)
         {
             unchecked
             {
@@ -152,8 +162,39 @@ namespace SousChef.Plugin.Navigation
                 if (sphere != null) return sphere.center.GetHashCode() * 397 ^ sphere.radius.GetHashCode();
                 var cap = c as CapsuleCollider;
                 if (cap != null) return ((cap.center.GetHashCode() * 397 ^ cap.radius.GetHashCode()) * 397 ^ cap.height.GetHashCode()) * 397 ^ cap.direction;
+                var meshCollider = c as MeshCollider;
+                if (meshCollider != null) return MeshKey(meshCollider.sharedMesh, reconcile) * 2 + (meshCollider.convex ? 1 : 0);
                 return c.GetType().GetHashCode();
             }
+        }
+        private int MeshKey(Mesh mesh, bool reconcile)
+        {
+            if (mesh == null) return 0;
+            MeshStamp old;
+            if (!meshes.TryGetValue(mesh.GetInstanceID(), out old) || old.Mesh != mesh)
+            { old = new MeshStamp { Mesh = mesh, Scan = -1 }; meshes[mesh.GetInstanceID()] = old; }
+            old.Seen = geometryScan;
+            if (old.Revision != 0 && (!reconcile || old.Scan == geometryScan)) return old.Revision;
+            old.Scan = geometryScan;
+            Vector3[] vertices = null; int[] triangles = null;
+            // Keep oversized/unreadable geometry conservative: its region still
+            // invalidates every reconciliation, never silently assumes no edits.
+            if (mesh.isReadable && mesh.vertexCount <= 65536)
+            {
+                vertices = mesh.vertices; triangles = mesh.triangles;
+                if (triangles.Length > 524288) { vertices = null; triangles = null; }
+            }
+            bool same = vertices != null && old.Vertices != null &&
+                vertices.Length == old.Vertices.Length && triangles.Length == old.Triangles.Length;
+            if (same)
+                for (int i = 0; i < vertices.Length; i++)
+                    if (!vertices[i].Equals(old.Vertices[i])) { same = false; break; }
+            if (same)
+                for (int i = 0; i < triangles.Length; i++)
+                    if (triangles[i] != old.Triangles[i]) { same = false; break; }
+            if (!same) old.Revision = ++meshRevision;
+            old.Vertices = vertices; old.Triangles = triangles;
+            return old.Revision;
         }
         private bool Own(Collider c)
         {

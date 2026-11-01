@@ -209,3 +209,24 @@ Moving/rotating barriers closing during a walk, wind, floor conveyors, ice,
 moving platforms, moving people and all special traversal still require dedicated
 Arcade Couch scenarios. The live result establishes basic autonomous navigation,
 native target selection and interruption, not complete coverage of those mechanics.
+
+### Additional Arcade Couch levels
+
+`s_lunar_1_3` exposed repeated `planning_budget_exceeded` failures before any
+movement. Its nearby kill-plane mesh caused full-map invalidation every 0.2
+seconds. Readable mesh vertices/triangles are now compared before invalidating
+probes; unchanged meshes retain their cache. Build/audit checks still pass.
+
+After installing that correction, the next user-selected round was `s_mine_2_4`.
+It exposed 17 destinations with a complete 587-node search. Explicit stop and
+disconnect cancellation passed again, with P1 unchanged and P2 settling to zero
+horizontal velocity. However, longer navigation still cancelled on intermittent
+planning-budget overruns. A later request to approach a pot also started but
+cancelled for that reason; one retry was refused with `input_suppressed`.
+Arrival was **not** verified in this level. The original Lunar failure scenario
+has not yet been replayed after the mesh correction. Planner timing stability
+remains a known issue, rather than a passing cross-level navigation result.
+
+Evidence: `.local/navigation-arcade-second-checks.ndjson`,
+`.local/navigation-lunar-snapshot.json`, and `.local/navigation-lunar-retry.ndjson`
+(the last file records the Mine round despite its original retry filename).
