@@ -20,8 +20,10 @@ internal static class Program
         public readonly GameObject Target;
         public readonly NavigationActions Navigation;
         public readonly InteractionActions Skills;
+        public readonly LogisticsActions Logistics;
         public readonly ServerPlayerAttachmentCarrier Carrier;
         public readonly List<int> Inputs = new List<int>();
+        public readonly List<Collider> Colliders = new List<Collider>();
         public string Id;
         public int Releases;
         public World(Action<GameObject> configure = null)
@@ -37,7 +39,8 @@ internal static class Program
             var box=Target.Add(new BoxCollider {size=new Vector3(.8f,1,.8f),center=new Vector3(0,.5f,0)});
             var use=Target.Add(new ClientInteractable());Target.Add(new ServerInteractable());Target.Add(new Pickup());Target.Add(new Placement());
             if (configure != null) configure(Target);
-            Physics.Nearby=(p,r)=>new Collider[] {floor,box};
+            Colliders.Add(floor);Colliders.Add(box);
+            Physics.Nearby=(p,r)=>Colliders.ToArray();
             Physics.Ray=(p,d,length,mask)=>d.y<-.9f && p.y>=0 && p.y<=length ? new[] {new RaycastHit {collider=floor,point=new Vector3(p.x,0,p.z),normal=Vector3.up,distance=p.y}} : new RaycastHit[0];
             Physics.Overlap=(a,b,r)=>new Collider[0];Physics.Cast=(a,b,r,d,l)=>new RaycastHit[0];
             Chef.CurrentInteractionObjects.m_TheOriginalHandlePickup=Target;
@@ -45,7 +48,8 @@ internal static class Program
             Chef.CurrentInteractionObjects.m_iHandlePlacement=Target.GetComponent<IPlacement>();
             Chef.CurrentInteractionObjects.m_interactable=use;
             Navigation=new NavigationActions((d,ms)=>{},()=>{});
-            Skills=new InteractionActions(Navigation,b=>Inputs.Add(b),()=>Releases++);
+            Skills=new InteractionActions(Navigation,b=>Inputs.Add(b),()=>{if(Logistics!=null && Logistics.Run.Running) Inputs.Add(0); else Releases++;});
+            Logistics=new LogisticsActions(Navigation,Skills,b=>Inputs.Add(b),()=>Releases++);
             for(int i=0;i<10 && Id==null;i++)
             {
                 var catalog=(Json.Record)Navigation.Available(Chef);
@@ -55,14 +59,26 @@ internal static class Program
         }
         public GameObject Ingredient(string label)
         {
-            var go=new GameObject(label);go.Add(new IngredientPropertiesComponent {Node=new AssembledDefinitionNode(label)});go.Add(new IngredientTransfer());return go;
+            var go=new GameObject(label);go.Add(new IngredientPropertiesComponent {Node=new AssembledDefinitionNode(label),m_ingredientOrderNode=new Definition {name=label,m_uID=label.GetHashCode()}});go.Add(new IngredientTransfer());return go;
         }
         public void Hold(GameObject item) { Carrier.Item=item;Chef.GetComponent<ClientPlayerAttachmentCarrier>().Item=item; }
         public string Start(string op,string condition=null,string state=null,int ms=10000)
         { return Skills.Start(Chef,1,new ControlCommand {Operation=op,Destination=Id,Condition=condition,DesiredState=state,Milliseconds=ms}); }
         public void Arrive() { Navigation.Stop("arrived");Tick(); }
-        public void Tick(float delta=.05f) { Time.realtimeSinceStartup+=delta;Time.frameCount++;Skills.Tick(); }
+        public void Tick(float delta=.05f) { Time.realtimeSinceStartup+=delta;Time.frameCount++;Skills.Tick();Logistics.Tick(); }
         public void Verify() { Tick();Tick();Tick(); }
+        public GameObject Delivery()
+        {
+            var go=new GameObject("handoff counter");go.transform.position=new Vector3(2,0,0);go.Add(new AttachStation());go.Add(new ServerAttachStation());go.Add(new Placement());
+            Colliders.Add(go.Add(new BoxCollider {center=new Vector3(0,.5f,0),size=new Vector3(.8f,1,.8f)}));
+            Navigation.Available(Chef);return go;
+        }
+        public string IdOf(GameObject go) { return (string)((Json.Record)Navigation.TargetIdentity(go))["id"]; }
+        public void ArriveAt(GameObject go)
+        {
+            Chef.CurrentInteractionObjects.m_TheOriginalHandlePickup=go;Chef.CurrentInteractionObjects.m_iHandlePickup=go.GetComponent<IPickup>();
+            Chef.CurrentInteractionObjects.m_iHandlePlacement=go.GetComponent<IPlacement>();Chef.CurrentInteractionObjects.m_interactable=go.GetComponent<ClientInteractable>();Arrive();
+        }
     }
     private static void Transactions()
     {
@@ -265,6 +281,53 @@ internal static class Program
         w.Navigation.Stop("stopped");
         Check(w.Navigation.Action.State=="idle","generated stance navigation is interruptible");
     }
-    private static void Main() { Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();Throws();GeneratedStances();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
+    private static void LogisticsJobs()
+    {
+        var w=new World();var destination=w.Delivery();var item=w.Ingredient("Tomato_Raw");w.Target.GetComponent<ServerAttachStation>().Item=item;
+        Check(w.Logistics.Start(w.Chef,1,new ControlCommand {Operation="move_item",Source=w.Id,Destination=w.IdOf(destination)})==null,"move_item resolves exact source and empty destination with empty hands");
+        w.Arrive();w.Hold(item);w.Target.GetComponent<ServerAttachStation>().Item=null;w.Tick();
+        Check(w.Logistics.Run.Phase=="delivering" && w.Skills.Run.Owner==w.Logistics.Run.Owner && w.Releases==0,"composed pickup retains the same owner into delivery without releasing bindings");
+        w.ArriveAt(destination);destination.GetComponent<ServerAttachStation>().Item=item;w.Hold(null);w.Verify();
+        Check(w.Logistics.Run.State=="succeeded" && w.Releases==1,"move_item completes only after verified placement and releases once");
+
+        w=new World();destination=w.Delivery();item=w.Ingredient("Tomato_Raw");w.Target.GetComponent<ServerAttachStation>().Item=item;
+        Check(w.Logistics.Start(w.Chef,1,new ControlCommand {Operation="fetch_ingredient",Selector="tomato",Destination=w.IdOf(destination)})==null,"ingredient selector resolves native raw definition");
+        w.Arrive();w.Hold(item);w.Target.GetComponent<ServerAttachStation>().Item=null;w.Tick();
+        destination.GetComponent<ServerAttachStation>().Item=w.Ingredient("someone else's food");w.ArriveAt(destination);w.Verify();
+        Check(w.Logistics.Run.State=="blocked" && w.Carrier.Item==item,"occupied destination blocks delivery while preserving carried ingredient");
+
+        w=new World();destination=w.Delivery();item=w.Ingredient("Tomato_Chopped");w.Target.GetComponent<ServerAttachStation>().Item=item;
+        Check(w.Logistics.Start(w.Chef,1,new ControlCommand {Operation="fetch_ingredient",Selector="tomato",Destination=w.IdOf(destination)})=="no_reachable_ingredient","raw ingredient request cannot silently substitute chopped food");
+        w.Hold(w.Ingredient("unrelated"));
+        Check(w.Logistics.Start(w.Chef,1,new ControlCommand {Operation="move_item",Source=w.Id,Destination=w.IdOf(destination)})=="hands_full" && w.Carrier.Item.name=="unrelated","logistics never parks or drops unrelated cargo");
+
+        w=new World();destination=w.Delivery();item=w.Ingredient("Tomato_Raw");w.Target.GetComponent<ServerAttachStation>().Item=item;
+        w.Logistics.Start(w.Chef,1,new ControlCommand {Operation="stage_item",Source=w.Id,Destination=w.IdOf(destination)});w.Logistics.Cancel("stopped");
+        Check(!w.Logistics.Run.Running && !w.Skills.Run.Running && w.Navigation.Action.State=="idle" && w.Releases==1,"stop cancels parent, child and navigation under a single release");
+
+        w=new World();destination=w.Delivery();
+        Check(w.Logistics.Start(w.Chef,1,new ControlCommand {Operation="clear_station",Source=w.Id,Destination=w.IdOf(destination)})==null && w.Logistics.Run.Reason=="station_already_empty","clearing an empty station is idempotent");
+        item=w.Ingredient("Tomato_Raw");w.Target.GetComponent<ServerAttachStation>().Item=item;
+        w.Logistics.Start(w.Chef,1,new ControlCommand {Operation="clear_station",Source=w.Id,Destination=w.IdOf(destination)});w.Arrive();w.Hold(item);w.Target.GetComponent<ServerAttachStation>().Item=null;w.Tick();
+        w.ArriveAt(destination);w.Hold(null);destination.GetComponent<ServerAttachStation>().Item=item;w.Verify();
+        Check(w.Logistics.Run.Reason=="station_cleared","clear_station verifies the source is freed after delivery");
+
+        w=new World();destination=w.Delivery();var plate=new GameObject("clean plate");var contents=plate.Add(new ServerIngredientContainer());plate.Add(new ServerPlate {m_ingredientContainer=contents});w.Target.GetComponent<ServerAttachStation>().Item=plate;
+        Check(w.Logistics.Start(w.Chef,1,new ControlCommand {Operation="get_plate",Destination=w.IdOf(destination)})==null,"get_plate selects observed clean empty plate");w.Logistics.Cancel("test_end");
+        contents.Contents.Add(new AssembledDefinitionNode("finished dinner"));
+        Check(w.Logistics.Start(w.Chef,1,new ControlCommand {Operation="get_plate",Destination=w.IdOf(destination)})=="no_reachable_clean_plate","get_plate cannot steal a completed meal");
+
+        w=new World();destination=w.Delivery();var pan=new GameObject("utensil");pan.Add(new ItemPropertiesComponent {m_itemDefinition=new Definition {name="FryingPan"}});pan.Add(new ServerIngredientContainer());pan.Add(new PhysicalAttachment());w.Target.GetComponent<ServerAttachStation>().Item=pan;
+        Check(w.Logistics.Start(w.Chef,1,new ControlCommand {Operation="get_utensil",Selector="pan",Destination=w.IdOf(destination)})==null,"utensil type comes from native item definition with deterministic aliases");w.Logistics.Cancel("test_end");
+        w.Target.GetComponent<ServerAttachStation>().Item=null;w.Hold(pan);string panId=w.Navigation.RegisterItem(pan);
+        Check(w.Logistics.Start(w.Chef,1,new ControlCommand {Operation="return_utensil",Source=panId})==null && w.Logistics.Run.Target==w.Id,"return_utensil remembers its observed home rather than its last delivery counter");w.Logistics.Cancel("test_end");
+        pan.GetComponent<ServerIngredientContainer>().Contents.Add(new AssembledDefinitionNode("rice"));
+        Check(w.Logistics.Start(w.Chef,1,new ControlCommand {Operation="return_utensil",Source=panId})=="utensil_has_contents","return_utensil does not dispose of food to empty a utensil");
+        Check(ControlCommand.Parse("move_item r d1 d2").Source=="d1" && ControlCommand.Parse("get_plate r d2").Destination=="d2","logistics grammar carries source and destination separately");
+        Check(ControlCommand.Parse("fetch_ingredient r sdG9tYXRv d2").Selector=="tomato","selector encoding safely supports human-readable names");
+        foreach(string command in new[] {"clear_station r d1 d2 extra","move_item r d1 nope","get_utensil r s%%% d2","fetch_ingredient r sCg d2","return_utensil r d1 d2"})
+        {bool failed=false;try{ControlCommand.Parse(command);}catch(ArgumentException){failed=true;}Check(failed,"malformed logistics command is rejected");}
+    }
+    private static void Main() { Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();Throws();GeneratedStances();LogisticsJobs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
     private static ClientInteractable GetCurrentlyInteractingForTest(this PlayerControls chef) { return chef.GetComponent<ClientPlayerControlsImpl_Default>().Current; }
 }

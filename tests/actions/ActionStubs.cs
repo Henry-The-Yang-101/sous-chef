@@ -16,8 +16,12 @@ public interface IOrderDefinition { AssembledDefinitionNode GetOrderComposition(
 public class IngredientPropertiesComponent : MonoBehaviour, IOrderDefinition
 {
     public AssembledDefinitionNode Node;
+    public UnityEngine.Object m_ingredientOrderNode;
     public AssembledDefinitionNode GetOrderComposition() { return Node; }
 }
+public class Definition : UnityEngine.Object { public int m_uID; }
+public class ItemPropertiesComponent : MonoBehaviour { public UnityEngine.Object m_itemDefinition; }
+public class CleanPlateStack : MonoBehaviour { }
 public interface IContainerTransferBehaviour { bool CanTransferToContainer(ServerIngredientContainer target); }
 public class IngredientTransfer : MonoBehaviour, IContainerTransferBehaviour { public bool CanTransferToContainer(ServerIngredientContainer target) { return true; } }
 public class ServerIngredientContainer : MonoBehaviour
@@ -32,13 +36,15 @@ public class ServerAttachStation : MonoBehaviour
 {
     public GameObject Item;
     public GameObject InspectItem() { return Item; }
+    public bool CanAttachToSelf(GameObject item,PlacementContext context) { return Item==null; }
 }
 public class ServerStack : MonoBehaviour
 {
     public List<GameObject> m_stackItems = new List<GameObject>();
+    public int GetSize() { return m_stackItems.Count; }
     public GameObject InspectTopOfStack() { return m_stackItems.Count==0 ? null : m_stackItems[m_stackItems.Count-1]; }
 }
-public class ServerPlate : MonoBehaviour { }
+public class ServerPlate : MonoBehaviour { public ServerIngredientContainer m_ingredientContainer; }
 public class ServerWashingStation : MonoBehaviour { public int m_plateCount; public float m_cleaningTimer; public ServerAttachStation m_dryingAttachStation; }
 public class ClientTriggerToggleOnAnimator : MonoBehaviour { public bool CurrentState; }
 public class ClientToggleSwitchCosmeticDecisions : MonoBehaviour { public ClientTriggerToggleOnAnimator m_toggleOnAnimator; }

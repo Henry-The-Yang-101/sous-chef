@@ -1,11 +1,12 @@
 using System;
 using System.Globalization;
+using System.Text;
 
 namespace SousChef.Core
 {
     public sealed class ControlCommand
     {
-        public string Operation, Id, Destination, Condition, DesiredState;
+        public string Operation, Id, Destination, Source, Selector, Condition, DesiredState;
         public long Sequence;
         public int Milliseconds, Buttons;
         public float X, Y;
@@ -18,6 +19,22 @@ namespace SousChef.Core
             if (p.Length < 2 || p[1].Length > 32) throw new ArgumentException("invalid_command");
             foreach (char c in p[1]) if (!Char.IsLetterOrDigit(c) && c != '-' && c != '_') throw new ArgumentException("invalid_id");
             var result = new ControlCommand { Operation = p[0], Id = p[1] };
+            if (Array.IndexOf(ActionRun.LogisticsNames, p[0]) >= 0)
+            {
+                if (p[0] == "get_plate" || p[0] == "return_utensil")
+                {
+                    if (p.Length != 3 || !DestinationId(p[2])) throw new ArgumentException("invalid_destination");
+                    if (p[0] == "get_plate") result.Destination = p[2]; else result.Source = p[2];
+                }
+                else
+                {
+                    if (p.Length != 4 || !DestinationId(p[3])) throw new ArgumentException("invalid_destination");
+                    result.Destination = p[3];
+                    if (p[0] == "fetch_ingredient" || p[0] == "get_utensil") result.Selector = DecodeSelector(p[2]);
+                    else { if (!DestinationId(p[2])) throw new ArgumentException("invalid_source"); result.Source = p[2]; }
+                }
+                return result;
+            }
             if (p[0] == "status" || p[0] == "claim" || p[0] == "release" || p[0] == "actions" || p[0] == "stop")
             {
                 if (p.Length != 2) throw new ArgumentException("invalid_arguments");
@@ -62,6 +79,29 @@ namespace SousChef.Core
             float length = (float)Math.Sqrt(result.X * result.X + result.Y * result.Y);
             if (length > 1) { result.X /= length; result.Y /= length; }
             return result;
+        }
+        private static bool DestinationId(string value)
+        {
+            if (value.Length < 2 || value.Length > 32 || value[0] != 'd') return false;
+            for (int i = 1; i < value.Length; i++) if (value[i] < '0' || value[i] > '9') return false;
+            return true;
+        }
+        private static string DecodeSelector(string token)
+        {
+            if (token.Length < 2 || token.Length > 129 || token[0] != 's') throw new ArgumentException("invalid_selector");
+            string encoded = token.Substring(1);
+            foreach (char c in encoded) if (!(c >= 'a' && c <= 'z') && !(c >= 'A' && c <= 'Z') && !(c >= '0' && c <= '9') && c != '-' && c != '_') throw new ArgumentException("invalid_selector");
+            try
+            {
+                encoded = encoded.Replace('-', '+').Replace('_', '/');
+                encoded = encoded.PadRight((encoded.Length + 3) / 4 * 4, '=');
+                string value = new UTF8Encoding(false, true).GetString(Convert.FromBase64String(encoded));
+                if (value.Trim().Length == 0 || value.Length > 64) throw new ArgumentException("invalid_selector");
+                foreach (char c in value) if (Char.IsControl(c)) throw new ArgumentException("invalid_selector");
+                return value;
+            }
+            catch (FormatException) { throw new ArgumentException("invalid_selector"); }
+            catch (DecoderFallbackException) { throw new ArgumentException("invalid_selector"); }
         }
     }
 

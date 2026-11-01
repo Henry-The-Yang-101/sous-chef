@@ -9,6 +9,7 @@ namespace UnityEngine
 {
     public class Object
     {
+        public string name;
         private static int next;
         internal static readonly List<Object> All = new List<Object>();
         public Object() { All.Add(this); }
@@ -27,7 +28,7 @@ namespace UnityEngine
     }
     public class GameObject : Object
     {
-        public string name, tag = "Untagged";
+        public string tag = "Untagged";
         public int layer;
         public bool activeInHierarchy = true;
         public readonly Transform transform;
@@ -217,7 +218,7 @@ public interface IPickup { bool CanHandlePickup(ClientPlayerAttachmentCarrier ca
 public interface IPlacement { bool CanHandlePlacement(ClientPlayerAttachmentCarrier carrier,UnityEngine.Vector2 forward,PlacementContext context); }
 public class PlacementContext { public enum Source { Player } public PlacementContext(Source s) { } }
 public class ClientPlayerAttachmentCarrier : UnityEngine.MonoBehaviour { public UnityEngine.GameObject Item; public UnityEngine.GameObject InspectCarriedItem() { return Item; } }
-public class ClientInteractable : UnityEngine.MonoBehaviour { public bool UsePlacementButton, Allowed=true; public bool CanInteract(UnityEngine.GameObject chef) { return Allowed; } }
+public class ClientInteractable : UnityEngine.MonoBehaviour { public bool UsePlacementButton, Allowed=true; public int Users; public int InteractorCount() { return Users; } public bool CanInteract(UnityEngine.GameObject chef) { return Allowed; } }
 public class InteractionObjects
 {
     public UnityEngine.GameObject m_TheOriginalHandlePickup;

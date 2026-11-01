@@ -60,6 +60,14 @@ namespace SousChef.Plugin.Navigation
             Destination d;
             return go != null && identities.TryGetValue(go.GetInstanceID(), out d) && d.Object == go ? Identity(d) : null;
         }
+        public string RegisterItem(GameObject go)
+        {
+            if (go == null || !go.activeInHierarchy) return null;
+            Destination d;
+            if (!identities.TryGetValue(go.GetInstanceID(), out d) || !System.Object.ReferenceEquals(d.Object, go))
+            { d = new Destination { Id = "d" + (++nextId), Object = go, Kind = "item" }; identities[go.GetInstanceID()] = d; }
+            return d.Id;
+        }
         public string StartPosition(PlayerControls player, int owner, GameObject aim, Vector3 position)
         {
             if (Action.State != "idle") return "action_in_progress";
@@ -368,7 +376,7 @@ namespace SousChef.Plugin.Navigation
         {
             return selected != null && (selected == targetObject || selected.transform.IsChildOf(targetObject.transform) || targetObject.transform.IsChildOf(selected.transform));
         }
-        private static bool Eligible(GameObject go, PlayerControls player, out string kind)
+        private static bool Eligible(GameObject go, PlayerControls player, out string kind, bool includeEmpty = false)
         {
             kind = null;
             if (go == null || !go.activeInHierarchy || go.transform.IsChildOf(player.transform) || go.GetComponentInParent<PlayerControls>() != null) return false;
@@ -391,6 +399,7 @@ namespace SousChef.Plugin.Navigation
             // place. Keep the catalogue focused on objects and task locations.
             if (kind == "counter" || kind == "pickup_or_placement")
             {
+                if (includeEmpty) return placement != null || pickup != null;
                 var carrier = player.GetComponent<ClientPlayerAttachmentCarrier>();
                 return carrier != null && ((pickup != null && pickup.CanHandlePickup(carrier)) ||
                     (placement != null && carrier.InspectCarriedItem() != null));
@@ -407,7 +416,7 @@ namespace SousChef.Plugin.Navigation
                 for (int depth = 0; t != null && depth < 5; depth++, t = t.parent)
                 {
                     string kind;
-                    if (!Eligible(t.gameObject, player, out kind)) continue;
+                    if (!Eligible(t.gameObject, player, out kind, true)) continue;
                     int key = t.gameObject.GetInstanceID(); Destination d;
                     if (!found.TryGetValue(key, out d))
                     {
@@ -421,7 +430,9 @@ namespace SousChef.Plugin.Navigation
             var removed = new List<int>();
             foreach (var pair in identities) if (pair.Value.Object == null) removed.Add(pair.Key);
             foreach (int key in removed) identities.Remove(key);
-            return new List<Destination>(found.Values);
+            var walkTargets = new List<Destination>();
+            foreach (Destination d in found.Values) { string kind; if (Eligible(d.Object, player, out kind)) walkTargets.Add(d); }
+            return walkTargets;
         }
         private void Refresh(PlayerControls player, bool force, bool alreadyRefreshed = false)
         {

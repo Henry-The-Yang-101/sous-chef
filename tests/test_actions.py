@@ -28,6 +28,22 @@ def reply(n, **fields):
 
 
 class ActionsTests(unittest.TestCase):
+    def test_logistics_actions_encode_exact_sources_destinations_and_selectors(self):
+        c = client(*(reply(i) for i in range(1, 8)))
+        c.move_item('d1', 'd2'); c.fetch_ingredient('tomato', 'd2'); c.get_plate('d3')
+        c.get_utensil('mixing bowl', 'd4'); c.stage_item('d5', 'd6'); c.return_utensil('d7'); c.clear_station('d8', 'd9')
+        self.assertEqual(c.socket.sent, [b'move_item 1 d1 d2\n', b'fetch_ingredient 2 sdG9tYXRv d2\n', b'get_plate 3 d3\n',
+                                      b'get_utensil 4 sbWl4aW5nIGJvd2w d4\n', b'stage_item 5 d5 d6\n', b'return_utensil 6 d7\n', b'clear_station 7 d8 d9\n'])
+
+    def test_logistics_arguments_cannot_inject_or_exceed_command_bounds(self):
+        c = client()
+        for value in ('', None, 'x' * 65, '\nstop r', '\x00', 'é' * 64):
+            with self.assertRaises(ValueError): c.fetch_ingredient(value, 'd2')
+        for call in (lambda: c.move_item('d1', 'd2\nstop r'), lambda: c.stage_item(None, 'd2'),
+                     lambda: c.get_plate('x'), lambda: c.return_utensil('d１２')):
+            with self.assertRaises(ValueError): call()
+        self.assertEqual(c.socket.sent, [])
+
     def test_first_layer_actions_have_typed_wire_commands(self):
         c = client(*(reply(i) for i in range(1, 10)))
         c.pick_up('d1'); c.place_at('d2'); c.add_ingredient('d3')

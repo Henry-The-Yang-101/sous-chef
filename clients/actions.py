@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Typed autonomous Player 2 actions; the caller never supplies steering input."""
 import argparse
+import base64
 import json
 import math
 import time
+import unicodedata
 try:
     from .control import ControlClient, ControlError
 except ImportError:
@@ -22,11 +24,42 @@ class ActionClient(ControlClient):
         return self._target('navigate_to', destination_id)
 
     def _target(self, operation, destination_id, *arguments):
+        return self._request(operation, self._destination(destination_id), *arguments)
+
+    @staticmethod
+    def _destination(destination_id):
         if (not isinstance(destination_id, str) or not 2 <= len(destination_id) <= 32
                 or destination_id[0] != 'd' or not destination_id[1:].isascii()
                 or not destination_id[1:].isdigit()):
             raise ValueError('Use a destination ID from available_actions()')
-        return self._request(operation, destination_id, *arguments)
+        return destination_id
+
+    @staticmethod
+    def _selector(value):
+        if not isinstance(value, str) or not value.strip() or len(value) > 64 or len(value.encode('utf-8')) > 96 or any(unicodedata.category(c) == 'Cc' for c in value):
+            raise ValueError('Selector must contain 1..64 printable characters, at most 96 UTF-8 bytes')
+        return 's' + base64.urlsafe_b64encode(value.encode('utf-8')).decode('ascii').rstrip('=')
+
+    def move_item(self, item, destination):
+        return self._request('move_item', self._destination(item), self._destination(destination))
+
+    def fetch_ingredient(self, ingredient, destination):
+        return self._request('fetch_ingredient', self._selector(ingredient), self._destination(destination))
+
+    def get_plate(self, destination):
+        return self._target('get_plate', destination)
+
+    def get_utensil(self, utensil_type, destination):
+        return self._request('get_utensil', self._selector(utensil_type), self._destination(destination))
+
+    def stage_item(self, item, handoff_location):
+        return self._request('stage_item', self._destination(item), self._destination(handoff_location))
+
+    def return_utensil(self, utensil):
+        return self._target('return_utensil', utensil)
+
+    def clear_station(self, station, destination):
+        return self._request('clear_station', self._destination(station), self._destination(destination))
 
     def pick_up(self, target_id):
         return self._target('pick_up', target_id)
@@ -84,8 +117,12 @@ if __name__ == '__main__':
     commands.add_parser('list')
     commands.add_parser('status')
     commands.add_parser('stop')
-    for operation in ('navigate_to', 'pick_up', 'place_at', 'add_ingredient', 'discard', 'throw_to'):
+    for operation in ('navigate_to', 'pick_up', 'place_at', 'add_ingredient', 'discard', 'throw_to', 'get_plate', 'return_utensil'):
         commands.add_parser(operation).add_argument('target_id')
+    for operation in ('move_item', 'stage_item', 'clear_station', 'fetch_ingredient', 'get_utensil'):
+        job = commands.add_parser(operation)
+        job.add_argument('source')
+        job.add_argument('destination')
     work = commands.add_parser('work_at')
     work.add_argument('target_id')
     work.add_argument('--until', choices=ActionClient.WORK_CONDITIONS, default='work_complete')
@@ -109,6 +146,8 @@ if __name__ == '__main__':
                 elif args.operation == 'wait_until': result = client.wait_until(args.target_id, args.condition, args.timeout)
                 elif args.operation == 'activate': result = client.activate(args.target_id, args.desired_state)
                 elif args.operation == 'throw_to_player': result = client.throw_to_player(args.player_id)
+                elif args.operation in ('move_item', 'stage_item', 'clear_station', 'fetch_ingredient', 'get_utensil'):
+                    result = getattr(client, args.operation)(args.source, args.destination)
                 else: result = getattr(client, args.operation)(args.target_id)
                 print(json.dumps(result), flush=True)
                 try:
