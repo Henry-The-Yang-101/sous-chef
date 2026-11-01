@@ -162,14 +162,14 @@ namespace SousChef.Plugin.Control
                 "chefObjectInstanceId", target == null ? null : (object)target.gameObject.GetInstanceID(),
                 "pad", config == null ? null : config.Pad.ToString(), "side", config == null ? null : config.Side.ToString());
         }
-        private void Walk(Vector3 direction)
+        private void Walk(Vector3 direction, int inputMilliseconds)
         {
             int owner = navigation.Action.Owner;
             if (owner == 0 || lease.Owner(Now) != owner) { navigation.Stop("control_lost"); return; }
             float x = direction.x * (target.Movement.XAxisAllignment == PlayerControls.InversionType.Normal ? 1 : -1);
             float y = -direction.z * (target.Movement.YAxisAllignment == PlayerControls.InversionType.Normal ? 1 : -1);
-            string error = lease.Set(owner, new ControlCommand { Sequence = ++navigationSequence, Milliseconds = 150,
-                X = x, Y = y, Buttons = 0 }, Now);
+            string error = lease.Set(owner, new ControlCommand { Sequence = ++navigationSequence, Milliseconds = Math.Max(150, inputMilliseconds + 50),
+                X = x, Y = y, Buttons = 0 }, Now, inputMilliseconds);
             if (error != null) navigation.Stop(error);
         }
         private void NeutralNavigation()

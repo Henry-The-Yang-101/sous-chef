@@ -84,6 +84,13 @@ internal static class NavigationTests
         check(!WalkHeight.WaypointReached(.05f, 1.85f, .04f, .65f), "waypoint on another deck cannot be skipped");
         check(!WalkHeight.Connected(1.85f, 0, .65f), "unsupported deck drop rejected");
         check(!WalkHeight.Connected(0, Single.NaN, .65f), "invalid height rejected");
+        check(WalkingCommand.Milliseconds(1f/60) == 17, "normal movement window rounds up to native walking interval");
+        check(WalkingCommand.Milliseconds(.1f) == 100, "10 FPS movement window covers the full frame");
+        check(WalkingCommand.Milliseconds(.25f) == 250, "slow movement window is never truncated to sixty milliseconds");
+        check(WalkingCommand.Milliseconds(0) == 17, "zero render delta still permits a bounded native step");
+        check(WalkingCommand.Milliseconds(.9f) == 900, "maximum movement interval remains bounded");
+        foreach (float invalid in new[] { -.1f, .901f, Single.NaN, Single.PositiveInfinity })
+            check(WalkingCommand.Milliseconds(invalid) == 0, "invalid or excessive movement interval fails closed");
         // The old flat-edge shortcut checked only the midpoint. Both ends and
         // midpoint can have floor while the chef's footprint clips a hole between.
         Func<float, bool> hole = delegate(float fraction) { return fraction < .20f || fraction > .30f; };

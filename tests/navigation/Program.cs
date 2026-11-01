@@ -29,6 +29,8 @@ internal static class Program
     {
         public readonly List<Collider> Colliders = new List<Collider>();
         public readonly PlayerControls Chef;
+        public Vector3 LastInput;
+        public int LastMilliseconds;
         public World()
         {
             Time.realtimeSinceStartup = 1; Time.deltaTime = Time.unscaledDeltaTime = 1f/60;
@@ -74,7 +76,7 @@ internal static class Program
         }
         public NavigationActions Navigate(GameObject station)
         {
-            var navigation=new NavigationActions(v => {},() => {}); string id=null;
+            var navigation=new NavigationActions((v,ms) => { LastInput=v;LastMilliseconds=ms; },() => {}); string id=null;
             for (int i=0; i<8; i++)
             {
                 var catalog=(Json.Record)navigation.Available(Chef);
@@ -207,9 +209,30 @@ internal static class Program
         approach=(float[])destination["approachPosition"];
         Check(approach[0] < -.9f && Math.Abs(approach[2]) < .1f,"reachable retained side remains preferred while aligning");
     }
+    private static void SlowFrames()
+    {
+        var w=new World(); w.AddFloor((x,z) => Math.Abs(x)<2 && Math.Abs(z)<2 ? 0 : (float?)null);
+        w.Chef.transform.position=new Vector3(0,0,-1.3f); var station=w.AddStation(); var navigation=w.Navigate(station);
+        Time.deltaTime=Time.unscaledDeltaTime=.1f; Time.realtimeSinceStartup += .1f; navigation.Tick(w.Chef);
+        Check(navigation.Action.State == "navigating" && w.LastInput.magnitude > .9f,"safe walking continues at ten FPS");
+        Check(w.LastMilliseconds == 100,"movement callback receives the entire checked slow-frame window");
+
+        w=new World(); w.AddFloor((x,z) => Math.Abs(x)<2 && Math.Abs(z)<2 ? 0 : (float?)null);
+        w.Chef.transform.position=new Vector3(0,0,-1.3f); station=w.AddStation(); navigation=w.Navigate(station);
+        var wall=new GameObject("wall beyond final stance").Add(new Collider());
+        Physics.Cast=(a,b,r,d,length) => Math.Max(a.z,a.z+d.z*length) > -.95f ? new[] { new RaycastHit { collider=wall } } : new RaycastHit[0];
+        Time.deltaTime=Time.unscaledDeltaTime=.1f; Time.realtimeSinceStartup += .1f; navigation.Tick(w.Chef);
+        Check(navigation.Action.Reason == "next_step_unsafe","slow-frame projection catches overshoot missed by a sixty-millisecond check");
+        Check(w.LastMilliseconds == 0,"unsafe slow-frame command is never emitted");
+
+        w=new World(); w.AddFloor((x,z) => Math.Abs(x)<2 && Math.Abs(z)<2 ? 0 : (float?)null);
+        w.Chef.transform.position=new Vector3(0,0,-1.3f); station=w.AddStation(); navigation=w.Navigate(station);
+        Time.deltaTime=Time.unscaledDeltaTime=1; Time.realtimeSinceStartup += 1; navigation.Tick(w.Chef);
+        Check(navigation.Action.Reason == "unsafe_update_interval" && w.LastMilliseconds == 0,"excessive update stall emits no new movement");
+    }
     private static void Main()
     {
-        StepsAndRamps(); InteriorFlow(); MovingBoundary(); ArrivalMotion(); ApproachFallback();
+        StepsAndRamps(); InteriorFlow(); MovingBoundary(); ArrivalMotion(); ApproachFallback(); SlowFrames();
         Console.WriteLine("PASS: " + checks + " navigator integration checks (analytical geometry; not PhysX)");
     }
 }

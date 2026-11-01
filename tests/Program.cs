@@ -239,6 +239,18 @@ internal static class Program
         Assert(lease.Claim(3, 2) && lease.Release(3, "disconnected"), "disconnect releases");
         Assert(lease.Read(2).X == 0, "disconnect neutralizes movement");
 
+        Assert(lease.Claim(4, 3), "navigation can claim a distinct motion window");
+        var walking = new ControlCommand { Sequence=1,Milliseconds=150,X=1 };
+        Assert(lease.Set(4, walking, 3, 17) == null, "navigation publishes a checked seventeen-millisecond input window");
+        Assert(lease.Read(3.016).X == 1, "checked walking input stays active inside its window");
+        Assert(lease.Read(3.017).X == 0 && lease.Owner(3.017) == 4, "motion expires independently of action ownership");
+        walking.Sequence++;
+        Assert(lease.Set(4, walking, 3.025, 100) == null, "frame jitter can renew movement without losing the action");
+        Assert(lease.Read(3.124).X == 1 && lease.Read(3.126).X == 0, "a slow-frame command cannot outlive its checked hundred milliseconds");
+        walking.Sequence++;
+        Assert(lease.Set(4, walking, 3.13, 151) == "invalid_input_window", "movement cannot exceed the ownership lease");
+        Assert(lease.Read(3.176).X == 0 && lease.Owner(3.176) == 0, "long stall still revokes navigation ownership");
+
         int disconnected = 0;
         using (var server = new ControlServer(0, Json.Object("type", "hello"), id => Interlocked.Increment(ref disconnected)))
         using (var client = new TcpClient())

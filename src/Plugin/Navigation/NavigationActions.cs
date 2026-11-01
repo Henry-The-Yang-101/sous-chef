@@ -21,7 +21,7 @@ namespace SousChef.Plugin.Navigation
         public readonly ChefActionState Action = new ChefActionState();
         private readonly Dictionary<string, Destination> available = new Dictionary<string, Destination>();
         private readonly Dictionary<int, Destination> identities = new Dictionary<int, Destination>();
-        private readonly Action<Vector3> move;
+        private readonly Action<Vector3, int> move;
         private readonly Action neutral;
         private WalkSearch search;
         private List<Vector3> route;
@@ -42,7 +42,7 @@ namespace SousChef.Plugin.Navigation
         private int nodeCount, candidateCount, startCount;
         private string observationError;
         private bool planning;
-        public NavigationActions(Action<Vector3> walk, Action halt) { move = walk; neutral = halt; }
+        public NavigationActions(Action<Vector3, int> walk, Action halt) { move = walk; neutral = halt; }
         public void Reset(string reason)
         {
             Stop(reason); lastDestination = arrivalDetails = null; identities.Clear(); available.Clear(); physics.Reset(); search = null; chef = null; lastPlan = -1; unavailable = reason;
@@ -155,6 +155,8 @@ namespace SousChef.Plugin.Navigation
                 return;
             }
             if (player != chef || target == null || !Eligible(target.Object, player, out target.Kind)) { Stop("destination_unavailable"); return; }
+            int commandMilliseconds = WalkingCommand.Milliseconds(Time.unscaledDeltaTime);
+            if (commandMilliseconds == 0) { Stop("unsafe_update_interval"); return; }
             string error = physics.Refresh(player);
             if (error != null) { Invalidate(error); return; }
             // Any observed geometry change prompts a full reachability recheck in this
@@ -173,7 +175,7 @@ namespace SousChef.Plugin.Navigation
             if (Vector3.Distance(position, progressPosition) > .15f)
             { progressPosition = position; lastProgress = Time.realtimeSinceStartup; }
             if (arrival.ShouldSettle(Vector3.Distance(position, target.Approach)))
-            { Align(position); return; }
+            { Align(position, commandMilliseconds); return; }
             if (Time.realtimeSinceStartup - lastProgress > 2f) { Stop("no_progress"); return; }
             facingSince = -1; arrival.Reset(); arrivalDetails = null;
             waypoint = WalkSegments.Advance(waypoint, route.Count, delegate(int index)
@@ -204,7 +206,7 @@ namespace SousChef.Plugin.Navigation
             }
             if (!WalkingSteering.Direction(direction.x, direction.z, drift.x, drift.z, speed, out x, out z)) { Stop("flow_prevents_walking"); return; }
             Vector3 input = new Vector3(x, 0, z);
-            float stepTime = Mathf.Clamp(Time.unscaledDeltaTime, .0167f, .06f);
+            float stepTime = Mathf.Max(commandMilliseconds / 1000f, Time.deltaTime);
             // Near the checked final stance validate the next actual walking step;
             // the longer lookahead would extend through the counter beyond the stop.
             float horizon = Vector3.Distance(position, target.Approach) < .6f ? stepTime : stepTime + .04f;
@@ -217,7 +219,7 @@ namespace SousChef.Plugin.Navigation
                 projectedStep = position + (input * speed + drift) * stepTime;
                 if (!physics.Segment(position, projectedStep)) { Stop("next_step_unsafe"); return; }
             }
-            move(input);
+            move(input, commandMilliseconds);
         }
         private bool TargetMoved()
         {
@@ -247,7 +249,7 @@ namespace SousChef.Plugin.Navigation
             motionPosition = position; motionLocalPosition = target.Object.transform.InverseTransformPoint(position);
             motionTime = now; haveMotion = true;
         }
-        private void Align(Vector3 position)
+        private void Align(Vector3 position, int commandMilliseconds)
         {
             float now = Time.realtimeSinceStartup;
             if (facingSince < 0) facingSince = now;
@@ -262,11 +264,12 @@ namespace SousChef.Plugin.Navigation
             // here falsely runs through a counter before neutral has been applied.
             var surface = chef.PhysicsSurface == null ? null : chef.PhysicsSurface.Properties;
             float retainedMotion = surface == null ? 0 : Mathf.Clamp01(surface.Slippiness);
-            if (!physics.Segment(position, position + (velocity * retainedMotion + drift) * .08f)) { Stop("unsafe_alignment_stance"); return; }
+            float horizon = Mathf.Max(commandMilliseconds / 1000f, Time.deltaTime);
+            if (!physics.Segment(position, position + (velocity * retainedMotion + drift) * horizon)) { Stop("unsafe_alignment_stance"); return; }
             // The game's axis helper normalizes every nonzero input to full speed.
             // Use its native turn helper at the normal turn rate with neutral walking
             // input, instead of walking into the counter just to change heading.
-            move(Vector3.zero);
+            move(Vector3.zero, commandMilliseconds);
             PlayerControlsHelper.TurnTowardsDirection(chef.gameObject, direction.normalized,
                 chef.Movement.TurnSpeed, Mathf.Min(Time.deltaTime, .05f));
             float distance = Vector3.Distance(position, target.Approach);

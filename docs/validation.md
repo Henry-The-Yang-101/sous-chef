@@ -436,3 +436,25 @@ The follow-up passes 775 C# assertions, 53 Python tests and the 151-type adapter
 audit against the installed game assemblies. Sampling rates, fields, navigation
 checks and command behavior are unchanged. Additional live FPS improvement has
 not been measured. Check log: `.local/fps-followup-check.log`.
+
+### Navigator code-audit regressions
+
+The code-audit follow-up addresses six gaps: native step eligibility, flow on
+intermediate support samples, destination-relative settled motion, fallback from
+an unreachable retained side, full slow-frame movement windows and search-radius
+filtering after the chef moves. Navigation input now expires at the checked
+motion deadline independently of its longer control-ownership lease.
+
+`python3 scripts/check.py` passes the real plugin build, 800 core/API assertions
+(including the 151-type installed-assembly audit), 56 navigator integration checks
+and 53 Python tests. The added test project links the production physics/planning
+and execution classes against small Unity/game doubles. Fixtures cover ledges,
+stairs, ramps, changing conveyors, interior wind, moving search boundaries,
+drifting/externally pushed chefs, shared platform translation and rotation,
+retained-side fallback and 10-FPS overshoot. Input-lease tests separately verify
+neutralization at the motion deadline and renewal after frame jitter.
+
+These are code and analytical-geometry regressions. They do not emulate PhysX,
+native step projection, friction or Unity update ordering. No game process was
+controlled and no installed plugin was replaced during this follow-up; live level
+traversal and low-FPS behavior remain unverified.

@@ -121,6 +121,12 @@ Stairs use the chef's native `StepHeightMax` (capped at 0.65 units) per transiti
 not a limit on total elevation change. Footprint probes allow that step variation;
 the planning capsule rests on the highest supported footprint point. Ground
 normals use the native GroundCast limit of 58 degrees.
+Height alone does not make a ledge climbable: discontinuities between support
+samples require `Steppable` on the upper collider's exact GameObject, matching
+the native collision handler. Continuous slopes, including ramp-to-floor joins,
+are distinguished using the support normals. Step-component changes participate
+in periodic geometry reconciliation, and a changed native step height clears
+cached probes and edges.
 
 Segments sample support at most 0.15 units apart. Height-changing segments sweep
 up, across, then down to check risers and overhead clearance instead of casting
@@ -133,7 +139,12 @@ in the same shortest-path search, with fresh collision checks for shortcuts.
 Flat graph edges use the same sampled footprint and capsule checks as execution;
 a clear midpoint and capsule sweep alone cannot certify floor support beside a
 hole. Cached edges use padded clearance regardless of the chef's current pose.
-Environmental flow is checked live separately from cached geometry. A nearby
+Environmental flow is checked live separately from cached geometry. Each cached
+edge retains every sampled support point and ground collider, so a narrow belt
+between calm endpoints still participates in each live flow check. Wind is also
+evaluated at those points rather than at one segment midpoint. The search radius
+is applied when expanding cached edges, relative to the current chef position;
+moving closer can reveal connections omitted by an earlier search boundary. A nearby
 waypoint is skipped only when the direct connection to the next point is clear,
 including its floor support. If optional lookahead beyond a turn is unsupported,
 the actual next movement step must still pass before input is sent. This does not
@@ -165,15 +176,31 @@ If the destination loses its route or eligibility, movement input is released
 and state becomes `idle` in that detecting update. It does not wait for a bridge
 or door to reopen, silently resume, or choose a different semantic task.
 
-The next walking step is checked against live support and collision. The chef must
+The next walking step is checked against live support and collision. Each walking
+command uses the full preceding unscaled frame interval, rounded up to milliseconds
+with a minimum native-step window of 17 ms. The safety projection also covers the
+scaled game delta when it is larger. There is no 60 ms cap that truncates a slow
+frame. Native input reads neutralize the command when its checked motion window
+expires; a separate, longer ownership lease permits renewal after frame jitter.
+An update interval above 0.9 seconds or an invalid interval stops with
+`unsafe_update_interval`. Ownership expiry after a stall still stops the action.
+
+The chef must
 reach within 0.20 units of the checked working stance, face the target within five
-degrees, settle below 0.2 units/second, and retain exact native selection for at
+degrees, settle to at most 0.2 units/second relative to the destination, and retain exact native selection for at
 least 0.1 seconds. An adjacent grid selection by itself cannot finish navigation.
+Settling checks combine native locomotion, wind/platform drift and observed pose
+changes. The previous chef pose is transported with the target's transform to
+account for shared platform translation and rotation; a first observation cannot
+establish settled speed.
 Once settling begins, up to 0.28 units of stance error is allowed so small braking
 drift does not repeatedly restart full-speed walking. A larger displacement resets
-this latch. Near the destination, the chosen approach is retained while it remains
-valid, instead of changing sides during alignment. The final route is shortest
-to that retained stance. At the stance, walking input is neutral and the game's own turn helper rotates
+this latch. Near the destination, the chosen approach is retained in the target's
+local frame while it remains valid and has a certified walking route. If that
+side loses its route, another certified side can be selected. An incomplete search
+can still preserve the previous route after checking all its remaining segments.
+Switching sides resets the alignment latch. The final route is shortest to the
+selected stance. At the stance, walking input is neutral and the game's own turn helper rotates
 Player 2 at the native turn rate. Position is never teleported; a nonzero movement
 axis cannot be used as a slow turning pulse because the game normalizes it to full
 walking speed.
@@ -183,7 +210,8 @@ use exact grid selection. Completion checks the selected native pickup, placemen
 and use predicates: `arrived` means at least one is currently available;
 `positioned_no_action` means alignment is complete but there is no current work
 (for example, an empty sink). Neither result presses an action button. The
-`arrival` record reports pose error, selection, `positioned`, `canPickup`,
+`arrival` record reports pose error, measured `relativeSpeed` (null before a
+valid motion sample), selection, `positioned`, `canPickup`,
 `canPlace`, `canUse` and `readyForAction` at completion; these are historical once
 idle, not a promise that a moving target or its contents stay available. Failure to align,
 loss of progress, excess duration, query overflow, planning failure, focus loss,

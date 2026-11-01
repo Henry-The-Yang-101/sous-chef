@@ -55,10 +55,10 @@ namespace SousChef.Core
         private readonly object sync = new object();
         private int owner;
         private long sequence;
-        private double deadline;
+        private double deadline, inputDeadline;
         private ControlInput input;
         public string LastRelease { get; private set; }
-        private void Clear(string reason) { owner = 0; input = new ControlInput(); LastRelease = reason; }
+        private void Clear(string reason) { owner = 0; input = new ControlInput(); inputDeadline = 0; LastRelease = reason; }
         private void Expire(double now) { if (owner != 0 && now >= deadline) Clear("expired"); }
         public bool Claim(int client, double now)
         {
@@ -66,17 +66,21 @@ namespace SousChef.Core
             {
                 Expire(now);
                 if (owner != 0) return false;
-                owner = client; sequence = 0; deadline = now + 0.5; input = new ControlInput(); return true;
+                owner = client; sequence = 0; deadline = now + 0.5; inputDeadline = now; input = new ControlInput(); return true;
             }
         }
         public string Set(int client, ControlCommand command, double now)
+        { return Set(client, command, now, command.Milliseconds); }
+        public string Set(int client, ControlCommand command, double now, int inputMilliseconds)
         {
             lock (sync)
             {
                 Expire(now);
                 if (owner != client || owner == 0) return "not_owner";
+                if (inputMilliseconds < 1 || inputMilliseconds > command.Milliseconds) return "invalid_input_window";
                 if (command.Sequence <= sequence) return "stale_sequence";
                 sequence = command.Sequence; deadline = now + command.Milliseconds / 1000.0;
+                inputDeadline = now + inputMilliseconds / 1000.0;
                 input = new ControlInput { X = command.X, Y = command.Y, Buttons = command.Buttons }; return null;
             }
         }
@@ -86,6 +90,14 @@ namespace SousChef.Core
         }
         public void Revoke(string reason) { lock (sync) { if (owner != 0) Clear(reason); } }
         public int Owner(double now) { lock (sync) { Expire(now); return owner; } }
-        public ControlInput Read(double now) { lock (sync) { Expire(now); return input; } }
+        public ControlInput Read(double now)
+        {
+            lock (sync)
+            {
+                Expire(now);
+                if (now >= inputDeadline) input = new ControlInput();
+                return input;
+            }
+        }
     }
 }

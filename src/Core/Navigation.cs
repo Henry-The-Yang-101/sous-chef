@@ -29,6 +29,17 @@ namespace SousChef.Core
         public static bool WaypointReached(float dx, float dy, float dz, float step)
         { return dx * dx + dz * dz < .18f * .18f && Connected(0, dy, step); }
     }
+    public static class WalkingCommand
+    {
+        // The motion window is also enforced at the native input read. Keep a
+        // separate, longer ownership lease so frame jitter can neutralize input
+        // without abandoning the action. Long stalls still stop safely.
+        public static int Milliseconds(float frameSeconds)
+        {
+            if (Single.IsNaN(frameSeconds) || Single.IsInfinity(frameSeconds) || frameSeconds < 0 || frameSeconds > .9f) return 0;
+            return (int)Math.Ceiling(Math.Max(1f / 60, frameSeconds) * 1000f);
+        }
+    }
     public struct WalkCell : IEquatable<WalkCell>
     {
         public int X, Y, Z;
