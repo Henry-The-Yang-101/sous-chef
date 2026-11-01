@@ -159,3 +159,53 @@ median/p95/max, p95 intervals, skipped sequences, discovery age and approximate
 JSON payload sizes. It does not measure rendering FPS or absolute end-to-end
 latency. Live moving-platform, spawn/despawn and full/fast overlap comparison
 remain necessary to validate accuracy and frame impact in representative kitchens.
+
+## Player 2 navigation — version 0.4
+
+Final live checks on 2026-11-01 used **Arcade → Couch**, with two simultaneous
+local players joined through Split Controller. Only Player 2 received gameplay
+commands. Its native assignment was pad `One`, side `Right`. The successful
+scenario was `s_wizard_3_2`; this scene name does not imply Story mode.
+
+| Check | Observation |
+| --- | --- |
+| Available destinations | Eight reachable significant objects from 12 candidates; one complete 388-node search; stable, distinct object IDs |
+| Autonomous arrival | One `navigate_to` call chose the route to an ingredient crate 8.49 sampled route units away; observed `arrived` after about 1.43 seconds |
+| Correct interaction | Native pickup, placement and grid selection all referenced the requested crate's Unity instance ID, 495866 |
+| P2 movement | `[8.14629, 0, -9.33419]` → `[15.16718, approximately 0, -8.82981]`; settled horizontal velocity zero |
+| P1 isolation | P1 remained exactly at `[15.866291046142578, 0, -4.9441938400268555]` across arrival, stop and disconnect observations |
+| Explicit interruption | A second connection stopped a running navigation action; reply reported idle and unclaimed; settled P2 velocity was zero |
+| Disconnect | Abrupt socket shutdown during navigation produced idle, `control_lost`, unclaimed, and `lastRelease: disconnected`; settled P2 velocity was zero |
+| Invalid destination | An ID absent from the catalogue was rejected with `destination_unavailable` |
+| Observation health | Full snapshot reported zero field errors; no bridge exceptions appeared in the loader log |
+
+The stop reply took 4.21 ms in this one observation. This is command-response
+latency, not a guarantee about all future calls or immediate removal of physical
+momentum. Status polling during navigation was observational; it did not send
+steering or renew the action's lease. Navigation sent no dash, pickup or use input.
+
+The cold first catalogue refresh measured 59.55 ms and explicitly returned
+`planning_budget_exceeded`, then became available after bounded cache warming.
+Nineteen distinct successful refreshes observed during the checks measured
+4.994–12.686 ms, median 5.946 ms. These measure complete planner refreshes in this
+one kitchen, not rendering FPS, the state stream's sampling rate, or a hard
+12 ms bound. The search budget excludes some setup/matching overhead.
+
+The live investigation corrected the active-controls type check, full-graph
+invalidation caused by scale rounding and distant kill-plane meshes, native
+counter-grid approach selection, and final-approach flow compensation. An earlier
+Arcade Balloon kitchen also exposed a false collision with a ceiling at the
+chef's native height; the probe capsule now insets both vertical contact ends.
+That exact Balloon scenario has not been replayed after the correction.
+
+`python3 scripts/check.py` passes with 717 C# assertions, 18 Python tests and
+the 151-type installed-assembly audit. Navigation tests cover shortest paths,
+changing graph connectivity, search budgets, directed flow, action cancellation,
+typed commands and bounded large-catalogue replies. They do not emulate Unity.
+
+Local evidence, ignored by Git, is `.local/navigation-arcade-checks.ndjson` and
+`.local/navigation-arcade-verified-snapshot.json`. The checked plugin is installed.
+Moving/rotating barriers closing during a walk, wind, floor conveyors, ice,
+moving platforms, moving people and all special traversal still require dedicated
+Arcade Couch scenarios. The live result establishes basic autonomous navigation,
+native target selection and interruption, not complete coverage of those mechanics.

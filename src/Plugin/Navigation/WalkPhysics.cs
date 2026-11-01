@@ -196,8 +196,11 @@ namespace SousChef.Plugin.Navigation
         }
         private void Capsule(Vector3 foot, out Vector3 low, out Vector3 high)
         {
-            low = foot + Vector3.up * (radius + Skin);
-            high = foot + Vector3.up * (height - radius + Skin);
+            // Inset both vertical ends from resting contact. Translating the whole
+            // capsule upward for floor skin makes a native-height ceiling block
+            // every cell, even while the real chef comfortably stands below it.
+            low = foot + Vector3.up * Mathf.Min(radius + Skin, height * .5f);
+            high = foot + Vector3.up * Mathf.Max(height * .5f, height - radius - Skin);
         }
         public bool Stand(Vector3 guess, out Vector3 point, out Collider support)
         {
