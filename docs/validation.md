@@ -328,6 +328,25 @@ the tested contact/arrival cases, not every wall shape, slippery surface or caus
 of cancellation. Evidence: `.local/contact-final-navigation.ndjson`,
 `.local/wall-contact.json`, and `.local/wall-contact-result.json`.
 
+### Stairs and connected decks
+
+The reported case was captured in `s_festivemashup_1_3`. Its upper deck is at
+1.85 units and its two staircases have approximately 0.50-unit risers, with
+`StepHeightMax` observed as 0.65. The old planner's footprint/midpoint checks
+used 0.22/0.15-unit height tolerances and straight capsule sweeps through risers.
+From the upper deck it exposed only ten upper-deck destinations. Evidence is
+`.local/stairs-before.json`; native GroundCast inspection also confirmed its
+58-degree slope limit.
+
+The update uses native-height supported step transitions, resolved surface keys,
+step-shaped clearance sweeps and horizontal waypoint completion with bounded
+stepping lag. The build passes 768 C# assertions, 53 Python tests and the
+151-type installed-assembly audit. New graph fixtures cover two staircases,
+shortest ascent, descent via the alternate staircase, a mid-stair start with
+both decks reachable, blocked staircases, distinct stacked-floor keys and rejected
+unsupported deck drops. These graph tests do not emulate Unity physics; live
+staircase traversal is recorded separately when verified.
+
 ### Capture overhead and unused streams
 
 The 2026-11-01 FPS investigation measured the original plugin in an active

@@ -40,6 +40,7 @@ namespace SousChef.Plugin.Navigation
         public int Queries { get; private set; }
         public bool Changed { get; private set; }
         public float Radius { get { return radius; } }
+        public float StepHeight { get { return Mathf.Min(.65f, chef.Movement.StepHeightMax); } }
         public Vector3 Position { get { Vector3 p = chef.transform.position; p.y -= pivotToFoot; return p; } }
         public IEnumerable<Collider> Colliders { get { for (int i = 0; i < nearbyCount; i++) yield return nearby[i]; } }
         private int nearbyCount;
@@ -238,7 +239,7 @@ namespace SousChef.Plugin.Navigation
         }
         private bool Ground(Vector3 point, out RaycastHit best)
         {
-            best = new RaycastHit(); float step = Mathf.Min(.65f, chef.Movement.StepHeightMax);
+            best = new RaycastHit(); float step = StepHeight;
             int count = Physics.RaycastNonAlloc(point + Vector3.up * (step + .12f), Vector3.down, hits,
                 2 * step + .24f, groundMask, QueryTriggerInteraction.Ignore); Queries++;
             if (count == hits.Length) { Overflow = true; return false; }
@@ -246,7 +247,8 @@ namespace SousChef.Plugin.Navigation
             for (int i = 0; i < count; i++)
             {
                 var hit = hits[i];
-                if (hit.collider == null || Own(hit.collider) || Dangerous(hit.collider) || hit.normal.y < .64f ||
+                // GroundCast accepts surfaces through 58 degrees in this game.
+                if (hit.collider == null || Own(hit.collider) || Dangerous(hit.collider) || hit.normal.y < .52992f ||
                     Mathf.Abs(hit.point.y - point.y) > step + .04f || hit.distance >= distance) continue;
                 best = hit; distance = hit.distance;
             }
@@ -268,13 +270,20 @@ namespace SousChef.Plugin.Navigation
             point = guess; support = null; RaycastHit hit;
             if (!Ground(guess, out hit)) return false;
             point.y = hit.point.y; support = hit.collider;
+            float highest = point.y, lowest = point.y;
             // Whole-footprint support: do not bridge a hole with the chef centre alone.
             for (int i = 0; i < 4; i++)
             {
                 Vector3 offset = i < 2 ? Vector3.right * (i == 0 ? clearance : -clearance) : Vector3.forward * (i == 2 ? clearance : -clearance);
                 RaycastHit edge;
-                if (!Ground(point + offset, out edge) || Mathf.Abs(edge.point.y - point.y) > .22f) return false;
+                if (!Ground(point + offset, out edge)) return false;
+                highest = Mathf.Max(highest, edge.point.y); lowest = Mathf.Min(lowest, edge.point.y);
             }
+            if (!WalkHeight.Connected(lowest, highest, StepHeight)) return false;
+            // Model native step-up support under the capsule footprint. Raising
+            // only the planning body avoids treating a walkable riser as a wall;
+            // actual movement remains entirely in the game's locomotion code.
+            point.y = highest;
             Vector3 low, high; Capsule(point, out low, out high, clearance);
             int count = Physics.OverlapCapsuleNonAlloc(low, high, clearance, overlaps, ~0, QueryTriggerInteraction.Collide); Queries++;
             if (count == overlaps.Length) { Overflow = true; return false; }
@@ -301,7 +310,7 @@ namespace SousChef.Plugin.Navigation
             for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++)
             {
                 var key = new WalkCell(x + dx, y, z + dz); Probe probe = Sample(key);
-                if (probe.Valid && Segment(start, probe.Point)) result.Add(new WalkEdge(key, Vector3.Distance(start, probe.Point)));
+                if (probe.Valid && Segment(start, probe.Point)) result.Add(new WalkEdge(Resolved(key, probe), Vector3.Distance(start, probe.Point)));
             }
             return result;
         }
@@ -316,7 +325,7 @@ namespace SousChef.Plugin.Navigation
                 var next = new WalkCell(cell.X + dx, Mathf.RoundToInt(from.Point.y / HeightBand), cell.Z + dz);
                 if ((Approximate(next) - Position).sqrMagnitude > (Range - 2) * (Range - 2)) continue;
                 Probe to = Sample(next);
-                if (to.Valid && ShortEdge(from.Point, to.Point)) result.Add(new WalkEdge(next, Vector3.Distance(from.Point, to.Point)));
+                if (to.Valid && ShortEdge(from.Point, to.Point)) result.Add(new WalkEdge(Resolved(next, to), Vector3.Distance(from.Point, to.Point)));
             }
             edges[cell] = result; return FilterFlow(cell, result);
         }
@@ -332,20 +341,33 @@ namespace SousChef.Plugin.Navigation
         }
         private bool ShortEdge(Vector3 from, Vector3 to)
         {
+            if (!WalkHeight.Connected(from.y, to.y, StepHeight)) return false;
+            if (Mathf.Abs(from.y - to.y) > .025f) return Segment(from, to);
             RaycastHit middle;
             Vector3 midpoint = (from + to) * .5f;
-            if (!Ground(midpoint, out middle) || Mathf.Abs(middle.point.y - midpoint.y) > .15f) return false;
+            if (!Ground(midpoint, out middle)) return false;
+            if (Mathf.Abs(middle.point.y - midpoint.y) > .025f) return Segment(from, to);
             Vector3 delta = to - from, low, high; Capsule(from, out low, out high);
             int count = Physics.CapsuleCastNonAlloc(low, high, radius, delta.normalized, hits, delta.magnitude, ~0, QueryTriggerInteraction.Collide); Queries++;
             if (count == hits.Length) { Overflow = true; return false; }
             for (int i = 0; i < count; i++) if (Blocks(hits[i].collider)) return false;
             return true;
         }
+        private WalkCell Resolved(WalkCell hint, Probe probe)
+        {
+            var key = new WalkCell(hint.X, Mathf.RoundToInt(probe.Point.y / HeightBand), hint.Z);
+            // The same supported surface reached from above or below is one node.
+            // Distinct decks at the same x/z retain distinct height keys.
+            probes[key] = probe;
+            return key;
+        }
         public bool Segment(Vector3 from, Vector3 to)
         {
             Vector3 delta = to - from; float length = delta.magnitude;
             bool entering = Vector3.Distance(from, Position) < .02f;
-            int steps = Math.Max(1, Mathf.CeilToInt(length / .2f));
+            int steps = Math.Max(1, Mathf.CeilToInt(length / .15f));
+            Vector3 previous = from;
+            float clearance = entering ? ContactRadius : radius;
             for (int i = 0; i <= steps; i++)
             {
                 Vector3 point; Collider ground;
@@ -355,11 +377,22 @@ namespace SousChef.Plugin.Navigation
                 // collision: use consistent native clearance along this connector.
                 // Lattice nodes and edges retain padded clearance. The contact skin
                 // is bounded, and every sample still checks support and hazards.
-                float clearance = entering ? ContactRadius : radius;
-                if (!Stand(guess, out point, out ground, clearance) || Mathf.Abs(point.y - guess.y) > .22f || !CanWalkDirection(from, to, ground)) return false;
+                if (!Stand(guess, out point, out ground, clearance) ||
+                    !WalkHeight.Connected(guess.y, point.y, StepHeight) ||
+                    !WalkHeight.Connected(previous.y, point.y, StepHeight) || !CanWalkDirection(from, to, ground)) return false;
+                if (!StepSweep(previous, point, clearance)) return false;
+                previous = point;
             }
-            if (length < .001f) return true;
-            return Sweep(from, to, entering ? ContactRadius : radius);
+            return !Overflow;
+        }
+        private bool StepSweep(Vector3 from, Vector3 to, float clearance)
+        {
+            if (Mathf.Abs(from.y - to.y) < .025f) return Sweep(from, to, clearance);
+            // Up, across, down: sweep the body over a native-height step, retaining
+            // wall and overhead clearance. Never ignore a ground collider wholesale.
+            float top = Mathf.Max(from.y, to.y);
+            Vector3 raisedFrom = new Vector3(from.x, top, from.z), raisedTo = new Vector3(to.x, top, to.z);
+            return Sweep(from, raisedFrom, clearance) && Sweep(raisedFrom, raisedTo, clearance) && Sweep(raisedTo, to, clearance);
         }
         private float ContactRadius { get { return Mathf.Max(.01f, nativeRadius - .02f); } }
         private bool Sweep(Vector3 from, Vector3 to, float clearance)

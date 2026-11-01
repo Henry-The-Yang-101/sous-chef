@@ -3,6 +3,14 @@ using System.Collections.Generic;
 
 namespace SousChef.Core
 {
+    // Vertical continuity uses the game's step limit, never the deck's total height.
+    public static class WalkHeight
+    {
+        public static bool Connected(float from, float to, float step)
+        { return step > 0 && Math.Abs(to - from) <= step + .025f; }
+        public static bool WaypointReached(float dx, float dy, float dz, float step)
+        { return dx * dx + dz * dz < .18f * .18f && Connected(0, dy, step); }
+    }
     public struct WalkCell : IEquatable<WalkCell>
     {
         public int X, Y, Z;

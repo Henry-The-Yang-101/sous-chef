@@ -48,6 +48,42 @@ internal static class NavigationTests
         // Directed edges represent an impassable counter-current.
         tree = new WalkSearch(new[] { new WalkEdge(goal, 0) }, expand, 50, delegate { return true; });
         check(!tree.Distances.ContainsKey(a), "one-way flow does not imply reverse reachability");
+        // Two decks joined by two staircases. Every riser is within native step
+        // height, although the complete deck separation is much larger.
+        var stairs = new[] { new WalkCell(0, 0, 0), new WalkCell(1, 5, 0),
+            new WalkCell(2, 10, 0), new WalkCell(3, 15, 0), new WalkCell(4, 18, 0),
+            new WalkCell(1, 5, 2), new WalkCell(2, 10, 2), new WalkCell(3, 15, 2) };
+        var links = new[] { new[] {0,1}, new[] {1,2}, new[] {2,3}, new[] {3,4},
+            new[] {0,5}, new[] {5,6}, new[] {6,7}, new[] {7,4}, new[] {0,4} };
+        bool closeNearStairs = false, closeFarStairs = false;
+        Func<WalkCell, IEnumerable<WalkEdge>> staircase = delegate(WalkCell node)
+        {
+            var result = new List<WalkEdge>();
+            for (int i = 0; i < links.Length; i++)
+            {
+                if ((i < 4 && closeNearStairs) || (i >= 4 && i < 8 && closeFarStairs)) continue;
+                int first = links[i][0], second = links[i][1];
+                if (!WalkHeight.Connected(stairs[first].Y / 10f, stairs[second].Y / 10f, .65f)) continue;
+                if (node.Equals(stairs[first])) result.Add(new WalkEdge(stairs[second], i < 4 ? 1 : 2));
+                if (node.Equals(stairs[second])) result.Add(new WalkEdge(stairs[first], i < 4 ? 1 : 2));
+            }
+            return result;
+        };
+        tree = new WalkSearch(new[] {new WalkEdge(stairs[0], 0)}, staircase, 100, delegate {return true;});
+        check(tree.Route(stairs[4]).Count == 5 && tree.Distances[stairs[4]] == 4, "lower deck reaches upper by shortest stairs, never direct vertical jump");
+        tree = new WalkSearch(new[] {new WalkEdge(stairs[2], 0)}, staircase, 100, delegate {return true;});
+        check(tree.Route(stairs[0]) != null && tree.Route(stairs[4]) != null, "mid-stair start keeps both decks reachable");
+        closeNearStairs = true;
+        tree = new WalkSearch(new[] {new WalkEdge(stairs[4], 0)}, staircase, 100, delegate {return true;});
+        check(tree.Route(stairs[0]).Count == 5 && tree.Distances[stairs[0]] == 8, "blocked near stairs selects far staircase downhill");
+        closeFarStairs = true;
+        tree = new WalkSearch(new[] {new WalkEdge(stairs[0], 0)}, staircase, 100, delegate {return true;});
+        check(tree.Route(stairs[4]) == null, "both staircases blocked does not connect decks through air");
+        check(!new WalkCell(2,0,2).Equals(new WalkCell(2,18,2)), "stacked floors retain separate graph identities");
+        check(WalkHeight.WaypointReached(.05f, .5f, .04f, .65f), "native stepping height does not strand a horizontally reached waypoint");
+        check(!WalkHeight.WaypointReached(.05f, 1.85f, .04f, .65f), "waypoint on another deck cannot be skipped");
+        check(!WalkHeight.Connected(1.85f, 0, .65f), "unsupported deck drop rejected");
+        check(!WalkHeight.Connected(0, Single.NaN, .65f), "invalid height rejected");
         float x, z;
         check(WalkingSteering.Direction(1, 0, 0, 2, 4, out x, out z) && z < 0 && Math.Abs(x*x+z*z-1) < .0001, "crosswind compensated at walking speed");
         check(!WalkingSteering.Direction(1, 0, -5, 0, 4, out x, out z), "opposing belt faster than chef rejected");

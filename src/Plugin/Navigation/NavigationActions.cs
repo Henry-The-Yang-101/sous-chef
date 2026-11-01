@@ -130,7 +130,8 @@ namespace SousChef.Plugin.Navigation
             Vector3 from = physics.Position;
             for (int i = waypoint; i < route.Count; i++)
             {
-                if (i < route.Count - 1 && Vector3.Distance(from, route[i]) < .18f) continue;
+                Vector3 offset = route[i] - from;
+                if (i < route.Count - 1 && WalkHeight.WaypointReached(offset.x, offset.y, offset.z, physics.StepHeight)) continue;
                 if (!physics.Segment(from, route[i])) return false;
                 from = route[i];
             }
@@ -173,7 +174,12 @@ namespace SousChef.Plugin.Navigation
             { Align(position); return; }
             if (Time.realtimeSinceStartup - lastProgress > 2f) { Stop("no_progress"); return; }
             facingSince = -1; arrival.Reset(); arrivalDetails = null;
-            while (waypoint < route.Count - 1 && Vector3.Distance(position, route[waypoint]) < .18f) waypoint++;
+            while (waypoint < route.Count - 1)
+            {
+                Vector3 offset = route[waypoint] - position;
+                if (!WalkHeight.WaypointReached(offset.x, offset.y, offset.z, physics.StepHeight)) break;
+                waypoint++;
+            }
             Vector3 goal = route[waypoint];
             // Shortcut only across freshly checked supported space; no corner cutting.
             for (int i = Math.Min(route.Count - 1, waypoint + 3); i > waypoint; i--)

@@ -115,6 +115,21 @@ that the retained route is newly optimal; other certified destinations remain av
 
 The search lattice is 0.4 world units horizontally with height-aware keys. Routes
 are shortest on that sampled graph, not guaranteed continuous-world geodesics.
+Supported heights resolve to canonical height keys, so the same stair tread
+reached from above and below shares a node while stacked decks remain distinct.
+Stairs use the chef's native `StepHeightMax` (capped at 0.65 units) per transition,
+not a limit on total elevation change. Footprint probes allow that step variation;
+the planning capsule rests on the highest supported footprint point. Ground
+normals use the native GroundCast limit of 58 degrees.
+
+Segments sample support at most 0.15 units apart. Height-changing segments sweep
+up, across, then down to check risers and overhead clearance instead of casting
+straight through the staircase. No ground collider is ignored wholesale. Every
+sample must have footprint support and remain within the native step limit of
+the preceding support. Intermediate waypoints allow native stepping lag in height
+while still requiring horizontal progress; final station arrival remains subject
+to the position, facing and selection checks below. Both staircases participate
+in the same shortest-path search, with fresh collision checks for shortcuts.
 Freshly checked shortcuts reduce stair-step paths without cutting corners or
 crossing unsupported floor. Discovery is bounded to a 60-world-unit radius around
 Player 2; walking cells stay within 58 units, with at most 16,000 discovered nodes.
