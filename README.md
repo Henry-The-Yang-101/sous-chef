@@ -9,6 +9,10 @@ directly through logical inputs, independently of Player 1. See
 Bridge 0.4 adds [autonomous walking actions](docs/navigation.md): list reachable
 meaningful destinations, call `navigate_to(destination_id)`, or interrupt with
 `stop()`. The plugin handles routing and steering; callers never send waypoints.
+Run `python3 -m harness.server` for a [live clickable navigation harness](docs/harness.md)
+at [localhost:8765](http://127.0.0.1:8765). It shows dispenser food names and
+walking/direct distances, with a QR code for phone access; add `--tunnel` for an
+internet link that lets the game stay focused on your Mac.
 It captures active kitchens, including paused rounds. Outside a round it sends
 status messages without a map, so consumers cannot mistake the level selector
 for a kitchen.
@@ -98,6 +102,7 @@ bypasses this loader unless you separately configure Steam to use it.
 | `src/Plugin/Adapters/` | Explicit field schemas and bounded readers |
 | `src/Plugin/Navigation/` | Live physics reachability, destination catalogue, autonomous walking |
 | `clients/` | Python observation/control/action APIs, world index, recording validator |
+| `harness/` | Local browser destination list, action status and Stop control |
 | `scripts/` | Pinned toolchain, build, reversible install, launch, checks |
 | `tests/` | Core/transport tests, installed-game field audit, client tests |
 
@@ -107,7 +112,8 @@ The [original investigation](overcooked2-bridge-investigation.md) provides conte
 The [decision-model and voice study](docs/ai-stack-research.md) compares hosted and
 local options for a future voice-directed sous chef, with latency evaluation criteria.
 Game assemblies are local build inputs and are never included in this repository.
-The implementation is original; reference projects were not vendored.
+The bridge implementation is original. The harness bundles Project Nayuki's
+MIT-licensed QR encoder; see [its attribution](harness/vendor/README.md).
 
 ### Faster gameplay observations
 

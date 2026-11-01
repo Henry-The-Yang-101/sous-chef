@@ -1,0 +1,224 @@
+const el = id => document.getElementById(id);
+// randomUUID is unavailable on an ordinary LAN HTTP origin (for example iPhone
+// Safari); getRandomValues also works outside a secure context.
+const viewerId = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
+const accessFromLink = new URLSearchParams(location.hash.slice(1)).get('access');
+let accessToken = accessFromLink || sessionStorage.getItem('phoneAccess');
+if (accessFromLink) {
+  sessionStorage.setItem('phoneAccess', accessFromLink);
+  history.replaceState(null, '', location.pathname + location.search);
+}
+const authHeaders = () => accessToken ? {'X-Page-Token': accessToken} : {};
+let token = null;
+let state = null;
+let receivedAt = 0;
+let pending = false;
+let lastError = '';
+let sessionId = null;
+const rows = new Map();
+
+const reasons = {
+  outside_local_round: 'Enter an Arcade → Couch kitchen with two local players.',
+  player2_absent_or_ambiguous: 'Add Player 2 with Split Controller.',
+  player2_not_ready: 'Player 2 is not ready yet.',
+  paused: 'Unpause the round to see available destinations.',
+  input_suppressed: 'The game is blocking input. Return focus to the unpaused kitchen.',
+  game_unfocused: 'Choose a destination to bring the game forward and navigate.',
+  planning_budget_exceeded: 'The planner reached its time limit. Waiting for a complete live route search.',
+  planning_in_progress: 'Checking the rest of the kitchen. Confirmed reachable destinations appear as they are verified.',
+  no_safe_start: 'The planner cannot find safe walking space around Player 2.',
+  arrived: 'Arrived at the selected destination.',
+  positioned_no_action: 'Positioned and facing the target. No action is currently available (for example, an empty sink).',
+  alignment_failed: 'Stopped: could not establish a stable, usable stance and facing.',
+  stopped: 'Stopped.',
+  destination_unreachable: 'Stopped: the destination became unreachable.',
+  destination_unavailable: 'Stopped: the destination is no longer available.',
+  control_lost: 'Stopped: the control connection or input lease was lost.',
+  released: 'Control released.',
+  navigation_timeout: 'Stopped: navigation timed out.',
+  no_progress: 'Stopped: Player 2 was not making progress.',
+};
+const explain = reason => reasons[reason] || (reason ? reason.replaceAll('_', ' ') : '');
+const kindName = kind => (kind || 'destination').replaceAll('_', ' ');
+const number = value => Number.isFinite(value) ? value.toFixed(1) : '—';
+function nameOf(d) {
+  if (d.foodName) return `${d.foodName.replaceAll('_', ' ')} dispenser`;
+  if (d.kind === 'ingredient_supply') return 'Food dispenser (name unavailable)';
+  if (d.kind === 'washing_station') return 'Sink';
+  if (d.kind === 'workstation') return 'Chopping station';
+  return d.label.replace(/^utensil_/i, '').replace(/_0?1\b/g, '').replaceAll('_', ' ').replace(/\(Clone\)/g, '').trim();
+}
+function fresh() {
+  return state?.fresh && performance.now() - receivedAt + (state.ageMs || 0) <= 1500;
+}
+function render() {
+  const live = fresh();
+  const control = state?.control || {};
+  const nav = control.navigation || {};
+  const moving = live && nav.state === 'navigating';
+  const catalog = live ? state.catalog || {} : {};
+  const destinations = catalog.destinations || [];
+  const catalogReason = catalog.reason || catalog.navigation?.catalogReason || control.reason;
+  const recorded = nav.destination || (nav.destinationId && state?.lastCommand?.target);
+  const active = destinations.find(d => d.id === recorded?.id) || recorded;
+  el('connection').textContent = live ? 'Bridge connected' : state?.connected ? 'State stale' : 'Bridge disconnected';
+  el('light').className = 'light ' + (live ? 'live' : 'offline');
+  el('freshness').textContent = live ? `Updated ${Math.max(0, Math.round((state.ageMs || 0) + performance.now() - receivedAt))} ms ago` : 'Waiting for a fresh sample';
+  el('action').textContent = moving ? `${nav.phase === 'aligning' ? 'Aligning with' : 'Walking to'} ${active ? nameOf(active) : nav.destinationId}` : live ? 'Player 2 is idle' : 'Waiting for the bridge';
+  el('target').textContent = active
+    ? `${active.label} · ${active.id} · object ${active.objectInstanceId} · x ${number(active.position?.[0])}, z ${number(active.position?.[2])}${Number.isFinite(active.routeDistance) ? ` · ${number(active.routeDistance)} units to walk` : ''}`
+    : 'Join Player 2 with Split Controller, then enter an unpaused Arcade → Couch kitchen.';
+  const ready = nav.arrival;
+  const possible = ready ? [['canPickup', 'pickup'], ['canPlace', 'place'], ['canUse', 'use']].filter(([key]) => ready[key]).map(([,name]) => name).join(', ') : '';
+  el('result').textContent = moving ? 'The plugin is navigating and checking final alignment. Stop interrupts it.'
+    : live ? explain(nav.reason) + (nav.reason === 'arrived' && possible ? ` Available at arrival: ${possible}.` : '') : '';
+  const error = lastError || (!live && state?.error) || '';
+  el('error').hidden = !error;
+  el('error').textContent = error;
+  el('stop').disabled = !token;
+  const query = el('filter').value.toLowerCase().trim();
+  const shown = destinations.filter(d => `${nameOf(d)} ${d.label} ${kindName(d.kind)} ${d.id}`.toLowerCase().includes(query));
+  el('count').textContent = (query ? `${shown.length} of ${destinations.length}` : String(destinations.length)) + (catalog.complete === false && destinations.length ? ' · still checking' : '');
+  el('empty').hidden = shown.length > 0;
+  el('table-wrap').hidden = !shown.length;
+  el('empty').textContent = !live ? 'No live destinations. Start the game with the bridge; this page reconnects automatically.'
+    : query && destinations.length ? 'No destinations match this filter.'
+    : explain(catalogReason) || 'No reachable destinations at the moment. This list updates automatically.';
+
+  if (sessionId !== state?.sessionId) { rows.forEach(row => row.tr.remove()); rows.clear(); sessionId = state?.sessionId; }
+  const ids = new Set(shown.map(d => d.id));
+  for (const [id, row] of rows) if (!ids.has(id)) { row.tr.remove(); rows.delete(id); }
+  shown.sort((a, b) => kindName(a.kind).localeCompare(kindName(b.kind)) || nameOf(a).localeCompare(nameOf(b), undefined, {numeric: true}) || a.id.localeCompare(b.id, undefined, {numeric: true}));
+  for (const [index, destination] of shown.entries()) {
+    let row = rows.get(destination.id);
+    if (!row) {
+      const tr = document.createElement('tr');
+      const titleCell = document.createElement('td');
+      const title = document.createElement('strong');
+      const meta = document.createElement('small');
+      const raw = document.createElement('small'); raw.className = 'raw';
+      titleCell.append(title, meta, raw);
+      const position = document.createElement('td');
+      const distance = document.createElement('td'); distance.className = 'distance';
+      const walkDistance = document.createElement('strong');
+      const directDistance = document.createElement('small');
+      distance.append(walkDistance, directDistance);
+      const action = document.createElement('td');
+      const button = document.createElement('button'); button.type = 'button';
+      action.append(button); tr.append(titleCell, position, distance, action);
+      row = {tr, title, meta, raw, position, walkDistance, directDistance, button, destination};
+      button.addEventListener('click', () => navigate(row.destination));
+      rows.set(destination.id, row);
+    }
+    row.destination = destination;
+    row.title.textContent = nameOf(destination);
+    row.meta.textContent = `${kindName(destination.kind)} · ${destination.id} · object ${destination.objectInstanceId}`;
+    row.raw.textContent = `${destination.foodName ? `Dispenses: ${destination.foodName} · ` : ''}${destination.label}`;
+    row.position.textContent = `${number(destination.position?.[0])} / ${number(destination.position?.[2])}`;
+    row.walkDistance.textContent = Number.isFinite(destination.routeDistance) ? `${number(destination.routeDistance)} units walk` : 'Walk distance unavailable';
+    row.directDistance.textContent = Number.isFinite(destination.directDistance) ? `${number(destination.directDistance)} units direct` : 'Direct distance unavailable';
+    row.button.textContent = moving && nav.destinationId === destination.id ? 'Walking…' : 'Navigate';
+    row.button.setAttribute('aria-label', `Navigate to ${nameOf(destination)} ${destination.id}`);
+    row.button.disabled = pending || moving || (!control.available && control.reason !== 'game_unfocused') || !live;
+    row.tr.classList.toggle('active', moving && nav.destinationId === destination.id);
+    const atIndex = el('rows').children[index];
+    if (atIndex !== row.tr) el('rows').insertBefore(row.tr, atIndex || null);
+  }
+  el('details').textContent = JSON.stringify({sessionId: state?.sessionId, pad: control.pad, side: control.side, navigation: nav, error: state?.error}, null, 2);
+}
+
+async function post(path, data = {}) {
+  const response = await fetch(path, {method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({...data, token, viewerId}), signal: AbortSignal.timeout(6000)});
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || 'Command failed');
+  return result;
+}
+async function navigate(d) {
+  if (pending || !fresh()) return;
+  pending = true; lastError = ''; render();
+  try {
+    state = await post('/api/navigate', {destinationId: d.id, objectInstanceId: d.objectInstanceId, sessionId: state.sessionId});
+    receivedAt = performance.now();
+  } catch (error) { lastError = error.message; }
+  finally { pending = false; render(); }
+}
+async function stop() {
+  if (!token) return;
+  lastError = '';
+  try { state = await post('/api/stop'); receivedAt = performance.now(); }
+  catch (error) { lastError = error.message; }
+  render();
+}
+async function poll() {
+  try {
+    if (!token) {
+      const response = await fetch('/api/bootstrap', {headers: authHeaders(), signal: AbortSignal.timeout(2000)});
+      if (response.status === 403) throw new Error('Scan the current QR code on the Mac to connect this phone.');
+      if (!response.ok) throw new Error('Could not connect to the harness');
+      token = (await response.json()).token;
+    }
+    const response = await fetch('/api/state', {headers: {...authHeaders(), 'X-Viewer-Id': viewerId}, signal: AbortSignal.timeout(2000)});
+    if (!response.ok) throw new Error('Could not read live state');
+    state = await response.json(); receivedAt = performance.now();
+  } catch (error) {
+    state = {connected: false, fresh: false, error: error.message.startsWith('Scan ') ? error.message : 'Harness connection lost. Reconnecting…'};
+    token = null;
+  }
+  render();
+  setTimeout(poll, 250);
+}
+let shareSignature = '';
+let shareLinks = [];
+let qrObjectUrl = null;
+function showPhoneLink() {
+  const link = shareLinks[Number(el('phone-network').value) || 0];
+  el('phone-qr').hidden = !link;
+  el('phone-link').hidden = !link;
+  if (qrObjectUrl) { URL.revokeObjectURL(qrObjectUrl); qrObjectUrl = null; }
+  if (!link) return;
+  qrObjectUrl = URL.createObjectURL(new Blob([link.qrSvg], {type: 'image/svg+xml'}));
+  el('phone-qr').src = qrObjectUrl;
+  el('phone-link').href = link.url;
+  el('phone-link').textContent = link.url;
+}
+async function pollSharing() {
+  try {
+    const response = await fetch('/api/share', {headers: authHeaders(), signal: AbortSignal.timeout(2000)});
+    if (!response.ok) throw new Error();
+    const sharing = await response.json();
+    const signature = JSON.stringify(sharing);
+    if (signature !== shareSignature) {
+      const previous = shareLinks[Number(el('phone-network').value) || 0]?.url;
+      shareSignature = signature; shareLinks = sharing.links;
+      el('phone-network').replaceChildren(...shareLinks.map((link, index) => {
+        const option = document.createElement('option');
+        option.value = index; option.textContent = `${link.label} · ${new URL(link.url).host}`;
+        return option;
+      }));
+      const selected = shareLinks.findIndex(link => link.url === previous);
+      el('phone-network').value = Math.max(0, selected);
+      el('phone-network-label').hidden = shareLinks.length < 2;
+      el('phone-status').textContent = sharing.status || (shareLinks.length
+        ? 'Connect your phone to the same Wi-Fi, then scan. Keep the game focused on your Mac.'
+        : 'No Wi-Fi address found. Connect your Mac to a network, or restart with --tunnel for an internet link.');
+      showPhoneLink();
+    }
+  } catch {
+    shareSignature = ''; shareLinks = []; showPhoneLink();
+    el('phone-network-label').hidden = true;
+    el('phone-status').textContent = 'Open this page on the Mac to get the current phone QR code.';
+  }
+  setTimeout(pollSharing, 3000);
+}
+el('phone-network').addEventListener('change', showPhoneLink);
+if (matchMedia('(max-width: 650px)').matches) el('phone-share').open = false;
+el('filter').addEventListener('input', render);
+el('stop').addEventListener('click', stop);
+document.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); stop(); } });
+window.addEventListener('pagehide', () => {
+  if (token) navigator.sendBeacon('/api/leave', new Blob([JSON.stringify({token, viewerId})], {type: 'application/json'}));
+});
+setInterval(() => { if (!fresh()) render(); }, 250);
+poll();
+pollSharing();

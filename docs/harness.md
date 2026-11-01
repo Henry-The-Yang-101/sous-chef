@@ -1,0 +1,141 @@
+# Local navigation harness
+
+From the repository root:
+
+```sh
+python3 -m harness.server
+```
+
+Open [http://127.0.0.1:8765](http://127.0.0.1:8765). The server uses Python's
+standard library and a bundled QR encoder, and uses the existing control endpoint
+on port 24703. Override with `--port` and `--bridge-port` if needed. By default it
+also listens on the Mac's network interfaces for phone access; `--local-only`
+restricts it to loopback.
+
+Start the game through `python3 scripts/launch.py`, add Player 2 with **Split
+Controller**, and enter an unpaused **Arcade → Couch** kitchen. The page reconnects
+automatically when the game starts or restarts. It never creates players or drives
+the menus.
+
+## Use
+
+- **Navigate** sends the exact chosen destination to `navigate_to`. The plugin
+  handles pathfinding, steering, replanning and final position/facing. On macOS,
+  clicking brings Overcooked! 2 to the foreground using the OS application launcher
+  so that its native input gate accepts the command. No keyboard events,
+  waypoints, dash, pickup or work buttons are sent by the harness.
+- **Stop**, or Escape while this page is focused, interrupts the current bridge
+  action. Stop is available even when another API client owns Player 2.
+- Filter by food name, object name, type or ID. Food dispensers show the actual
+  `PickupItemSpawner.m_itemPrefab.name` (for example, Flour, Egg or Cheese_Raw),
+  rather than just `DispenserCrate`. Names are observed, never inferred from crate
+  numbers. A missing prefab is shown as unavailable.
+- Each row shows the stable destination ID, object instance, live x/z position
+  and two distances from Player 2, in game world units. **Walk** is the planner's
+  route to a usable approach stance; **direct** is the horizontal straight-line
+  distance to the object's pivot, which can include an intervening counter or wall.
+  Walk can be shorter than direct because the chef stops beside an object rather
+  than at its centre. Both update with the live catalogue. This metadata requires
+  the rebuilt plugin: quit the game, run `python3 scripts/install.py`, then relaunch
+  through `python3 scripts/launch.py` after updating.
+- The status names the actual target and shows walking, aligning, arrival or the interruption reason.
+  `Arrived` includes the actions currently allowed by native predicates (pickup,
+  place or use). An empty sink instead reports that the chef is positioned and
+  facing it, with no action currently available. Navigation never performs the work.
+  Navigation buttons are disabled while an action is active; stop it before choosing
+  another. Commands are never retried or redirected automatically.
+
+## Open on your phone
+
+Open **Open on your phone** on the Mac's localhost page and scan its QR code with
+your phone's camera. Keep both devices on the same Wi-Fi. The phone shows the same
+live list, distances, status, Navigate and Stop controls, so Overcooked! 2 can stay
+focused on the Mac. If the Mac has several network addresses, choose the one on
+your phone's network in the connection selector. Guest Wi-Fi isolation or a local
+firewall can prevent direct access.
+
+For access from another network, install
+[`cloudflared`](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/)
+once (`brew install cloudflared` on macOS), then start:
+
+```sh
+python3 -m harness.server --tunnel
+```
+
+The harness starts a temporary Cloudflare Quick Tunnel, adds its HTTPS URL to
+the QR panel automatically, and stops the tunnel when the harness exits. Select
+**Internet** if it is not already selected. It requires no router port forwarding
+or Cloudflare account. If you already have a forwarded URL, use
+`--public-url https://your-forwarded-host.example` instead; this registers the
+exact origin and encodes it but does not start forwarding itself.
+
+QR codes are generated locally with no external image service. Each link contains
+a random per-process access token in its URL fragment. The browser moves it into
+session storage and removes the fragment; non-local viewers need that token to
+read state or issue commands. A tunnel's loopback proxy connection does not bypass
+authentication. Treat the QR/link as access to this Player 2 session; restarting
+the harness invalidates it, so scan the new QR afterward. Ordinary Wi-Fi HTTP is
+unencrypted; the optional tunnel uses HTTPS. The plugin's TCP endpoints remain
+loopback-only.
+
+## Live data and lifecycle
+
+A single persistent connection polls the plugin up to **5 Hz**, shared across all
+browser tabs. The page reads that cache every 250 ms; more viewers do not increase
+game-side planning frequency. This is a target rate, bounded by game response time.
+Destinations are replaced on each observation, including removals caused by moving
+geometry. No options are shown when data is over 1.5 seconds old, the game is outside
+a round or Player 2 is missing. During a budget-limited search, confirmed shortest
+routes remain clickable while the count says **still checking**; uncertified
+destinations are withheld until the planner reaches them. A partial catalogue is
+not a claim that omitted locations are physically unreachable.
+
+Clicking rechecks the bridge session, destination ID, object instance and current
+reachable list. The plugin revalidates again at action start. A removed target or
+new game session produces an error instead of acting on a stale row. If the game's
+native input gate blocks control, the reason is displayed. Focus activation gets
+a bounded 1.5-second wait and then the exact target is checked again. Menus, pause
+and respawn still prevent movement. A rejected command is never retained to run
+later when a round starts or an obstacle moves.
+
+Local player chefs do not block the list or routes. Fire, walls, pedestrians and
+other non-player solid geometry still do. Discovery covers a 60-unit vicinity;
+the empty-list reason distinguishes missing/paused players, unsupported starting
+positions and unfinished planning rather than silently implying a distance cutoff.
+
+The owning browser tab sends heartbeats through its state requests. Closing or
+reloading it releases its lease; if the close notification is lost, five seconds
+without that tab's heartbeat releases it. Other tabs cannot keep its action alive.
+Severe browser timer throttling may therefore stop an action conservatively.
+Ctrl+C closes the harness's persistent socket, also cancelling its action. Losing
+the bridge clears all options; reconnection observes only and never resumes motion.
+The underlying plugin's input lease remains responsible for immediate socket-loss
+handling. Network delays and Unity updates bound stop latency; native momentum is
+not forcibly erased.
+
+The HTTP server validates the exact configured Host/Origin and requires a
+per-process page token for commands, plus authenticated reads for phone/tunnel
+origins. There are no external page assets or runtime Python dependencies. Only
+`--tunnel` starts an outbound service. This is a development harness; every viewer
+with the QR token can control Player 2.
+
+## Verification
+
+```sh
+python3 -m unittest discover -s tests -p 'test_harness.py' -v
+python3 scripts/check.py
+```
+
+Tests cover live removal, staleness, identity/session mismatch, command rejection,
+disconnect/reconnect, browser ownership expiry, Stop, shutdown and the HTTP path.
+They also cover dispenser metadata, phone authentication, forwarded Host/Origin
+checks and phone command/heartbeat round trips. See
+[the validation record](validation.md) for actual Arcade Couch browser tests.
+
+Phone sharing was checked on November 1, 2026: both the Mac's LAN address and the
+managed public HTTPS tunnel returned fresh game state with the QR token and
+rejected unauthenticated state requests. Chrome loaded both links, and the LAN
+page rendered without horizontal overflow at phone width. Apple's Vision QR
+decoder read a screenshot of the displayed QR and recovered the exact access
+URL. The full check passed 730 C# assertions, the 151-type installed assembly
+audit and 42 Python tests. A physical phone camera/network was not exercised.
