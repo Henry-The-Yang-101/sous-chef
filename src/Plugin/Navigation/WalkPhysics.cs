@@ -342,16 +342,9 @@ namespace SousChef.Plugin.Navigation
         private bool ShortEdge(Vector3 from, Vector3 to)
         {
             if (!WalkHeight.Connected(from.y, to.y, StepHeight)) return false;
-            if (Mathf.Abs(from.y - to.y) > .025f) return Segment(from, to);
-            RaycastHit middle;
-            Vector3 midpoint = (from + to) * .5f;
-            if (!Ground(midpoint, out middle)) return false;
-            if (Mathf.Abs(middle.point.y - midpoint.y) > .025f) return Segment(from, to);
-            Vector3 delta = to - from, low, high; Capsule(from, out low, out high);
-            int count = Physics.CapsuleCastNonAlloc(low, high, radius, delta.normalized, hits, delta.magnitude, ~0, QueryTriggerInteraction.Collide); Queries++;
-            if (count == hits.Length) { Overflow = true; return false; }
-            for (int i = 0; i < count; i++) if (Blocks(hits[i].collider)) return false;
-            return true;
+            // Cached graph edges must satisfy the same footprint and sweep checks
+            // as execution. A clear capsule cast does not detect missing floor.
+            return Segment(from, to, radius, false);
         }
         private WalkCell Resolved(WalkCell hint, Probe probe)
         {
@@ -363,15 +356,16 @@ namespace SousChef.Plugin.Navigation
         }
         public bool Segment(Vector3 from, Vector3 to)
         {
-            Vector3 delta = to - from; float length = delta.magnitude;
             bool entering = Vector3.Distance(from, Position) < .02f;
-            int steps = Math.Max(1, Mathf.CeilToInt(length / .15f));
+            return Segment(from, to, entering ? ContactRadius : radius, true);
+        }
+        private bool Segment(Vector3 from, Vector3 to, float clearance, bool checkFlow)
+        {
             Vector3 previous = from;
-            float clearance = entering ? ContactRadius : radius;
-            for (int i = 0; i <= steps; i++)
+            bool clear = WalkSegments.Check(Vector3.Distance(from, to), delegate(float fraction)
             {
                 Vector3 point; Collider ground;
-                Vector3 guess = Vector3.Lerp(from, to, (float)i / steps);
+                Vector3 guess = Vector3.Lerp(from, to, fraction);
                 // Only the connector from the actual chef uses contact clearance.
                 // Growing a capsule while sliding away from a wall invents a
                 // collision: use consistent native clearance along this connector.
@@ -379,11 +373,12 @@ namespace SousChef.Plugin.Navigation
                 // is bounded, and every sample still checks support and hazards.
                 if (!Stand(guess, out point, out ground, clearance) ||
                     !WalkHeight.Connected(guess.y, point.y, StepHeight) ||
-                    !WalkHeight.Connected(previous.y, point.y, StepHeight) || !CanWalkDirection(from, to, ground)) return false;
+                    !WalkHeight.Connected(previous.y, point.y, StepHeight) || (checkFlow && !CanWalkDirection(from, to, ground))) return false;
                 if (!StepSweep(previous, point, clearance)) return false;
                 previous = point;
-            }
-            return !Overflow;
+                return true;
+            });
+            return clear && !Overflow;
         }
         private bool StepSweep(Vector3 from, Vector3 to, float clearance)
         {

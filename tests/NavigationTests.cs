@@ -84,6 +84,21 @@ internal static class NavigationTests
         check(!WalkHeight.WaypointReached(.05f, 1.85f, .04f, .65f), "waypoint on another deck cannot be skipped");
         check(!WalkHeight.Connected(1.85f, 0, .65f), "unsupported deck drop rejected");
         check(!WalkHeight.Connected(0, Single.NaN, .65f), "invalid height rejected");
+        // The old flat-edge shortcut checked only the midpoint. Both ends and
+        // midpoint can have floor while the chef's footprint clips a hole between.
+        Func<float, bool> hole = delegate(float fraction) { return fraction < .20f || fraction > .30f; };
+        check(hole(0) && hole(.5f) && hole(1), "hole fixture defeats endpoint and midpoint-only support checks");
+        check(!WalkSegments.Check(.566f, hole), "shared edge sampler rejects unsupported footprint between endpoints");
+        // Use a sample-width hole that intersects a .4-unit edge's first interior sample.
+        Func<float, bool> widerHole = delegate(float fraction) { return fraction < .25f || fraction > .4f; };
+        check(!WalkSegments.Check(.4f, widerHole), "footprint over a hole removes a graph edge before walking");
+        check(WalkSegments.Check(.4f, delegate(float t) {return true;}), "continuous floor remains traversable");
+        check(!WalkSegments.Check(.4f, delegate(float t) {return t < 1;}), "unsupported endpoint is checked");
+        check(!WalkSegments.Check(Single.NaN, delegate(float t) {return true;}), "invalid segment cannot be certified");
+        check(WalkSegments.Advance(0, 3, delegate(int i) {return i == 0;}, delegate(int i) {return false;}) == 0,
+            "nearby waypoint is retained when cutting its corner would cross a hole");
+        check(WalkSegments.Advance(0, 3, delegate(int i) {return i == 0;}, delegate(int i) {return true;}) == 1,
+            "safe corner can advance without stopping");
         float x, z;
         check(WalkingSteering.Direction(1, 0, 0, 2, 4, out x, out z) && z < 0 && Math.Abs(x*x+z*z-1) < .0001, "crosswind compensated at walking speed");
         check(!WalkingSteering.Direction(1, 0, -5, 0, 4, out x, out z), "opposing belt faster than chef rejected");

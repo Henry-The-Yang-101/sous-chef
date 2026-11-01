@@ -130,6 +130,14 @@ the preceding support. Intermediate waypoints allow native stepping lag in heigh
 while still requiring horizontal progress; final station arrival remains subject
 to the position, facing and selection checks below. Both staircases participate
 in the same shortest-path search, with fresh collision checks for shortcuts.
+Flat graph edges use the same sampled footprint and capsule checks as execution;
+a clear midpoint and capsule sweep alone cannot certify floor support beside a
+hole. Cached edges use padded clearance regardless of the chef's current pose.
+Environmental flow is checked live separately from cached geometry. A nearby
+waypoint is skipped only when the direct connection to the next point is clear,
+including its floor support. If optional lookahead beyond a turn is unsupported,
+the actual next movement step must still pass before input is sent. This does not
+permit unsupported hole crossing, ignore actual obstacles, or retry a stopped action.
 Freshly checked shortcuts reduce stair-step paths without cutting corners or
 crossing unsupported floor. Discovery is bounded to a 60-world-unit radius around
 Player 2; walking cells stay within 58 units, with at most 16,000 discovered nodes.

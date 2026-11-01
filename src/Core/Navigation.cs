@@ -3,6 +3,24 @@ using System.Collections.Generic;
 
 namespace SousChef.Core
 {
+    public static class WalkSegments
+    {
+        // Shared by graph edges and execution, including the endpoints. A centre
+        // ray or one midpoint alone cannot certify the chef's supported footprint.
+        public static bool Check(float length, Func<float, bool> supported)
+        {
+            if (Single.IsNaN(length) || Single.IsInfinity(length) || length < 0) return false;
+            int steps = Math.Max(1, (int)Math.Ceiling(length / .15f));
+            for (int i = 0; i <= steps; i++) if (!supported((float)i / steps)) return false;
+            return true;
+        }
+        public static int Advance(int index, int count, Func<int, bool> reached, Func<int, bool> clear)
+        {
+            // Being near a corner does not grant permission to cut across it.
+            while (index < count - 1 && reached(index) && clear(index + 1)) index++;
+            return index;
+        }
+    }
     // Vertical continuity uses the game's step limit, never the deck's total height.
     public static class WalkHeight
     {

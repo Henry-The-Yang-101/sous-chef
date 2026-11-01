@@ -130,8 +130,6 @@ namespace SousChef.Plugin.Navigation
             Vector3 from = physics.Position;
             for (int i = waypoint; i < route.Count; i++)
             {
-                Vector3 offset = route[i] - from;
-                if (i < route.Count - 1 && WalkHeight.WaypointReached(offset.x, offset.y, offset.z, physics.StepHeight)) continue;
                 if (!physics.Segment(from, route[i])) return false;
                 from = route[i];
             }
@@ -174,12 +172,11 @@ namespace SousChef.Plugin.Navigation
             { Align(position); return; }
             if (Time.realtimeSinceStartup - lastProgress > 2f) { Stop("no_progress"); return; }
             facingSince = -1; arrival.Reset(); arrivalDetails = null;
-            while (waypoint < route.Count - 1)
+            waypoint = WalkSegments.Advance(waypoint, route.Count, delegate(int index)
             {
-                Vector3 offset = route[waypoint] - position;
-                if (!WalkHeight.WaypointReached(offset.x, offset.y, offset.z, physics.StepHeight)) break;
-                waypoint++;
-            }
+                Vector3 offset = route[index] - position;
+                return WalkHeight.WaypointReached(offset.x, offset.y, offset.z, physics.StepHeight);
+            }, delegate(int index) { return physics.Segment(position, route[index]); });
             Vector3 goal = route[waypoint];
             // Shortcut only across freshly checked supported space; no corner cutting.
             for (int i = Math.Min(route.Count - 1, waypoint + 3); i > waypoint; i--)
@@ -208,7 +205,14 @@ namespace SousChef.Plugin.Navigation
             // the longer lookahead would extend through the counter beyond the stop.
             float horizon = Vector3.Distance(position, target.Approach) < .6f ? stepTime : stepTime + .04f;
             Vector3 projectedStep = position + (input * speed + drift) * horizon;
-            if (!physics.Segment(position, projectedStep)) { Stop("next_step_unsafe"); return; }
+            if (!physics.Segment(position, projectedStep))
+            {
+                // The extra lookahead can run past a safe turn and into a hole.
+                // Require the actual next step; optional lookahead is not a reason
+                // to cancel an otherwise supported route before its corner.
+                projectedStep = position + (input * speed + drift) * stepTime;
+                if (!physics.Segment(position, projectedStep)) { Stop("next_step_unsafe"); return; }
+            }
             move(input);
         }
         private bool TargetMoved()

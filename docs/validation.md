@@ -347,6 +347,30 @@ both decks reachable, blocked staircases, distinct stacked-floor keys and reject
 unsupported deck drops. These graph tests do not emulate Unity physics; live
 staircase traversal is recorded separately when verified.
 
+### Interruptions beside holes and narrow connections
+
+The reported interruption was captured in `s_wonderland_1_5` as `route_blocked`,
+with `planning_in_progress` on the subsequently observed catalogue. Player 2 was
+grounded when the snapshot was taken; this does not establish its pose at the
+exact cancellation update. Evidence: `.local/hole-control-before.json` and
+`.local/hole-before.json`.
+
+Inspection found that flat graph edges checked only midpoint ground plus a body
+sweep, while execution checked the full footprint along the segment. Near holes,
+those checks can disagree even when the centre remains supported. Graph edges
+now use the same sampled support and clearance kernel, with padded clearance
+independent of the chef's position; dynamic flow is not baked into cached geometry.
+Waypoint advancement now validates the direct connection instead of cutting a
+corner solely because the chef is nearby. Optional lookahead into a hole beyond
+a turn falls back to checking the actual next step, never unchecked movement.
+
+Regression checks cover a missing footprint between supported endpoints/midpoint,
+unsupported endpoints, invalid lengths, and retaining versus advancing a corner
+waypoint. Full build/audit checks pass. The update is installed; live gameplay
+verification is left to the user's requested manual test. It does not add jumping
+or traversal over genuinely unsupported gaps. Cold searches may need more cache
+warming because flat edges now perform the same stricter checks as execution.
+
 ### Capture overhead and unused streams
 
 The 2026-11-01 FPS investigation measured the original plugin in an active
