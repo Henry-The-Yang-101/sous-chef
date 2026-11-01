@@ -127,3 +127,51 @@ base class does not imply coverage of additional subclass fields.
 `clients/world.py` supplies indexes, not planning/navigation inference.
 `clients/validate_recording.py` checks reference closure, hierarchy cycles, asset
 availability, monotonic sequences and adapter errors in recordings.
+
+## Gameplay stream (bridge 0.3.0)
+
+The new loopback endpoint `24704` sends `hello`, `gameplay`, `gap`, and `status`
+messages using the same protocol version and bounded latest-state transport.
+The original `24702` stream remains full snapshots with unchanged coverage and
+its own sequence counter. Both greetings advertise the companion stream port.
+`Gameplay.Hz` defaults to 20 (1–30); `Capture.Hz` still defaults to 5.
+These are scheduling targets, bounded by render cadence and capture cost.
+Cadence skips missed deadlines without producing catch-up bursts.
+
+Each gameplay message independently replaces the preceding gameplay sample;
+it is not a delta. It has `sessionId`, `levelEpoch`, its own `sequence`, and
+`baselineSequence` identifying the most recent full capture used for discovery.
+IDs are shared with the full stream. Match session AND epoch when consulting
+map data. Sequence numbers from the two streams are not comparable.
+No baseline is needed to read the gameplay message itself, including after
+reconnection or a gap. A parent ID can point outside the gameplay subset.
+
+The subset contains discovered objects with supported gameplay adapters,
+rigidbodies or colliders, native registered entities, and their observed scene
+references. All supported component adapter fields on those objects are read
+afresh, including held objects, interaction targets and work progress. Transforms,
+rigidbody velocity and collider world bounds are fresh each sample, including
+inactive objects and moving collider children. Collider shapes, meshes, animation
+state, physics settings and comprehensive inventory remain in full snapshots.
+Do not replace full collider records with the bounds-only gameplay records.
+Do not assume a full snapshot's transforms are as fresh as a gameplay sample.
+
+Full captures reconcile component discovery at the existing full rate. Native
+entities and referenced objects are discovered each gameplay sample; arbitrary
+non-native spawns and added components can take one full-capture interval.
+`coverage.discoveryAgeSeconds` exposes that delay, which can increase under load.
+Destruction removes an object from the next sample. An absent record means absent
+from this observed subset, not proof that the entire game object was destroyed.
+Read errors, missing fields and truncation are explicit coverage diagnostics.
+
+`clock.realtime` is Unity monotonic time at gameplay capture start, not wall time;
+`renderFrame` and `fixedUpdateCount` identify the sampling boundary. Each stream
+reports extraction `diagnostics.captureMilliseconds` and coalesced captures.
+Outside a round and on capture failures both streams publish invalidating status.
+On flow replacement the full capture establishes a fresh epoch before gameplay.
+Clients must also invalidate on disconnect and enforce a freshness deadline.
+Python `BridgeClient(24704)` supports this stream; use `GameplayWorld(sample)`
+for indexes, and e.g. `client.current(max_age=0.2)` for a tighter local receive-age
+limit. Receive age alone is not end-to-end capture latency: also monitor capture
+clock advancement, gaps and sample intervals. No cross-stream atomic merge is
+performed implicitly.

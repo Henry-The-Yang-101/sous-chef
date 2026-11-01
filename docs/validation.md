@@ -142,3 +142,20 @@ completed chopping/washing/throwing and dash behavior, reassignment during a cla
 and special piloting/cannon control schemes. P1 isolation was verified with P1
 idle; the implementation never replaces P1's input objects. Physical movement
 already initiated (momentum/dash) is not forcibly cancelled when input is released.
+
+## 0.3.0 dual-rate implementation
+
+Built against the installed Unity/Mono game assemblies; 691 C# assertions and
+13 Python tests passed. Added cadence tests across 60 Hz frame quantization and
+long stalls, plus gameplay client tests for bounds-only records, gaps, epoch
+replacement, status invalidation, stale reads and disconnects. Original transport,
+identity, adapter audit and control tests continue to pass.
+
+20 Hz gameplay / 5 Hz full are configured targets, not new live measurements.
+The earlier 19–22 ms full-capture results above do not measure this new fast path.
+Run `python3 scripts/profile_streams.py --seconds 15` in an active kitchen to
+measure both streams concurrently. It reports capture/receive rates, extraction
+median/p95/max, p95 intervals, skipped sequences, discovery age and approximate
+JSON payload sizes. It does not measure rendering FPS or absolute end-to-end
+latency. Live moving-platform, spawn/despawn and full/fast overlap comparison
+remain necessary to validate accuracy and frame impact in representative kitchens.

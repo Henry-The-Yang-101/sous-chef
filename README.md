@@ -102,3 +102,21 @@ Read [architecture and coverage](docs/architecture.md) and the
 The [original investigation](overcooked2-bridge-investigation.md) provides context.
 Game assemblies are local build inputs and are never included in this repository.
 The implementation is original; reference projects were not vendored.
+
+### Faster gameplay observations
+
+Bridge 0.3.0 adds a compact gameplay stream on **127.0.0.1:24704**, targeting
+**20 Hz** by default, while retaining the complete **5 Hz** map stream on 24702.
+Set `[Gameplay] Hz` to 1–30 in the BepInEx config while the game is closed.
+The fast stream includes fresh transforms, velocities, supported gameplay fields
+and collider bounds; full geometry and comprehensive discovery remain in the
+original stream. Rates depend on live game performance.
+
+```sh
+python3 clients/bridge.py --port 24704 --frames 100
+python3 scripts/profile_streams.py --seconds 15
+```
+
+Use `GameplayWorld` from `clients/world.py` to index fast samples. See
+[the protocol](docs/protocol.md#gameplay-stream-bridge-030) for identity,
+freshness, discovery delay and recovery semantics.

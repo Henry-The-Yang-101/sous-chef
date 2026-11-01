@@ -92,3 +92,22 @@ and [Steam launch guidance](https://docs.bepinex.dev/articles/advanced/steam_int
 `build.json` records the SDK version and reference fingerprints. Install checks
 all conflicts before writes and tracks owned files for removal. Original game
 assemblies are neither changed nor redistributed.
+
+## Separate gameplay sampling
+
+`GameplayCapture` keeps main-thread component handles populated during the full
+scene traversal, avoiding repeated scene walks, component discovery, animation
+inspection and mesh work on fast ticks. It copies supported gameplay fields,
+transforms, body motion and collider bounds into detached records. Native entity
+registry checks and reference closure cover new registered/held items between
+full captures. Full discovery still runs at its original rate; metadata is not
+assumed immutable. In particular the full physics layer matrix and collider
+shapes are still refreshed, preserving existing observation accuracy.
+
+Full and gameplay endpoints have independent encoder threads, pending mailboxes
+and client writers. No Unity API or mutable game object is read by these workers.
+This avoids encoder head-of-line blocking between streams, though both still
+share CPU and the main-thread capture budget. Input ticking remains independent.
+The scheduler retains phase across render-frame quantization and skips missed
+slots. Fast sample completeness permits latest-state backpressure without a
+baseline-dependent delta protocol.
