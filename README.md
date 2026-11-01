@@ -104,6 +104,8 @@ bypasses this loader unless you separately configure Steam to use it.
 Read [architecture and coverage](docs/architecture.md) and the
 [validation record](docs/validation.md) before relying on an untested mechanic.
 The [original investigation](overcooked2-bridge-investigation.md) provides context.
+The [decision-model and voice study](docs/ai-stack-research.md) compares hosted and
+local options for a future voice-directed sous chef, with latency evaluation criteria.
 Game assemblies are local build inputs and are never included in this repository.
 The implementation is original; reference projects were not vendored.
 
