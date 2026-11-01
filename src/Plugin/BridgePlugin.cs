@@ -85,17 +85,23 @@ namespace SousChef.Plugin
                     KitchenGate gate = KitchenGate.Inspect();
                     if (gate.InRound)
                     {
-                        if (now >= nextCapture || !capture.Matches(gate))
+                        bool fullWanted = server.HasClients, gameplayWanted = gameplayServer.HasClients;
+                        // Gameplay still depends on full discovery/reconciliation.
+                        // Control/navigation operate independently of both streams.
+                        if ((fullWanted || gameplayWanted) && (now >= nextCapture || !capture.Matches(gate)))
                         {
-                            server.Publish(capture.Capture(gate, ++sequence, fixedTicks, server.CoalescedCaptures));
+                            CapturePacket packet = capture.Capture(gate, ++sequence, fixedTicks, server.CoalescedCaptures);
+                            if (fullWanted) server.Publish(packet);
                             nextCapture = SampleSchedule.Next(nextCapture, now, interval);
                         }
-                        if (now >= nextGameplay)
+                        if (gameplayWanted && now >= nextGameplay)
                         {
                             gameplayServer.Publish(capture.Gameplay.Capture(gate, capture.Epoch, ++gameplaySequence,
                                 fixedTicks, gameplayServer.CoalescedCaptures));
                             nextGameplay = SampleSchedule.Next(nextGameplay, now, gameplayInterval);
                         }
+                        if (!fullWanted && !gameplayWanted) nextCapture = now + interval;
+                        if (!gameplayWanted) nextGameplay = now + gameplayInterval;
                     }
                     else
                     {

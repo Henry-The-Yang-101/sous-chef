@@ -14,8 +14,10 @@ namespace SousChef.Plugin.Adapters
         {
             public AdapterSpec Spec;
             public FieldInfo[] Fields;
+            public string[] Keys;
         }
         private readonly Dictionary<Type, List<BoundSpec>> cache = new Dictionary<Type, List<BoundSpec>>();
+        private readonly List<object> parents = new List<object>(24);
         private readonly Func<Object, object> reference;
         public readonly Dictionary<string, int> UnsupportedValues = new Dictionary<string, int>();
         public readonly HashSet<string> MissingFields = new HashSet<string>();
@@ -34,7 +36,9 @@ namespace SousChef.Plugin.Adapters
         public object Read(object value)
         {
             int budget = 8192;
-            return Record(value, 0, new List<object>(), ref budget);
+            parents.Clear();
+            try { return Record(value, 0, parents, ref budget); }
+            finally { parents.Clear(); }
         }
 
         private object Record(object value, int depth, List<object> parents, ref int budget)
@@ -76,7 +80,7 @@ namespace SousChef.Plugin.Adapters
                     UsedAdapters.Add(bound.Spec.TypeName);
                     for (int i = 0; i < bound.Spec.Fields.Length; i++)
                     {
-                        string key = bound.Spec.TypeName + "." + bound.Spec.Fields[i];
+                        string key = bound.Keys[i];
                         FieldInfo field = bound.Fields[i];
                         if (field == null)
                         {
@@ -140,17 +144,18 @@ namespace SousChef.Plugin.Adapters
         // Expand the root component only. References inside it remain references.
         public object ReadComponent(Component component)
         {
-            var fields = new Dictionary<string, object>();
-            foreach (BoundSpec bound in Bind(component.GetType()))
+            var specs = Bind(component.GetType());
+            var fields = new Dictionary<string, object>(specs.Count);
+            foreach (BoundSpec bound in specs)
             {
                 UsedAdapters.Add(bound.Spec.TypeName);
-                var values = new Dictionary<string, object>();
+                var values = new Dictionary<string, object>(bound.Fields.Length);
                 for (int i = 0; i < bound.Fields.Length; i++)
                 {
                     string name = bound.Spec.Fields[i]; FieldInfo field = bound.Fields[i];
                     if (field == null)
                     {
-                        MissingFields.Add(bound.Spec.TypeName + "." + name);
+                        MissingFields.Add(bound.Keys[i]);
                         values[name] = Json.Object("status", "missing_field"); continue;
                     }
                     try
@@ -183,9 +188,13 @@ namespace SousChef.Plugin.Adapters
                 AdapterSpec spec;
                 if (!AdapterCatalog.Specs.TryGetValue(t.FullName, out spec)) continue;
                 var fields = new FieldInfo[spec.Fields.Length];
+                var keys = new string[fields.Length];
                 for (int i = 0; i < fields.Length; i++)
+                {
                     fields[i] = t.GetField(spec.Fields[i], BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly);
-                result.Add(new BoundSpec { Spec = spec, Fields = fields });
+                    keys[i] = spec.TypeName + "." + spec.Fields[i];
+                }
+                result.Add(new BoundSpec { Spec = spec, Fields = fields, Keys = keys });
             }
             cache.Add(type, result); return result;
         }

@@ -36,11 +36,13 @@ namespace SousChef.Core
         private readonly TcpListener listener;
         private Thread encoderThread, acceptThread;
         private CapturePacket pending;
+        private int audience, pendingAudience;
         private Encoded latest;
         private volatile bool stopping;
         private long coalesced;
         public long CoalescedCaptures { get { return Interlocked.Read(ref coalesced); } }
         public int Port { get { return ((IPEndPoint)listener.LocalEndpoint).Port; } }
+        public bool HasClients { get { lock (sync) return clients.Count > 0; } }
 
         public StreamServer(int port, object greeting, Action<string> log)
         {
@@ -62,6 +64,7 @@ namespace SousChef.Core
                 if (stopping) return;
                 if (pending != null) Interlocked.Increment(ref coalesced);
                 pending = packet;
+                pendingAudience = audience;
             }
             pendingSignal.Set();
         }
@@ -72,8 +75,8 @@ namespace SousChef.Core
             while (!stopping)
             {
                 pendingSignal.WaitOne(250, false);
-                CapturePacket packet;
-                lock (sync) { packet = pending; pending = null; }
+                CapturePacket packet; int generation;
+                lock (sync) { packet = pending; generation = pendingAudience; pending = null; }
                 if (packet == null) continue;
                 try
                 {
@@ -91,7 +94,12 @@ namespace SousChef.Core
                     var encoded = new Encoded { Sequence = packet.Sequence, Epoch = packet.Epoch,
                         Frame = Line(packet.Frame), Assets = assets };
                     assetCache = assets;
-                    lock (sync) { latest = encoded; Monitor.PulseAll(sync); }
+                    lock (sync)
+                    {
+                        // A new first subscriber must never receive a capture left
+                        // over from before demand stopped (including in-flight JSON).
+                        if (generation == audience) { latest = encoded; Monitor.PulseAll(sync); }
+                    }
                 }
                 catch (Exception e) { report("Serialization failed: " + e.Message); }
             }
@@ -109,6 +117,7 @@ namespace SousChef.Core
                     lock (sync)
                     {
                         if (stopping || clients.Count >= 4) { client.Close(); continue; }
+                        if (clients.Count == 0) { audience++; latest = null; pending = null; }
                         clients.Add(client);
                     }
                     Background(delegate { SendLoop(client); }, "SousChef client");
@@ -130,7 +139,14 @@ namespace SousChef.Core
                     Encoded frame;
                     lock (sync)
                     {
-                        while (!stopping && (latest == null || latest.Sequence == last)) Monitor.Wait(sync, 500);
+                        while (!stopping && (latest == null || latest.Sequence == last))
+                        {
+                            // Observation clients send no input. Detect a closed
+                            // reader even while capture is idle, so it cannot keep
+                            // main-thread work enabled indefinitely.
+                            if (client.Client.Poll(0, SelectMode.SelectRead) && client.Client.Available == 0) return;
+                            Monitor.Wait(sync, 250);
+                        }
                         if (stopping) break;
                         frame = latest;
                     }
@@ -152,7 +168,15 @@ namespace SousChef.Core
             catch (IOException) { }
             catch (SocketException) { }
             catch (ObjectDisposedException) { }
-            finally { client.Close(); lock (sync) clients.Remove(client); }
+            finally
+            {
+                client.Close();
+                lock (sync)
+                {
+                    clients.Remove(client);
+                    if (clients.Count == 0) { audience++; latest = null; pending = null; }
+                }
+            }
         }
 
         public void Dispose()

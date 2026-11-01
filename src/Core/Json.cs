@@ -9,12 +9,33 @@ namespace SousChef.Core
     // Only plain, already-copied values cross the capture/transport boundary.
     public static class Json
     {
-        public static Dictionary<string, object> Object(params object[] pairs)
+        // Capture already allocates the key/value array. Keep it as the detached
+        // record instead of also allocating and growing a hash table for every
+        // transform, component and reference. Mutations finish before publication.
+        public sealed class Record
         {
-            var value = new Dictionary<string, object>();
-            for (int i = 0; i < pairs.Length; i += 2) value.Add((string)pairs[i], pairs[i + 1]);
-            return value;
+            internal object[] Pairs;
+            internal int Length;
+            internal Record(object[] pairs) { Pairs = pairs; Length = pairs.Length; }
+            public object this[string key]
+            {
+                get
+                {
+                    for (int i = 0; i < Length; i += 2)
+                        if ((string)Pairs[i] == key) return Pairs[i + 1];
+                    throw new KeyNotFoundException(key);
+                }
+                set
+                {
+                    for (int i = 0; i < Length; i += 2)
+                        if ((string)Pairs[i] == key) { Pairs[i + 1] = value; return; }
+                    if (Length == Pairs.Length) Array.Resize(ref Pairs, Length + 8);
+                    Pairs[Length++] = key; Pairs[Length++] = value;
+                }
+            }
         }
+
+        public static Record Object(params object[] pairs) { return new Record(pairs); }
 
         public static string Encode(object value)
         {
@@ -28,6 +49,36 @@ namespace SousChef.Core
             if (value == null) { output.Append("null"); return; }
             if (value is string) { Quote(output, (string)value); return; }
             if (value is bool) { output.Append((bool)value ? "true" : "false"); return; }
+            var record = value as Record;
+            if (record != null)
+            {
+                output.Append('{');
+                for (int i = 0; i < record.Length; i += 2)
+                {
+                    if (i > 0) output.Append(',');
+                    Quote(output, (string)record.Pairs[i]); output.Append(':'); Write(output, record.Pairs[i + 1]);
+                }
+                output.Append('}'); return;
+            }
+            // Unity transforms/meshes contain many primitive arrays. Enumerating
+            // them as IEnumerable boxes every scalar on the encoder thread and
+            // still contributes to the game's shared managed GC pressure.
+            var floats = value as float[];
+            if (floats != null)
+            {
+                output.Append('[');
+                for (int i = 0; i < floats.Length; i++)
+                { if (i > 0) output.Append(','); WriteNumber(output, floats[i]); }
+                output.Append(']'); return;
+            }
+            var integers = value as int[];
+            if (integers != null)
+            {
+                output.Append('[');
+                for (int i = 0; i < integers.Length; i++)
+                { if (i > 0) output.Append(','); output.Append(integers[i].ToString(CultureInfo.InvariantCulture)); }
+                output.Append(']'); return;
+            }
             if (value is IDictionary<string, object>)
             {
                 output.Append('{'); bool first = true;
@@ -50,9 +101,7 @@ namespace SousChef.Core
             }
             if (value is double || value is float)
             {
-                double number = Convert.ToDouble(value, CultureInfo.InvariantCulture);
-                if (Double.IsNaN(number) || Double.IsInfinity(number)) output.Append("null");
-                else output.Append(number.ToString("R", CultureInfo.InvariantCulture));
+                WriteNumber(output, Convert.ToDouble(value, CultureInfo.InvariantCulture));
                 return;
             }
             if (value is byte || value is sbyte || value is short || value is ushort ||
@@ -61,6 +110,12 @@ namespace SousChef.Core
                 output.Append(Convert.ToString(value, CultureInfo.InvariantCulture)); return;
             }
             throw new ArgumentException("Non-wire value: " + value.GetType().FullName);
+        }
+
+        private static void WriteNumber(StringBuilder output, double number)
+        {
+            if (Double.IsNaN(number) || Double.IsInfinity(number)) output.Append("null");
+            else output.Append(number.ToString("R", CultureInfo.InvariantCulture));
         }
 
         private static void Quote(StringBuilder output, string value)

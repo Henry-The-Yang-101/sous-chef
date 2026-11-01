@@ -21,7 +21,7 @@ internal static class Program
     private static void Main(string[] args)
     {
         checks += NavigationTests.Run();
-        TestSchedule(); TestJson(); TestIdentity(); TestStream(); TestControl();
+        TestSchedule(); TestJson(); TestIdentity(); TestStream(); TestStreamDemand(); TestControl();
         if (args.Length > 0) Audit(args[0]);
         Console.WriteLine("PASS: " + checks + " assertions");
     }
@@ -55,6 +55,61 @@ internal static class Program
         bool rejected = false;
         try { Json.Encode(new object()); } catch (ArgumentException) { rejected = true; }
         Assert(rejected, "must not serialize opaque game objects on worker");
+        var record = Json.Object("id", "original", "nested", Json.Object("value", 1));
+        record["id"] = "updated";
+        for (int i = 0; i < 20; i++) record["field" + i] = i;
+        record["floatArray"] = new[] { .1f, Single.NaN, Single.PositiveInfinity, -2f };
+        record["indices"] = new[] { Int32.MinValue, 0, Int32.MaxValue };
+        using (var document = JsonDocument.Parse(Json.Encode(record)))
+        {
+            var root = document.RootElement;
+            Assert(root.GetProperty("id").GetString() == "updated", "record update replaces existing key");
+            Assert(root.EnumerateObject().Count() == 24, "record growth does not serialize spare capacity or duplicate keys");
+            Assert(root.GetProperty("field19").GetInt32() == 19, "record survives repeated growth");
+            Assert(root.GetProperty("nested").GetProperty("value").GetInt32() == 1, "nested record preserved");
+            Assert(root.GetProperty("floatArray")[0].GetDouble() == (double).1f, "float array preserves original double wire precision");
+            Assert(root.GetProperty("floatArray")[1].ValueKind == JsonValueKind.Null &&
+                root.GetProperty("floatArray")[2].ValueKind == JsonValueKind.Null, "array nonfinite values remain null");
+            Assert(root.GetProperty("indices")[0].GetInt32() == Int32.MinValue &&
+                root.GetProperty("indices")[2].GetInt32() == Int32.MaxValue, "mesh indices retain full integer range");
+        }
+        Assert((string)record["id"] == "updated", "record lookup supports catalogue sorting");
+        // Preserve wire output across the previous dictionary representation,
+        // including dynamic adapter maps mixed into compact records.
+        var legacy = new Dictionary<string, object> { { "x", new object[] { (double).1f, null, -2d } },
+            { "adapter", new Dictionary<string, object> { { "field", "value" } } } };
+        Assert(Json.Encode(Json.Object("x", new[] { .1f, Single.NaN, -2f }, "adapter", legacy["adapter"])) ==
+            Json.Encode(legacy), "compact records and typed arrays preserve JSON semantics");
+    }
+
+    private static void TestStreamDemand()
+    {
+        using (var server = new StreamServer(0, Json.Object("type", "hello"), e => { throw new Exception(e); }))
+        {
+            server.Start();
+            Assert(!server.HasClients, "no capture demand before subscription");
+            using (var client = new TcpClient("127.0.0.1", server.Port))
+            {
+                client.ReceiveTimeout = 4000;
+                var reader = new StreamReader(client.GetStream()); Read(reader);
+                Assert(server.HasClients, "hello establishes capture demand");
+                server.Publish(Packet(1)); Read(reader); Read(reader);
+            }
+            for (int i = 0; i < 200 && server.HasClients; i++) Thread.Sleep(5);
+            Assert(!server.HasClients, "disconnect clears demand without another publication");
+            // Simulate a capture racing with the final disconnect, including a
+            // potentially in-flight encoder. A later subscriber needs fresh data.
+            server.Publish(Packet(2));
+            using (var client = new TcpClient("127.0.0.1", server.Port))
+            {
+                client.ReceiveTimeout = 4000;
+                var reader = new StreamReader(client.GetStream());
+                Assert(Read(reader).GetProperty("type").GetString() == "hello", "resubscription hello");
+                server.Publish(Packet(3));
+                Assert(Read(reader).GetProperty("type").GetString() == "asset", "resubscription restores assets");
+                Assert(Read(reader).GetProperty("sequence").GetInt64() == 3, "resubscription never replays stale kitchen");
+            }
+        }
     }
 
     private static void TestIdentity()

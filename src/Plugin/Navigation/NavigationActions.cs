@@ -93,7 +93,7 @@ namespace SousChef.Plugin.Navigation
                     "objectInstanceId", d.Object.GetInstanceID(), "position", Values.Vector(d.Object.transform.position),
                     "approachPosition", Values.Vector(d.Approach), "routeDistance", d.Distance, "directDistance", offset.magnitude));
             }
-            destinations.Sort(delegate(object a, object b) { return String.CompareOrdinal((string)((Dictionary<string, object>)a)["id"], (string)((Dictionary<string, object>)b)["id"]); });
+            destinations.Sort(delegate(object a, object b) { return String.CompareOrdinal((string)((Json.Record)a)["id"], (string)((Json.Record)b)["id"]); });
             var actions = new List<object> { Json.Object("name", "stop", "parameters", new Dictionary<string, object>()) };
             if (destinations.Count > 0 && Action.State == "idle")
                 actions.Add(Json.Object("name", "navigate_to", "parameters", Json.Object("destination_id", Json.Object("type", "enum", "options", destinations))));
