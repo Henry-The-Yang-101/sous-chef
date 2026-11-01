@@ -37,6 +37,9 @@ Targets include pickup items/supplies, workstations, washing/cooking stations,
 placement surfaces and native interactables such as buttons. Their current native
 pickup/interaction predicates and the chef's held item are checked. Geometry alone
 does not establish that chopping or washing will be possible after arrival.
+Approaches also respect the native interaction layer mask and counter grid:
+standing near a counter's corner does not make it selectable from a neighbouring
+counter's cell. The chosen stance must be in a valid cardinally adjacent cell.
 
 Listing or starting refreshes the catalogue. Targets appear only if a supported
 walking route currently exists. Query again to see a previously disconnected
@@ -62,6 +65,14 @@ bounds/poses invalidate nearby probes. Periodic reconciliation catches changes
 that preserve bounds. Query buffers, node counts and planning time are bounded;
 incomplete searches are explicitly unavailable, never interpreted as open space.
 Diagnostics report planning time, queries and node counts.
+The first catalogue query can return `planning_budget_exceeded` while a cold
+graph warms. Up to eight bounded background updates continue that work; query
+again for the complete catalogue. A persistently oversized graph stays
+unavailable and does not cause unlimited background retries. Unchanged primitive
+colliders retain probes; mesh/terrain regions are periodically reconciled.
+The 12 ms search budget is not a hard bound on the entire first request: Unity
+queries, discovery, runtime initialization and destination matching also take
+time. `planMilliseconds` reports the complete measured refresh duration.
 
 The search lattice is 0.4 world units horizontally with height-aware keys. Routes
 are shortest on that sampled graph, not guaranteed continuous-world geodesics.
@@ -77,6 +88,7 @@ excluded when walking cannot counter its cross-flow or make forward progress.
 Execution compensates using the chef's actual wind/surface velocities. Countertop
 conveyors move the destination rather than the chef. Slipperiness affects momentum
 checks and steering; unsupported sliding/override-gravity surfaces are excluded.
+The final approach uses the same flow compensation and next-step checks.
 No prediction of an entire moving kitchen or another player's future decisions is
 claimed. Geometry and target eligibility are rechecked during execution.
 

@@ -45,3 +45,16 @@ class ActionsTests(unittest.TestCase):
         c = client({'type': 'reply', 'id': '1', 'ok': False, 'error': 'destination_unavailable'})
         with self.assertRaisesRegex(ControlError, 'destination_unavailable'): c.navigate_to('d7')
         self.assertEqual(c.socket.sent, [b'navigate_to 1 d7\n'])
+
+    def test_large_kitchen_catalog_is_not_truncated_at_old_control_limit(self):
+        catalog = {'destinations': [{'id': 'd' + str(i), 'label': 'Counter with a plate',
+                                    'position': [i, 0, 0]} for i in range(1200)]}
+        self.assertGreater(len(json.dumps(catalog)), 65536)
+        c = client(reply(1, availableActions=catalog))
+        self.assertEqual(c.available_actions(), catalog)
+
+    def test_oversized_catalog_still_has_a_bounded_read(self):
+        c = client(reply(1, availableActions={'destinations': ['x' * 100]}))
+        c.MAX_REPLY_BYTES = 64
+        with self.assertRaisesRegex(ControlError, 'invalid control reply'):
+            c.available_actions()

@@ -13,6 +13,7 @@ class ControlError(RuntimeError):
 
 class ControlClient:
     BUTTONS = {'pickup': 1, 'use': 2, 'dash': 4}
+    MAX_REPLY_BYTES = 4 * 1024 * 1024  # Includes bounded kitchen action catalogues.
 
     def __init__(self, port=24703, timeout=3.0):
         self.socket = socket.create_connection(('127.0.0.1', port), timeout)
@@ -28,8 +29,8 @@ class ControlClient:
             self.reader.close(); self.socket.close(); raise
 
     def _read(self):
-        line = self.reader.readline(65537)
-        if not line or len(line) > 65536 or not line.endswith(b'\n'):
+        line = self.reader.readline(self.MAX_REPLY_BYTES + 1)
+        if not line or len(line) > self.MAX_REPLY_BYTES or not line.endswith(b'\n'):
             raise ControlError('Disconnected or invalid control reply')
         return json.loads(line)
 

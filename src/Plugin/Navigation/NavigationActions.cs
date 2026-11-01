@@ -25,7 +25,7 @@ namespace SousChef.Plugin.Navigation
         private WalkSearch search;
         private List<Vector3> route;
         private Destination target;
-        private int nextId, waypoint;
+        private int nextId, waypoint, warmTicks;
         private PlayerControls chef;
         private float lastPlan = -1, started, lastProgress, facingSince = -1;
         private Vector3 progressPosition;
@@ -59,6 +59,7 @@ namespace SousChef.Plugin.Navigation
         }
         public object Available(PlayerControls player)
         {
+            warmTicks = 8;
             Refresh(player, true);
             if (Action.State == "navigating") ApplyPlan();
             var destinations = new List<object>();
@@ -96,7 +97,14 @@ namespace SousChef.Plugin.Navigation
         }
         public void Tick(PlayerControls player)
         {
-            if (Action.State != "navigating") return;
+            if (Action.State != "navigating")
+            {
+                // A cold physics graph may take several bounded updates to warm.
+                // Keep all destinations unavailable until a complete search passes.
+                if (chef == player && unavailable == "planning_budget_exceeded" && warmTicks > 0)
+                { warmTicks--; Refresh(player, true); }
+                return;
+            }
             if (player != chef || target == null || !Eligible(target.Object, player, out target.Kind)) { Stop("destination_unavailable"); return; }
             string error = physics.Refresh(player);
             if (error != null) { Invalidate(error); return; }
@@ -127,13 +135,17 @@ namespace SousChef.Plugin.Navigation
                 goal = target.Object.transform.position; goal.y = position.y;
                 Vector3 facing = goal - position;
                 if (!SafeFacing(position, facing)) { Stop("approach_blocked"); return; }
-                move(facing.normalized); return;
             }
-            facingSince = -1;
-            // Shortcut only across freshly checked supported space; no corner cutting.
-            for (int i = Math.Min(route.Count - 1, waypoint + 3); i > waypoint; i--)
-                if (Vector3.Distance(position, route[i]) < 1.4f && physics.Segment(position, route[i])) { waypoint = i; goal = route[i]; break; }
-            if (!physics.Segment(position, goal)) { Stop("route_blocked"); return; }
+            else
+            {
+                facingSince = -1;
+                // Shortcut only across freshly checked supported space; no corner cutting.
+                for (int i = Math.Min(route.Count - 1, waypoint + 3); i > waypoint; i--)
+                    if (Vector3.Distance(position, route[i]) < 1.4f && physics.Segment(position, route[i])) { waypoint = i; goal = route[i]; break; }
+                if (!physics.Segment(position, goal)) { Stop("route_blocked"); return; }
+            }
+            // Use the same drift compensation and actual next-step safety check
+            // during the final approach, including when facing a counter.
             Vector3 direction = goal - position; direction.y = 0;
             Vector3 drift = player.WindReceiver == null ? Vector3.zero : player.WindReceiver.GetVelocity();
             if (player.SurfaceMovable != null) drift += player.SurfaceMovable.GetVelocity();
@@ -171,7 +183,11 @@ namespace SousChef.Plugin.Navigation
             float speed = physics.Speed(chef.GroundCollider);
             Vector3 next = position + direction.normalized * speed * Mathf.Clamp(Time.unscaledDeltaTime + .02f, .025f, .08f);
             if (!physics.Segment(position, next)) return false;
-            foreach (Collider c in target.Colliders) if (c != null && physics.Sight(position, c)) return true;
+            // The route's final stance may be just inside interaction range.
+            // Arrival tolerance can put us slightly before it: permit the checked
+            // step into range rather than cancelling a safe final approach.
+            foreach (Collider c in target.Colliders)
+                if (c != null && (physics.Sight(position, c) || physics.Sight(next, c))) return true;
             return false;
         }
         private bool Selected(GameObject go)
