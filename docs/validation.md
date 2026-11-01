@@ -392,3 +392,23 @@ run. Local evidence: `.local/fps-before.json`, `.local/fps-before-clocks.json`,
 `.local/fps-after-validation.ndjson`, `.local/fps-after-catalog.json` and
 `.local/fps-reconnect.json`. `profile_streams.py --stream full` measures just the
 full subscription; its new `averageRenderFps` field uses Unity frame counters.
+
+### Additional allocation reductions
+
+A follow-up removes the full UTF-16 string copy previously used to append the
+NDJSON newline. Both observation and control responses now put that delimiter
+directly into the final UTF-8 buffer. Byte-equivalence tests cover Unicode,
+escaping, empty input and a large payload. For the same 1 MiB ASCII payload,
+the .NET 8 test measured framing allocations falling from 3,145,784 to
+1,048,608 bytes. This measures framing only, not complete serialization or Unity
+FPS; the original string and final byte buffer still exist.
+
+Gameplay discovery now reuses its component-selection scratch list, while
+copying each retained component array independently. Repeated references queue
+an object only once per sample. All references are still emitted and the queue
+membership resets each sample; no state is cached across samples by this change.
+
+The follow-up passes 775 C# assertions, 53 Python tests and the 151-type adapter
+audit against the installed game assemblies. Sampling rates, fields, navigation
+checks and command behavior are unchanged. Additional live FPS improvement has
+not been measured. Check log: `.local/fps-followup-check.log`.

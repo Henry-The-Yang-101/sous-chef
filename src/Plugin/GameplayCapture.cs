@@ -19,6 +19,8 @@ namespace SousChef.Plugin
         }
         private readonly Dictionary<int, Entry> entries = new Dictionary<int, Entry>();
         private readonly Queue<GameObject> pending = new Queue<GameObject>();
+        private readonly HashSet<int> queued = new HashSet<int>();
+        private readonly List<Component> selected = new List<Component>();
         private readonly HashSet<int> visited = new HashSet<int>();
         private readonly FieldReader reader;
         private readonly Func<GameObject, string> identify;
@@ -29,20 +31,23 @@ namespace SousChef.Plugin
         {
             session = sessionId; identify = id; reader = new FieldReader(Reference);
         }
-        public void Reset() { entries.Clear(); pending.Clear(); baseline = 0; }
+        public void Reset() { entries.Clear(); pending.Clear(); queued.Clear(); selected.Clear(); baseline = 0; }
         public void BeginReconciliation() { entries.Clear(); }
         public void Register(GameObject go, Component[] components)
         {
-            var selected = new List<Component>();
+            // Scratch storage stays on the main thread. Entries receive their
+            // own array, so later registrations cannot alter earlier handles.
+            selected.Clear();
             foreach (Component c in components)
                 if (c != null && (c is Collider || c is Rigidbody || reader.Supports(c.GetType()))) selected.Add(c);
             if (selected.Count > 0) entries[go.GetInstanceID()] = new Entry { Object = go, Components = selected.ToArray() };
             else entries.Remove(go.GetInstanceID());
+            selected.Clear();
         }
         public void Reconciled(long sequence) { baseline = sequence; reconciledAt = Time.realtimeSinceStartup; }
         private void Enqueue(GameObject go)
         {
-            if (go != null && go.scene.IsValid()) pending.Enqueue(go);
+            if (go != null && go.scene.IsValid() && queued.Add(go.GetInstanceID())) pending.Enqueue(go);
         }
         private object Reference(Object value)
         {
@@ -62,7 +67,7 @@ namespace SousChef.Plugin
         {
             var watch = System.Diagnostics.Stopwatch.StartNew();
             float started = Time.realtimeSinceStartup;
-            pending.Clear(); visited.Clear(); reader.BeginFrame();
+            pending.Clear(); queued.Clear(); visited.Clear(); reader.BeginFrame();
             var dead = new List<int>();
             foreach (var pair in entries)
                 if (pair.Value.Object == null) dead.Add(pair.Key); else Enqueue(pair.Value.Object);

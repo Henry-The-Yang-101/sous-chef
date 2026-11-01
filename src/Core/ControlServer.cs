@@ -112,7 +112,7 @@ namespace SousChef.Core
         }
         private static void Write(Stream stream, string value)
         {
-            byte[] bytes = Encoding.UTF8.GetBytes(value + "\n"); stream.Write(bytes, 0, bytes.Length);
+            byte[] bytes = Json.Utf8Line(value); stream.Write(bytes, 0, bytes.Length);
         }
         public void Dispose()
         {

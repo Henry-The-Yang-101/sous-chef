@@ -44,6 +44,17 @@ namespace SousChef.Core
             return output.ToString();
         }
 
+        // Append the NDJSON delimiter in the final byte buffer, not by copying
+        // an entire multi-megabyte UTF-16 snapshot to concatenate one character.
+        public static byte[] Utf8Line(string value)
+        {
+            int length = Encoding.UTF8.GetByteCount(value);
+            var bytes = new byte[length + 1];
+            Encoding.UTF8.GetBytes(value, 0, value.Length, bytes, 0);
+            bytes[length] = (byte)'\n';
+            return bytes;
+        }
+
         private static void Write(StringBuilder output, object value)
         {
             if (value == null) { output.Append("null"); return; }

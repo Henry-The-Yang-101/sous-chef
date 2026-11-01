@@ -21,7 +21,7 @@ internal static class Program
     private static void Main(string[] args)
     {
         checks += NavigationTests.Run();
-        TestSchedule(); TestJson(); TestIdentity(); TestStream(); TestStreamDemand(); TestControl();
+        TestSchedule(); TestJson(); TestUtf8Line(); TestIdentity(); TestStream(); TestStreamDemand(); TestControl();
         if (args.Length > 0) Audit(args[0]);
         Console.WriteLine("PASS: " + checks + " assertions");
     }
@@ -80,6 +80,26 @@ internal static class Program
             { "adapter", new Dictionary<string, object> { { "field", "value" } } } };
         Assert(Json.Encode(Json.Object("x", new[] { .1f, Single.NaN, -2f }, "adapter", legacy["adapter"])) ==
             Json.Encode(legacy), "compact records and typed arrays preserve JSON semantics");
+    }
+
+    private static void TestUtf8Line()
+    {
+        foreach (string value in new[] { "", "{}", "café 中文 🥘", "\ud800", Json.Encode(Json.Object("s", "\n\r\"")) })
+            Assert(Json.Utf8Line(value).SequenceEqual(System.Text.Encoding.UTF8.GetBytes(value + "\n")),
+                "NDJSON framing preserves every byte, including Unicode");
+        // Measure the actual old/new framing paths on the same large payload.
+        // This is an allocation regression check, not a rendering FPS benchmark.
+        string large = new string('x', 1024 * 1024);
+        Json.Utf8Line(large); System.Text.Encoding.UTF8.GetBytes(large + "\n");
+        long start = GC.GetAllocatedBytesForCurrentThread();
+        byte[] previous = System.Text.Encoding.UTF8.GetBytes(large + "\n");
+        long oldBytes = GC.GetAllocatedBytesForCurrentThread() - start;
+        start = GC.GetAllocatedBytesForCurrentThread();
+        byte[] current = Json.Utf8Line(large);
+        long newBytes = GC.GetAllocatedBytesForCurrentThread() - start;
+        Assert(current.SequenceEqual(previous), "large frame bytes unchanged");
+        Assert(oldBytes - newBytes >= large.Length * 2, "framing avoids a full UTF-16 copy");
+        Console.WriteLine("1 MiB line framing allocated " + oldBytes + " -> " + newBytes + " bytes");
     }
 
     private static void TestStreamDemand()
