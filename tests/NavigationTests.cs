@@ -39,6 +39,16 @@ internal static class NavigationTests
         check(!WalkingSteering.Direction(1, 0, -5, 0, 4, out x, out z), "opposing belt faster than chef rejected");
         check(!WalkingSteering.Direction(1, 0, 0, 5, 4, out x, out z), "uncounterable crosswind rejected");
         check(WalkingSteering.Direction(1, 0, 5, 0, 4, out x, out z), "following flow remains reachable");
+        var arrival = new ArrivalCheck();
+        check(!arrival.Observe(1, .5f, 1, 0, true), "nearby native selection cannot finish short of the stance");
+        check(!arrival.Observe(2, .05f, .9f, 0, true), "station selected while facing away cannot finish");
+        check(!arrival.Observe(3, .05f, 1, 2, true), "moving through a stance is not settled arrival");
+        check(!arrival.Observe(4, .05f, 1, 0, false), "correct pose still requires native target selection");
+        check(!arrival.Observe(5, .05f, 1, 0, true), "arrival requires stability across updates");
+        check(arrival.Observe(5.11, .05f, 1, 0, true), "settled aligned native selection finishes");
+        check(!arrival.Observe(6, .05f, 1, 0, false), "losing selection resets arrival latch");
+        check(!arrival.Observe(6.2, .05f, 1, 0, true), "old stable time cannot survive target loss");
+        check(!arrival.Observe(7, Single.NaN, 1, 0, true), "invalid observation cannot confirm arrival");
         var action = new ChefActionState();
         check(!action.Start(1, "d1", false) && action.State == "idle", "unavailable target never starts");
         check(action.Start(1, "d1", true) && action.State == "navigating", "accepted action owns lifecycle");

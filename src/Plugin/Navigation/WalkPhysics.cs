@@ -28,13 +28,14 @@ namespace SousChef.Plugin.Navigation
         private readonly Dictionary<int, bool> dangers = new Dictionary<int, bool>();
         private readonly Dictionary<int, IMovingSurface> surfaces = new Dictionary<int, IMovingSurface>();
         private readonly Dictionary<int, PlayerPhysicsSurface> properties = new Dictionary<int, PlayerPhysicsSurface>();
+        private readonly Dictionary<int, float> speeds = new Dictionary<int, float>();
         private readonly Dictionary<int, IGridLocation> grids = new Dictionary<int, IGridLocation>();
         private PlayerControls chef;
         private CapsuleCollider capsule;
         private GameObject held;
         private int groundMask, collisionMask, interactMask;
         private bool useGridSelection;
-        private float radius, height, pivotToFoot, lastReconcile;
+        private float radius, height, pivotToFoot, lastReconcile, walkingSpeed;
         public bool Overflow { get; private set; }
         public int Queries { get; private set; }
         public bool Changed { get; private set; }
@@ -44,7 +45,7 @@ namespace SousChef.Plugin.Navigation
         private int nearbyCount;
         private int geometryScan, meshRevision;
         private sealed class Probe { public bool Valid; public Vector3 Point; public Collider Ground; }
-        private sealed class GeometryStamp { public Collider Collider; public Bounds Bounds; public Matrix4x4 Matrix; public int Layer, Shape; public bool Trigger, Danger; }
+        private sealed class GeometryStamp { public Collider Collider; public Bounds Bounds, Obstruction; public Matrix4x4 Matrix; public int Layer, Shape; public bool Trigger, Danger; }
         private sealed class MeshStamp { public Mesh Mesh; public Vector3[] Vertices; public int[] Triangles; public int Scan, Seen, Revision; }
 
         public void Reset()
@@ -53,7 +54,7 @@ namespace SousChef.Plugin.Navigation
         }
         public string Refresh(PlayerControls player)
         {
-            Queries = 0; Overflow = false; Changed = false;
+            Queries = 0; Overflow = false; Changed = false; speeds.Clear();
             if (!(player.GetActiveControlsImpl() is PlayerControlsImpl_Default)) return "unsupported_control_mode";
             CapsuleCollider shape = player.GetComponent<CapsuleCollider>();
             GroundCast ground = player.GetComponent<GroundCast>();
@@ -63,6 +64,7 @@ namespace SousChef.Plugin.Navigation
             if (Vector3.Dot(player.transform.up, Vector3.up) < .99f) return "unsupported_gravity";
             if (chef != player || capsule != shape) Reset();
             chef = player; capsule = shape;
+            walkingSpeed = Mathf.Min(chef.Movement.MaxSpeed, chef.Movement.RunSpeed * chef.MovementScale);
             useGridSelection = (bool)gridSelection.GetValue(chef);
             interactMask = ((LayerMask)interactionMask.GetValue(chef)).value;
             var carrier = chef.GetComponent<ClientPlayerAttachmentCarrier>();
@@ -100,21 +102,29 @@ namespace SousChef.Plugin.Navigation
                 int id = c.GetInstanceID(); present.Add(id);
                 WindVolume wind = c.GetComponent<WindVolume>();
                 if (wind != null) winds[id] = wind;
-                if (c.GetComponentInParent<PlayerControls>() != null) people.Add(c);
+                bool person = c.GetComponentInParent<PlayerControls>() != null;
+                if (person) people.Add(c);
                 GeometryStamp old;
                 Bounds bounds = c.bounds; Matrix4x4 matrix = c.transform.localToWorldMatrix;
+                Bounds obstruction = bounds;
+                if (person && c.attachedRigidbody != null)
+                {
+                    Vector3 shift = c.attachedRigidbody.velocity * .12f; shift.y = 0;
+                    Bounds future = bounds; future.center += shift;
+                    obstruction.Encapsulate(future);
+                }
                 int shapeKey = ShapeKey(c, reconcile); bool danger = Dangerous(c);
                 if (!stamps.TryGetValue(id, out old) || old.Collider != c || !old.Bounds.Equals(bounds) ||
-                    old.Matrix != matrix || old.Layer != c.gameObject.layer || old.Trigger != c.isTrigger || old.Shape != shapeKey || old.Danger != danger ||
+                    !old.Obstruction.Equals(obstruction) || old.Matrix != matrix || old.Layer != c.gameObject.layer || old.Trigger != c.isTrigger || old.Shape != shapeKey || old.Danger != danger ||
                     (reconcile && c is TerrainCollider))
                 {
-                    if (old != null) changed.Add(old.Bounds);
-                    changed.Add(bounds);
-                    stamps[id] = new GeometryStamp { Collider = c, Bounds = bounds, Matrix = matrix, Layer = c.gameObject.layer, Trigger = c.isTrigger, Shape = shapeKey, Danger = danger };
+                    if (old != null) changed.Add(old.Obstruction);
+                    changed.Add(obstruction);
+                    stamps[id] = new GeometryStamp { Collider = c, Bounds = bounds, Obstruction = obstruction, Matrix = matrix, Layer = c.gameObject.layer, Trigger = c.isTrigger, Shape = shapeKey, Danger = danger };
                 }
             }
             var removed = new List<int>();
-            foreach (var pair in stamps) if (!present.Contains(pair.Key)) { changed.Add(pair.Value.Bounds); removed.Add(pair.Key); }
+            foreach (var pair in stamps) if (!present.Contains(pair.Key)) { changed.Add(pair.Value.Obstruction); removed.Add(pair.Key); }
             foreach (int id in removed) { stamps.Remove(id); dangers.Remove(id); surfaces.Remove(id); properties.Remove(id); }
             if (reconcile)
             {
@@ -308,13 +318,13 @@ namespace SousChef.Plugin.Navigation
         }
         private IEnumerable<WalkEdge> FilterFlow(WalkCell from, List<WalkEdge> candidates)
         {
-            var result = new List<WalkEdge>(); Probe a = Sample(from);
+            Probe a = Sample(from);
             foreach (WalkEdge edge in candidates)
             {
                 Probe b = Sample(edge.Cell);
-                if (CanWalkDirection(a.Point, b.Point, a.Ground) && CanWalkDirection(a.Point, b.Point, b.Ground)) result.Add(edge);
+                if (CanWalkDirection(a.Point, b.Point, a.Ground) &&
+                    (a.Ground == b.Ground || CanWalkDirection(a.Point, b.Point, b.Ground))) yield return edge;
             }
-            return result;
         }
         private bool ShortEdge(Vector3 from, Vector3 to)
         {
@@ -347,16 +357,8 @@ namespace SousChef.Plugin.Navigation
         public Vector3 Flow(Vector3 at, Collider ground)
         {
             Vector3 drift = Vector3.zero;
-            if (ground != null)
-            {
-                IMovingSurface surface;
-                if (!surfaces.TryGetValue(ground.GetInstanceID(), out surface))
-                {
-                    foreach (var c in ground.GetComponents<MonoBehaviour>()) if (c is IMovingSurface) { surface = (IMovingSurface)c; break; }
-                    surfaces[ground.GetInstanceID()] = surface;
-                }
-                if (surface != null) drift += surface.CalculateVelocityAtPoint(at, null);
-            }
+            IMovingSurface surface = MovingSurface(ground);
+            if (surface != null) drift += surface.CalculateVelocityAtPoint(at, null);
             foreach (var pair in winds)
             {
                 WindVolume wind = pair.Value;
@@ -368,24 +370,40 @@ namespace SousChef.Plugin.Navigation
             }
             drift.y = 0; return drift;
         }
+        private IMovingSurface MovingSurface(Collider ground)
+        {
+            if (ground == null) return null;
+            int id = ground.GetInstanceID(); IMovingSurface surface;
+            if (!surfaces.TryGetValue(id, out surface))
+            {
+                foreach (var c in ground.GetComponents<MonoBehaviour>()) if (c is IMovingSurface) { surface = (IMovingSurface)c; break; }
+                surfaces[id] = surface;
+            }
+            return surface;
+        }
         public float Speed(Collider ground)
         {
+            int id = ground == null ? 0 : ground.GetInstanceID(); float speed;
+            if (speeds.TryGetValue(id, out speed)) return speed;
             PlayerPhysicsSurface surface = null;
-            if (ground != null && !properties.TryGetValue(ground.GetInstanceID(), out surface))
-            { surface = ground.GetComponent<PlayerPhysicsSurface>(); properties[ground.GetInstanceID()] = surface; }
+            if (ground != null && !properties.TryGetValue(id, out surface))
+            { surface = ground.GetComponent<PlayerPhysicsSurface>(); properties[id] = surface; }
             var p = surface == null ? null : surface.Properties;
-            if (p != null && (p.UseOverrideGravityNormal || p.Slidiness > .01f)) return 0; // unsupported gravity/sliding control
-            return Mathf.Min(chef.Movement.MaxSpeed, chef.Movement.RunSpeed * chef.MovementScale) * (p == null ? 1 : p.SpeedMultiplier);
+            speed = p != null && (p.UseOverrideGravityNormal || p.Slidiness > .01f) ? 0 : walkingSpeed * (p == null ? 1 : p.SpeedMultiplier);
+            // Re-read on every physics refresh, not every directed edge. No dynamic
+            // speed or surface velocity is retained across updates.
+            speeds[id] = speed; return speed;
         }
         private bool CanWalkDirection(Vector3 from, Vector3 to, Collider ground)
         {
             if ((to - from).sqrMagnitude < .0001f) return true;
+            float speed = Speed(ground);
+            if (winds.Count == 0 && MovingSurface(ground) == null) return speed > .1f;
             Vector3 drift = Flow((from + to) * .5f, ground); float x, z;
-            return WalkingSteering.Direction(to.x - from.x, to.z - from.z, drift.x, drift.z, Speed(ground), out x, out z);
+            return WalkingSteering.Direction(to.x - from.x, to.z - from.z, drift.x, drift.z, speed, out x, out z);
         }
-        public bool Sight(Vector3 foot, Collider target)
+        private IGridLocation Grid(Collider target)
         {
-            if ((interactMask & (1 << target.gameObject.layer)) == 0) return false;
             IGridLocation grid = null;
             if (useGridSelection && !grids.TryGetValue(target.GetInstanceID(), out grid))
             {
@@ -394,6 +412,47 @@ namespace SousChef.Plugin.Navigation
                         if (component is IGridLocation) { grid = (IGridLocation)component; break; }
                 grids[target.GetInstanceID()] = grid;
             }
+            return grid;
+        }
+        public bool Approach(Vector3 foot, Collider target, out Vector3 stance)
+        {
+            stance = foot;
+            if (target == null || (interactMask & (1 << target.gameObject.layer)) == 0) return false;
+            IGridLocation grid = Grid(target);
+            if (grid != null)
+            {
+                GridManager manager = grid.AccessGridManager;
+                var component = grid as Component;
+                if (manager == null || component == null || !manager.isActiveAndEnabled) return false;
+                GridIndex at = manager.GetUnclampedGridLocationFromPos(foot + Vector3.up * pivotToFoot), destination = grid.GridIndex;
+                if (at.Y != destination.Y || Math.Abs(at.X - destination.X) + Math.Abs(at.Z - destination.Z) != 1) return false;
+                // Centre the chef on the counter's usable side. Track the actual
+                // station transform, including a grid moving/rotating with a cart.
+                Vector3 offset = manager.GetPosFromGridLocation(at) - manager.GetPosFromGridLocation(destination);
+                stance = component.transform.position + offset;
+            }
+            else
+            {
+                Bounds bounds = target.bounds;
+                Vector3 outward = foot - bounds.center; outward.y = 0;
+                if (outward.sqrMagnitude < .001f) return false;
+                outward.Normalize();
+                Vector3 extent = bounds.extents;
+                float reach = Mathf.Abs(outward.x) * extent.x + Mathf.Abs(outward.z) * extent.z;
+                stance = bounds.center + outward * (reach + radius + .08f);
+            }
+            stance.y = foot.y;
+            // Only attach a short, checked connector to the Dijkstra lattice.
+            if ((stance - foot).sqrMagnitude > Spacing * Spacing * .75f) return false;
+            Vector3 supported; Collider support;
+            if (!Stand(stance, out supported, out support) || Mathf.Abs(supported.y - foot.y) > .22f) return false;
+            stance = supported;
+            return Sight(stance, target) && Segment(foot, stance);
+        }
+        public bool Sight(Vector3 foot, Collider target)
+        {
+            if ((interactMask & (1 << target.gameObject.layer)) == 0) return false;
+            IGridLocation grid = Grid(target);
             if (grid != null)
             {
                 GridManager manager = grid.AccessGridManager;

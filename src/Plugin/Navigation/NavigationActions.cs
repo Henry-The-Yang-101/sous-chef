@@ -14,6 +14,7 @@ namespace SousChef.Plugin.Navigation
             public GameObject Object;
             public readonly List<Collider> Colliders = new List<Collider>();
             public WalkCell Goal;
+            public Vector3 Approach;
             public float Distance;
         }
         private readonly WalkPhysics physics = new WalkPhysics();
@@ -25,25 +26,30 @@ namespace SousChef.Plugin.Navigation
         private WalkSearch search;
         private List<Vector3> route;
         private Destination target;
+        private object lastDestination;
+        private object arrivalDetails;
+        private readonly ArrivalCheck arrival = new ArrivalCheck();
         private int nextId, waypoint, warmTicks;
         private PlayerControls chef;
         private float lastPlan = -1, started, lastProgress, facingSince = -1;
         private Vector3 progressPosition;
         private long revision;
         private string unavailable = "not_ready";
-        private double planMilliseconds;
+        private double planMilliseconds, prepareMilliseconds, searchMilliseconds, matchMilliseconds;
         private int nodeCount, candidateCount, startCount;
         private string observationError;
         private bool planning;
         public NavigationActions(Action<Vector3> walk, Action halt) { move = walk; neutral = halt; }
         public void Reset(string reason)
         {
-            Stop(reason); identities.Clear(); available.Clear(); physics.Reset(); search = null; chef = null; lastPlan = -1; unavailable = reason;
+            Stop(reason); lastDestination = arrivalDetails = null; identities.Clear(); available.Clear(); physics.Reset(); search = null; chef = null; lastPlan = -1; unavailable = reason;
         }
         public void Stop(string reason)
         {
             // Neutral first; callers must not observe idle with stale movement input.
-            neutral(); Action.Stop(reason); target = null; route = null; facingSince = -1;
+            neutral();
+            if (target != null && target.Object != null) lastDestination = Identity(target);
+            Action.Stop(reason); target = null; route = null; facingSince = -1; arrival.Reset();
         }
         public void Invalidate(string reason)
         {
@@ -53,9 +59,18 @@ namespace SousChef.Plugin.Navigation
         public object Describe()
         {
             return Json.Object("state", Action.State, "destinationId", Action.Destination, "reason", Action.Reason,
+                "destination", target == null ? lastDestination : Identity(target),
+                "phase", Action.State == "idle" ? "idle" : facingSince < 0 ? "walking" : "aligning", "arrival", arrivalDetails,
                 "revision", Action.Revision, "catalogRevision", revision, "catalogReason", unavailable,
                 "catalogAgeSeconds", lastPlan < 0 ? null : (object)(Time.realtimeSinceStartup - lastPlan),
-                "diagnostics", Json.Object("planMilliseconds", planMilliseconds, "searchNodes", nodeCount, "physicsQueries", physics.Queries, "candidateCount", candidateCount, "startCount", startCount, "observationError", observationError));
+                "diagnostics", Json.Object("planMilliseconds", planMilliseconds, "prepareMilliseconds", prepareMilliseconds,
+                    "searchMilliseconds", searchMilliseconds, "matchMilliseconds", matchMilliseconds, "searchNodes", nodeCount,
+                    "physicsQueries", physics.Queries, "candidateCount", candidateCount, "startCount", startCount, "observationError", observationError));
+        }
+        private static object Identity(Destination d)
+        {
+            return d.Object == null ? null : Json.Object("id", d.Id, "label", d.Object.name, "kind", d.Kind,
+                "objectInstanceId", d.Object.GetInstanceID(), "position", Values.Vector(d.Object.transform.position));
         }
         public object Available(PlayerControls player)
         {
@@ -66,7 +81,7 @@ namespace SousChef.Plugin.Navigation
             foreach (Destination d in available.Values)
                 destinations.Add(Json.Object("id", d.Id, "label", d.Object.name, "kind", d.Kind,
                     "objectInstanceId", d.Object.GetInstanceID(), "position", Values.Vector(d.Object.transform.position),
-                    "approachPosition", Values.Vector(physics.Point(d.Goal)), "routeDistance", d.Distance));
+                    "approachPosition", Values.Vector(d.Approach), "routeDistance", d.Distance));
             destinations.Sort(delegate(object a, object b) { return String.CompareOrdinal((string)((Dictionary<string, object>)a)["id"], (string)((Dictionary<string, object>)b)["id"]); });
             var actions = new List<object> { Json.Object("name", "stop", "parameters", new Dictionary<string, object>()) };
             if (destinations.Count > 0 && Action.State == "idle")
@@ -80,7 +95,8 @@ namespace SousChef.Plugin.Navigation
             Destination chosen;
             if (!available.TryGetValue(destination, out chosen)) return unavailable ?? "destination_unavailable";
             if (!Action.Start(owner, destination, true)) return "action_in_progress";
-            target = chosen; started = lastProgress = Time.realtimeSinceStartup; progressPosition = physics.Position;
+            target = chosen; lastDestination = Identity(chosen); started = lastProgress = Time.realtimeSinceStartup; progressPosition = physics.Position;
+            arrivalDetails = null; arrival.Reset(); facingSince = -1;
             SetRoute(chosen); return null;
         }
         private bool ApplyPlan()
@@ -93,6 +109,7 @@ namespace SousChef.Plugin.Navigation
         private void SetRoute(Destination chosen)
         {
             route = new List<Vector3>(); foreach (WalkCell cell in search.Route(chosen.Goal)) route.Add(physics.Point(cell));
+            if (route.Count == 0 || Vector3.Distance(route[route.Count - 1], chosen.Approach) > .001f) route.Add(chosen.Approach);
             waypoint = 0;
         }
         public void Tick(PlayerControls player)
@@ -117,33 +134,21 @@ namespace SousChef.Plugin.Navigation
             }
             if (route == null || route.Count == 0) { Stop("destination_unreachable"); return; }
             Vector3 position = physics.Position;
-            if (Selected(target.Object)) { Stop("arrived"); return; }
             if (Time.realtimeSinceStartup - started > 45f) { Stop("navigation_timeout"); return; }
             // A valid detour can initially move away from the destination. Measure
             // actual displacement for the stall watchdog, not Euclidean goal distance.
             if (Vector3.Distance(position, progressPosition) > .15f)
             { progressPosition = position; lastProgress = Time.realtimeSinceStartup; }
             if (Time.realtimeSinceStartup - lastProgress > 2f) { Stop("no_progress"); return; }
+            if (Vector3.Distance(position, target.Approach) <= ArrivalCheck.PositionTolerance)
+            { Align(position); return; }
+            facingSince = -1; arrival.Reset(); arrivalDetails = null;
             while (waypoint < route.Count - 1 && Vector3.Distance(position, route[waypoint]) < .18f) waypoint++;
             Vector3 goal = route[waypoint];
-            if (waypoint == route.Count - 1 && Vector3.Distance(position, goal) < .2f)
-            {
-                if (facingSince < 0) facingSince = Time.realtimeSinceStartup;
-                if (Time.realtimeSinceStartup - facingSince > .6f) { Stop("interaction_not_selected"); return; }
-                // Native movement input also turns the chef. A short safe approach
-                // pulse is needed; never rotate/teleport the chef behind the game.
-                goal = target.Object.transform.position; goal.y = position.y;
-                Vector3 facing = goal - position;
-                if (!SafeFacing(position, facing)) { Stop("approach_blocked"); return; }
-            }
-            else
-            {
-                facingSince = -1;
-                // Shortcut only across freshly checked supported space; no corner cutting.
-                for (int i = Math.Min(route.Count - 1, waypoint + 3); i > waypoint; i--)
-                    if (Vector3.Distance(position, route[i]) < 1.4f && physics.Segment(position, route[i])) { waypoint = i; goal = route[i]; break; }
-                if (!physics.Segment(position, goal)) { Stop("route_blocked"); return; }
-            }
+            // Shortcut only across freshly checked supported space; no corner cutting.
+            for (int i = Math.Min(route.Count - 1, waypoint + 3); i > waypoint; i--)
+                if (Vector3.Distance(position, route[i]) < 1.4f && physics.Segment(position, route[i])) { waypoint = i; goal = route[i]; break; }
+            if (!physics.Segment(position, goal)) { Stop("route_blocked"); return; }
             // Use the same drift compensation and actual next-step safety check
             // during the final approach, including when facing a counter.
             Vector3 direction = goal - position; direction.y = 0;
@@ -163,38 +168,75 @@ namespace SousChef.Plugin.Navigation
             if (!WalkingSteering.Direction(direction.x, direction.z, drift.x, drift.z, speed, out x, out z)) { Stop("flow_prevents_walking"); return; }
             Vector3 input = new Vector3(x, 0, z);
             float stepTime = Mathf.Clamp(Time.unscaledDeltaTime, .0167f, .06f);
-            Vector3 projectedStep = position + (input * speed + drift) * (stepTime + .04f);
+            // Near the checked final stance validate the next actual walking step;
+            // the longer lookahead would extend through the counter beyond the stop.
+            float horizon = Vector3.Distance(position, target.Approach) < .6f ? stepTime : stepTime + .04f;
+            Vector3 projectedStep = position + (input * speed + drift) * horizon;
             if (!physics.Segment(position, projectedStep)) { Stop("next_step_unsafe"); return; }
             move(input);
         }
         private bool TargetMoved()
         {
             if (target == null || route == null || route.Count == 0) return true;
-            foreach (Collider c in target.Colliders) if (c != null && physics.Sight(route[route.Count - 1], c)) return false;
+            foreach (Collider c in target.Colliders)
+            {
+                Vector3 stance;
+                if (c != null && physics.Approach(target.Approach, c, out stance) && Vector3.Distance(stance, target.Approach) < .04f) return false;
+            }
             return true;
         }
-        private bool SafeFacing(Vector3 position, Vector3 direction)
+        private void Align(Vector3 position)
         {
-            if (direction.sqrMagnitude < .0001f) return false;
-            // Allow facing into the destination's physical collider, but only when
-            // the current supported stance remains safe and the target is in sight.
-            Vector3 stand; Collider ground;
-            if (!physics.Stand(position, out stand, out ground)) return false;
-            float speed = physics.Speed(chef.GroundCollider);
-            Vector3 next = position + direction.normalized * speed * Mathf.Clamp(Time.unscaledDeltaTime + .02f, .025f, .08f);
-            if (!physics.Segment(position, next)) return false;
-            // The route's final stance may be just inside interaction range.
-            // Arrival tolerance can put us slightly before it: permit the checked
-            // step into range rather than cancelling a safe final approach.
-            foreach (Collider c in target.Colliders)
-                if (c != null && (physics.Sight(position, c) || physics.Sight(next, c))) return true;
-            return false;
+            float now = Time.realtimeSinceStartup;
+            if (facingSince < 0) facingSince = now;
+            if (now - facingSince > 1.5f) { Stop("alignment_failed"); return; }
+            Vector3 direction = target.Object.transform.position - position; direction.y = 0;
+            if (direction.sqrMagnitude < .001f) { Stop("invalid_facing_target"); return; }
+            Vector3 drift = chef.WindReceiver == null ? Vector3.zero : chef.WindReceiver.GetVelocity();
+            if (chef.SurfaceMovable != null) drift += chef.SurfaceMovable.GetVelocity();
+            Vector3 velocity = chef.Motion.GetVelocityXZ();
+            if (!physics.Segment(position, position + (velocity + drift) * .08f)) { Stop("unsafe_alignment_stance"); return; }
+            // The game's axis helper normalizes every nonzero input to full speed.
+            // Use its native turn helper at the normal turn rate with neutral walking
+            // input, instead of walking into the counter just to change heading.
+            move(Vector3.zero);
+            PlayerControlsHelper.TurnTowardsDirection(chef.gameObject, direction.normalized,
+                chef.Movement.TurnSpeed, Mathf.Min(Time.deltaTime, .05f));
+            float distance = Vector3.Distance(position, target.Approach);
+            float dot = Vector3.Dot(chef.transform.forward.normalized, direction.normalized);
+            bool selected = Selected(target.Object), canPickup, canPlace, canUse;
+            Readiness(out canPickup, out canPlace, out canUse);
+            bool ready = canPickup || canPlace || canUse;
+            bool positioned = arrival.Observe(now, distance, dot, velocity.magnitude, selected);
+            arrivalDetails = Json.Object("stanceError", distance, "facingErrorDegrees", Mathf.Acos(Mathf.Clamp(dot, -1, 1)) * Mathf.Rad2Deg,
+                "nativeSelected", selected, "positioned", positioned, "canPickup", canPickup, "canPlace", canPlace, "canUse", canUse, "readyForAction", positioned && ready);
+            if (positioned) Stop(ready ? "arrived" : "positioned_no_action");
+        }
+        private void Readiness(out bool pickup, out bool place, out bool use)
+        {
+            var observed = chef.CurrentInteractionObjects;
+            var carrier = chef.GetComponent<ClientPlayerAttachmentCarrier>();
+            GameObject held = carrier == null ? null : carrier.InspectCarriedItem();
+            bool matches = Matches(observed.m_TheOriginalHandlePickup, target.Object);
+            pickup = carrier != null && held == null && matches && observed.m_iHandlePickup != null && observed.m_iHandlePickup.CanHandlePickup(carrier);
+            Vector3 forward = chef.transform.forward;
+            place = carrier != null && held != null && matches && observed.m_iHandlePlacement != null &&
+                observed.m_iHandlePlacement.CanHandlePlacement(carrier, new Vector2(forward.x, forward.z), new PlacementContext(PlacementContext.Source.Player));
+            use = observed.m_interactable != null && Matches(observed.m_interactable.gameObject, target.Object) && observed.m_interactable.CanInteract(chef.gameObject);
         }
         private bool Selected(GameObject go)
         {
             var observed = chef.CurrentInteractionObjects;
-            return Matches(observed.m_TheOriginalHandlePickup, go) ||
+            bool selected = Matches(observed.m_TheOriginalHandlePickup, go) ||
                 (observed.m_interactable != null && Matches(observed.m_interactable.gameObject, go));
+            // A fixed station can be selected by the native grid while it has no
+            // work or pickup available (for example, an empty sink). Items still
+            // require their own pickup/interaction selection, not a nearby counter.
+            var grid = observed.m_gridLocation as Component;
+            if (target.Kind != "item" && grid != null && Matches(grid.gameObject, go)) selected = true;
+            if (!selected) return false;
+            foreach (Collider c in target.Colliders) if (c != null && physics.Sight(physics.Position, c)) return true;
+            return false;
         }
         private static bool Matches(GameObject selected, GameObject targetObject)
         {
@@ -204,7 +246,6 @@ namespace SousChef.Plugin.Navigation
         {
             kind = null;
             if (go == null || !go.activeInHierarchy || go.transform.IsChildOf(player.transform) || go.GetComponentInParent<PlayerControls>() != null) return false;
-            var carrier = player.GetComponent<ClientPlayerAttachmentCarrier>();
             var interact = go.GetComponent<ClientInteractable>();
             var pickup = PlayerControlsHelper.GetControllingPickupHandler_Client(go);
             var placement = PlayerControlsHelper.GetControllingPlacementHandler_Client(go);
@@ -212,14 +253,23 @@ namespace SousChef.Plugin.Navigation
             else if (go.GetComponent<ServerWorkstation>() != null) kind = "workstation";
             else if (go.GetComponent<PickupItemSpawner>() != null) kind = "ingredient_supply";
             else if (go.GetComponent<CookingStation>() != null) kind = "cooking_station";
+            else if (go.GetComponent<PlateReturnStation>() != null || go.GetComponent<PlateStackBase>() != null) kind = "plate_station";
             else if (go.GetComponent<PhysicalAttachment>() != null) kind = "item";
             else if (interact != null) kind = "interaction";
             else if (go.GetComponent<AttachStation>() != null) kind = "counter";
             else if (pickup != null || placement != null) kind = "pickup_or_placement";
-            if (kind == null) return false;
-            if (interact != null && interact.CanInteract(player.gameObject)) return true;
-            if (carrier != null && pickup != null && pickup.CanHandlePickup(carrier)) return true;
-            return placement != null && carrier != null && carrier.InspectCarriedItem() != null;
+            // Navigation answers whether this meaningful object can be approached.
+            // Having dirty dishes, free hands or ingredients is a separate action
+            // precondition, and must not hide a physically reachable destination.
+            // Ordinary empty counters are useful only when carrying something to
+            // place. Keep the catalogue focused on objects and task locations.
+            if (kind == "counter" || kind == "pickup_or_placement")
+            {
+                var carrier = player.GetComponent<ClientPlayerAttachmentCarrier>();
+                return carrier != null && ((pickup != null && pickup.CanHandlePickup(carrier)) ||
+                    (placement != null && carrier.InspectCarriedItem() != null));
+            }
+            return kind != null;
         }
         private List<Destination> Discover(PlayerControls player)
         {
@@ -252,6 +302,8 @@ namespace SousChef.Plugin.Navigation
             if (planning) return;
             if (!force && Time.realtimeSinceStartup - lastPlan < .1f) return;
             planning = true; var watch = Stopwatch.StartNew();
+            prepareMilliseconds = searchMilliseconds = matchMilliseconds = 0;
+            nodeCount = candidateCount = startCount = 0;
             try
             {
                 available.Clear(); chef = player;
@@ -261,8 +313,11 @@ namespace SousChef.Plugin.Navigation
                 List<Destination> candidates = Discover(player); candidateCount = candidates.Count;
                 var starts = new List<WalkEdge>(physics.Starts()); startCount = starts.Count;
                 if (startCount == 0) { unavailable = "no_safe_start"; return; }
+                prepareMilliseconds = watch.Elapsed.TotalMilliseconds;
+                var searchWatch = Stopwatch.StartNew();
                 search = new WalkSearch(starts, physics.Neighbours, 16000,
-                    delegate { return watch.Elapsed.TotalMilliseconds < 12 && !physics.Overflow; });
+                    delegate { return searchWatch.Elapsed.TotalMilliseconds < 12 && !physics.Overflow; });
+                searchMilliseconds = searchWatch.Elapsed.TotalMilliseconds;
                 nodeCount = search.Distances.Count;
                 if (!search.Complete || physics.Overflow) { unavailable = physics.Overflow ? "physics_query_overflow" : "planning_budget_exceeded"; return; }
                 // Index the reachable nodes once, then only inspect cells around each
@@ -276,7 +331,7 @@ namespace SousChef.Plugin.Navigation
                 }
                 foreach (Destination d in candidates)
                 {
-                    float best = Single.MaxValue; WalkCell goal = new WalkCell();
+                    float best = Single.MaxValue; WalkCell goal = new WalkCell(); Vector3 bestApproach = Vector3.zero;
                     foreach (Collider c in d.Colliders)
                     {
                         Bounds b = c.bounds;
@@ -289,16 +344,19 @@ namespace SousChef.Plugin.Navigation
                             if (!byXZ.TryGetValue(((long)x << 32) ^ (uint)z, out bucket)) continue;
                             foreach (WalkCell cell in bucket)
                             {
-                                float distance = search.Distances[cell];
-                                if (distance >= best || !physics.Sight(physics.Point(cell), c)) continue;
-                                best = distance; goal = cell;
+                                float distance = search.Distances[cell]; Vector3 stance, point = physics.Point(cell);
+                                if (distance >= best || !physics.Approach(point, c, out stance)) continue;
+                                distance += Vector3.Distance(point, stance);
+                                if (distance >= best) continue;
+                                best = distance; goal = cell; bestApproach = stance;
                             }
                         }
                     }
-                    if (best != Single.MaxValue) { d.Goal = goal; d.Distance = best; available[d.Id] = d; }
+                    if (best != Single.MaxValue) { d.Goal = goal; d.Approach = bestApproach; d.Distance = best; available[d.Id] = d; }
                 }
                 if (physics.Overflow) { available.Clear(); unavailable = "physics_query_overflow"; }
                 else unavailable = null;
+                matchMilliseconds = watch.Elapsed.TotalMilliseconds - prepareMilliseconds - searchMilliseconds;
             }
             catch (Exception e)
             {

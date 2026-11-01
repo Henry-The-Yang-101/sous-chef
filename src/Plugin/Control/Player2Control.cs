@@ -67,7 +67,7 @@ namespace SousChef.Plugin.Control
             target = found; config = entry;
         }
 
-        private string Check(KitchenGate gate)
+        private string Check(KitchenGate gate, bool observation = false)
         {
             if (!gate.InRound || gate.Role != "host") return "outside_local_round";
             if (TimeManager.IsPaused(TimeManager.PauseLayer.Main)) return "paused";
@@ -76,7 +76,17 @@ namespace SousChef.Plugin.Control
             if (provider == null || provider.GetID() != PlayerInputLookup.Player.Two || config == null || !config.IsLocal()) return "player2_not_local";
             if (!target.enabled || !target.gameObject.activeInHierarchy || target.ControlScheme == null ||
                 target.ControlScheme.Player != PlayerInputLookup.Player.Two) return "player2_not_ready";
-            if (!target.CanButtonBePressed() || target.m_bRespawning) return "input_suppressed";
+            if (target.m_bRespawning) return "input_suppressed";
+            if (!target.CanButtonBePressed())
+            {
+                // A browser may inspect reachability while the game is unfocused.
+                // Replicate the remaining native button gates; never permit motion
+                // or ignore dialogs/menus merely because this is an observation.
+                if (!observation || Application.isFocused || !target.GetDirectlyUnderPlayerControl() ||
+                    T17DialogBoxManager.HasAnyOpenDialogs() || (T17InGameFlow.Instance != null &&
+                    T17InGameFlow.Instance.m_Rootmenu.GetCurrentOpenMenu() != null))
+                    return Application.isFocused ? "input_suppressed" : "game_unfocused";
+            }
             if (scheme != null && !OwnsBindings()) return "bindings_changed";
             return null;
         }
@@ -101,8 +111,9 @@ namespace SousChef.Plugin.Control
             if (command.Operation == "stop") { navigation.Stop("stopped"); Revoke("stopped"); }
             else if (command.Operation == "actions")
             {
-                Discover(); unavailable = Check(KitchenGate.Inspect());
-                if (unavailable != null) { navigation.Invalidate(unavailable); actions = Json.Object("actions", new[] { Json.Object("name", "stop") }, "destinations", new object[0], "navigation", navigation.Describe()); }
+                Discover(); KitchenGate gate = KitchenGate.Inspect(); unavailable = Check(gate);
+                string observationError = Check(gate, true);
+                if (observationError != null) { navigation.Invalidate(observationError); actions = Json.Object("actions", new[] { Json.Object("name", "stop") }, "destinations", new object[0], "navigation", navigation.Describe()); }
                 else if (lease.Owner(Now) != 0 && navigation.Action.State == "idle")
                     actions = Json.Object("actions", new[] { Json.Object("name", "stop") }, "destinations", new object[0], "reason", "already_claimed", "navigation", navigation.Describe());
                 else actions = navigation.Available(target);
