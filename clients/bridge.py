@@ -47,9 +47,9 @@ class BridgeClient:
                     self.snapshot = message if kind == 'snapshot' and message.get('inRound') else None
                     self.last_received = time.monotonic()
                     if self.snapshot:
-                        needed = {c['shape']['mesh']['assetId'] for o in message['objects'] for c in o['colliders']
-                                  if c.get('shape', {}).get('kind') == 'mesh' and c['shape'].get('mesh')}
-                        if not needed.issubset(self.assets): raise ValueError('Missing mesh assets')
+                        needed = {c['shape'][key]['assetId'] for o in message['objects'] for c in o['colliders']
+                                  for key in ('mesh', 'terrain') if c.get('shape', {}).get(key)}
+                        if not needed.issubset(self.assets): raise ValueError('Missing geometry assets')
                         self.assets = {k: self.assets[k] for k in needed}
                     else: self.assets.clear()
                 yield message

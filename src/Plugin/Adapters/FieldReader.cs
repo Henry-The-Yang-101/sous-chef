@@ -24,7 +24,10 @@ namespace SousChef.Plugin.Adapters
         public int Errors;
 
         public FieldReader(Func<Object, object> objectReference) { reference = objectReference; }
-        public void BeginFrame() { UnsupportedValues.Clear(); TruncatedValues = 0; Errors = 0; }
+        public void BeginFrame()
+        {
+            UnsupportedValues.Clear(); MissingFields.Clear(); UsedAdapters.Clear(); TruncatedValues = 0; Errors = 0;
+        }
 
         public bool Supports(Type type) { return Bind(type).Count > 0; }
 
@@ -45,6 +48,7 @@ namespace SousChef.Plugin.Adapters
                 if (System.Object.ReferenceEquals(parent, value)) return Json.Object("status", "cycle", "type", value.GetType().FullName);
             Type type = value.GetType();
             if (type.IsEnum) return value.ToString();
+            if (value is char) return value.ToString();
             if (type.IsPrimitive || value is string || value is decimal) return value;
             if (value is Vector3) return Values.Vector((Vector3)value);
             if (value is Vector2) { Vector2 v = (Vector2)value; return new[] { v.x, v.y }; }
@@ -104,6 +108,20 @@ namespace SousChef.Plugin.Adapters
                 }
                 parents.RemoveAt(parents.Count - 1); return entries;
             }
+            // The game's FastList has public backing storage but is NOT IEnumerable.
+            // Read only _size live entries, not stale objects in spare capacity.
+            if (type.IsGenericType && type.GetGenericTypeDefinition().FullName == "System.Collections.Generic.FastList`1")
+            {
+                var array = (Array)type.GetField("_items").GetValue(value);
+                int liveCount = (int)type.GetField("_size", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(value);
+                var entries = new List<object>(); parents.Add(value);
+                for (int i = 0; i < liveCount && i < array.Length; i++)
+                {
+                    if (entries.Count >= 4096 || budget <= 0) { entries.Add(Truncated()); break; }
+                    entries.Add(Record(array.GetValue(i), depth + 1, parents, ref budget));
+                }
+                parents.RemoveAt(parents.Count - 1); return entries;
+            }
             // Restrict enumeration to ordinary collections, not arbitrary game iterators.
             if (value is IList || IsKnownCollection(type))
             {
@@ -152,7 +170,7 @@ namespace SousChef.Plugin.Adapters
         private static bool IsKnownCollection(Type type)
         {
             string name = type.FullName;
-            return name.StartsWith("FastList`1", StringComparison.Ordinal) || name.StartsWith("System.Collections.Generic.Queue`1", StringComparison.Ordinal);
+            return name.StartsWith("System.Collections.Generic.Queue`1", StringComparison.Ordinal);
         }
 
         private List<BoundSpec> Bind(Type type)

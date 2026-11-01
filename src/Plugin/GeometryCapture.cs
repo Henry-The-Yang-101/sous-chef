@@ -16,15 +16,36 @@ namespace SousChef.Plugin
             public float RefreshedAt;
             public object Asset;
         }
+        private sealed class TerrainEntry
+        {
+            public TerrainData Terrain;
+            public string Id;
+            public float RefreshedAt;
+            public uint Fingerprint;
+            public object Asset;
+        }
         private readonly Dictionary<int, MeshEntry> meshes = new Dictionary<int, MeshEntry>();
+        private readonly Dictionary<int, TerrainEntry> terrains = new Dictionary<int, TerrainEntry>();
         private readonly Func<Object, object> reference;
         private int nextAsset;
         public int Revision { get; private set; }
         public readonly Dictionary<string, object> Assets = new Dictionary<string, object>();
         public GeometryCapture(Func<Object, object> objectReference) { reference = objectReference; }
 
-        public void Reset() { meshes.Clear(); Assets.Clear(); Revision++; }
+        public void Reset() { meshes.Clear(); terrains.Clear(); Assets.Clear(); Revision++; }
         public void BeginFrame() { Assets.Clear(); }
+
+        public void EndFrame()
+        {
+            var removed = new List<int>();
+            foreach (var pair in meshes)
+                if (pair.Value.Id == null || !Assets.ContainsKey(pair.Value.Id)) removed.Add(pair.Key);
+            foreach (int key in removed) meshes.Remove(key);
+            removed.Clear();
+            foreach (var pair in terrains)
+                if (pair.Value.Id == null || !Assets.ContainsKey(pair.Value.Id)) removed.Add(pair.Key);
+            foreach (int key in removed) terrains.Remove(key);
+        }
 
         public object Collider(Collider collider)
         {
@@ -48,8 +69,7 @@ namespace SousChef.Plugin
             else if (character != null) result["shape"] = Json.Object("kind", "character", "center", Values.Vector(character.center),
                 "radius", character.radius, "height", character.height, "skinWidth", character.skinWidth, "stepOffset", character.stepOffset, "slopeLimit", character.slopeLimit);
             else if (mesh != null) result["shape"] = Json.Object("kind", "mesh", "convex", mesh.convex, "mesh", MeshAsset(mesh.sharedMesh));
-            else if (terrain != null) result["shape"] = Json.Object("kind", "terrain", "status", "unsupported_heightfield",
-                "size", terrain.terrainData == null ? null : Values.Vector(terrain.terrainData.size));
+            else if (terrain != null) result["shape"] = Json.Object("kind", "terrain", "terrain", TerrainAsset(terrain.terrainData));
             else result["shape"] = Json.Object("kind", "unknown", "status", "unsupported_shape");
             return result;
         }
@@ -160,6 +180,45 @@ namespace SousChef.Plugin
             return Json.Object("assetId", entry.Id, "sampleAgeSeconds", Time.realtimeSinceStartup - entry.RefreshedAt);
         }
 
+        private object TerrainAsset(TerrainData terrain)
+        {
+            if (terrain == null) return null;
+            TerrainEntry entry;
+            int key = terrain.GetInstanceID();
+            if (!terrains.TryGetValue(key, out entry) || !System.Object.ReferenceEquals(entry.Terrain, terrain))
+            {
+                entry = new TerrainEntry { Terrain = terrain, RefreshedAt = -100 }; terrains[key] = entry;
+            }
+            if (Time.realtimeSinceStartup - entry.RefreshedAt >= 2f)
+            {
+                entry.RefreshedAt = Time.realtimeSinceStartup;
+                int resolution = terrain.heightmapResolution; uint hash = 2166136261;
+                object data;
+                if (resolution > 1025) data = Json.Object("status", "truncated", "reason", "heightmap resolution exceeds 1025", "resolution", resolution);
+                else
+                {
+                    float[,] heights = terrain.GetHeights(0, 0, resolution, resolution);
+                    float[] values = new float[resolution * resolution];
+                    for (int z = 0; z < resolution; z++) for (int x = 0; x < resolution; x++)
+                    {
+                        float value = heights[z, x]; values[z * resolution + x] = value;
+                        hash = unchecked((hash ^ (uint)value.GetHashCode()) * 16777619);
+                    }
+                    foreach (float value in Values.Vector(terrain.size)) hash = unchecked((hash ^ (uint)value.GetHashCode()) * 16777619);
+                    data = Json.Object("status", "observed", "name", terrain.name, "resolution", resolution,
+                        "size", Values.Vector(terrain.size), "heights", values, "layout", "z-major normalized heights");
+                }
+                if (entry.Asset == null || entry.Fingerprint != hash)
+                {
+                    entry.Fingerprint = hash; entry.Id = "terrain:" + (++nextAsset);
+                    entry.Asset = Json.Object("type", "asset", "protocolVersion", 1, "id", entry.Id, "kind", "heightfield", "data", data);
+                    Revision++;
+                }
+            }
+            Assets[entry.Id] = entry.Asset;
+            return Json.Object("assetId", entry.Id, "sampleAgeSeconds", Time.realtimeSinceStartup - entry.RefreshedAt);
+        }
+
         public static object PhysicsSettings()
         {
             var layers = new List<object>();
@@ -171,7 +230,7 @@ namespace SousChef.Plugin
             }
             return Json.Object("gravity", Values.Vector(Physics.gravity), "layers", layers,
                 "queriesHitTriggers", Physics.queriesHitTriggers, "queriesHitBackfaces", Physics.queriesHitBackfaces,
-                "individualIgnoredPairs", "unobserved");
+                "individualIgnoredPairs", Json.Object("status", "unavailable", "reason", "Unity 2017.4 has no Physics.GetIgnoreCollision reader"));
         }
     }
 }

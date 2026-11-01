@@ -33,11 +33,20 @@ namespace SousChef.Plugin.Adapters
             Add(s, "attachments", "ServerPhysicalAttachment", "m_isHeld m_physicalAttachment m_bIsClientSidePredicted");
             Add(s, "attachments", "ClientPhysicalAttachment", "m_isHeld m_Parent m_bClientSidePredicted");
             Add(s, "attachments", "ServerAttachStation", "m_item m_pendingInit");
+            Add(s, "attachments", "ClientAttachStation", "m_item");
+            Add(s, "attachments", "ServerAttachStation+HolderAdapter", "m_attachStation");
+            Add(s, "attachments", "ClientAttachStation+HolderAdapter", "m_attachStation");
             Add(s, "attachments", "AttachStation", "m_attachPoint m_pickupPriority m_placementPriority m_catchingPriority m_canCatch");
 
             Add(s, "food", "ServerIngredientContainer", "m_contents");
             Add(s, "food", "ClientIngredientContainer", "m_contents");
             Add(s, "food", "IngredientContainer", "m_capacity");
+            Add(s, "food", "IngredientPropertiesComponent", "m_ingredientOrderNode");
+            Add(s, "food", "ItemPropertiesComponent", "m_itemDefinition");
+            Add(s, "food", "CookableIngredient", "m_ingredientOrderNode");
+            Add(s, "food", "ServerCookableIngredient", "m_cookableIngredient m_cookingHandler");
+            Add(s, "food", "ServerItemContainer", "m_ingredientContainer");
+            Add(s, "food", "ServerLadleContainer", "m_ingredientContainer");
             Add(s, "food", "AssembledDefinitionNode", "m_freeObject");
             Add(s, "food", "IngredientAssembledNode", "m_ingriedientOrderNode");
             Add(s, "food", "ItemAssembledNode", "m_itemOrderNode");
@@ -65,6 +74,17 @@ namespace SousChef.Plugin.Adapters
             Add(s, "food", "PlateStackBase", "m_platePrefab");
 
             Add(s, "processing", "ServerWorkableItem", "m_progress m_subProgress m_chopsPerSlice m_onWorkstation");
+            Add(s, "processing", "ClientWorkableItem", "m_progress m_subProgress m_chopsPerSlice m_onWorkstation");
+            Add(s, "processing", "ServerWorkstation", "m_item m_interacters");
+            Add(s, "processing", "ClientWorkstation", "m_item m_interacters");
+            Add(s, "processing", "ServerWorkstation+Interacter", "m_object m_actionLength m_actionTime m_actionTimer");
+            Add(s, "processing", "ClientWorkstation+Interacter", "Component m_actionLength m_actionTime m_actionTimer");
+            Add(s, "processing", "ClientCookingHandler", "m_cachedCookingState m_cachedCookingProgress m_isInCookingRegion");
+            Add(s, "processing", "ClientMixingHandler", "m_cachedMixingState m_cachedMixingProgress");
+            Add(s, "processing", "CookableProperties", "AllowedCookingSteps");
+            Add(s, "interactions", "ServerInteractable", "m_interacters m_interactionSuppressed");
+            Add(s, "interactions", "ClientInteractable", "m_interacters m_interactionSuppressed");
+            Add(s, "chef", "ServerPlayerControlsImpl_Default", "m_lastInteracted m_autoSwitchTimer");
             Add(s, "processing", "WorkableItem", "m_stages m_nextPrefab");
             Add(s, "processing", "ServerCookingHandler", "m_ServerData");
             Add(s, "processing", "CookingStateMessage", "m_cookingState m_cookingProgress");
@@ -106,10 +126,13 @@ namespace SousChef.Plugin.Adapters
             Add(s, "orders", "OrderController.OrderID", "m_id");
             Add(s, "round", "ServerRoundTimer", "m_timeLeft m_roundTimer m_timeLimit");
             Add(s, "round", "ClientRoundTimer", "m_timeLeft m_roundTimer m_timeLimit");
+            Add(s, "round", "TimeManager", "m_paused m_timeMultiplier m_pauseMask m_frozenPhysics m_debugtimeScale");
+            Add(s, "round", "TimeManager+FrozenPhysicsData", "m_layer m_frozenBody m_linearVelocity m_angularVelocity m_isKinematic m_useGravity");
 
             Add(s, "conveyors", "ServerConveyorStation", "m_conveying m_item m_responsibleForItem m_adjacentReceiver m_gridIndex m_data m_pendingAdjacentUpdate");
             Add(s, "conveyors", "ConveyorStationMessage", "m_receiverEntityID m_itemEntityID m_arriveTime");
             Add(s, "conveyors", "ConveyorStation", "m_conveySpeed m_conveyanceDirectionXZ");
+            Add(s, "conveyors", "ServerTabletopConveyenceReceiver", "m_receiving m_itemJustRemoved m_item");
             Add(s, "surfaces", "Travelator", "m_speed m_directionXZ m_border m_gridManager m_gridIndex");
             Add(s, "surfaces", "SurfaceMovable", "m_surface m_prevSurface m_surfaceVelocity");
             Add(s, "surfaces", "PlayerPhysicsSurface", "Properties");
@@ -155,6 +178,7 @@ namespace SousChef.Plugin.Adapters
             Add(s, "horde", "GameModes.Horde.HordeEnemyMessage", "m_kind m_toState");
             Add(s, "horde", "GameModes.Horde.ServerHordeTarget", "m_interactors m_repairAmount <Health>k__BackingField");
             Add(s, "horde", "GameModes.Horde.ServerHordeLockable", "m_locked");
+            Add(s, "horde", "GameModes.Horde.TeamScoreStats", "TotalHealth TotalMoneyEarned TotalMoneySpent TotalEnemiesDefeated");
             return s;
         }
 

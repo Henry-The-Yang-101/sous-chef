@@ -98,12 +98,20 @@ internal static class Program
                 server.Publish(new CapturePacket { Sequence = 6, Epoch = 2,
                     Frame = Json.Object("type", "status", "inRound", false, "sequence", 6) });
                 Assert(Read(reader).GetProperty("type").GetString() == "status", "exit invalidates kitchen");
+                server.Publish(Packet(7, 2));
+                Assert(Read(reader).GetProperty("type").GetString() == "asset", "assets resent after status in same epoch");
+                Assert(Read(reader).GetProperty("sequence").GetInt64() == 7, "recovered snapshot");
+                server.Publish(Packet(8, 2, false));
+                Assert(Read(reader).GetProperty("sequence").GetInt64() == 8, "asset disappeared");
+                server.Publish(Packet(9, 2));
+                Assert(Read(reader).GetProperty("type").GetString() == "asset", "asset reappears without unresolved reference");
+                Assert(Read(reader).GetProperty("sequence").GetInt64() == 9, "reappearance snapshot");
             }
             // Slow clients cannot delay publication or retain an unbounded queue.
             using (var slow = new TcpClient("127.0.0.1", server.Port))
             {
                 var watch = System.Diagnostics.Stopwatch.StartNew();
-                for (int n = 7; n < 1007; n++) server.Publish(Packet(n));
+                for (int n = 10; n < 1010; n++) server.Publish(Packet(n));
                 Assert(watch.ElapsedMilliseconds < 1500, "publish is nonblocking");
                 Assert(server.CoalescedCaptures > 0, "bounded mailbox coalesces captures");
             }
@@ -119,6 +127,10 @@ internal static class Program
             return File.Exists(file) ? context.LoadFromAssemblyPath(file) : null;
         };
         Assembly assembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(Path.Combine(managed, "Assembly-CSharp.dll"));
+        Type fastList = assembly.GetType("System.Collections.Generic.FastList`1");
+        Assert(fastList != null && fastList.GetField("_items") != null, "FastList backing array contract");
+        Assert(fastList.GetField("_size", BindingFlags.Instance | BindingFlags.NonPublic)?.FieldType == typeof(int),
+            "FastList live size contract");
         var errors = new List<string>();
         foreach (AdapterSpec spec in AdapterCatalog.Specs.Values)
         {

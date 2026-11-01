@@ -144,6 +144,9 @@ namespace SousChef.Core
                         stream.Write(gap, 0, gap.Length);
                     }
                     stream.Write(frame.Frame, 0, frame.Frame.Length); last = frame.Sequence;
+                    // Assets can disappear and later reappear within the same epoch.
+                    // Match the client's current-frame cache, including empty status frames.
+                    sent = new HashSet<string>(frame.Assets.Keys);
                 }
             }
             catch (IOException) { }

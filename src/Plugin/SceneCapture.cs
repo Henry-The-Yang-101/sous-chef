@@ -81,7 +81,7 @@ namespace SousChef.Plugin
                         if (component == null) { missingScripts++; continue; }
                         string type = component.GetType().FullName; Increment(inventory, type);
                         var observation = Json.Object("type", type, "instanceId", component.GetInstanceID(),
-                            "authority", type.StartsWith("Server", StringComparison.Ordinal) ? "server" : type.StartsWith("Client", StringComparison.Ordinal) ? "client" : "shared");
+                            "authority", component.GetType().Name.StartsWith("Server", StringComparison.Ordinal) ? "server" : component.GetType().Name.StartsWith("Client", StringComparison.Ordinal) ? "client" : "shared");
                         Behaviour behaviour = component as Behaviour;
                         if (behaviour != null) observation["enabled"] = behaviour.enabled;
                         try
@@ -111,6 +111,10 @@ namespace SousChef.Plugin
                             }
                             var wind = component as WindVolume;
                             if (wind != null) observation["velocity"] = Values.Vector(wind.GetVelocity());
+                            var serverFlow = component as ServerKitchenFlowControllerBase;
+                            if (serverFlow != null && serverFlow.RoundTimer != null) observation["timerSuppressed"] = serverFlow.RoundTimer.IsSuppressed;
+                            var clientFlow = component as ClientKitchenFlowControllerBase;
+                            if (clientFlow != null && clientFlow.RoundTimer != null) observation["timerSuppressed"] = clientFlow.RoundTimer.IsSuppressed;
                         }
                         catch (Exception e)
                         {
@@ -133,22 +137,23 @@ namespace SousChef.Plugin
             }
             foreach (string id in previousParents.Keys) if (!parents.ContainsKey(id)) removed.Add(id);
             previousParents = parents; identities.Retain(seen);
+            geometry.EndFrame();
             object physics = GeometryCapture.PhysicsSettings(); watch.Stop();
             var snapshot = Json.Object("type", "snapshot", "protocolVersion", 1, "sessionId", session,
                 "sequence", sequence, "levelEpoch", Epoch, "role", gate.Role, "inRound", true,
-                "flowId", Id(gate.Flow.gameObject), "scenes", scenes,
+                "flowId", Id(gate.Flow.gameObject), "scenes", scenes, "paused", TimeManager.IsPaused(TimeManager.PauseLayer.Main),
                 "clock", Json.Object("renderFrame", Time.frameCount, "fixedUpdateCount", fixedTicks,
                     "gameTime", Time.time, "fixedTime", Time.fixedTime, "realtime", Time.realtimeSinceStartup,
                     "timeScale", Time.timeScale, "deltaTime", Time.deltaTime, "fixedDeltaTime", Time.fixedDeltaTime,
                     "captureStage", "WaitForEndOfFrame"),
-                "geometryRevision", geometry.Revision, "physics", physics, "objects", objects,
+                "geometryRevision", sequence, "meshRevision", geometry.Revision, "physics", physics, "objects", objects,
                 "changes", Json.Object("semantics", "sampled_diff", "created", created, "removed", removed, "reparented", reparented),
                 "coverage", Json.Object("usedAdapters", new List<string>(reader.UsedAdapters),
                     "componentInventory", CountObject(inventory), "unsupportedComponents", CountObject(unsupported),
                     "unsupportedValues", CountObject(reader.UnsupportedValues), "missingFields", new List<string>(reader.MissingFields),
                     "missingScripts", missingScripts, "truncatedValues", reader.TruncatedValues, "fieldErrors", reader.Errors,
-                    "errors", errors, "limitations", new[] { "sampled events only", "per-collider collision ignores unobserved",
-                        "terrain heightfields unobserved", "unreadable collision meshes reported", "coroutine locals and RNG unobserved",
+                    "errors", errors, "limitations", new[] { "sampled events only", "per-collider collision ignore pairs unavailable in Unity 2017.4",
+                        "unreadable collision meshes reported", "coroutine locals and RNG unobserved",
                         "mesh refresh interval 2 seconds", "client role lacks authoritative server state" }),
                 "diagnostics", Json.Object("captureMilliseconds", watch.Elapsed.TotalMilliseconds, "coalescedCaptures", coalesced));
             return new CapturePacket { Sequence = sequence, Epoch = Epoch, Frame = snapshot,

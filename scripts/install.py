@@ -6,8 +6,9 @@ import json
 import os
 from pathlib import Path
 import shutil
+import subprocess
 from build import DEFAULT_GAME, build
-from toolchain import ROOT, TOOLS, bootstrap
+from toolchain import TOOLS
 
 
 def sha(path):
@@ -15,6 +16,8 @@ def sha(path):
 
 
 def install(game):
+    if subprocess.run(['pgrep', '-x', 'Overcooked2'], capture_output=True).returncode == 0:
+        raise SystemExit('Quit Overcooked! 2 before updating its loaded plugin.')
     output = build(game)
     dest = game.parent
     manifest = dest / '.sous-chef-install.json'
@@ -45,6 +48,8 @@ def install(game):
 
 
 def uninstall(game):
+    if subprocess.run(['pgrep', '-x', 'Overcooked2'], capture_output=True).returncode == 0:
+        raise SystemExit('Quit Overcooked! 2 before removing its loaded plugin.')
     dest = game.parent
     manifest = dest / '.sous-chef-install.json'
     if not manifest.exists(): raise SystemExit('No owned installation manifest found.')
