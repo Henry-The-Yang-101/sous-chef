@@ -1,4 +1,4 @@
-# Local navigation harness
+# Local action harness
 
 From the repository root:
 
@@ -19,11 +19,17 @@ the menus.
 
 ## Use
 
-- **Navigate** sends the exact chosen destination to `navigate_to`. The plugin
-  handles pathfinding, steering, replanning and final position/facing. On macOS,
+- Select an action in a target's dropdown, then **Run**. **Navigate** sends the
+  exact chosen destination to `navigate_to`. Other options include pickup,
+  placement, ingredient addition, work, activation, disposal, waits and targeted
+  throwing; see [first-layer actions](actions.md) for their semantics. Work and
+  wait choices include their completion condition, such as **Work: one plate
+  clean** or **Wait: cooked**, with the default 60-second timeout. Player rows
+  offer **Pass held item** when the native capability is available.
+- The plugin handles pathfinding, steering, replanning and final position/facing. On macOS,
   clicking brings Overcooked! 2 to the foreground using the OS application launcher
-  so that its native input gate accepts the command. No keyboard events,
-  waypoints, dash, pickup or work buttons are sent by the harness.
+  so that its native input gate accepts the command. The harness sends a typed
+  action request; the plugin owns the logical inputs and verifies the outcome.
 - **Stop**, or Escape while this page is focused, interrupts the current bridge
   action. Stop is available even when another API client owns Player 2.
 - Filter by food name, object name, type or ID. Food dispensers show the actual
@@ -43,21 +49,24 @@ the menus.
   route to a usable approach stance; **direct** is the horizontal straight-line
   distance to the object's pivot, which can include an intervening counter or wall.
   Walk can be shorter than direct because the chef stops beside an object rather
-  than at its centre. Both update with the live catalogue. This metadata requires
+  than at its centre. Both update with the live catalogue. Targets without a
+  walking route can still offer throws and waits; their walking distance is
+  unavailable. This metadata requires
   the rebuilt plugin: quit the game, run `python3 scripts/install.py`, then relaunch
   through `python3 scripts/launch.py` after updating.
 - The status names the actual target and shows walking, aligning, arrival or the interruption reason.
   `Arrived` includes the actions currently allowed by native predicates (pickup,
   place or use). An empty sink instead reports that the chef is positioned and
   facing it, with no action currently available. Navigation never performs the work.
-  Navigation buttons are disabled while an action is active; stop it before choosing
-  another. Commands are never retried or redirected automatically.
+  All action buttons are disabled while an action is active; stop it before choosing
+  another. Interaction phases and terminal outcomes also appear in the status.
+  Commands are never retried or redirected automatically.
 
 ## Open on your phone
 
 Open **Open on your phone** on the Mac's localhost page and scan its QR code with
 your phone's camera. Keep both devices on the same Wi-Fi. The phone shows the same
-live list, distances, status, Navigate and Stop controls, so Overcooked! 2 can stay
+live list, distances, status, action selectors and Stop control, so Overcooked! 2 can stay
 focused on the Mac. If the Mac has several network addresses, choose the one on
 your phone's network in the connection selector. Guest Wi-Fi isolation or a local
 firewall can prevent direct access.

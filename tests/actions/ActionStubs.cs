@@ -33,7 +33,11 @@ public class ServerAttachStation : MonoBehaviour
     public GameObject Item;
     public GameObject InspectItem() { return Item; }
 }
-public class ServerStack : MonoBehaviour { public List<GameObject> m_stackItems = new List<GameObject>(); }
+public class ServerStack : MonoBehaviour
+{
+    public List<GameObject> m_stackItems = new List<GameObject>();
+    public GameObject InspectTopOfStack() { return m_stackItems.Count==0 ? null : m_stackItems[m_stackItems.Count-1]; }
+}
 public class ServerPlate : MonoBehaviour { }
 public class ServerWashingStation : MonoBehaviour { public int m_plateCount; public float m_cleaningTimer; public ServerAttachStation m_dryingAttachStation; }
 public class ClientTriggerToggleOnAnimator : MonoBehaviour { public bool CurrentState; }

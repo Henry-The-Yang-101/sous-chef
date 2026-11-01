@@ -458,3 +458,31 @@ These are code and analytical-geometry regressions. They do not emulate PhysX,
 native step projection, friction or Unity update ordering. No game process was
 controlled and no installed plugin was replaced during this follow-up; live level
 traversal and low-FPS behavior remain unverified.
+
+### First-layer interactions and targeted throwing — 2026-11-01
+
+Bridge 0.5 implements pickup, placement, single-ingredient addition, work,
+activation, disposal, typed waits and targeted throws to stations or other local
+players. `transfer_contents` remains a higher-layer operation and is not exposed.
+The Python API, CLI and browser action selector use the same native executor.
+
+Validation builds the plugin against the installed assemblies and audits the
+151 observation schemas plus the additional action fields, native processing
+enum names and sticky-interaction cleanup bindings. The core/API suite passes
+812 assertions; navigation passes 56 checks. The action project links the real
+executor and planner against Unity/game doubles, including Unity's destroyed
+object/null equality behavior. Its 117 checks cover exact pickup/placement
+outcomes, consumed ingredients, last-plate stack destruction, changed targets,
+washing scopes, desired-state activation, cancellation, bounded waits, processing
+state, fixed-step damped ballistics, obstructions, generated release stances,
+moving-player catch constraints and missed catches. Python passes 60 tests.
+
+The browser selector was inspected with a local mocked kitchen, including
+station work, nonwalking throw targets and player-pass options; no browser errors
+were reported. The temporary preview server was stopped afterward.
+
+No game was opened or controlled for this addition, as requested. No installed
+plugin was replaced. Throw physics and native interaction behavior remain
+unverified in a live kitchen; the analytical fixtures do not establish perfect
+throws under arbitrary human movement or changing native collision geometry.
+Check log: `.local/first-layer-final-check.log`.

@@ -42,6 +42,22 @@ const explain = reason => reasons[reason] || (reason ? reason.replaceAll('_', ' 
 const kindName = kind => (kind || 'destination').replaceAll('_', ' ');
 const number = value => Number.isFinite(value) ? value.toFixed(1) : '—';
 const contentsOf = d => d.contents?.summary || '';
+const actionNames = {navigate_to: 'Navigate', pick_up: 'Pick up', place_at: 'Place held item', add_ingredient: 'Add held ingredient',
+  work_at: 'Work', activate: 'Activate', discard: 'Discard held item', wait_until: 'Wait', throw_to: 'Throw held item', throw_to_player: 'Pass held item'};
+function actionChoices(d) {
+  const choices = d.walkReachable ? [{value: 'navigate_to', label: 'Navigate'}] : [];
+  for (const operation of d.operations || []) {
+    if (operation === 'work_at' || operation === 'wait_until') {
+      for (const condition of d[operation === 'work_at' ? 'workConditions' : 'waitConditions'] || []) {
+        const label = condition.replaceAll('_', ' ');
+        choices.push({value: `${operation}|${condition}`, label: `${actionNames[operation]}: ${label}`});
+      }
+    } else if (operation === 'activate') {
+      for (const desired of d.activationStates || ['trigger']) choices.push({value: `activate|${desired}`, label: `Activate: ${desired}`});
+    } else choices.push({value: operation, label: actionNames[operation] || operation.replaceAll('_', ' ')});
+  }
+  return choices;
+}
 function nameOf(d) {
   if (d.foodName) return `${d.foodName.replaceAll('_', ' ')} dispenser`;
   if (d.kind === 'ingredient_supply') return 'Food dispenser (name unavailable)';
@@ -56,22 +72,29 @@ function render() {
   const live = fresh();
   const control = state?.control || {};
   const nav = control.navigation || {};
+  const receipt = control.action || {};
   const moving = live && nav.state === 'navigating';
+  const acting = live && receipt.state === 'running';
+  const busy = moving || acting;
   const catalog = live ? state.catalog || {} : {};
-  const destinations = catalog.destinations || [];
+  const byId = new Map((catalog.destinations || []).map(d => [d.id, {...d, walkReachable: true}]));
+  for (const d of [...(catalog.targets || []), ...(catalog.players || [])]) byId.set(d.id, {...byId.get(d.id), ...d});
+  const destinations = Array.from(byId.values());
   const catalogReason = catalog.reason || catalog.navigation?.catalogReason || control.reason;
-  const recorded = nav.destination || (nav.destinationId && state?.lastCommand?.target);
+  const useReceipt = receipt.operation && (acting || (!moving && state?.lastCommand?.operation !== 'navigate_to'));
+  const recorded = useReceipt ? (destinations.find(d => d.id === receipt.targetId || (receipt.operation === 'throw_to_player' && String(d.playerId) === receipt.targetId)) || state?.lastCommand?.target)
+    : nav.destination || (nav.destinationId && state?.lastCommand?.target);
   const active = destinations.find(d => d.id === recorded?.id) || recorded;
   el('connection').textContent = live ? 'Bridge connected' : state?.connected ? 'State stale' : 'Bridge disconnected';
   el('light').className = 'light ' + (live ? 'live' : 'offline');
   el('freshness').textContent = live ? `Updated ${Math.max(0, Math.round((state.ageMs || 0) + performance.now() - receivedAt))} ms ago` : 'Waiting for a fresh sample';
-  el('action').textContent = moving ? `${nav.phase === 'aligning' ? 'Aligning with' : 'Walking to'} ${active ? nameOf(active) : nav.destinationId}` : live ? 'Player 2 is idle' : 'Waiting for the bridge';
+  el('action').textContent = acting ? `${actionNames[receipt.operation] || receipt.operation} · ${receipt.phase.replaceAll('_', ' ')}` : moving ? `${nav.phase === 'aligning' ? 'Aligning with' : 'Walking to'} ${active ? nameOf(active) : nav.destinationId}` : live ? 'Player 2 is idle' : 'Waiting for the bridge';
   el('target').textContent = active
     ? `${active.label}${contentsOf(active) ? ` · Contents: ${contentsOf(active)}` : ''} · ${active.id} · object ${active.objectInstanceId} · x ${number(active.position?.[0])}, z ${number(active.position?.[2])}${Number.isFinite(active.routeDistance) ? ` · ${number(active.routeDistance)} units to walk` : ''}`
     : 'Join Player 2 with Split Controller, then enter an unpaused Arcade → Couch kitchen.';
   const ready = nav.arrival;
   const possible = ready ? [['canPickup', 'pickup'], ['canPlace', 'place'], ['canUse', 'use']].filter(([key]) => ready[key]).map(([,name]) => name).join(', ') : '';
-  el('result').textContent = moving ? 'The plugin is navigating and checking final alignment. Stop interrupts it.'
+  el('result').textContent = useReceipt ? `${receipt.state}: ${explain(receipt.reason) || 'Checking the requested outcome.'}` : moving ? 'The plugin is navigating and checking final alignment. Stop interrupts it.'
     : live ? explain(nav.reason) + (nav.reason === 'arrived' && possible ? ` Available at arrival: ${possible}.` : '') : '';
   const error = lastError || (!live && state?.error) || '';
   el('error').hidden = !error;
@@ -84,7 +107,7 @@ function render() {
   el('table-wrap').hidden = !shown.length;
   el('empty').textContent = !live ? 'No live destinations. Start the game with the bridge; this page reconnects automatically.'
     : query && destinations.length ? 'No destinations match this filter.'
-    : explain(catalogReason) || 'No reachable destinations at the moment. This list updates automatically.';
+    : explain(catalogReason) || 'No observed action targets at the moment. This list updates automatically.';
 
   if (sessionId !== state?.sessionId) { rows.forEach(row => row.tr.remove()); rows.clear(); sessionId = state?.sessionId; }
   const ids = new Set(shown.map(d => d.id));
@@ -105,11 +128,13 @@ function render() {
       const walkDistance = document.createElement('strong');
       const directDistance = document.createElement('small');
       distance.append(walkDistance, directDistance);
-      const action = document.createElement('td');
+      const action = document.createElement('td'); action.className = 'action-controls';
+      const select = document.createElement('select');
       const button = document.createElement('button'); button.type = 'button';
-      action.append(button); tr.append(titleCell, position, distance, action);
-      row = {tr, title, contents, meta, raw, position, walkDistance, directDistance, button, destination};
-      button.addEventListener('click', () => navigate(row.destination));
+      action.append(select, button); tr.append(titleCell, position, distance, action);
+      row = {tr, title, contents, meta, raw, position, walkDistance, directDistance, select, button, destination};
+      select.addEventListener('change', render);
+      button.addEventListener('click', () => perform(row.destination, row.select.value));
       rows.set(destination.id, row);
     }
     row.destination = destination;
@@ -123,14 +148,26 @@ function render() {
     row.position.textContent = `${number(destination.position?.[0])} / ${number(destination.position?.[2])}`;
     row.walkDistance.textContent = Number.isFinite(destination.routeDistance) ? `${number(destination.routeDistance)} units walk` : 'Walk distance unavailable';
     row.directDistance.textContent = Number.isFinite(destination.directDistance) ? `${number(destination.directDistance)} units direct` : 'Direct distance unavailable';
-    row.button.textContent = moving && nav.destinationId === destination.id ? 'Walking…' : 'Navigate';
-    row.button.setAttribute('aria-label', `Navigate to ${nameOf(destination)}${contentsOf(destination) ? `, ${contentsOf(destination)}` : ''} ${destination.id}`);
-    row.button.disabled = pending || moving || (!control.available && control.reason !== 'game_unfocused') || !live;
-    row.tr.classList.toggle('active', moving && nav.destinationId === destination.id);
+    const choices = actionChoices(destination);
+    const signature = JSON.stringify(choices);
+    if (row.choiceSignature !== signature) {
+      const selected = row.select.value;
+      row.select.replaceChildren(...choices.map(choice => {
+        const option = document.createElement('option'); option.value = choice.value; option.textContent = choice.label; return option;
+      }));
+      if (choices.some(choice => choice.value === selected)) row.select.value = selected;
+      row.choiceSignature = signature;
+    }
+    row.select.setAttribute('aria-label', `Action for ${nameOf(destination)}`);
+    row.select.disabled = pending || busy || !live || !choices.length;
+    row.button.textContent = busy && active?.id === destination.id ? 'Running…' : 'Run';
+    row.button.setAttribute('aria-label', `${choices.find(c => c.value === row.select.value)?.label || 'Run'}: ${nameOf(destination)}`);
+    row.button.disabled = pending || busy || !choices.length || (!control.available && control.reason !== 'game_unfocused') || !live;
+    row.tr.classList.toggle('active', busy && active?.id === destination.id);
     const atIndex = el('rows').children[index];
     if (atIndex !== row.tr) el('rows').insertBefore(row.tr, atIndex || null);
   }
-  el('details').textContent = JSON.stringify({sessionId: state?.sessionId, pad: control.pad, side: control.side, navigation: nav, error: state?.error}, null, 2);
+  el('details').textContent = JSON.stringify({sessionId: state?.sessionId, pad: control.pad, side: control.side, navigation: nav, action: receipt, error: state?.error}, null, 2);
 }
 
 async function post(path, data = {}) {
@@ -140,11 +177,13 @@ async function post(path, data = {}) {
   if (!response.ok) throw new Error(result.error || 'Command failed');
   return result;
 }
-async function navigate(d) {
+async function perform(d, choice) {
   if (pending || !fresh()) return;
   pending = true; lastError = ''; render();
   try {
-    state = await post('/api/navigate', {destinationId: d.id, objectInstanceId: d.objectInstanceId, sessionId: state.sessionId});
+    const [operation, option] = choice.split('|');
+    const args = operation === 'work_at' ? {until: option} : operation === 'wait_until' ? {condition: option} : operation === 'activate' ? {desired_state: option} : {};
+    state = await post('/api/action', {destinationId: d.id, objectInstanceId: d.objectInstanceId, sessionId: state.sessionId, operation, arguments: args});
     receivedAt = performance.now();
   } catch (error) { lastError = error.message; }
   finally { pending = false; render(); }

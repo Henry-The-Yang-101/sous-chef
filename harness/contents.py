@@ -187,9 +187,10 @@ class ContentsObserver:
         state['contentsObservation'] = {'fresh': fresh,
             'ageMs': None if observed is None else round((self.clock() - observed) * 1000),
             'levelEpoch': index.epoch if fresh else None, 'sequence': index.sequence if fresh else None}
-        for destination in state.get('catalog', {}).get('destinations', []):
-            destination['contents'] = index.describe(destination) if fresh else {
-                'status': 'unknown', 'summary': 'Contents unavailable'}
+        for key in ('destinations', 'targets'):
+            for destination in state.get('catalog', {}).get(key, []):
+                destination['contents'] = index.describe(destination) if fresh else {
+                    'status': 'unknown', 'summary': 'Contents unavailable'}
 
     def start(self):
         self.thread = threading.Thread(target=self._run, name='contents-observer', daemon=True)

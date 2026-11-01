@@ -7,41 +7,6 @@ namespace SousChef.Core
     // live collision sweeps, receiving volumes and navigation to release stances.
     public static class ThrowTrajectory
     {
-        public static bool FlightTime(float height, float verticalSpeed, float gravity, out float time)
-        {
-            time = 0;
-            if (!Finite(height) || !Finite(verticalSpeed) || !Finite(gravity) || gravity >= -.001f) return false;
-            double discriminant = verticalSpeed * verticalSpeed + 2.0 * gravity * height;
-            if (discriminant < 0) return false;
-            double t = (-verticalSpeed - Math.Sqrt(discriminant)) / gravity;
-            if (t <= .1 || t > 4) return false;
-            time = (float)t; return true;
-        }
-        // Horizontal interception at a selected receiving height. Native throws
-        // have fixed elevation, so an arbitrary origin cannot reach every target.
-        public static bool Intercept(float dx, float dz, float vx, float vz, float speed, out float time)
-        {
-            time = 0;
-            if (!Finite(dx) || !Finite(dz) || !Finite(vx) || !Finite(vz) || !Finite(speed) || speed <= 0) return false;
-            double a = vx * vx + vz * vz - speed * speed, b = 2 * (dx * vx + dz * vz), c = dx * dx + dz * dz;
-            double t;
-            if (Math.Abs(a) < 1e-8) { if (Math.Abs(b) < 1e-8) return false; t = -c / b; }
-            else
-            {
-                double d = b * b - 4 * a * c;
-                if (d < 0) return false;
-                double first = (-b - Math.Sqrt(d)) / (2 * a), second = (-b + Math.Sqrt(d)) / (2 * a);
-                t = first > .1 && second > .1 ? Math.Min(first, second) : Math.Max(first, second);
-            }
-            if (t <= .1 || t > 4) return false;
-            time = (float)t; return true;
-        }
-        public static float Height(float origin, float verticalSpeed, float gravity, float time, float fixedDelta)
-        {
-            // PhysX applies gravity before each position integration. Include the
-            // discrete-step correction rather than aiming with a continuous arc.
-            return origin + verticalSpeed * time + .5f * gravity * time * (time + fixedDelta);
-        }
         // Independent implementation of the free-flight integration described in
         // NVIDIA PhysX 3.4 DyBodyCoreIntegrator.h: gravity, damping, then position.
         // Fractional times interpolate along the next actual fixed-step segment.
@@ -86,6 +51,8 @@ namespace SousChef.Core
             time = 0;
             if (!Finite(dx) || !Finite(dz) || !Finite(vx) || !Finite(vz) || !Finite(speed) || !Finite(drag) || !Finite(step) || speed <= 0 || drag < 0 || step < .001f || step > .1f) return false;
             float low = .1f;
+            double initialX = dx + vx * low, initialZ = dz + vz * low;
+            if (Math.Sqrt(initialX * initialX + initialZ * initialZ) <= Displacement(speed, 0, drag, low, step)) return false;
             for (float high = .1f + step; high <= 4; high += step)
             {
                 double x = dx + vx * high, z = dz + vz * high;

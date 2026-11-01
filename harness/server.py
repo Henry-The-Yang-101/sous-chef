@@ -137,6 +137,20 @@ class HarnessBridge:
             return result
 
     def navigate(self, viewer, session, destination, instance):
+        return self.act(viewer, session, destination, instance, 'navigate_to')
+
+    def act(self, viewer, session, destination, instance, operation, arguments=None):
+        allowed = {'navigate_to', 'pick_up', 'place_at', 'add_ingredient', 'work_at',
+                   'activate', 'discard', 'wait_until', 'throw_to', 'throw_to_player'}
+        if not isinstance(operation, str):
+            raise HarnessError('Unsupported action')
+        arguments = {} if arguments is None else arguments
+        keys = {'work_at': {'until', 'timeout'}, 'wait_until': {'condition', 'timeout'},
+                'activate': {'desired_state'}}.get(operation, set())
+        if operation not in allowed or not isinstance(arguments, dict) or arguments.keys() - keys:
+            raise HarnessError('Unsupported action or arguments')
+        if operation == 'wait_until' and 'condition' not in arguments:
+            raise HarnessError('Choose a wait condition')
         with self.state_lock:
             generation = self.generation
         with self.io_lock:
@@ -169,25 +183,32 @@ class HarnessBridge:
                     # before validating the exact target and issuing the sole command.
                     catalog = self.client.available_actions()
                     self._publish(catalog, self.client.last_response['control'])
-                chosen = next((d for d in catalog.get('destinations', [])
+                options = catalog.get('destinations', []) if operation == 'navigate_to' else (
+                    catalog.get('players', []) if operation == 'throw_to_player' else catalog.get('targets', []))
+                chosen = next((d for d in options
                                if d['id'] == destination and d['objectInstanceId'] == instance), None)
                 if chosen is None:
                     reason = catalog.get('navigation', {}).get('catalogReason')
                     raise HarnessError(reason or 'That destination is no longer reachable')
+                if operation != 'navigate_to' and operation not in chosen.get('operations', []):
+                    raise HarnessError('That action is no longer available for this target')
                 with self.state_lock:
                     if generation != self.generation:
                         raise HarnessError('Cancelled by Stop')
-                control = self.client.navigate_to(destination)
+                target = chosen['playerId'] if operation == 'throw_to_player' else destination
+                control = getattr(self.client, operation)(target, **arguments)
                 with self.state_lock:
                     self.owner = viewer
                     self.owner_seen = self.clock()
-                    self.value['lastCommand'] = {'operation': 'navigate_to', 'ok': True,
-                                                 'target': chosen, 'message': 'Navigation requested'}
+                    self.value['lastCommand'] = {'operation': operation, 'ok': True,
+                                                 'target': chosen, 'message': operation.replace('_', ' ') + ' requested'}
                 self._publish(catalog, control)
                 return self.state(viewer)
             except ControlError as error:
                 raise HarnessError(str(error)) from error
-            except (OSError, ValueError, KeyError) as error:
+            except (ValueError, TypeError) as error:
+                raise HarnessError(str(error)) from error
+            except (OSError, KeyError) as error:
                 self._failed(error)
                 raise HarnessError('Bridge disconnected; command was not retried') from error
 
@@ -306,10 +327,15 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(viewer, str) or not 1 <= len(viewer) <= 80:
                 raise ValueError('Missing browser identity')
             path = urlsplit(self.path).path
-            if path == '/api/navigate':
-                if not isinstance(data.get('destinationId'), str) or not isinstance(data.get('objectInstanceId'), int) or not isinstance(data.get('sessionId'), str):
+            if path in {'/api/navigate', '/api/action'}:
+                if not isinstance(data.get('destinationId'), str) or type(data.get('objectInstanceId')) is not int or not isinstance(data.get('sessionId'), str):
                     raise ValueError('Missing destination identity')
-                result = self.server.bridge.navigate(viewer, data['sessionId'], data['destinationId'], data['objectInstanceId'])
+                if path == '/api/navigate':
+                    result = self.server.bridge.navigate(viewer, data['sessionId'], data['destinationId'], data['objectInstanceId'])
+                else:
+                    if not isinstance(data.get('operation'), str):
+                        raise ValueError('Missing action')
+                    result = self.server.bridge.act(viewer, data['sessionId'], data['destinationId'], data['objectInstanceId'], data['operation'], data.get('arguments'))
             elif path == '/api/stop':
                 result = self.server.bridge.stop()
             elif path == '/api/leave':
@@ -332,7 +358,7 @@ def serve(port=8765, bridge_port=24703, local_only=False, tunnel=False, public_u
     server.bridge, server.token = bridge, secrets.token_urlsafe(32)
     server.sharing = PhoneShare(server.server_port, server.token,
                                 () if local_only else lan_addresses(), public_url)
-    print(f'Sous Chef navigation: http://127.0.0.1:{server.server_port}', flush=True)
+    print(f'Sous Chef actions: http://127.0.0.1:{server.server_port}', flush=True)
     print('Scan the phone QR code on that page; keep your phone on the same Wi-Fi.', flush=True)
     print('Player 2 only. Ctrl+C stops the harness and releases its action.', flush=True)
     try:

@@ -46,6 +46,7 @@ th { background: #f0f2ec; color: #66705f; font-size: 11px; font-weight: 600; pad
 th small { font-weight: 400; }
 td { padding: 13px 18px; border-top: 1px solid #e7ebe4; vertical-align: middle; font-variant-numeric: tabular-nums; }
 td:last-child { text-align: right; }
+.action-controls select { max-width: 220px; margin-right: 8px; }
 td small { display: block; font-size: 11px; color: #6b7365; font-weight: 400; margin-top: 5px; }
 td .raw { max-width: 480px; overflow-wrap: anywhere; color: #7a8075; }
 td .contents { color: #294527; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
@@ -72,5 +73,7 @@ pre { font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; backgroun
   td:nth-child(2) { display: none; }
   td .raw { max-width: none; }
   td:last-child { align-self: center; }
+  .action-controls { display: flex; flex-direction: column; gap: 8px; }
+  .action-controls select { max-width: 180px; margin-right: 0; }
   td button { min-height: 44px; }
 }

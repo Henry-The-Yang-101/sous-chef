@@ -302,6 +302,21 @@ internal static class Program
         }
         foreach (string error in errors) Console.Error.WriteLine(error);
         Assert(errors.Count == 0, "Installed-game adapter contract audit failed");
+        foreach (var contract in new[] {
+            new[] { "ClientToggleSwitchCosmeticDecisions", "m_toggleOnAnimator" },
+            new[] { "PhysicalAttachment", "m_rigidBodyParams" },
+            new[] { "PhysicalAttachment+RigidbodyParams", "m_drag", "m_useGravity", "m_constraints" },
+            new[] { "AttachmentThrower", "m_throwForce", "m_throwInclination" },
+            new[] { "AttachmentCatcher", "m_catchAngleMax", "m_catchDistance" } })
+        {
+            Type type = assembly.GetType(contract[0]);
+            foreach (string name in contract.Skip(1)) Assert(type?.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic) != null, "first-layer native field: " + contract[0] + "." + name);
+        }
+        Type clientImpl = assembly.GetType("ClientPlayerControlsImpl_Default"), messenger = assembly.GetType("ClientMessenger");
+        Assert(clientImpl?.GetMethod("EndInteraction", BindingFlags.Instance | BindingFlags.NonPublic) != null, "native sticky interaction cleanup method exists");
+        Assert(messenger?.GetMethods(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic).Any(m => m.Name == "ChefEventMessage" && m.GetParameters().Length == 3 && m.GetParameters()[2].ParameterType.FullName == "UnityEngine.MonoBehaviour") == true, "native interaction-end message overload exists");
+        Type cooking = assembly.GetType("ClientCookingHandler")?.GetField("m_cachedCookingState", BindingFlags.Instance | BindingFlags.NonPublic)?.FieldType;
+        Assert(cooking != null && Enum.GetNames(cooking).Contains("Completed"), "cooked/mixed completion uses installed enum names");
         Console.WriteLine("Audited " + AdapterCatalog.Specs.Count + " adapter types against installed assembly.");
     }
 }

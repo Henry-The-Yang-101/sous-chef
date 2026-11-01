@@ -55,10 +55,10 @@ namespace SousChef.Plugin.Navigation
             foreach (Destination d in identities.Values) if (d.Object != null && d.Object.activeInHierarchy) result.Add(d.Object);
             return result;
         }
-        public string IdFor(GameObject go)
+        public object TargetIdentity(GameObject go)
         {
             Destination d;
-            return go != null && identities.TryGetValue(go.GetInstanceID(), out d) && d.Object == go ? d.Id : null;
+            return go != null && identities.TryGetValue(go.GetInstanceID(), out d) && d.Object == go ? Identity(d) : null;
         }
         public string StartPosition(PlayerControls player, int owner, GameObject aim, Vector3 position)
         {
@@ -71,13 +71,6 @@ namespace SousChef.Plugin.Navigation
             Refresh(player, true);
             if (!ApplyPlan()) return Action.Reason;
             return null;
-        }
-        public bool CanStand(PlayerControls player, Vector3 point, out Vector3 stance)
-        {
-            stance = Vector3.zero;
-            if (physics.Refresh(player) != null) return false;
-            Collider ground;
-            return physics.Stand(point, out stance, out ground);
         }
         public void PrepareStances(PlayerControls player) { Refresh(player, true); }
         public bool TryStance(Vector3 point, out Vector3 stance)

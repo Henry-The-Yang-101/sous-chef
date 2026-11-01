@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sous Chef · Navigation</title>
+  <title>Sous Chef · Actions</title>
   <link rel="stylesheet" href="/style.css">
   <script src="/app.js" defer></script>
 </head>
@@ -34,7 +34,7 @@
     </details>
     <section class="destinations" aria-labelledby="destinations-title">
       <div class="toolbar">
-        <div><h2 id="destinations-title">Reachable destinations <span id="count">0</span></h2><p>Distance from Player 2 in game world units. Walk follows the route to a usable stance; direct is a straight line to the object.</p></div>
+        <div><h2 id="destinations-title">Action targets <span id="count">0</span></h2><p>Choose an action for a live target. Interactions handle walking and alignment; throws find a release position.</p></div>
         <label class="search">Filter destinations or contents<input id="filter" type="search" placeholder="Tomato, pot, sink…" autocomplete="off"></label>
       </div>
       <p id="empty">Waiting for live destinations…</p>
@@ -46,8 +46,8 @@
       </div>
     </section>
     <footer>
-      <p>Live catalogue: up to 5 Hz · Walking only · No pickup, washing or cooking inputs</p>
-      <p>Unavailable or stale destinations disappear. Stop cancels immediately when the bridge receives it. Closing this tab releases its action.</p>
+      <p>Live catalogue: up to 5 Hz · Outcome-checked Player 2 actions</p>
+      <p>Stale targets disappear. Stop cancels immediately when the bridge receives it. Closing this tab releases its action.</p>
       <details><summary>Bridge details</summary><pre id="details">Waiting for a connection.</pre></details>
     </footer>
   </main>

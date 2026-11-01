@@ -143,3 +143,17 @@ update loop, converting world directions to P2's native logical axes. The same
 exclusive input lease handles disconnects and timeouts. No external steering
 loop, dash, object teleport or model call participates in navigation. Only plain
 command data and JSON replies cross the control server's worker boundary.
+
+`InteractionActions` composes child navigation with first-layer button actions,
+retaining the same input lease through approach, work and outcome verification.
+`ActionRun` owns the terminal receipt and bounded lifetime. `ActionObservations`
+reads explicit native holder, ingredient, progress, washing and toggle state;
+successful input installation alone never completes an interaction. Native
+sticky-interaction cleanup ends only the skill's matching P2 interaction.
+
+`ThrowPlanner` uses the native launch parameters, a fixed-step gravity/damping
+model, live collision sweeps and receiver predicates. It searches supported,
+reachable release stances rather than accepting caller coordinates. Moving-chef
+passes include a constant-velocity intercept and native catch constraints.
+The planner does not modify thrown-object physics or manufacture a catch.
+See [first-layer actions](actions.md) for protocol details and validation limits.

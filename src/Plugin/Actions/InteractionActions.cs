@@ -17,7 +17,7 @@ namespace SousChef.Plugin.Actions
         private readonly ThrowPlanner throws = new ThrowPlanner();
         private PlayerControls chef;
         private ControlCommand command;
-        private GameObject target, held, receiver, expectedPickup, initialOccupant;
+        private GameObject target, held, receiver, expectedPickup, expectedTopPlate, initialOccupant;
         private ServerIngredientContainer container;
         private AssembledDefinitionNode ingredient, expectedOutput;
         private ServerWorkableItem workable;
@@ -34,6 +34,52 @@ namespace SousChef.Plugin.Actions
         public object Describe() { return Run.Describe(evidence); }
         public static bool Handles(string operation)
         { return Array.IndexOf(ActionRun.Names, operation) >= 0 && operation != "navigate_to" && operation != "stop"; }
+        public static string[] Offered(PlayerControls chef, GameObject go)
+        {
+            var options = new List<string> { "wait_until" };
+            GameObject held = ActionObservations.Held(chef), receiver = ActionObservations.Receiver(go);
+            var carrier = chef.GetComponent<ClientPlayerAttachmentCarrier>();
+            var pickup = PlayerControlsHelper.GetControllingPickupHandler_Client(go);
+            var placement = PlayerControlsHelper.GetControllingPlacementHandler_Client(go);
+            var interact = go.GetComponent<ClientInteractable>();
+            Vector3 delta = go.transform.position - chef.transform.position; delta.y = 0; delta.Normalize();
+            bool canPlace = held != null && carrier != null && placement != null && placement.CanHandlePlacement(carrier, new Vector2(delta.x, delta.z), new PlacementContext(PlacementContext.Source.Player));
+            if (held == null)
+            {
+                if (pickup != null && carrier != null && pickup.CanHandlePickup(carrier)) options.Add("pick_up");
+                if (interact != null && interact.CanInteract(chef.gameObject))
+                {
+                    if (go.GetComponent<ServerWashingStation>() != null || receiver.GetComponent<ServerWorkableItem>() != null) options.Add("work_at");
+                    else if (!interact.UsePlacementButton || pickup == null || carrier == null || !pickup.CanHandlePickup(carrier)) options.Add("activate");
+                }
+            }
+            else
+            {
+                if (go.GetComponent<ServerRubbishBin>() != null) { if (canPlace) options.Add("discard"); }
+                else if (canPlace && (ActionObservations.Occupant(go) == null || ActionObservations.StackCount(receiver) > 0 || go.GetComponent<ServerWashingStation>() != null)) options.Add("place_at");
+                var container = ActionObservations.Container(go);
+                var transfer = GameObjectUtils.RequestInterface<IContainerTransferBehaviour>(held);
+                var composition = ActionObservations.Composition(held);
+                if (canPlace && held.GetComponent<IngredientPropertiesComponent>() != null && container != null && transfer != null && composition != null &&
+                    transfer.CanTransferToContainer(container) && container.CanAddIngredient(composition)) options.Add("add_ingredient");
+                if (GameObjectUtils.RequestInterface<IClientThrowable>(held) != null && GameObjectUtils.RequestInterface<IHandleCatch>(receiver) != null && go.GetComponent<ServerRubbishBin>() == null) options.Add("throw_to");
+            }
+            return options.ToArray();
+        }
+        public static string[] ConditionsFor(GameObject go, bool workOnly)
+        {
+            var result = new List<string>(); GameObject receiver = ActionObservations.Receiver(go);
+            if (receiver.GetComponent<ServerWorkableItem>() != null) result.Add("work_complete");
+            if (go.GetComponent<ServerWashingStation>() != null) { result.Add("sink_empty"); result.Add("one_plate_clean"); }
+            if (!workOnly)
+            {
+                result.Add("reachable"); result.Add("ready");
+                if (go.GetComponent<ServerAttachStation>() != null || go.GetComponent<ServerWashingStation>() != null || go.GetComponent<ServerIngredientContainer>() != null || go.GetComponent<ServerStack>() != null) { result.Add("occupied"); result.Add("empty"); }
+                if (receiver.GetComponent<ClientCookingHandler>() != null) result.Add("cooked");
+                if (receiver.GetComponent<ClientMixingHandler>() != null) result.Add("mixed");
+            }
+            return result.ToArray();
+        }
 
         public string Start(PlayerControls player, int owner, ControlCommand request)
         {
@@ -55,6 +101,8 @@ namespace SousChef.Plugin.Actions
             container = ActionObservations.Container(target); ingredient = expectedOutput = null;
             initialDirty = ActionObservations.DirtyCount(target); initialClean = ActionObservations.CleanCount(target);
             initialStack = ActionObservations.StackCount(receiver); initialMatches = 0;
+            var stack = receiver == null ? null : receiver.GetComponent<ServerStack>();
+            expectedTopPlate = stack == null ? null : stack.InspectTopOfStack();
             initialContents = held == null || held.GetComponent<ServerIngredientContainer>() == null ? 0 : held.GetComponent<ServerIngredientContainer>().GetContentsCount();
             pressed = throwReleased = triggeredByChef = false; evidence = null; throwPlan = null; workable = null;
             string error = ValidateRequest();
@@ -89,7 +137,7 @@ namespace SousChef.Plugin.Actions
             if (op == "pick_up")
             {
                 if (held != null) return "hands_full";
-                if (expectedPickup == null && target.GetComponent<PhysicalAttachment>() != null) expectedPickup = target;
+                if (expectedPickup == null && (target.GetComponent<PhysicalAttachment>() != null || target.GetComponent<ServerStack>() != null)) expectedPickup = target;
                 if (expectedPickup == null && target.GetComponent<PickupItemSpawner>() == null && target.GetComponent<PlateStackBase>() == null)
                     return "nothing_to_pick_up";
             }
@@ -133,6 +181,7 @@ namespace SousChef.Plugin.Actions
                 if (command.Condition == "one_plate_clean" && initialDirty == 0) return "sink_empty";
                 if (command.Condition == "cooked" && receiver.GetComponent<ClientCookingHandler>() == null) return "target_is_not_cookable";
                 if (command.Condition == "mixed" && receiver.GetComponent<ClientMixingHandler>() == null) return "target_is_not_mixable";
+                if ((command.Condition == "occupied" || command.Condition == "empty") && Array.IndexOf(ConditionsFor(target, false), command.Condition) < 0) return "occupancy_unavailable";
             }
             return null;
         }
@@ -142,6 +191,9 @@ namespace SousChef.Plugin.Actions
             try
             {
                 if (Run.Expired(Time.realtimeSinceStartup)) { Finish("failed", "action_timeout"); return; }
+                // The last plate can destroy its own source stack. Verify the
+                // surviving carried identity before requiring a live source.
+                if (pressed && command.Operation == "pick_up" && Outcome()) { Finish("succeeded", "outcome_observed"); return; }
                 if (target == null || !target.activeInHierarchy) { Finish("blocked", "target_unavailable"); return; }
                 if (Run.Phase == "navigating")
                 {
@@ -155,12 +207,16 @@ namespace SousChef.Plugin.Actions
                 }
                 if (Run.Phase == "waiting")
                 {
-                    input(0); if (Condition()) Finish("succeeded", "condition_met"); return;
+                    input(0);
+                    if (Condition()) Finish("succeeded", "condition_met");
+                    else if ((command.Condition == "work_complete" || command.Condition == "cooked" || command.Condition == "mixed") && ActionObservations.Receiver(target) != receiver)
+                        Finish("blocked", "station_contents_changed");
+                    return;
                 }
                 if (Run.Phase == "aiming") { Aim(); return; }
                 if (Run.Phase == "throw_hold")
                 {
-                    if (ActionObservations.Held(chef) != held) { Finish("blocked", "held_item_changed"); return; }
+                    if (!System.Object.ReferenceEquals(ActionObservations.Held(chef), held)) { Finish("blocked", "held_item_changed"); return; }
                     if (Time.frameCount <= pressFrame + 1 || Time.realtimeSinceStartup - phaseStarted < .08f) { input(2); return; }
                     ThrowPlan fresh; string error = throws.Prepare(chef, held, target);
                     if (error != null || !throws.From(Foot(), true, out fresh)) { Finish("blocked", error ?? "throw_became_invalid"); return; }
@@ -208,6 +264,9 @@ namespace SousChef.Plugin.Actions
             if (op == "pick_up")
             {
                 if (ActionObservations.Held(chef) != null) { Finish("blocked", "hands_full"); return false; }
+                var stack = ActionObservations.Receiver(target).GetComponent<ServerStack>();
+                if (expectedTopPlate != null && (stack == null || !System.Object.ReferenceEquals(stack.InspectTopOfStack(), expectedTopPlate)))
+                { Finish("blocked", "pickup_target_changed"); return false; }
                 if (initialOccupant != ActionObservations.Occupant(target) || !ActionObservations.CanPickUp(chef, target))
                 { Finish("blocked", "pickup_target_changed"); return false; }
             }
@@ -221,7 +280,7 @@ namespace SousChef.Plugin.Actions
             }
             else
             {
-                if (ActionObservations.Held(chef) != held) { Finish("blocked", "held_item_changed"); return false; }
+                if (!System.Object.ReferenceEquals(ActionObservations.Held(chef), held)) { Finish("blocked", "held_item_changed"); return false; }
                 if (!ActionObservations.CanPlace(chef, target)) { Finish("blocked", "placement_unavailable"); return false; }
                 if (op == "add_ingredient" && ActionObservations.Container(target) != container) { Finish("blocked", "container_changed"); return false; }
                 if (op == "place_at" && initialOccupant != ActionObservations.Occupant(target)) { Finish("blocked", "station_contents_changed"); return false; }
@@ -244,8 +303,9 @@ namespace SousChef.Plugin.Actions
             {
                 if (carrying == null) return false;
                 bool matches = carrying == expectedPickup;
-                if (!matches && expectedPickup != null && expectedPickup.GetComponent<ServerStack>() != null)
-                    matches = ActionObservations.StackCount(expectedPickup) < initialStack && carrying.GetComponent<ServerPlate>() != null;
+                if (!matches && expectedTopPlate != null) matches = System.Object.ReferenceEquals(carrying, expectedTopPlate);
+                if (matches) { evidence = ItemEvidence(carrying); return true; }
+                if (target == null) return false;
                 var supply = target.GetComponent<PickupItemSpawner>();
                 if (!matches && supply != null)
                 {
@@ -259,11 +319,11 @@ namespace SousChef.Plugin.Actions
                 bool added = container != null && ActionObservations.Container(target) == container &&
                     ActionObservations.MatchingCount(container, ingredient) > initialMatches;
                 if (added) evidence = Json.Object("containerInstanceId", container.gameObject.GetInstanceID(), "matchingIngredients", ActionObservations.MatchingCount(container, ingredient));
-                return added && carrying != held;
+                return added && !System.Object.ReferenceEquals(carrying, held);
             }
             if (op == "place_at")
             {
-                bool placed = carrying != held && (ActionObservations.Occupant(target) == held ||
+                bool placed = !System.Object.ReferenceEquals(carrying, held) && ((held != null && System.Object.ReferenceEquals(ActionObservations.Occupant(target), held)) ||
                     (initialDirty >= 0 && ActionObservations.DirtyCount(target) > initialDirty) ||
                     (initialStack > 0 && ActionObservations.StackCount(ActionObservations.Receiver(target)) > initialStack));
                 if (placed) evidence = Json.Object("targetInstanceId", target.GetInstanceID(), "heldItem", ItemEvidence(carrying));
@@ -294,8 +354,15 @@ namespace SousChef.Plugin.Actions
             }
             if (condition == "sink_empty") return ActionObservations.DirtyCount(target) == 0;
             if (condition == "one_plate_clean") return ActionObservations.DirtyCount(target) < initialDirty;
-            if (condition == "occupied") return ActionObservations.Occupant(target) != null || ActionObservations.DirtyCount(target) > 0;
-            if (condition == "empty") return target.GetComponent<ServerWashingStation>() != null ? ActionObservations.DirtyCount(target) == 0 : target.GetComponent<ServerAttachStation>() != null && ActionObservations.Occupant(target) == null;
+            if (condition == "occupied" || condition == "empty")
+            {
+                bool occupied;
+                if (target.GetComponent<ServerWashingStation>() != null) occupied = ActionObservations.DirtyCount(target) > 0;
+                else if (target.GetComponent<ServerAttachStation>() != null) occupied = ActionObservations.Occupant(target) != null;
+                else if (target.GetComponent<ServerIngredientContainer>() != null) occupied = target.GetComponent<ServerIngredientContainer>().GetContentsCount() > 0;
+                else occupied = ActionObservations.StackCount(target) > 0;
+                return condition == "occupied" ? occupied : !occupied;
+            }
             if (condition == "ready") return ActionObservations.CanPickUp(chef, target) || ActionObservations.CanPlace(chef, target) || ActionObservations.CanUse(chef, target);
             if (condition == "reachable")
             {
@@ -305,11 +372,13 @@ namespace SousChef.Plugin.Actions
             }
             if (condition == "cooked")
             {
+                if (ActionObservations.Receiver(target) != receiver) return false;
                 var cooking = receiver.GetComponent<ClientCookingHandler>();
                 return cooking != null && ActionObservations.Read<object>(cooking, "m_cachedCookingState").ToString() == "Completed";
             }
             if (condition == "mixed")
             {
+                if (ActionObservations.Receiver(target) != receiver) return false;
                 var mixing = receiver.GetComponent<ClientMixingHandler>();
                 return mixing != null && ActionObservations.Read<object>(mixing, "m_cachedMixingState").ToString() == "Completed";
             }
@@ -324,7 +393,7 @@ namespace SousChef.Plugin.Actions
                 Finish("succeeded", "condition_met"); return;
             }
             if (ActionObservations.Held(chef) != null || !ActionObservations.CanUse(chef, target)) { Finish("blocked", "interaction_unavailable"); return; }
-            if (command.Condition == "work_complete" && workable == null) { Finish("blocked", "work_item_changed"); return; }
+            if (command.Condition == "work_complete" && (workable == null || ActionObservations.Receiver(target) != workable.gameObject)) { Finish("blocked", "work_item_changed"); return; }
             float progress = workable != null ? workable.GetProgress() + ActionObservations.Read<int>(workable, "m_subProgress") * .001f :
                 ActionObservations.Read<float>(target.GetComponent<ServerWashingStation>(), "m_cleaningTimer") - ActionObservations.DirtyCount(target);
             if (!pressed || progress != lastProgress) { lastProgressTime = Time.realtimeSinceStartup; lastProgress = progress; }
@@ -336,7 +405,7 @@ namespace SousChef.Plugin.Actions
         private void Aim()
         {
             input(0);
-            if (ActionObservations.Held(chef) != held) { Finish("blocked", "held_item_changed"); return; }
+            if (!System.Object.ReferenceEquals(ActionObservations.Held(chef), held)) { Finish("blocked", "held_item_changed"); return; }
             string error = throws.Prepare(chef, held, target); ThrowPlan current;
             if (error != null || !throws.From(Foot(), false, out current)) { Finish("blocked", error ?? "throw_became_invalid"); return; }
             PlayerControlsHelper.TurnTowardsDirection(chef.gameObject, current.Direction, chef.Movement.TurnSpeed, Mathf.Min(Time.deltaTime, .05f));
@@ -348,7 +417,7 @@ namespace SousChef.Plugin.Actions
         private bool ThrowReceived()
         {
             var player = target.GetComponent<PlayerControls>();
-            bool received = player != null ? ActionObservations.Held(player) == held :
+            bool received = player != null ? held != null && System.Object.ReferenceEquals(ActionObservations.Held(player), held) :
                 (held != null && ActionObservations.Occupant(target) == held);
             if (!received && container != null && ingredient != null)
                 received = ActionObservations.MatchingCount(container, ingredient) > initialMatches && (held == null || !held.activeInHierarchy);

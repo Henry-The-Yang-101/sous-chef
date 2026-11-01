@@ -20,12 +20,31 @@ class FakeBridge:
         self.calls = []
         self.failure = None
         self.reject = None
+        self.targets = None
+        self.players = []
 
     def available_actions(self):
         if self.failure:
             raise self.failure
         self.last_response = {'control': copy.deepcopy(self.control)}
-        return {'destinations': copy.deepcopy(self.destinations), 'navigation': self.control['navigation']}
+        targets = self.targets if self.targets is not None else [dict(d, operations=['pick_up', 'work_at', 'wait_until']) for d in self.destinations]
+        return {'destinations': copy.deepcopy(self.destinations), 'targets': copy.deepcopy(targets),
+                'players': copy.deepcopy(self.players), 'navigation': self.control['navigation']}
+
+    def pick_up(self, target):
+        self.calls.append(('pick_up', target))
+        self.control.update(ownedByYou=True, action={'state': 'running', 'operation': 'pick_up'})
+        return copy.deepcopy(self.control)
+
+    def work_at(self, target, until='work_complete', timeout=60):
+        self.calls.append(('work_at', target, until, timeout))
+        self.control.update(ownedByYou=True, action={'state': 'running', 'operation': 'work_at'})
+        return copy.deepcopy(self.control)
+
+    def throw_to_player(self, player):
+        self.calls.append(('throw_to_player', player))
+        self.control.update(ownedByYou=True, action={'state': 'running', 'operation': 'throw_to_player'})
+        return copy.deepcopy(self.control)
 
     def navigate_to(self, destination):
         self.calls.append(('navigate_to', destination))
@@ -103,6 +122,39 @@ class HarnessTests(unittest.TestCase):
         self.assertTrue(value['viewerOwnsAction'])
         self.assertEqual(value['lastCommand']['target']['objectInstanceId'], 77)
         self.assertEqual(value['control']['navigation']['state'], 'navigating')
+
+    def test_first_layer_actions_dispatch_once_with_exact_target(self):
+        value = self.bridge.act('tab-a', 'test-session', 'd7', 77, 'pick_up')
+        self.assertEqual(self.native.calls, [('pick_up', 'd7')])
+        self.assertTrue(value['viewerOwnsAction'])
+        self.assertEqual(value['lastCommand']['operation'], 'pick_up')
+        self.bridge.poll()
+        self.assertTrue(self.bridge.state('tab-a')['viewerOwnsAction'])
+
+    def test_work_parameters_and_nonwalking_targets(self):
+        self.native.targets = [dict(self.native.destinations[0], operations=['work_at'])]
+        self.native.destinations.clear()
+        self.bridge.act('tab-a', 'test-session', 'd7', 77, 'work_at', {'until': 'one_plate_clean', 'timeout': 12})
+        self.assertEqual(self.native.calls, [('work_at', 'd7', 'one_plate_clean', 12)])
+
+    def test_action_affordance_is_revalidated_before_dispatch(self):
+        self.native.targets = [dict(self.native.destinations[0], operations=[])]
+        with self.assertRaisesRegex(HarnessError, 'no longer available'):
+            self.bridge.act('tab-a', 'test-session', 'd7', 77, 'pick_up')
+        self.assertEqual(self.native.calls, [])
+
+    def test_unknown_action_or_extra_arguments_cannot_call_client_methods(self):
+        for operation, arguments in [('close', {}), ('pick_up', {'destination_id': 'd9'}), ('wait_until', {})]:
+            with self.assertRaises(HarnessError):
+                self.bridge.act('tab-a', 'test-session', 'd7', 77, operation, arguments)
+        self.assertEqual(self.native.calls, [])
+
+    def test_player_pass_validates_player_object_then_dispatches_logical_id(self):
+        self.native.players = [dict(id='p1', playerId=1, objectInstanceId=123, operations=['throw_to_player'])]
+        with self.assertRaises(HarnessError):
+            self.bridge.act('tab-a', 'test-session', 'p1', 999, 'throw_to_player')
+        self.bridge.act('tab-a', 'test-session', 'p1', 123, 'throw_to_player')
+        self.assertEqual(self.native.calls, [('throw_to_player', 1)])
 
     def test_rejected_command_is_not_retried(self):
         self.native.reject = 'planning_budget_exceeded'
@@ -209,7 +261,7 @@ class HttpTests(unittest.TestCase):
     def test_page_and_live_state_are_served(self):
         code, body = self.request('GET', '/')
         self.assertEqual(code, 200)
-        self.assertIn(b'Reachable destinations', body)
+        self.assertIn(b'Action targets', body)
         code, body = self.request('GET', '/api/state')
         self.assertEqual(code, 200)
         self.assertEqual(json.loads(body)['catalog']['destinations'][0]['id'], 'd7')

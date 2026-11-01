@@ -14,6 +14,15 @@ namespace UnityEngine
         public Object() { All.Add(this); }
         public static T[] FindObjectsOfType<T>() { return All.OfType<T>().ToArray(); }
         private readonly int id = ++next;
+        public bool Destroyed;
+        public static bool operator ==(Object a,Object b)
+        {
+            bool an=ReferenceEquals(a,null) || a.Destroyed,bn=ReferenceEquals(b,null) || b.Destroyed;
+            return an || bn ? an==bn : ReferenceEquals(a,b);
+        }
+        public static bool operator !=(Object a,Object b) { return !(a==b); }
+        public override bool Equals(object value) { return value is Object other && this==other; }
+        public override int GetHashCode() { return id; }
         public int GetInstanceID() { return id; }
     }
     public class GameObject : Object
@@ -202,7 +211,7 @@ public class PickupItemSpawner : UnityEngine.MonoBehaviour { public UnityEngine.
 public class CookingStation : UnityEngine.MonoBehaviour { }
 public class PlateReturnStation : UnityEngine.MonoBehaviour { }
 public class PlateStackBase : UnityEngine.MonoBehaviour { }
-public class PhysicalAttachment : UnityEngine.MonoBehaviour { public RigidbodyParams m_rigidBodyParams = new RigidbodyParams(); public class RigidbodyParams { public float m_drag;public bool m_useGravity=true; } }
+public class PhysicalAttachment : UnityEngine.MonoBehaviour { public RigidbodyParams m_rigidBodyParams = new RigidbodyParams(); public class RigidbodyParams { public float m_drag; public int m_constraints; public bool m_useGravity=true; } }
 public class AttachStation : UnityEngine.MonoBehaviour { }
 public interface IPickup { bool CanHandlePickup(ClientPlayerAttachmentCarrier carrier); }
 public interface IPlacement { bool CanHandlePlacement(ClientPlayerAttachmentCarrier carrier,UnityEngine.Vector2 forward,PlacementContext context); }

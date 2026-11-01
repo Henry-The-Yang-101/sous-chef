@@ -48,9 +48,11 @@ The present repository already documents:
   See [control](control.md).
 
 The autonomous navigator explicitly does **not** press pickup, use, or dash.
-Verified pickup/deposit/wash skills, a task manager, and voice integration remain
-additional work. Arriving beside the sink is not evidence of a completed washing
-task. Navigation also has cold-start and planning-budget limits that must be
+Bridge 0.5 now implements [first-layer interactions](actions.md), including
+pickup, placement, work and outcome-checked throws. These additions have build
+and automated coverage; live native behavior remains unverified. A composed
+dishwashing job, task manager and voice integration remain additional work.
+Arriving beside the sink is not evidence of a completed washing task. Navigation also has cold-start and planning-budget limits that must be
 included in end-to-end measurements.
 
 ## Keep the model's job small

@@ -46,13 +46,31 @@ namespace SousChef.Plugin.Actions
                 Mathf.Abs(Physics.gravity.x) > .001f || Mathf.Abs(Physics.gravity.z) > .001f || Physics.gravity.y >= -.001f)
                 return "unsupported_throw_physics";
             drag = parameters.m_drag;
+            if (((int)parameters.m_constraints & 14) != 0) return "unsupported_throw_constraints";
             if (Time.fixedDeltaTime < .001f || Time.fixedDeltaTime > .1f) return "unsupported_throw_timestep";
             speed = launch.m_throwForce; vertical = speed * Mathf.Tan(launch.m_throwInclination * Mathf.Deg2Rad);
             if (!ThrowTrajectory.Finite(speed) || speed <= 0 || !ThrowTrajectory.Finite(vertical)) return "unsupported_throw_physics";
             var shape = item.GetComponent<Collider>();
             var capsule = chef.GetComponent<CapsuleCollider>();
             if (shape == null || capsule == null) return "unsupported_throw_geometry";
-            radius = Mathf.Max(.05f, Mathf.Max(shape.bounds.extents.x, Mathf.Max(shape.bounds.extents.y, shape.bounds.extents.z)));
+            // Held colliders may be disabled, in which case Unity returns empty
+            // bounds. Read their actual shape and enclose corners as well as axes.
+            Vector3 scale = shape.transform.lossyScale; scale = new Vector3(Mathf.Abs(scale.x), Mathf.Abs(scale.y), Mathf.Abs(scale.z));
+            var box = shape as BoxCollider; var sphere = shape as SphereCollider; var pill = shape as CapsuleCollider;
+            Vector3 shapeCenter;
+            if (box != null)
+            {
+                shapeCenter = box.center;
+                radius = new Vector3(box.size.x * scale.x, box.size.y * scale.y, box.size.z * scale.z).magnitude * .5f;
+            }
+            else if (sphere != null) { shapeCenter = sphere.center; radius = sphere.radius * Mathf.Max(scale.x, Mathf.Max(scale.y, scale.z)); }
+            else if (pill != null)
+            {
+                shapeCenter = pill.center;
+                radius = Mathf.Max(pill.height * .5f, pill.radius) * Mathf.Max(scale.x, Mathf.Max(scale.y, scale.z));
+            }
+            else return "unsupported_throw_geometry";
+            radius = Mathf.Max(.05f, radius + Vector3.Distance(shape.transform.TransformPoint(shapeCenter), item.transform.position));
             if (radius > .6f) return "unsupported_throw_geometry";
             localRelease = chef.transform.InverseTransformPoint(item.transform.position);
             pivot = chef.transform.position.y - capsule.bounds.min.y;
@@ -61,6 +79,7 @@ namespace SousChef.Plugin.Actions
             player = target.GetComponent<PlayerControls>(); receiver = ActionObservations.Receiver(target);
             if (player != null)
             {
+                if (GameObjectUtils.RequestInterface<ICatchable>(item) == null) return "item_not_catchable";
                 var configuration = PlayerInputLookup.GetInputConfig();
                 var entry = configuration == null || player.PlayerIDProvider == null ? null : configuration.GetInputConfigEntry(player.PlayerIDProvider.GetID());
                 if (entry == null || !entry.IsLocal()) return "player_not_local";
@@ -110,12 +129,13 @@ namespace SousChef.Plugin.Actions
             if (!ThrowTrajectory.FlightTime(receiving.center.y - (chef.transform.position.y + localRelease.y),
                 vertical, Physics.gravity.y, drag, Time.fixedDeltaTime, out flight)) return "no_valid_throw";
             float distance = ThrowTrajectory.Displacement(speed, 0, drag, flight, Time.fixedDeltaTime) + new Vector2(localRelease.x, localRelease.z).magnitude;
+            Vector3 predictedCenter = receiving.center + ReceiverVelocity() * flight;
             // Invert the fixed launch arc into a release ring. Include nearby rings
             // to account for receiver volume, mount offset and differing floors.
             for (int i = 0; i < 32; i++) for (int ring = -1; ring <= 1; ring++)
             {
                 float angle = i * 2 * Mathf.PI / 32, r = Mathf.Max(.5f, distance + ring * .15f);
-                candidates.Add(new Vector3(receiving.center.x + Mathf.Cos(angle) * r, foot.y, receiving.center.z + Mathf.Sin(angle) * r));
+                candidates.Add(new Vector3(predictedCenter.x + Mathf.Cos(angle) * r, foot.y, predictedCenter.z + Mathf.Sin(angle) * r));
             }
             float best = Single.MaxValue;
             var budget = Stopwatch.StartNew();
@@ -133,6 +153,7 @@ namespace SousChef.Plugin.Actions
         public bool From(Vector3 stance, bool actualRelease, out ThrowPlan plan)
         {
             plan = null;
+            if (actualRelease && chef.CurrentInteractionObjects.m_interactable != null && chef.CurrentInteractionObjects.m_interactable.CanInteract(chef.gameObject)) return false;
             Vector3 velocity = ReceiverVelocity(), destination = receiving.center;
             if (velocity.magnitude > 6 || Mathf.Abs(velocity.y) > .2f) return false;
             Vector3 origin = stance + Vector3.up * pivot, direction = destination - origin;
@@ -184,7 +205,10 @@ namespace SousChef.Plugin.Actions
                 Vector3 segment = next - previous;
                 int n = Physics.SphereCastNonAlloc(previous, radius + .015f, segment.normalized, hits, segment.magnitude, mask, QueryTriggerInteraction.Collide);
                 if (n >= hits.Length) return false;
-                for (int i = 0; i < n; i++) if (Obstruction(hits[i].collider, step >= steps - 2)) return false;
+                bool receivingEnd = step >= steps - 2;
+                if (player != null && t >= .1f)
+                    receivingEnd |= Vector3.Distance(next, player.transform.position + ReceiverVelocity() * t) <= player.GetComponent<AttachmentCatcher>().m_catchDistance - .1f;
+                for (int i = 0; i < n; i++) if (Obstruction(hits[i].collider, receivingEnd)) return false;
                 // Environmental force fields cannot be represented by a gravity-only
                 // arc. Reject them instead of silently predicting through wind.
                 n = Physics.OverlapSphereNonAlloc(next, radius, overlaps, ~0, QueryTriggerInteraction.Collide);

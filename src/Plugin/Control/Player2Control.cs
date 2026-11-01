@@ -194,14 +194,41 @@ namespace SousChef.Plugin.Control
             var catalog = (Json.Record)navigation.Available(target);
             var targets = new System.Collections.Generic.List<object>();
             foreach (GameObject go in navigation.Targets())
-                targets.Add(Json.Object("id", navigation.IdFor(go), "label", go.name, "objectInstanceId", go.GetInstanceID(), "position", Values.Vector(go.transform.position)));
+            {
+                var identity = (Json.Record)navigation.TargetIdentity(go);
+                try
+                {
+                    identity["operations"] = InteractionActions.Offered(target, go);
+                    identity["workConditions"] = InteractionActions.ConditionsFor(go, true);
+                    identity["waitConditions"] = InteractionActions.ConditionsFor(go, false);
+                    identity["activationStates"] = ActionObservations.ToggleState(go).HasValue ? new[] { "trigger", "on", "off" } : new[] { "trigger" };
+                }
+                catch (Exception) { identity["operations"] = new string[0]; identity["reason"] = "observation_unavailable"; }
+                targets.Add(identity);
+            }
+            var players = new System.Collections.Generic.List<object>();
+            foreach (PlayerControls player in UnityEngine.Object.FindObjectsOfType<PlayerControls>())
+            {
+                if (player == target || player.PlayerIDProvider == null) continue;
+                int playerId = (int)player.PlayerIDProvider.GetID() + 1;
+                if (playerId != 1 && playerId != 3 && playerId != 4) continue;
+                var entry = PlayerInputLookup.GetInputConfig().GetInputConfigEntry(player.PlayerIDProvider.GetID());
+                if (entry == null || !entry.IsLocal()) continue;
+                players.Add(Json.Object("id", "p" + playerId, "playerId", playerId, "kind", "player", "label", "Player " + playerId,
+                    "objectInstanceId", player.gameObject.GetInstanceID(), "position", Values.Vector(player.transform.position),
+                    "operations", ActionObservations.Held(target) != null && GameObjectUtils.RequestInterface<IClientThrowable>(ActionObservations.Held(target)) != null &&
+                    ActionObservations.Held(player) == null && player.GetComponent<AttachmentCatcher>() != null ? new[] { "throw_to_player" } : new string[0]));
+            }
             var actions = (System.Collections.Generic.List<object>)catalog["actions"];
             if (!interactions.Run.Running && navigation.Action.State == "idle")
                 foreach (string name in ActionRun.Names)
                 {
                     if (name == "navigate_to" || name == "stop") continue;
-                    object parameters = name == "throw_to_player" ? (object)Json.Object("player_id", Json.Object("type", "enum", "options", new[] { 1, 3, 4 })) :
-                        Json.Object("target_id", Json.Object("type", "enum", "options", targets));
+                    var eligible = new System.Collections.Generic.List<object>();
+                    foreach (Json.Record identity in targets) if (Array.IndexOf((string[])identity["operations"], name) >= 0) eligible.Add(identity);
+                    if (name != "throw_to_player" && eligible.Count == 0) continue;
+                    object parameters = name == "throw_to_player" ? (object)Json.Object("player_id", Json.Object("type", "enum", "options", players)) :
+                        Json.Object("target_id", Json.Object("type", "enum", "options", eligible));
                     if (name == "work_at" || name == "wait_until")
                     {
                         ((Json.Record)parameters)["condition"] = Json.Object("type", "enum", "options", name == "work_at" ? ActionRun.WorkConditions : ActionRun.WaitConditions);
@@ -211,7 +238,7 @@ namespace SousChef.Plugin.Control
                     actions.Add(Json.Object("name", name, "parameters", parameters));
                 }
             else catalog["actions"] = new[] { Json.Object("name", "stop") };
-            catalog["targets"] = targets; catalog["action"] = interactions.Describe(); return catalog;
+            catalog["targets"] = targets; catalog["players"] = players; catalog["action"] = interactions.Describe(); return catalog;
         }
         private void Install()
         {

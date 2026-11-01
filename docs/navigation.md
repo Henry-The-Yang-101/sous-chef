@@ -32,8 +32,9 @@ python3 clients/actions.py status
 python3 clients/actions.py stop            # can interrupt another bridge client
 ```
 
-The action list contains one `navigate_to` schema with enumerated destination
-options and one `stop`. Each object has a lifetime-specific ID within the bridge
+The navigation entries contain one `navigate_to` schema with enumerated
+destination options and one `stop`. Bridge 0.5 also includes
+[first-layer interaction schemas](actions.md) and discovered nonwalking targets. Each object has a lifetime-specific ID within the bridge
 session, label, semantic kind, Unity instance ID, current position, chosen approach
 position and route distance. Multiple colliders for the same object are deduplicated.
 Targets include pickup items/supplies, workstations, washing/cooking stations,

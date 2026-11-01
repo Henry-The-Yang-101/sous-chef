@@ -2,9 +2,10 @@
 
 Bridge 0.5 adds outcome-checked interactions on the existing control endpoint.
 These run inside Unity, including navigation and alignment. No Python heartbeat
-or model call drives their execution. All act on Player 2's **currently held**
-item; fetching an item and container-to-container `transfer_contents` belong to a
-higher layer and are not implemented here.
+or model call drives their execution. Placement, ingredient addition, disposal
+and throwing use Player 2's **currently held** item. Fetch-and-deliver jobs and
+container-to-container `transfer_contents` belong to a higher layer and are not
+implemented here.
 
 | Python call | Scope and success evidence |
 | --- | --- |
@@ -26,6 +27,11 @@ and waits for a route to reopen. `destinations` retains only checked walking
 destinations. A listed target is not a promise that every action is compatible.
 Starting and executing revalidate native predicates, ownership and target contents.
 IDs remain scoped to the current game session and round.
+Targets include `operations`, `workConditions`, `waitConditions` and
+`activationStates` to describe compatible request combinations. A separate
+`players` list binds logical player IDs to current chef object identities for
+pass requests. The browser rechecks these identities and operations before
+dispatch. Expensive walking/throw feasibility is still validated at execution.
 
 ```python
 from clients.actions import ActionClient

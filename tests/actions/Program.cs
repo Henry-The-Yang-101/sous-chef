@@ -85,6 +85,24 @@ internal static class Program
         w=new World();w.Hold(w.Ingredient("tomato"));Check(w.Start("pick_up")=="hands_full","pickup never silently parks held food");
         w=new World();w.Hold(w.Ingredient("tomato"));w.Start("place_at");w.Arrive();w.Verify();w.Tick(3);
         Check(w.Skills.Run.Reason=="outcome_not_observed","no native effect times out without another placement tap");
+
+        w=new World(t=>{t.Add(new PlateStackBase());t.Add(new ServerStack());});
+        var plate=new GameObject("last clean plate");plate.Add(new ServerPlate());w.Target.GetComponent<ServerStack>().m_stackItems.Add(plate);
+        Check(w.Start("pick_up")==null,"direct clean plate stack is a valid pickup source");w.Arrive();
+        w.Hold(plate);w.Target.GetComponent<ServerStack>().m_stackItems.Clear();w.Verify();
+        Check(w.Skills.Run.State=="succeeded","exact top plate confirms pickup from direct stack");
+
+        w=new World(t=>{t.Add(new PlateStackBase());t.Add(new ServerStack());});plate=new GameObject("last plate");plate.Add(new ServerPlate());
+        w.Target.GetComponent<ServerStack>().m_stackItems.Add(plate);w.Start("pick_up");w.Arrive();w.Hold(plate);w.Target.Destroyed=true;w.Verify();
+        Check(w.Skills.Run.State=="succeeded","destroyed direct pickup source does not hide the verified last plate in P2's hands");
+
+        w=new World();var stackObject=new GameObject("clean plate stack");stackObject.Add(new PhysicalAttachment());var stack=stackObject.Add(new ServerStack());
+        plate=new GameObject("last clean plate");plate.Add(new ServerPlate());stack.m_stackItems.Add(plate);w.Target.GetComponent<ServerAttachStation>().Item=stackObject;
+        w.Start("pick_up");w.Arrive();w.Hold(plate);stackObject.Destroyed=true;w.Target.GetComponent<ServerAttachStation>().Item=null;w.Verify();
+        Check(w.Skills.Run.State=="succeeded","last plate pickup survives native auto-destruction of its empty stack");
+
+        w=new World();item=w.Ingredient("tomato");w.Hold(item);w.Start("place_at");w.Arrive();item.Destroyed=true;w.Hold(null);w.Verify();
+        Check(w.Skills.Run.State=="running","destroyed item and empty target are not a successful placement despite Unity fake-null equality");
     }
     private static void IngredientsAndDisposal()
     {
@@ -95,6 +113,15 @@ internal static class Program
         Check(w.Skills.Run.State=="running","an unrelated ingredient added by human does not count");
         contents.Contents.Add(new AssembledDefinitionNode("meat"));w.Tick();
         Check(w.Skills.Run.State=="succeeded","matching contents and consumed source confirm addition");
+
+        w=new World();pan=new GameObject("pan");contents=pan.Add(new ServerIngredientContainer());w.Target.GetComponent<ServerAttachStation>().Item=pan;
+        item=w.Ingredient("meat");w.Hold(item);w.Start("add_ingredient");w.Arrive();
+        contents.Contents.Add(new AssembledDefinitionNode("meat"));item.Destroyed=true;w.Hold(null);w.Verify();
+        Check(w.Skills.Run.State=="succeeded","native destruction of consumed ingredient still confirms addition");
+
+        w=new World(t=>{t.Add(new WashingStation());t.Add(new ServerWashingStation());});item=new GameObject("dirty stack");w.Hold(item);
+        w.Start("place_at");w.Arrive();w.Target.GetComponent<ServerWashingStation>().m_plateCount=3;item.Destroyed=true;w.Hold(null);w.Verify();
+        Check(w.Skills.Run.State=="succeeded","sink loading verifies count even when the dirty stack is destroyed");
 
         w=new World();w.Hold(new GameObject("pot"));
         Check(w.Start("add_ingredient")=="held_item_is_not_single_ingredient","container transfer stays outside first layer");
@@ -128,6 +155,19 @@ internal static class Program
         w.Target.GetComponent<ServerAttachStation>().Item=cooked;w.Tick();
         Check(w.Skills.Run.State=="succeeded","chopping accepts verified replacement prefab composition");
 
+        w=new World();raw=w.Ingredient("raw");cooked=w.Ingredient("chopped");raw.Add(new ServerWorkableItem());raw.Add(new WorkableItem {Next=cooked});
+        w.Target.GetComponent<ServerAttachStation>().Item=raw;w.Start("work_at","work_complete");w.Arrive();
+        w.Target.GetComponent<ServerAttachStation>().Item=w.Ingredient("someone else's ingredient");w.Tick();
+        Check(w.Skills.Run.Reason=="work_item_changed","human replacing the work item blocks further work on unrelated food");
+
+        w=new World();var pan=new GameObject("pan");pan.Add(new ClientCookingHandler());w.Target.GetComponent<ServerAttachStation>().Item=pan;
+        w.Start("wait_until","cooked");w.Target.GetComponent<ServerAttachStation>().Item=new GameObject("replacement pot");w.Tick();
+        Check(w.Skills.Run.Reason=="station_contents_changed","processing wait stays bound to its original container");
+
+        w=new World();pan=new GameObject("pan");var process=pan.Add(new ClientCookingHandler());w.Target.GetComponent<ServerAttachStation>().Item=pan;
+        w.Start("wait_until","cooked");process.m_cachedCookingState="Ruined";w.Tick();Check(w.Skills.Run.State=="running","burnt food cannot satisfy cooked wait");
+        process.m_cachedCookingState="Completed";w.Tick();Check(w.Skills.Run.State=="succeeded","native Completed processing state satisfies cooked wait");
+
         w=new World();w.Start("wait_until","occupied",ms:100);w.Tick(.11f);
         Check(w.Skills.Run.Reason=="action_timeout" && w.Releases==1,"wait has bounded lifetime and releases ownership");
     }
@@ -146,13 +186,13 @@ internal static class Program
     private static void BallisticsAndLifecycle()
     {
         float t;
-        Check(ThrowTrajectory.FlightTime(0,2,-10,out t) && Math.Abs(t-.4f)<.0001f,"descending equal-height arc solved");
-        Check(!ThrowTrajectory.FlightTime(1,2,-10,out t),"target above apex is rejected");
-        Check(!ThrowTrajectory.FlightTime(0,2,0,out t),"unsupported zero gravity fails closed");
-        Check(ThrowTrajectory.Intercept(4,0,1,0,5,out t) && Math.Abs(t-1)<.0001f,"moving-player horizontal intercept");
-        Check(!ThrowTrajectory.Intercept(4,0,10,0,5,out t),"unreachable moving receiver is rejected");
-        Check(Math.Abs(ThrowTrajectory.Height(0,2,-10,.4f,.02f)+.04f)<.0001f,"arc accounts for fixed-step gravity integration");
-        foreach(float invalid in new[] {float.NaN,float.PositiveInfinity}) Check(!ThrowTrajectory.Intercept(invalid,0,0,0,5,out t),"invalid physics cannot create a plan");
+        Check(ThrowTrajectory.FlightTime(0,2,-10,0,.02f,out t) && Math.Abs(t-.38f)<.0001f,"descending equal-height arc solved");
+        Check(!ThrowTrajectory.FlightTime(1,2,-10,0,.02f,out t),"target above apex is rejected");
+        Check(!ThrowTrajectory.FlightTime(0,2,0,0,.02f,out t),"unsupported zero gravity fails closed");
+        Check(ThrowTrajectory.Intercept(4,0,1,0,5,0,.02f,out t) && Math.Abs(t-1)<.0001f,"moving-player horizontal intercept");
+        Check(!ThrowTrajectory.Intercept(4,0,10,0,5,0,.02f,out t),"unreachable moving receiver is rejected");
+        Check(Math.Abs(ThrowTrajectory.Displacement(2,-10,0,.4f,.02f)+.04f)<.0001f,"arc accounts for fixed-step gravity integration");
+        foreach(float invalid in new[] {float.NaN,float.PositiveInfinity}) Check(!ThrowTrajectory.Intercept(invalid,0,0,0,5,0,.02f,out t),"invalid physics cannot create a plan");
         // Compare the closed solver to independent repeated native fixed-step
         // integration, including damping and non-integer flight durations.
         foreach(float drag in new[] {0f,.2f,2f,60f})
@@ -190,6 +230,7 @@ internal static class Program
         Check(!planner.From(w.Chef.transform.position,false,out plan),"flight obstruction rejects a previously valid arc");Physics.Sphere=(p,r,d,l)=>new RaycastHit[0];
         w.Target.GetComponent<Catcher>().Allowed=false;
         Check(!planner.From(w.Chef.transform.position,false,out plan),"native catcher veto rejects incompatible receipt");w.Target.GetComponent<Catcher>().Allowed=true;
+        w.Chef.CurrentInteractionObjects.m_interactable=null;
         Check(w.Start("throw_to")==null,"targeted throw starts with a planned release stance");w.Arrive();w.Tick();w.Tick();w.Tick();
         Check(w.Skills.Run.Phase=="flight" && w.Skills.Run.State=="running","release is tracked separately from successful receipt");
         w.Hold(null);w.Target.GetComponent<ServerAttachStation>().Item=item;w.Tick();
@@ -201,10 +242,29 @@ internal static class Program
         distance=ThrowTrajectory.Displacement(8,0,.2f,.6f,.02f);w.Chef.transform.position=new Vector3(0,0,-distance-.4f);item.transform.position=w.Chef.transform.position+new Vector3(0,1,.4f);
         player.Motion.Velocity=new Vector3(1,0,0);
         Check(planner.Prepare(w.Chef,item,human)==null && planner.From(w.Chef.transform.position,false,out plan) && plan.Direction.x>0,"player pass leads a moving human who faces the incoming throw");
+        var playerBody=human.Add(new CapsuleCollider());
+        Physics.Sphere=(p,r,d,l)=>Vector3.Distance(p,player.transform.position)<.65f ? new[] {new RaycastHit {collider=playerBody}} : new RaycastHit[0];
+        Check(planner.From(w.Chef.transform.position,false,out plan),"receiver body inside native catching range is the receiving contact, not an intervening obstruction");
+        Physics.Sphere=(p,r,d,l)=>new RaycastHit[0];
         human.transform.yaw=0;Check(!planner.From(w.Chef.transform.position,false,out plan),"player facing away is outside native catch cone");
         human.GetComponent<ServerPlayerAttachmentCarrier>().Item=new GameObject("occupied hands");
         Check(planner.Prepare(w.Chef,item,human)=="player_cannot_catch","player pass respects occupied hands");
+        human.GetComponent<ServerPlayerAttachmentCarrier>().Item=null;human.transform.yaw=Mathf.PI;player.Motion.Velocity=Vector3.zero;
+        Check(w.Skills.Start(w.Chef,1,new ControlCommand {Operation="throw_to_player",Destination="1",Milliseconds=10000})==null,"player pass resolves actual logical player identity");
+        w.Arrive();w.Tick();w.Tick();w.Tick();Check(w.Skills.Run.Phase=="flight","player pass uses ordinary use hold/release");
+        item.Destroyed=true;w.Hold(null);w.Tick();
+        Check(w.Skills.Run.State=="running","destroyed projectile and empty receiver hands cannot falsely confirm a catch");
+        w.Tick(3);Check(w.Skills.Run.Reason=="throw_missed","missed player pass terminates with an explicit outcome");
     }
-    private static void Main() { Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();Throws();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
+    private static void GeneratedStances()
+    {
+        var w=new World();
+        Check(w.Navigation.StartPosition(w.Chef,1,w.Target,w.Chef.transform.position)==null,"generated release stance uses production route planner");
+        var catalog=(Json.Record)w.Navigation.Available(w.Chef);
+        Check(((List<object>)catalog["destinations"]).All(d=>(string)((Json.Record)d)["id"]!="throw_stance"),"internal stance never leaks into wire destination options");
+        w.Navigation.Stop("stopped");
+        Check(w.Navigation.Action.State=="idle","generated stance navigation is interruptible");
+    }
+    private static void Main() { Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();Throws();GeneratedStances();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
     private static ClientInteractable GetCurrentlyInteractingForTest(this PlayerControls chef) { return chef.GetComponent<ClientPlayerControlsImpl_Default>().Current; }
 }
