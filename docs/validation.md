@@ -296,3 +296,17 @@ checks cover braking drift without walking reversals, leaving and re-entering th
 settling band, and resetting it between actions. Unity wall/corner contacts and
 physical settling still require live testing; these unit checks do not emulate
 PhysX or establish that all reported cancellations are resolved.
+
+The first live follow-up used `s_sushi_1_3` (Arcade Couch). Player 2 started
+at approximately `[13.4, 0, 9.8]` against the counter corner, and the planner found
+six start connectors and 19 destinations. Navigation to the cucumber dispenser
+completed in 0.676 seconds with one walking-to-aligning transition and 0.20
+seconds of alignment; stance error was 0.0905 and facing error zero.
+
+The longer rice-dispenser route then reproduced `unsafe_alignment_stance` after
+3.31 seconds. Its arrival check projected the preceding full-speed walking
+velocity toward the counter even on a non-slippery floor. The follow-up fix
+scales retained locomotion by native surface slippiness while continuing to
+check wind/platform drift and native settled velocity before arrival. Build/audit
+checks still pass. Evidence: `.local/contact-navigation.ndjson` and
+`.local/contact-before.json` / `.local/contact-after.json`.

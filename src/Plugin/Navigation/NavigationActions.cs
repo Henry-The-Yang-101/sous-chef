@@ -225,7 +225,12 @@ namespace SousChef.Plugin.Navigation
             Vector3 drift = chef.WindReceiver == null ? Vector3.zero : chef.WindReceiver.GetVelocity();
             if (chef.SurfaceMovable != null) drift += chef.SurfaceMovable.GetVelocity();
             Vector3 velocity = chef.Motion.GetVelocityXZ();
-            if (!physics.Segment(position, position + (velocity + drift) * .08f)) { Stop("unsafe_alignment_stance"); return; }
+            // Neutral input stops ordinary walking; only slippery floors retain
+            // locomotion velocity. Projecting the preceding full-speed command
+            // here falsely runs through a counter before neutral has been applied.
+            var surface = chef.PhysicsSurface == null ? null : chef.PhysicsSurface.Properties;
+            float retainedMotion = surface == null ? 0 : Mathf.Clamp01(surface.Slippiness);
+            if (!physics.Segment(position, position + (velocity * retainedMotion + drift) * .08f)) { Stop("unsafe_alignment_stance"); return; }
             // The game's axis helper normalizes every nonzero input to full speed.
             // Use its native turn helper at the normal turn rate with neutral walking
             // input, instead of walking into the counter just to change heading.
