@@ -2,7 +2,8 @@
 
 The server binds IPv4 loopback only. Each line is one UTF-8 JSON object terminated
 by LF. A connection receives `hello`, then the latest complete state and updates.
-There is no command channel. Four clients can connect; the Python client limits
+This observation socket is send-only. A separate [Player 2 control endpoint](control.md)
+accepts commands. Four observation clients can connect; the Python client limits
 individual lines to 64 MiB.
 
 ## Messages

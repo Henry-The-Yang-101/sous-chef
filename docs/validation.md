@@ -83,7 +83,7 @@ pause menu was absent.
 ## Remaining validation scope
 
 Online multiplayer is outside the supported scope. Within couch co-op,
-two independently controlled local player seats, scene-to-scene round transitions, delivery/plate-return
+scene-to-scene round transitions, delivery/plate-return
 progression, food-processing completion, fire, moving platforms, wind, portals,
 cannons, piloting, Horde, DLC and terrain still need dedicated live scenarios.
 No broad runtime coverage is claimed from member existence alone. The core
@@ -96,3 +96,49 @@ while probing this old Unity version. Startup still completed and the observer
 worked. No bridge capture exceptions appeared in the tested run. The original
 game assembly fingerprint remained unchanged. The test game was closed normally;
 the side-by-side loader/plugin remain installed for the documented launcher.
+
+
+## Player 2 direct control — version 0.2
+
+The user manually created two simultaneous local players through Split Controller
+and entered `MovingPlatform4`. The native assignments were Player.One and
+Player.Two; the control endpoint identified P2 as pad `One`, side `Right`.
+This supersedes the earlier single-player-only observation scope above.
+
+Verified through direct bridge commands, without synthetic gameplay keystrokes:
+
+- Movement: P2 changed from `[15.1099997, 0, 3.6650000]` to
+  `[15.1099997, 0, 2.2000000]`, a displacement of about 1.465 units. P1 remained
+  exactly at `[11.3999987, 0, 8.1350002]` in both snapshots.
+- Exclusive ownership: a second connection's claim failed with `already_claimed`.
+- Expiry: waiting beyond the last input's TTL revoked the claim; an ensuing
+  release received `not_owner`, as expected for an already-expired lease.
+- Pickup/drop: after aligning P2 with the plate counter, the authoritative held
+  relationship changed from empty to `Plate 16 (2)` and back to empty on two
+  distinct pickup presses. P1's position and empty hands remained unchanged.
+- Explicit release restored an unclaimed status with `lastRelease: released`.
+- Abrupt socket shutdown without a release command cleared ownership with
+  `lastRelease: disconnected`. Subsequent observation showed zero horizontal
+  velocity for P2 and unchanged P1 position.
+- Requests were rejected when native input was suppressed, when paused, and
+  after the round ended. Active-claim revocation at the precise pause transition
+  was not captured in this live probe; lease revocation is also unit-tested.
+- The new level's observed fields reported no field-read or component errors.
+
+Local evidence is in `.local/control-probe-result.txt`,
+`.local/control-actions-result.txt`, and `.local/control-pickup-result.txt`.
+The first pickup attempt faced an empty counter and correctly picked up nothing;
+we aligned with the actual plate before recording the successful relationship.
+
+Automated validation now includes 489 C# assertions and 11 Python tests. New
+checks cover finite/ranged inputs, diagonal normalization, strict command grammar,
+exclusive leases, expiry, disconnects, sequence regression, main-thread control
+request dispatch over a real TCP connection, and Python wire encoding/cleanup.
+A final small hardening change seeds the native button edge tracker with neutral
+at construction so a same-update claim/input cannot swallow its first press.
+
+Still unverified: actual concurrent human P1 movement during bridge P2 movement,
+completed chopping/washing/throwing and dash behavior, reassignment during a claim,
+and special piloting/cannon control schemes. P1 isolation was verified with P1
+idle; the implementation never replaces P1's input objects. Physical movement
+already initiated (momentum/dash) is not forcibly cancelled when input is released.

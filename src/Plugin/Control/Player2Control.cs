@@ -165,7 +165,13 @@ namespace SousChef.Plugin.Control
         {
             private readonly Func<bool> read;
             private readonly ILogicalButton original;
-            public Button(Func<bool> value, ILogicalButton native) { read = value; original = native; }
+            public Button(Func<bool> value, ILogicalButton native)
+            {
+                read = value; original = native;
+                // Seed the native edge tracker with neutral even if claim and
+                // first input are dispatched in the same Unity update.
+                Update(false);
+            }
             public override bool IsDown() { return read(); }
             public override void GetLogicTreeData(out AcyclicGraph<ILogicalElement, LogicalLinkInfo> graph, out AcyclicGraph<ILogicalElement, LogicalLinkInfo>.Node head)
             { original.GetLogicTreeData(out graph, out head); }

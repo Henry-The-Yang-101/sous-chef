@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the installed read-only bridge through the pinned BepInEx wrapper."""
+"""Run the installed bridge through the pinned BepInEx wrapper."""
 import argparse
 import os
 from pathlib import Path

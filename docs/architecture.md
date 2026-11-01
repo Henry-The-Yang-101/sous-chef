@@ -25,7 +25,9 @@ All Unity reads occur on the main thread. Frozen plain DTOs pass to a serializer
 worker and independent socket writers. A single pending capture and single
 latest encoded frame bound the backlog; slow consumers cannot block Unity.
 Socket writers have a two-second timeout. Asset caches and identities are pruned.
-The bridge makes no gameplay/input calls and adds no gameplay Harmony patches.
+The observation path makes no gameplay/input calls. The separate
+[Player 2 control adapter](control.md) temporarily replaces only the selected
+chef's logical input fields; it adds no gameplay Harmony patches.
 
 ## Implemented observations
 
@@ -50,7 +52,9 @@ not behavioral coverage of every mechanic. The catalog is the exact field list.
   The default 5 Hz favors breadth over event fidelity.
 - The target is two simultaneous local players, each controlling one chef.
   Single-player chef switching is not the intended co-op setup. Online multiplayer
-  is out of scope. Independent player control through the bridge is not implemented.
+  is out of scope. Direct control of an existing Player 2 is implemented;
+  menu control, player joining and special transferred control schemes are outside
+  this first input adapter.
   Existing client-role metadata is diagnostic, not a promise of online support.
   Horde, DLC, terrain-heavy levels and many special mechanics remain unvalidated.
 - Unity 2017.4 lacks the public per-collider ignore-pair reader. Layer filtering
