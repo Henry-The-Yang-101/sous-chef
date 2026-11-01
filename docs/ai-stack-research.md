@@ -7,8 +7,10 @@ performed for this study. All prices below are USD.
 
 ## Recommendation
 
-Start with **Moonshine Small Streaming → Jev 1.14 → the local task executor**,
+Start with **Parakeet Ultra/Core ML → Jev 1.14 → the local task executor**,
 with cached acknowledgements and Pocket TTS for messages that need synthesis.
+The [on-device ASR follow-up](on-device-asr.md) revises the initial Moonshine
+recommendation and compares stronger recognition options alongside gameplay.
 Compare Jev against **OpenAI Decisions with GPT-6 Luna**, using exactly the same
 grounded task candidates. Both fit the bounded decision interface unusually well.
 This recommendation is based on interface and deployment fit; neither provider
@@ -197,7 +199,7 @@ billing](https://docs.cartesia.ai/pricing)
 
 | Component | Preferred local options | Why / caveat |
 | --- | --- | --- |
-| **Speech recognition** | **Moonshine Small Streaming (123M)**; compare Medium Streaming (245M) for accuracy and Tiny Streaming (34M) for load. | Streaming work overlaps speech; MIT code and these English weights. Use the Streaming variants, not the older similarly named Base/Tiny checkpoints. Small is the first balance to test. [Available models](https://moonshine-voice.readthedocs.io/en/latest/models/available-models/) |
+| **Original recognition baseline** | **Moonshine Small Streaming (123M)**, Medium Streaming (245M), and Tiny Streaming (34M). | Streaming work overlaps speech; MIT code and these English weights. The user found Medium unsatisfactory; see the [revised recognition shortlist](on-device-asr.md). [Available models](https://moonshine-voice.readthedocs.io/en/latest/models/available-models/) |
 | **Recognition alternative** | **Parakeet TDT 0.6B v3 via parakeet-mlx** | Apple-specific MLX implementation and 25-language ASR. Its wrapper exposes chunked streaming; context/chunk settings and transcript revision determine responsiveness. Do not infer live latency from offline transcription speed. Weights are CC BY 4.0. [Implementation](https://github.com/senstella/parakeet-mlx), [NVIDIA card](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) |
 | **Speech synthesis** | **Pocket TTS** | MIT, CPU-oriented streaming synthesis; the established 100M model advertises about 200 ms to first chunk and faster-than-realtime CPU generation. Newly released 18.2M/6.9M/1.9M English variants are interesting load-reduction experiments; those are not covered by the 100M latency claim. [Repository](https://github.com/kyutai-labs/pocket-tts), [technical report](https://kyutai.org/pocket-tts-technical-report/) |
 | **Synthesis alternative** | **Kokoro-82M** | Lightweight Apache 2.0 weights; good candidate for concise fixed-character acknowledgements. Actual startup/playback time still depends on runtime and chunking. [Model card](https://huggingface.co/hexgrad/Kokoro-82M) |
@@ -321,8 +323,8 @@ The three configurations to compare first are:
 
 | Configuration | Stack | Reason to choose it |
 | --- | --- | --- |
-| **Initial recommendation** | Moonshine Small Streaming + Jev 1.14 + cached audio/Pocket TTS | Local audio with one small hosted decision request; compare Decisions behind the same interface. |
-| **Fully local** | Moonshine Small Streaming + Qwen3.5-4B + Pocket TTS/Kokoro | No service dependency; check co-running latency and game frame times. |
+| **Initial recommendation** | Parakeet Ultra/Core ML + Jev 1.14 + cached audio/Pocket TTS | Local audio with one small hosted decision request; compare Decisions behind the same interface. |
+| **Fully local** | Parakeet Ultra/Core ML + Qwen3.5-4B + Pocket TTS/Kokoro | No service dependency; check co-running latency and game frame times. |
 | **Conversational character** | GPT-Live 1 + native Decisions, or Gemini 3.8 Live + validated game functions | Natural dialogue and interruptions with a more integrated hosted voice experience. |
 
 The final choice should be the smallest stack that interprets the intended
