@@ -62,6 +62,7 @@ namespace SousChef.Plugin.Navigation
                 "destination", target == null ? lastDestination : Identity(target),
                 "phase", Action.State == "idle" ? "idle" : facingSince < 0 ? "walking" : "aligning", "arrival", arrivalDetails,
                 "revision", Action.Revision, "catalogRevision", revision, "catalogReason", unavailable,
+                "catalogComplete", unavailable == null && search != null && search.Complete,
                 "catalogAgeSeconds", lastPlan < 0 ? null : (object)(Time.realtimeSinceStartup - lastPlan),
                 "diagnostics", Json.Object("planMilliseconds", planMilliseconds, "prepareMilliseconds", prepareMilliseconds,
                     "searchMilliseconds", searchMilliseconds, "matchMilliseconds", matchMilliseconds, "searchNodes", nodeCount,
@@ -86,7 +87,8 @@ namespace SousChef.Plugin.Navigation
             var actions = new List<object> { Json.Object("name", "stop", "parameters", new Dictionary<string, object>()) };
             if (destinations.Count > 0 && Action.State == "idle")
                 actions.Add(Json.Object("name", "navigate_to", "parameters", Json.Object("destination_id", Json.Object("type", "enum", "options", destinations))));
-            return Json.Object("actions", actions, "navigation", Describe(), "destinations", destinations);
+            return Json.Object("actions", actions, "navigation", Describe(), "destinations", destinations,
+                "complete", unavailable == null && search != null && search.Complete, "reason", unavailable);
         }
         public string Start(PlayerControls player, int owner, string destination)
         {
@@ -118,7 +120,7 @@ namespace SousChef.Plugin.Navigation
             {
                 // A cold physics graph may take several bounded updates to warm.
                 // Keep all destinations unavailable until a complete search passes.
-                if (chef == player && unavailable == "planning_budget_exceeded" && warmTicks > 0)
+                if (chef == player && (unavailable == "planning_budget_exceeded" || unavailable == "planning_in_progress") && warmTicks > 0)
                 { warmTicks--; Refresh(player, true); }
                 return;
             }
@@ -319,11 +321,11 @@ namespace SousChef.Plugin.Navigation
                     delegate { return searchWatch.Elapsed.TotalMilliseconds < 12 && !physics.Overflow; });
                 searchMilliseconds = searchWatch.Elapsed.TotalMilliseconds;
                 nodeCount = search.Distances.Count;
-                if (!search.Complete || physics.Overflow) { unavailable = physics.Overflow ? "physics_query_overflow" : "planning_budget_exceeded"; return; }
+                if (physics.Overflow) { unavailable = "physics_query_overflow"; return; }
                 // Index the reachable nodes once, then only inspect cells around each
                 // meaningful object. Never emit the lattice itself as available actions.
                 var byXZ = new Dictionary<long, List<WalkCell>>();
-                foreach (WalkCell cell in search.Distances.Keys)
+                foreach (WalkCell cell in search.Settled)
                 {
                     long key = ((long)cell.X << 32) ^ (uint)cell.Z; List<WalkCell> bucket;
                     if (!byXZ.TryGetValue(key, out bucket)) { bucket = new List<WalkCell>(); byXZ[key] = bucket; }
@@ -352,10 +354,13 @@ namespace SousChef.Plugin.Navigation
                             }
                         }
                     }
-                    if (best != Single.MaxValue) { d.Goal = goal; d.Approach = bestApproach; d.Distance = best; available[d.Id] = d; }
+                    // Any unsettled approach costs at least the frontier distance.
+                    // Publish only when even an unseen approach cannot beat this one.
+                    if (best != Single.MaxValue && best <= search.MinimumPendingDistance)
+                    { d.Goal = goal; d.Approach = bestApproach; d.Distance = best; available[d.Id] = d; }
                 }
                 if (physics.Overflow) { available.Clear(); unavailable = "physics_query_overflow"; }
-                else unavailable = null;
+                else unavailable = search.Complete ? null : "planning_in_progress";
                 matchMilliseconds = watch.Elapsed.TotalMilliseconds - prepareMilliseconds - searchMilliseconds;
             }
             catch (Exception e)

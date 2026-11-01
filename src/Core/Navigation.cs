@@ -26,8 +26,10 @@ namespace SousChef.Core
         private struct Pending { public WalkCell Cell; public float Cost; }
         private readonly List<Pending> heap = new List<Pending>();
         public readonly Dictionary<WalkCell, float> Distances = new Dictionary<WalkCell, float>();
+        public readonly HashSet<WalkCell> Settled = new HashSet<WalkCell>();
         private readonly Dictionary<WalkCell, WalkCell> parents = new Dictionary<WalkCell, WalkCell>();
         public bool Complete { get; private set; }
+        public float MinimumPendingDistance { get { return heap.Count == 0 ? Single.PositiveInfinity : heap[0].Cost; } }
         public WalkSearch(IEnumerable<WalkEdge> starts, Func<WalkCell, IEnumerable<WalkEdge>> expand,
             int maxNodes, Func<bool> budgetAvailable)
         {
@@ -43,6 +45,7 @@ namespace SousChef.Core
                 if (Distances.Count > maxNodes || !budgetAvailable()) return;
                 Pending next = Pop();
                 if (Distances[next.Cell] < next.Cost) continue;
+                Settled.Add(next.Cell);
                 foreach (WalkEdge edge in expand(next.Cell))
                 {
                     if (!Valid(edge.Distance)) throw new ArgumentException("invalid_distance");
@@ -56,7 +59,9 @@ namespace SousChef.Core
         private static bool Valid(float cost) { return cost >= 0 && !Single.IsNaN(cost) && !Single.IsInfinity(cost); }
         public List<WalkCell> Route(WalkCell goal)
         {
-            if (!Complete || !Distances.ContainsKey(goal)) return null;
+            // Settled Dijkstra nodes already have proven shortest paths even when
+            // the rest of a large or newly changed kitchen exceeds this frame's budget.
+            if (!Settled.Contains(goal)) return null;
             var path = new List<WalkCell>(); WalkCell current = goal, parent;
             while (true)
             {

@@ -24,18 +24,18 @@ namespace SousChef.Plugin.Navigation
         private readonly Dictionary<int, MeshStamp> meshes = new Dictionary<int, MeshStamp>();
         private readonly List<Bounds> changed = new List<Bounds>();
         private readonly Dictionary<int, WindVolume> winds = new Dictionary<int, WindVolume>();
-        private readonly List<Collider> people = new List<Collider>();
         private readonly Dictionary<int, bool> dangers = new Dictionary<int, bool>();
         private readonly Dictionary<int, IMovingSurface> surfaces = new Dictionary<int, IMovingSurface>();
         private readonly Dictionary<int, PlayerPhysicsSurface> properties = new Dictionary<int, PlayerPhysicsSurface>();
         private readonly Dictionary<int, float> speeds = new Dictionary<int, float>();
         private readonly Dictionary<int, IGridLocation> grids = new Dictionary<int, IGridLocation>();
+        private readonly HashSet<int> ignoredChefColliders = new HashSet<int>();
         private PlayerControls chef;
         private CapsuleCollider capsule;
         private GameObject held;
         private int groundMask, collisionMask, interactMask;
         private bool useGridSelection;
-        private float radius, height, pivotToFoot, lastReconcile, walkingSpeed;
+        private float radius, nativeRadius, height, pivotToFoot, lastReconcile, walkingSpeed;
         public bool Overflow { get; private set; }
         public int Queries { get; private set; }
         public bool Changed { get; private set; }
@@ -50,7 +50,7 @@ namespace SousChef.Plugin.Navigation
 
         public void Reset()
         {
-            chef = null; probes.Clear(); edges.Clear(); stamps.Clear(); meshes.Clear(); dangers.Clear(); surfaces.Clear(); properties.Clear(); grids.Clear();
+            chef = null; probes.Clear(); edges.Clear(); stamps.Clear(); meshes.Clear(); dangers.Clear(); surfaces.Clear(); properties.Clear(); grids.Clear(); ignoredChefColliders.Clear();
         }
         public string Refresh(PlayerControls player)
         {
@@ -73,7 +73,8 @@ namespace SousChef.Plugin.Navigation
             int nextGroundMask = ((LayerMask)landscape.GetValue(ground)).value;
             int nextCollisionMask = 0;
             for (int i = 0; i < 32; i++) if (!Physics.GetIgnoreLayerCollision(chef.gameObject.layer, i)) nextCollisionMask |= 1 << i;
-            float nextRadius = capsule.radius * Mathf.Max(Mathf.Abs(capsule.transform.lossyScale.x), Mathf.Abs(capsule.transform.lossyScale.z)) + .025f;
+            nativeRadius = capsule.radius * Mathf.Max(Mathf.Abs(capsule.transform.lossyScale.x), Mathf.Abs(capsule.transform.lossyScale.z));
+            float nextRadius = nativeRadius + .025f;
             float nextHeight = Mathf.Max(2 * nextRadius, capsule.height * Mathf.Abs(capsule.transform.lossyScale.y));
             // Unity's lossyScale jitters by a few float ULPs as a unit-scale chef
             // turns. Retain the padded dimensions through that numerical noise;
@@ -86,7 +87,19 @@ namespace SousChef.Plugin.Navigation
             pivotToFoot = chef.transform.position.y - capsule.bounds.min.y;
             nearbyCount = Physics.OverlapSphereNonAlloc(chef.transform.position, Range, nearby, ~0, QueryTriggerInteraction.Collide); Queries++;
             if (nearbyCount == nearby.Length) { Overflow = true; return "physics_query_overflow"; }
-            changed.Clear(); winds.Clear(); people.Clear();
+            ignoredChefColliders.Clear();
+            var inputConfig = PlayerInputLookup.GetInputConfig();
+            for (int i = 0; i < nearbyCount; i++)
+            {
+                Collider c = nearby[i];
+                if (c == null) continue;
+                var controls = c.GetComponentInParent<PlayerControls>();
+                if (controls == null) continue;
+                var provider = controls.PlayerIDProvider;
+                var entry = provider == null || inputConfig == null ? null : inputConfig.GetInputConfigEntry(provider.GetID());
+                if (controls == chef || (entry != null && entry.IsLocal())) ignoredChefColliders.Add(c.GetInstanceID());
+            }
+            changed.Clear(); winds.Clear();
             geometryScan++;
             bool reconcile = Time.realtimeSinceStartup - lastReconcile >= .2f;
             if (reconcile)
@@ -102,17 +115,9 @@ namespace SousChef.Plugin.Navigation
                 int id = c.GetInstanceID(); present.Add(id);
                 WindVolume wind = c.GetComponent<WindVolume>();
                 if (wind != null) winds[id] = wind;
-                bool person = c.GetComponentInParent<PlayerControls>() != null;
-                if (person) people.Add(c);
                 GeometryStamp old;
                 Bounds bounds = c.bounds; Matrix4x4 matrix = c.transform.localToWorldMatrix;
                 Bounds obstruction = bounds;
-                if (person && c.attachedRigidbody != null)
-                {
-                    Vector3 shift = c.attachedRigidbody.velocity * .12f; shift.y = 0;
-                    Bounds future = bounds; future.center += shift;
-                    obstruction.Encapsulate(future);
-                }
                 int shapeKey = ShapeKey(c, reconcile); bool danger = Dangerous(c);
                 if (!stamps.TryGetValue(id, out old) || old.Collider != c || !old.Bounds.Equals(bounds) ||
                     !old.Obstruction.Equals(obstruction) || old.Matrix != matrix || old.Layer != c.gameObject.layer || old.Trigger != c.isTrigger || old.Shape != shapeKey || old.Danger != danger ||
@@ -208,7 +213,10 @@ namespace SousChef.Plugin.Navigation
         }
         private bool Own(Collider c)
         {
-            return c.transform.IsChildOf(chef.transform) || (held != null && c.transform.IsChildOf(held.transform));
+            // Local chefs can be pushed. Their bodies and carried descendants do
+            // not remove destinations or obstruct navigation. NPCs lack this component
+            // and continue to participate in native collision and hazard queries.
+            return ignoredChefColliders.Contains(c.GetInstanceID()) || (held != null && c.transform.IsChildOf(held.transform));
         }
         private bool Dangerous(Collider c)
         {
@@ -226,7 +234,6 @@ namespace SousChef.Plugin.Navigation
             if (c == null || !c.enabled || !c.gameObject.activeInHierarchy || Own(c)) return false;
             if (Dangerous(c)) return true;
             if (c.isTrigger) return false;
-            if (c.GetComponentInParent<PlayerControls>() != null) return true;
             return (collisionMask & (1 << c.gameObject.layer)) != 0;
         }
         private bool Ground(Vector3 point, out RaycastHit best)
@@ -245,15 +252,18 @@ namespace SousChef.Plugin.Navigation
             }
             return distance != Single.MaxValue;
         }
-        private void Capsule(Vector3 foot, out Vector3 low, out Vector3 high)
+        private void Capsule(Vector3 foot, out Vector3 low, out Vector3 high, float clearance = -1)
         {
             // Inset both vertical ends from resting contact. Translating the whole
             // capsule upward for floor skin makes a native-height ceiling block
             // every cell, even while the real chef comfortably stands below it.
-            low = foot + Vector3.up * Mathf.Min(radius + Skin, height * .5f);
-            high = foot + Vector3.up * Mathf.Max(height * .5f, height - radius - Skin);
+            float r = clearance < 0 ? radius : clearance;
+            low = foot + Vector3.up * Mathf.Min(r + Skin, height * .5f);
+            high = foot + Vector3.up * Mathf.Max(height * .5f, height - r - Skin);
         }
         public bool Stand(Vector3 guess, out Vector3 point, out Collider support)
+        { return Stand(guess, out point, out support, radius); }
+        private bool Stand(Vector3 guess, out Vector3 point, out Collider support, float clearance)
         {
             point = guess; support = null; RaycastHit hit;
             if (!Ground(guess, out hit)) return false;
@@ -261,22 +271,14 @@ namespace SousChef.Plugin.Navigation
             // Whole-footprint support: do not bridge a hole with the chef centre alone.
             for (int i = 0; i < 4; i++)
             {
-                Vector3 offset = i < 2 ? Vector3.right * (i == 0 ? radius : -radius) : Vector3.forward * (i == 2 ? radius : -radius);
+                Vector3 offset = i < 2 ? Vector3.right * (i == 0 ? clearance : -clearance) : Vector3.forward * (i == 2 ? clearance : -clearance);
                 RaycastHit edge;
                 if (!Ground(point + offset, out edge) || Mathf.Abs(edge.point.y - point.y) > .22f) return false;
             }
-            Vector3 low, high; Capsule(point, out low, out high);
-            int count = Physics.OverlapCapsuleNonAlloc(low, high, radius, overlaps, ~0, QueryTriggerInteraction.Collide); Queries++;
+            Vector3 low, high; Capsule(point, out low, out high, clearance);
+            int count = Physics.OverlapCapsuleNonAlloc(low, high, clearance, overlaps, ~0, QueryTriggerInteraction.Collide); Queries++;
             if (count == overlaps.Length) { Overflow = true; return false; }
             for (int i = 0; i < count; i++) if (Blocks(overlaps[i])) return false;
-            foreach (Collider person in people)
-            {
-                if (person == null || person.attachedRigidbody == null) continue;
-                Vector3 shift = person.attachedRigidbody.velocity * .12f; shift.y = 0;
-                Bounds future = person.bounds; future.center += shift;
-                future.Expand(new Vector3(radius * 2, 0, radius * 2));
-                if (future.Contains(point + Vector3.up * (height * .5f))) return false;
-            }
             return true;
         }
         private Vector3 Approximate(WalkCell cell) { return new Vector3(cell.X * Spacing, cell.Y * HeightBand, cell.Z * Spacing); }
@@ -340,16 +342,33 @@ namespace SousChef.Plugin.Navigation
         public bool Segment(Vector3 from, Vector3 to)
         {
             Vector3 delta = to - from; float length = delta.magnitude;
+            bool entering = Vector3.Distance(from, Position) < .02f;
             int steps = Math.Max(1, Mathf.CeilToInt(length / .2f));
             for (int i = 0; i <= steps; i++)
             {
                 Vector3 point; Collider ground;
                 Vector3 guess = Vector3.Lerp(from, to, (float)i / steps);
-                if (!Stand(guess, out point, out ground) || Mathf.Abs(point.y - guess.y) > .22f || !CanWalkDirection(from, to, ground)) return false;
+                // A legal resting wall contact can lie inside the extra planning
+                // margin. Use the native capsule (with tiny contact skin) at the
+                // actual starting pose, growing back to full clearance over 0.15 m.
+                float clearance = entering ? Mathf.Lerp(Mathf.Max(.01f, nativeRadius - .005f), radius, Mathf.Clamp01(length * i / steps / .15f)) : radius;
+                if (!Stand(guess, out point, out ground, clearance) || Mathf.Abs(point.y - guess.y) > .22f || !CanWalkDirection(from, to, ground)) return false;
             }
             if (length < .001f) return true;
-            Vector3 low, high; Capsule(from, out low, out high);
-            int count = Physics.CapsuleCastNonAlloc(low, high, radius, delta / length, hits, length, ~0, QueryTriggerInteraction.Collide); Queries++;
+            if (entering)
+            {
+                float entryLength = Mathf.Min(.15f, length);
+                if (!Sweep(from, from + delta / length * entryLength, Mathf.Max(.01f, nativeRadius - .005f))) return false;
+                if (entryLength >= length) return true;
+                from += delta / length * entryLength;
+            }
+            return Sweep(from, to, radius);
+        }
+        private bool Sweep(Vector3 from, Vector3 to, float clearance)
+        {
+            Vector3 delta = to - from, low, high; float length = delta.magnitude;
+            Capsule(from, out low, out high, clearance);
+            int count = Physics.CapsuleCastNonAlloc(low, high, clearance, delta / length, hits, length, ~0, QueryTriggerInteraction.Collide); Queries++;
             if (count == hits.Length) { Overflow = true; return false; }
             for (int i = 0; i < count; i++) if (Blocks(hits[i].collider)) return false;
             return true;

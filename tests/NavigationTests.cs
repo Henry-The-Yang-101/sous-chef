@@ -31,6 +31,20 @@ internal static class NavigationTests
         check(!tree.Complete && tree.Route(a) == null, "partial budget search is not authoritative");
         tree = new WalkSearch(new[] { new WalkEdge(a, 0) }, expand, 1, delegate { return true; });
         check(!tree.Complete && tree.Route(goal) == null, "node cap fails closed");
+        int budget = 2;
+        tree = new WalkSearch(new[] { new WalkEdge(a, 0) }, expand, 50, delegate { return budget-- > 0; });
+        check(!tree.Complete && tree.Settled.Contains(b) && tree.Route(b).Count == 2, "settled routes survive an incomplete full-map search");
+        check(!tree.Settled.Contains(goal) && tree.Route(goal) == null, "frontier guesses are never published as proven routes");
+        check(tree.Distances[b] < tree.MinimumPendingDistance, "frontier bound certifies nearest known approach");
+        Func<WalkCell, IEnumerable<WalkEdge>> fireDetour = delegate(WalkCell node)
+        {
+            if (node.Equals(a)) return new[] { new WalkEdge(b, 1), new WalkEdge(c, 1.4f) };
+            // Fire removes the short branch, leaving the alternative open.
+            if (node.Equals(c)) return new[] { new WalkEdge(goal, 1.4f) };
+            return new WalkEdge[0];
+        };
+        tree = new WalkSearch(new[] { new WalkEdge(a, 0) }, fireDetour, 50, delegate { return true; });
+        check(tree.Complete && Math.Abs(tree.Distances[goal] - 2.8f) < .001f && tree.Route(goal)[1].Equals(c), "a blocked branch preserves destinations via the alternate shortest route");
         // Directed edges represent an impassable counter-current.
         tree = new WalkSearch(new[] { new WalkEdge(goal, 0) }, expand, 50, delegate { return true; });
         check(!tree.Distances.ContainsKey(a), "one-way flow does not imply reverse reachability");
