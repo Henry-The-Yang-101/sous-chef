@@ -48,8 +48,9 @@ not behavioral coverage of every mechanic. The catalog is the exact field list.
 
 - Sampling cannot observe actions/objects that begin and end between captures.
   The default 5 Hz favors breadth over event fidelity.
-- Online client-only sessions, Horde, DLC, terrain-heavy levels and many special
-  mechanics have not been live-validated. Client role lacks hidden server state.
+- Couch co-op is the supported scope; online multiplayer is out of scope.
+  Existing client-role metadata is diagnostic, not a promise of online support.
+  Horde, DLC, terrain-heavy levels and many special mechanics remain unvalidated.
 - Unity 2017.4 lacks the public per-collider ignore-pair reader. Layer filtering
   is available. No navigation graph or exact reachability claim is provided.
 - Unreadable meshes are explicit; mesh/terrain changes may lag two seconds.

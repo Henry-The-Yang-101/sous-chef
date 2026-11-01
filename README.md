@@ -1,6 +1,7 @@
 # Sous Chef — Overcooked! 2 state bridge
 
-A read-only local bridge for the native macOS Steam build of Overcooked! 2.
+A read-only local bridge for couch co-op in the native macOS Steam build of
+Overcooked! 2. Online multiplayer is outside the supported scope.
 It captures active kitchens, including paused rounds. Outside a round it sends
 status messages without a map, so consumers cannot mistake the level selector
 for a kitchen.

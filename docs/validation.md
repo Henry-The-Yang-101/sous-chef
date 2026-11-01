@@ -78,7 +78,8 @@ pause menu was absent.
 
 ## Remaining validation scope
 
-Online client-only mode, scene-to-scene round transitions, delivery/plate-return
+Online multiplayer is outside the supported scope. Within couch co-op,
+scene-to-scene round transitions, delivery/plate-return
 progression, food-processing completion, fire, moving platforms, wind, portals,
 cannons, piloting, Horde, DLC and terrain still need dedicated live scenarios.
 No broad runtime coverage is claimed from member existence alone. The core
