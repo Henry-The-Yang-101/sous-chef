@@ -15,6 +15,7 @@ from urllib.parse import urlsplit
 
 from clients.actions import ActionClient
 from clients.control import ControlError
+from harness.contents import ContentsObserver
 from harness.sharing import PhoneShare, lan_addresses
 
 
@@ -43,10 +44,11 @@ class HarnessBridge:
     STALE_SECONDS = 1.5
     VIEWER_TIMEOUT = 5.0
 
-    def __init__(self, port=24703, factory=None, clock=time.monotonic, focus=focus_game):
+    def __init__(self, port=24703, factory=None, clock=time.monotonic, focus=focus_game, contents=None):
         self.factory = factory or (lambda: ActionClient(port, timeout=1.0))
         self.clock = clock
         self.focus = focus
+        self.contents = contents
         self.io_lock = threading.Lock()
         self.state_lock = threading.RLock()
         self.halt = threading.Event()
@@ -130,6 +132,8 @@ class HarnessBridge:
             result['viewerOwnsAction'] = bool(viewer and viewer == self.owner)
             if not result['fresh']:
                 result['catalog'] = {}
+            if self.contents:
+                self.contents.decorate(result)
             return result
 
     def navigate(self, viewer, session, destination, instance):
@@ -321,8 +325,9 @@ class Handler(BaseHTTPRequestHandler):
             self.send(400, {'error': str(error)})
 
 
-def serve(port=8765, bridge_port=24703, local_only=False, tunnel=False, public_url=None):
-    bridge = HarnessBridge(bridge_port)
+def serve(port=8765, bridge_port=24703, local_only=False, tunnel=False, public_url=None, state_port=24702):
+    contents = ContentsObserver(state_port)
+    bridge = HarnessBridge(bridge_port, contents=contents)
     server = ThreadingHTTPServer(('127.0.0.1' if local_only else '0.0.0.0', port), Handler)
     server.bridge, server.token = bridge, secrets.token_urlsafe(32)
     server.sharing = PhoneShare(server.server_port, server.token,
@@ -335,6 +340,7 @@ def serve(port=8765, bridge_port=24703, local_only=False, tunnel=False, public_u
             signal.signal(signal.SIGTERM, signal.default_int_handler)
         if tunnel:
             server.sharing.start_tunnel(server.server_port)
+        contents.start()
         bridge.start()
         server.serve_forever(poll_interval=.2)
     except KeyboardInterrupt:
@@ -342,6 +348,7 @@ def serve(port=8765, bridge_port=24703, local_only=False, tunnel=False, public_u
     finally:
         server.server_close()
         bridge.close()
+        contents.close()
         server.sharing.close()
 
 
@@ -349,12 +356,13 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--port', type=int, default=8765)
     parser.add_argument('--bridge-port', type=int, default=24703)
+    parser.add_argument('--state-port', type=int, default=24702, help='Full observation stream for live item contents')
     parser.add_argument('--local-only', action='store_true', help='Disable access over local Wi-Fi')
     sharing = parser.add_mutually_exclusive_group()
     sharing.add_argument('--tunnel', action='store_true', help='Start a temporary internet link using cloudflared')
     sharing.add_argument('--public-url', help='Existing forwarded http(s) origin to encode in the phone QR code')
     args = parser.parse_args()
     try:
-        serve(args.port, args.bridge_port, args.local_only, args.tunnel, args.public_url)
+        serve(args.port, args.bridge_port, args.local_only, args.tunnel, args.public_url, args.state_port)
     except (RuntimeError, ValueError) as error:
         parser.exit(1, str(error) + '\n')
