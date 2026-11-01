@@ -71,7 +71,13 @@ namespace SousChef.Plugin.Navigation
         private static object Identity(Destination d)
         {
             return d.Object == null ? null : Json.Object("id", d.Id, "label", d.Object.name, "kind", d.Kind,
+                "foodName", FoodName(d.Object),
                 "objectInstanceId", d.Object.GetInstanceID(), "position", Values.Vector(d.Object.transform.position));
+        }
+        private static string FoodName(GameObject go)
+        {
+            var spawner = go.GetComponent<PickupItemSpawner>();
+            return spawner == null || spawner.m_itemPrefab == null ? null : spawner.m_itemPrefab.name;
         }
         public object Available(PlayerControls player)
         {
@@ -80,9 +86,13 @@ namespace SousChef.Plugin.Navigation
             if (Action.State == "navigating") ApplyPlan();
             var destinations = new List<object>();
             foreach (Destination d in available.Values)
+            {
+                Vector3 offset = d.Object.transform.position - physics.Position; offset.y = 0;
                 destinations.Add(Json.Object("id", d.Id, "label", d.Object.name, "kind", d.Kind,
+                    "foodName", FoodName(d.Object),
                     "objectInstanceId", d.Object.GetInstanceID(), "position", Values.Vector(d.Object.transform.position),
-                    "approachPosition", Values.Vector(d.Approach), "routeDistance", d.Distance));
+                    "approachPosition", Values.Vector(d.Approach), "routeDistance", d.Distance, "directDistance", offset.magnitude));
+            }
             destinations.Sort(delegate(object a, object b) { return String.CompareOrdinal((string)((Dictionary<string, object>)a)["id"], (string)((Dictionary<string, object>)b)["id"]); });
             var actions = new List<object> { Json.Object("name", "stop", "parameters", new Dictionary<string, object>()) };
             if (destinations.Count > 0 && Action.State == "idle")
