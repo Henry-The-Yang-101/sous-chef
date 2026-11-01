@@ -6,6 +6,9 @@ own chef simultaneously. Online multiplayer is outside the supported scope.
 Player 2 can be created with the game's Split Controller option and controlled
 directly through logical inputs, independently of Player 1. See
 [Player 2 control](docs/control.md) for the API and lifecycle rules.
+Bridge 0.4 adds [autonomous walking actions](docs/navigation.md): list reachable
+meaningful destinations, call `navigate_to(destination_id)`, or interrupt with
+`stop()`. The plugin handles routing and steering; callers never send waypoints.
 It captures active kitchens, including paused rounds. Outside a round it sends
 status messages without a map, so consumers cannot mistake the level selector
 for a kitchen.
@@ -90,10 +93,11 @@ bypasses this loader unless you separately configure Steam to use it.
 
 | Directory | Responsibility |
 | --- | --- |
-| `src/Core/` | JSON, stable identities, bounded TCP transport |
+| `src/Core/` | JSON, stable identities, bounded TCP transport, graph search and action state |
 | `src/Plugin/` | Round gate, main-thread scene/geometry capture, lifecycle |
 | `src/Plugin/Adapters/` | Explicit field schemas and bounded readers |
-| `clients/` | Python consumer, world index, recording validator |
+| `src/Plugin/Navigation/` | Live physics reachability, destination catalogue, autonomous walking |
+| `clients/` | Python observation/control/action APIs, world index, recording validator |
 | `scripts/` | Pinned toolchain, build, reversible install, launch, checks |
 | `tests/` | Core/transport tests, installed-game field audit, client tests |
 

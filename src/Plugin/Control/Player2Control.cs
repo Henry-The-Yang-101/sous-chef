@@ -103,6 +103,8 @@ namespace SousChef.Plugin.Control
             {
                 Discover(); unavailable = Check(KitchenGate.Inspect());
                 if (unavailable != null) { navigation.Invalidate(unavailable); actions = Json.Object("actions", new[] { Json.Object("name", "stop") }, "destinations", new object[0], "navigation", navigation.Describe()); }
+                else if (lease.Owner(Now) != 0 && navigation.Action.State == "idle")
+                    actions = Json.Object("actions", new[] { Json.Object("name", "stop") }, "destinations", new object[0], "reason", "already_claimed", "navigation", navigation.Describe());
                 else actions = navigation.Available(target);
             }
             else if (command.Operation == "navigate_to")

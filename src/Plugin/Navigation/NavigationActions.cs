@@ -27,11 +27,13 @@ namespace SousChef.Plugin.Navigation
         private Destination target;
         private int nextId, waypoint;
         private PlayerControls chef;
-        private float lastPlan = -1, started, lastProgress, bestDistance, facingSince = -1;
+        private float lastPlan = -1, started, lastProgress, facingSince = -1;
+        private Vector3 progressPosition;
         private long revision;
         private string unavailable = "not_ready";
         private double planMilliseconds;
-        private int nodeCount;
+        private int nodeCount, candidateCount, startCount;
+        private string observationError;
         private bool planning;
         public NavigationActions(Action<Vector3> walk, Action halt) { move = walk; neutral = halt; }
         public void Reset(string reason)
@@ -53,11 +55,12 @@ namespace SousChef.Plugin.Navigation
             return Json.Object("state", Action.State, "destinationId", Action.Destination, "reason", Action.Reason,
                 "revision", Action.Revision, "catalogRevision", revision, "catalogReason", unavailable,
                 "catalogAgeSeconds", lastPlan < 0 ? null : (object)(Time.realtimeSinceStartup - lastPlan),
-                "diagnostics", Json.Object("planMilliseconds", planMilliseconds, "searchNodes", nodeCount, "physicsQueries", physics.Queries));
+                "diagnostics", Json.Object("planMilliseconds", planMilliseconds, "searchNodes", nodeCount, "physicsQueries", physics.Queries, "candidateCount", candidateCount, "startCount", startCount, "observationError", observationError));
         }
         public object Available(PlayerControls player)
         {
             Refresh(player, true);
+            if (Action.State == "navigating") ApplyPlan();
             var destinations = new List<object>();
             foreach (Destination d in available.Values)
                 destinations.Add(Json.Object("id", d.Id, "label", d.Object.name, "kind", d.Kind,
@@ -76,8 +79,15 @@ namespace SousChef.Plugin.Navigation
             Destination chosen;
             if (!available.TryGetValue(destination, out chosen)) return unavailable ?? "destination_unavailable";
             if (!Action.Start(owner, destination, true)) return "action_in_progress";
-            target = chosen; started = lastProgress = Time.realtimeSinceStartup; bestDistance = chosen.Distance;
+            target = chosen; started = lastProgress = Time.realtimeSinceStartup; progressPosition = physics.Position;
             SetRoute(chosen); return null;
+        }
+        private bool ApplyPlan()
+        {
+            Destination current;
+            if (!available.TryGetValue(Action.Destination ?? "", out current))
+            { Stop(unavailable ?? "destination_unreachable"); return false; }
+            target = current; SetRoute(current); return true;
         }
         private void SetRoute(Destination chosen)
         {
@@ -95,16 +105,16 @@ namespace SousChef.Plugin.Navigation
             if (physics.Changed || Time.realtimeSinceStartup - lastPlan >= .1f || TargetMoved())
             {
                 Refresh(player, true, true);
-                Destination current;
-                if (!available.TryGetValue(Action.Destination ?? "", out current)) { Stop(unavailable ?? "destination_unreachable"); return; }
-                target = current; SetRoute(current);
+                if (!ApplyPlan()) return;
             }
             if (route == null || route.Count == 0) { Stop("destination_unreachable"); return; }
             Vector3 position = physics.Position;
             if (Selected(target.Object)) { Stop("arrived"); return; }
             if (Time.realtimeSinceStartup - started > 45f) { Stop("navigation_timeout"); return; }
-            float remaining = Vector3.Distance(position, route[route.Count - 1]);
-            if (remaining < bestDistance - .15f) { bestDistance = remaining; lastProgress = Time.realtimeSinceStartup; }
+            // A valid detour can initially move away from the destination. Measure
+            // actual displacement for the stall watchdog, not Euclidean goal distance.
+            if (Vector3.Distance(position, progressPosition) > .15f)
+            { progressPosition = position; lastProgress = Time.realtimeSinceStartup; }
             if (Time.realtimeSinceStartup - lastProgress > 2f) { Stop("no_progress"); return; }
             while (waypoint < route.Count - 1 && Vector3.Distance(position, route[waypoint]) < .18f) waypoint++;
             Vector3 goal = route[waypoint];
@@ -158,6 +168,9 @@ namespace SousChef.Plugin.Navigation
             // the current supported stance remains safe and the target is in sight.
             Vector3 stand; Collider ground;
             if (!physics.Stand(position, out stand, out ground)) return false;
+            float speed = physics.Speed(chef.GroundCollider);
+            Vector3 next = position + direction.normalized * speed * Mathf.Clamp(Time.unscaledDeltaTime + .02f, .025f, .08f);
+            if (!physics.Segment(position, next)) return false;
             foreach (Collider c in target.Colliders) if (c != null && physics.Sight(position, c)) return true;
             return false;
         }
@@ -228,8 +241,11 @@ namespace SousChef.Plugin.Navigation
                 available.Clear(); chef = player;
                 string error = alreadyRefreshed ? null : physics.Refresh(player);
                 if (error != null) { unavailable = error; return; }
-                List<Destination> candidates = Discover(player);
-                search = new WalkSearch(physics.Starts(), physics.Neighbours, 16000,
+                observationError = null;
+                List<Destination> candidates = Discover(player); candidateCount = candidates.Count;
+                var starts = new List<WalkEdge>(physics.Starts()); startCount = starts.Count;
+                if (startCount == 0) { unavailable = "no_safe_start"; return; }
+                search = new WalkSearch(starts, physics.Neighbours, 16000,
                     delegate { return watch.Elapsed.TotalMilliseconds < 12 && !physics.Overflow; });
                 nodeCount = search.Distances.Count;
                 if (!search.Complete || physics.Overflow) { unavailable = physics.Overflow ? "physics_query_overflow" : "planning_budget_exceeded"; return; }
@@ -267,6 +283,10 @@ namespace SousChef.Plugin.Navigation
                 }
                 if (physics.Overflow) { available.Clear(); unavailable = "physics_query_overflow"; }
                 else unavailable = null;
+            }
+            catch (Exception e)
+            {
+                available.Clear(); unavailable = "navigation_observation_error"; observationError = e.GetType().Name + ": " + e.Message;
             }
             finally { watch.Stop(); planMilliseconds = watch.Elapsed.TotalMilliseconds; lastPlan = Time.realtimeSinceStartup; revision++; planning = false; }
         }

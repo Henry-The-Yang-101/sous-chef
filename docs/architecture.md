@@ -58,7 +58,9 @@ not behavioral coverage of every mechanic. The catalog is the exact field list.
   Existing client-role metadata is diagnostic, not a promise of online support.
   Horde, DLC, terrain-heavy levels and many special mechanics remain unvalidated.
 - Unity 2017.4 lacks the public per-collider ignore-pair reader. Layer filtering
-  is available. No navigation graph or exact reachability claim is provided.
+  is available. The separate [navigation layer](navigation.md) builds a
+  conservative graph from live physics queries; exact reachability for every
+  game mechanic is not claimed. Per-pair exclusions can cause false blocking.
 - Unreadable meshes are explicit; mesh/terrain changes may lag two seconds.
   PhysX contact manifolds, solver internals and force history are not observed.
   Mesh triangles do not reproduce PhysX convex cooking exactly.
@@ -111,3 +113,19 @@ share CPU and the main-thread capture budget. Input ticking remains independent.
 The scheduler retains phase across render-frame quantization and skips missed
 slots. Fast sample completeness permits latest-state backpressure without a
 baseline-dependent delta protocol.
+
+## Autonomous Player 2 actions
+
+`NavigationActions` discovers and deduplicates native pickup, interaction and
+placement targets, applies current affordance predicates, and chooses reachable
+approach stances. `WalkPhysics` owns main-thread support, clearance, line-of-sight,
+environmental flow and geometry-change queries. `WalkSearch` is a Unity-free,
+single-source Dijkstra tree shared by all targets. `ChefActionState` tracks
+ownership and idle/navigating transitions.
+
+The executor reads live physics and native interaction selection independently
+of the observation streams. It follows and rechecks the route inside Unity's
+update loop, converting world directions to P2's native logical axes. The same
+exclusive input lease handles disconnects and timeouts. No external steering
+loop, dash, object teleport or model call participates in navigation. Only plain
+command data and JSON replies cross the control server's worker boundary.

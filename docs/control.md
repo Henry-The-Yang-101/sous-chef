@@ -1,4 +1,7 @@
-# Direct Player 2 control (bridge 0.2)
+# Direct Player 2 control
+
+For autonomous walking and interruption, use [navigation actions](navigation.md).
+The raw input API below remains available for low-level mechanics.
 
 Create two local players manually using the game's Split Controller option,
 then enter a kitchen. Player 2 can share the physical keyboard with Player 1.
@@ -68,7 +71,7 @@ not cause the client to reacquire automatically.
 Separate IPv4 loopback TCP endpoint: `127.0.0.1:24703`. Configure `Control.Port`
 in `BepInEx/config/dev.souschef.observer.cfg`; it must differ from the observation
 port. Four connections maximum. The existing observation stream stays on 24702.
-Its greeting now advertises `bridgeVersion: 0.2.0`, `readOnly: false`,
+Its greeting advertises the installed `bridgeVersion`, `readOnly: false`,
 `controlPort`, and `controlPlayer: 2`; observation protocol version remains 1.
 
 Control replies are UTF-8 NDJSON. The greeting has `controlProtocolVersion: 1`,
@@ -101,8 +104,11 @@ Common errors: `outside_local_round`, `player2_absent_or_ambiguous`,
 Workers parse requests and queue bounded work; Unity applies commands and
 returns an acknowledgement from its update loop. An accepted command means the
 input state was installed, not that a collision, pickup or other action succeeded.
-Use observation snapshots to determine the actual outcome. Idle connections
-close after five seconds without commands; input TTL is much shorter.
+Use observation snapshots to determine the actual outcome. Since bridge 0.4,
+idle connections stay open so an autonomous action can finish without client
+heartbeats. The four-connection limit, bounded dispatch and write timeouts, and
+short raw-input TTLs still apply. `stop` interrupts either navigation or raw input
+from any connection. Navigation rejects raw `input` with `action_in_progress`.
 
 ## Implementation
 

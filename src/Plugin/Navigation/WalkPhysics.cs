@@ -47,6 +47,7 @@ namespace SousChef.Plugin.Navigation
         public string Refresh(PlayerControls player)
         {
             Queries = 0; Overflow = false; Changed = false;
+            if (!(player.GetActiveControlsImpl() is ClientPlayerControlsImpl_Default)) return "unsupported_control_mode";
             CapsuleCollider shape = player.GetComponent<CapsuleCollider>();
             GroundCast ground = player.GetComponent<GroundCast>();
             if (shape == null || !shape.enabled || shape.direction != 1 || ground == null || landscape == null || windFilter == null)
