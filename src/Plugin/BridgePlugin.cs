@@ -40,6 +40,11 @@ namespace SousChef.Plugin
                 using (var sha = SHA256.Create()) using (var file = File.OpenRead(assembly))
                     hash = BitConverter.ToString(sha.ComputeHash(file)).Replace("-", "").ToLowerInvariant();
                 capture = new SceneCapture(session);
+                if (NativeSimulator.Enabled)
+                {
+                    var simulator = gameObject.AddComponent<NativeSimulator>();
+                    simulator.GameAssemblyHash = hash; simulator.BridgeSession = session;
+                }
                 int controlPort = Config.Bind("Control", "Port", 24703, "Loopback port for direct control of existing local Player 2.").Value;
                 if (controlPort < 1024 || controlPort > 65535 || controlPort == port || gameplayPort < 1024 || gameplayPort > 65535 || gameplayPort == port || gameplayPort == controlPort) throw new ArgumentException("Invalid control port");
                 control = new Player2Control(controlPort, session);
@@ -73,7 +78,8 @@ namespace SousChef.Plugin
 
         private IEnumerator CaptureLoop()
         {
-            var boundary = new WaitForEndOfFrame();
+            // Batchmode has no rendered end-of-frame coroutine boundary.
+            object boundary = NativeSimulator.Enabled ? null : (object)new WaitForEndOfFrame();
             while (true)
             {
                 yield return boundary;

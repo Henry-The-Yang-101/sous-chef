@@ -23,6 +23,7 @@ def build(game):
                                       'Assembly-CSharp.dll', 'Assembly-CSharp-firstpass.dll')]
     references += sorted(managed.glob('UnityEngine*.dll'))
     references += [TOOLS / 'bepinex/BepInEx/core/BepInEx.dll']
+    references += [TOOLS / 'bepinex/BepInEx/core/0Harmony.dll']
     args = ['-nostdlib+', '-target:library', '-langversion:7.3', '-optimize+',
             '-warnaserror+', '-out:' + str(output / 'SousChef.Bridge.dll')]
     args += ['-r:' + str(p) for p in references] + [str(p) for p in sources]

@@ -106,6 +106,21 @@ Uninstall removes manifest-owned, unchanged files and preserves other mods,
 modified files, generated configuration, and logs. Launching the `.app` normally
 bypasses this loader unless you separately configure Steam to use it.
 
+## Native headless kitchens
+
+Run a silent, windowless instance of the installed game with an exact kitchen and
+repeatable resets. This uses the game's own levels, chef controllers, and physics:
+
+```sh
+python3 scripts/native_simulator.py start --level s_wizard_school_3_4
+python3 scripts/native_simulator.py navigate Chocolate --repeat 5
+python3 scripts/native_simulator.py stop
+```
+
+The existing harness and action clients also work with this process. See the
+[native simulator guide](docs/native-simulator.md) for level selection, resetting,
+frame-rate tests, saved traces, and current limitations.
+
 ## Organization
 
 | Directory | Responsibility |
