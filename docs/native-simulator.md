@@ -114,8 +114,17 @@ entrances, and records the native transitions and final arrival. Timed portal
 phases are observed without changing transforms or advancing the game clock.
 A walking-only arrival cannot cover a portal; every observed entrance must be
 followed by a successful arrival. Failures and uncovered entrances remain in the
-report, with per-route NDJSON traces. `--resume` skips recorded scenes; use a new
-output directory for a new validation run. Story-only throne rooms are identified
+report, with per-route NDJSON traces. Each result records the runtime's bridge
+DLL hash. `--resume` skips recorded scenes; use a new output directory for a new
+validation run. `--level NAME` (repeatable) and `--dlc ID` select subsets.
+
+For the seasonal cannon island, use `--cannon-setup --level s_festivemashup_1_5`.
+This fixture boards using the normal `activate` action, confirms Player 2 is
+loaded in a ready cannon, then fires the native teammate launch trigger. It
+waits for native flight and grounded control to return before testing the portal
+route. It never writes positions or controls Player 1. The setup is recorded
+separately and does **not** establish autonomous cannon pathfinding. A stale
+cannon occupant reference after landing cannot authorize another launch. Story-only throne rooms are identified
 separately. An inactive player portal is not silently counted as tested.
 Files are private local runtime artifacts, not distributable game assets.
 

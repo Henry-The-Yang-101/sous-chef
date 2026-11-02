@@ -143,7 +143,7 @@ namespace SousChef.Plugin.Navigation
             Vector3 exit = attach.position + attach.rotation * link.Receiver.m_ReceiverAnimation.m_TargetPositionValue + offset;
             link.RawExit = exit;
             if ((exit - Position).sqrMagnitude > (Range - 2) * (Range - 2) ||
-                !PortalStand(exit, link.ExitTrigger, out point, out ground, 3.1f) ||
+                !PortalStand(exit, link.ExitTrigger, out point, out ground, 4.1f) ||
                 !PortalLandingClear(exit, point, link.ExitTrigger)) return false;
             link.Exit = point; link.GeometryReason = "ready";
             return true;
@@ -157,7 +157,7 @@ namespace SousChef.Plugin.Navigation
         public bool PortalLandingClear(Vector3 from, Vector3 to, Collider trigger)
         {
             Vector3 delta = from - to;
-            if (delta.y < -.1f || delta.y > 3.01f || delta.x*delta.x + delta.z*delta.z > .01f) return Fail("portal_landing_displacement", from);
+            if (delta.y < -.1f || delta.y > 4.01f || delta.x*delta.x + delta.z*delta.z > .01f) return Fail("portal_landing_displacement", from);
             Vector3 supported; Collider support;
             if (!PortalStand(to, trigger, out supported, out support) || Vector3.Distance(supported, to) > .1f)
                 return Fail("portal_landing_support", to);

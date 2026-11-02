@@ -16,7 +16,11 @@ namespace SousChef.Plugin
         public static bool Enabled { get { return !String.IsNullOrEmpty(Environment.GetEnvironmentVariable("SOUS_CHEF_NATIVE_SIM")) && Array.IndexOf(Environment.GetCommandLineArgs(), "-batchmode") >= 0 && Array.IndexOf(Environment.GetCommandLineArgs(), "-nographics") >= 0; } }
         internal string GameAssemblyHash, BridgeSession;
         private string directory, phase = "booting", error, requested, lastCommand, commandError;
-        private float nextStatus;
+        private float nextStatus, nextIntroSkip;
+        private bool introReady;
+        private ServerPilotRotation aimingCannon;
+        private PlayerControls.ControlSchemeData savedCannonControls;
+        private float aimUntil;
         private bool engaged, split, loaded;
         private int generation, loadedGeneration;
         private int dlc = -1;
@@ -57,7 +61,21 @@ namespace SousChef.Plugin
             AudioListener.pause = true;
             try
             {
+                if (aimingCannon != null && Time.realtimeSinceStartup >= aimUntil)
+                { aimingCannon.AssignPlayer(savedCannonControls); aimingCannon = null; }
                 if (error == null) Bootstrap();
+                if (!introReady && loadedGeneration == generation && generation > 0)
+                {
+                    introReady = KitchenGate.Inspect().InRound;
+                    if (!introReady && Time.realtimeSinceStartup >= nextIntroSkip)
+                    {
+                        nextIntroSkip = Time.realtimeSinceStartup + 1f;
+                        // Use the same native skip event as the held UI button.
+                        // This only runs during initial kitchen entry.
+                        foreach (var cutscene in UnityEngine.Object.FindObjectsOfType<CutsceneController>())
+                            if (cutscene.GetComponent<ClientCutsceneController>() != null) cutscene.OnCutsceneSkipped();
+                    }
+                }
                 string command = Path.Combine(directory, "command");
                 if (File.Exists(command))
                 {
@@ -70,6 +88,8 @@ namespace SousChef.Plugin
                     {
                         if (value == "quit") { phase = "stopping"; Application.Quit(); }
                         else if (value == "reset") Load(requested);
+                        else if (value == "launch-cannon") LaunchLoadedCannon();
+                        else if (value == "aim-cannon-down") AimLoadedCannon();
                         else if (value.StartsWith("load ", StringComparison.Ordinal)) Load(value.Substring(5));
                         else if (value.StartsWith("fps ", StringComparison.Ordinal)) SetFrameRate(Int32.Parse(value.Substring(4)));
                         else throw new ArgumentException("Unknown simulator command");
@@ -84,7 +104,18 @@ namespace SousChef.Plugin
                 bool inRound = loadedGeneration == generation && generation > 0 && KitchenGate.Inspect().InRound;
                 var players = new List<object>();
                 foreach (var p in UnityEngine.Object.FindObjectsOfType<PlayerControls>())
-                    players.Add(Json.Object("name", p.name, "position", new[] { p.transform.position.x, p.transform.position.y, p.transform.position.z }, "inputAllowed", p.CanButtonBePressed()));
+                    players.Add(Json.Object("name", p.name, "position", new[] { p.transform.position.x, p.transform.position.y, p.transform.position.z }, "inputAllowed", p.CanButtonBePressed(), "enabled", p.enabled, "grounded", p.GroundCollider != null));
+                var cannons = new List<object>();
+                foreach (var cannon in UnityEngine.Object.FindObjectsOfType<ServerCannon>())
+                {
+                    var occupant = (GameObject)typeof(ServerCannon).GetField("m_loadedObject", Flags).GetValue(cannon);
+                    var provider = occupant == null ? null : occupant.GetComponent<PlayerIDProvider>();
+                    cannons.Add(Json.Object("id", cannon.gameObject.GetInstanceID(), "name", cannon.name,
+                        "loadedPlayer", provider == null ? 0 : (int)provider.GetID() + 1,
+                        "ready", (bool)typeof(ServerCannon).GetField("m_readyToLaunch", Flags).GetValue(cannon), "flying", cannon.IsFlying(),
+                        "aiming", aimingCannon != null && aimingCannon.gameObject == cannon.gameObject,
+                        "target", Values.Vector(cannon.GetComponent<Cannon>().m_target.position)));
+                }
                 var portals = new List<object>();
                 foreach (var portal in Resources.FindObjectsOfTypeAll<Teleportal>())
                 {
@@ -94,7 +125,7 @@ namespace SousChef.Plugin
                         "playerSender", portal.GetComponent<TeleportalPlayerSender>() != null,
                         "enabled", portal.isActiveAndEnabled));
                 }
-                Write("status.json", Json.Object("dlc", dlc, "portals", portals,"phase", error != null ? "error" : inRound ? "ready" : phase, "error", error,
+                Write("status.json", Json.Object("dlc", dlc, "cannons", cannons, "portals", portals,"phase", error != null ? "error" : inRound ? "ready" : phase, "error", error,
                     "scene", SceneManager.GetActiveScene().name, "requestedLevel", requested, "generation", generation,
                     "inRound", inRound, "players", players, "serverUsers", ServerUserSystem.m_Users.Count,
                     "clientUsers", ClientUserSystem.m_Users.Count, "realtime", Time.realtimeSinceStartup,
@@ -103,6 +134,47 @@ namespace SousChef.Plugin
                     "unityVersion", Application.unityVersion, "gameAssemblySha256", GameAssemblyHash, "audioPaused", AudioListener.pause, "audioVolume", AudioListener.volume,
                     "graphicsDevice", SystemInfo.graphicsDeviceType.ToString(), "frame", Time.frameCount, "physicsAutoSimulation", Physics.autoSimulation, "fixedDeltaTime", Time.fixedDeltaTime));
             }
+        }
+        private ServerCannon LoadedCannon()
+        {
+            // Test fixture only: fire the native teammate button after Player 2
+            // boarded through ordinary interaction. Never move a chef directly.
+            ServerCannon selected = null;
+            foreach (var cannon in UnityEngine.Object.FindObjectsOfType<ServerCannon>())
+            {
+                var occupant = (GameObject)typeof(ServerCannon).GetField("m_loadedObject", Flags).GetValue(cannon);
+                var provider = occupant == null ? null : occupant.GetComponent<PlayerIDProvider>();
+                var chef = occupant == null ? null : occupant.GetComponent<PlayerControls>();
+                var config = cannon.GetComponent<Cannon>();
+                if (provider == null || provider.GetID() != PlayerInputLookup.Player.Two || chef == null || chef.enabled ||
+                    config == null || config.m_attachPoint == null || Vector3.Distance(chef.transform.position, config.m_attachPoint.position) > 2f || cannon.IsFlying() ||
+                    !(bool)typeof(ServerCannon).GetField("m_readyToLaunch", Flags).GetValue(cannon)) continue;
+                if (selected != null) throw new InvalidOperationException("Ambiguous loaded Player 2 cannon");
+                selected = cannon;
+            }
+            if (selected == null) throw new InvalidOperationException("Player 2 must already be loaded in one ready native cannon");
+            return selected;
+        }
+        private void LaunchLoadedCannon()
+        {
+            if (aimingCannon != null) throw new InvalidOperationException("Cannon is still aiming");
+            var cannon = LoadedCannon();
+            cannon.OnTrigger(cannon.GetComponent<Cannon>().m_launchTrigger);
+        }
+        private void AimLoadedCannon()
+        {
+            if (aimingCannon != null) throw new InvalidOperationException("Cannon is already aiming");
+            var cannon = LoadedCannon();
+            var pilot = cannon.GetComponent<ServerPilotRotation>();
+            if (pilot == null) throw new InvalidOperationException("Cannon has no native pilot rotation");
+            savedCannonControls = (PlayerControls.ControlSchemeData)typeof(ServerPilotMovement).GetField("m_controlScheme", Flags).GetValue(pilot);
+            var occupant = (GameObject)typeof(ServerCannon).GetField("m_loadedObject", Flags).GetValue(cannon);
+            var controls = occupant.GetComponent<PlayerControls>().ControlScheme;
+            var x = new NetworkLogicalValue(controls.m_moveX, (PlayerInputLookup.LogicalValueID)0);
+            var y = new NetworkLogicalValue(controls.m_moveY, (PlayerInputLookup.LogicalValueID)0);
+            x.SetValue(0); y.SetValue(1);
+            pilot.AssignPlayer(new PlayerControls.ControlSchemeData(PlayerInputLookup.Player.Two, occupant.GetComponent<PlayerControls>()) { m_moveX = x, m_moveY = y });
+            aimingCannon = pilot; aimUntil = Time.realtimeSinceStartup + 1f;
         }
         private void Bootstrap()
         {
@@ -166,7 +238,7 @@ namespace SousChef.Plugin
                 if (variant != null && variant.SceneName == level) { match = variant; break; }
             }
             if (match == null) throw new ArgumentException("Unknown two-player kitchen: " + level);
-            requested = level; generation++; phase = "loading";
+            requested = level; generation++; phase = "loading"; introReady = false; nextIntroSkip = Time.realtimeSinceStartup + 1f;
             session.LevelSettings = new GameSession.GameLevelSettings { SceneDirectoryVarientEntry = match };
             var persist = session.GetComponent<PersistentObject>();
             persist.AddPersistingLevel(level); persist.AddPersistingLevel("Loading");
@@ -202,6 +274,7 @@ namespace SousChef.Plugin
         }
         private void OnDestroy()
         {
+            if (aimingCannon != null) aimingCannon.AssignPlayer(savedCannonControls);
             SceneManager.sceneLoaded -= OnSceneLoaded;
             if (patches != null) patches.UnpatchSelf();
         }

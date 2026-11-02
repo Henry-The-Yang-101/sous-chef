@@ -185,7 +185,7 @@ trigger is exempted from the entry connector's collision check; walls, other
 portals, fire and respawn hazards still block it. The native landing must be
 supported and clear, with a checked connection back to walking cells. An elevated receiver may finish above that floor: the navigator mirrors the
 native grounded-ray/fallback offset and checks a vertical landing of at most
-three units. Only downward separation from the horizontal underside of a level
+four units. Only downward separation from the horizontal underside of a level
 box is allowed for native ceiling contact; hazards, side overlaps and blocked
 landing sweeps are rejected. Missing endpoints and disabled senders/receivers are
 omitted. Normal discovery radius and node limits still apply.

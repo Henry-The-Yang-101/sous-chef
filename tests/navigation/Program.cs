@@ -545,6 +545,8 @@ internal static class Program
             "receiver-only endpoint accepts the native ray-miss fallback with a checked vertical landing");
         attachOnly.transform.position = new Vector3(10,3,0);
         physics.Refresh(w.Chef); Check(link.Valid,"three-unit festive receiver fall includes ground-probe contact margin");
+        attachOnly.transform.position = new Vector3(10,3.5f,0);
+        physics.Refresh(w.Chef); Check(link.Valid,"Carnival receiver supports its native 3.5-unit landing");
         attachOnly.transform.position += Vector3.up;
         physics.Refresh(w.Chef); Check(!link.Valid,"receiver fallback rejects a fall beyond the bounded landing sweep");
         attachOnly.transform.position = new Vector3(10,1,0); receiver.m_groundPlayer=false;
