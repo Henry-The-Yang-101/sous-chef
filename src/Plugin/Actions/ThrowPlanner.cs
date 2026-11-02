@@ -48,6 +48,7 @@ namespace SousChef.Plugin.Actions
         private ThrowPlan bestPlan;
         private Vector3 lastArrival;
         private string lastObstruction;
+        public int AimIterations { get; private set; }
         public object Diagnostics { get { return Json.Object("rejected", rejected, "receivingCenter", Values.Vector(receiving.center), "receivingSize", Values.Vector(receiving.size), "lastArrival", Values.Vector(lastArrival), "lastObstruction", lastObstruction); } }
         private bool Reject(string reason) { object count; rejected.TryGetValue(reason, out count); rejected[reason] = (count == null ? 0 : (int)count) + 1; return false; }
 
@@ -251,6 +252,7 @@ namespace SousChef.Plugin.Actions
         }
         public bool From(Vector3 stance, bool actualRelease, out ThrowPlan plan, float stanceUncertainty = 0)
         {
+            AimIterations = 0;
             plan = null;
             if (actualRelease && chef.CurrentInteractionObjects.m_interactable != null && chef.CurrentInteractionObjects.m_interactable.CanInteract(chef.gameObject)) return Reject("interactable_selected");
             Vector3 velocity = ReceiverVelocity(), destination = receiving.center;
@@ -264,6 +266,7 @@ namespace SousChef.Plugin.Actions
             // not a single constant acceleration pasted onto a ballistic arc.
             for (int i = 0; i < 8; i++)
             {
+                Vector3 previousDirection = direction, previousCorrection = correction;
                 if (player == null) { receiving = itemBody.Receiving(receiverBounds, direction); destination = receiving.center; }
                 origin = actualRelease ? item.transform.position : stance + Vector3.up * pivot + Quaternion.LookRotation(direction) * localRelease;
                 if (player != null)
@@ -282,6 +285,12 @@ namespace SousChef.Plugin.Actions
                 if (!NativeThrow.Velocity(chef, direction, out launch)) return Reject("native_launch_velocity");
                 path = ThrowFlight.Simulate(origin, direction, launch, Physics.gravity, drag, time, Time.fixedDeltaTime, wind, aimedFlight);
                 correction = path.End - origin - direction * ThrowTrajectory.Displacement(speed, 0, drag, time, Time.fixedDeltaTime); correction.y = 0;
+                AimIterations++;
+                // Exact fixed point, not an approximation tolerance: the next
+                // shooting iteration would have identical inputs and output.
+                // The full final flight, collision sweeps and native vetoes
+                // below still run even when aim converges early.
+                if (direction.Equals(previousDirection) && correction.Equals(previousCorrection)) break;
             }
             if (actualRelease)
             {

@@ -598,6 +598,10 @@ internal static class Program
         Check(planner.Prepare(w.Chef,item,w.Target)==null && planner.From(w.Chef.transform.position,false,out plan),"throw solver uses elevated release and target geometry");
         planner.From(w.Chef.transform.position,false,out plan);
         Check(Math.Abs(plan.InitialVelocity.z-5)<.0001f && plan.InitialVelocity.y==3 && server.Calls>0,"launch velocity comes from native calculator even when public launch settings disagree");
+        Check(planner.AimIterations < 8,"calm converged aiming avoids redundant shooting iterations");
+        w.Target.GetComponent<Catcher>().Allowed=false;
+        Check(!planner.From(w.Chef.transform.position,false,out plan),"converged aiming still applies the native catch veto");
+        w.Target.GetComponent<Catcher>().Allowed=true;
         item.Add(new AttachmentWindReceiver());item.Add(new ServerAttachmentWindReceiver());
         var crosswind=new GameObject("crosswind");var crossVolume=crosswind.Add(new WindVolume {Velocity=new Vector3(1,0,0)});crosswind.Add(new BoxCollider {size=Vector3.one*100});
         Physics.Penetration=(a,p,q,b,r,s)=>b.bounds.Contains(p);planner.Prepare(w.Chef,item,w.Target);
