@@ -104,6 +104,19 @@ class HarnessTests(unittest.TestCase):
         self.bridge.poll()
         self.assertEqual(self.bridge.state()['catalog']['destinations'], [])
 
+    def test_implemented_actions_remain_visible_when_paused_catalogue_hides_jobs(self):
+        self.native.hello.update(bridgeVersion='0.6.0', actions=['navigate_to', 'move_item', 'stop'])
+        self.native.control.update(available=False, reason='paused')
+        self.bridge.poll()
+        value = self.bridge.state()
+        self.assertEqual(value['bridgeVersion'], '0.6.0')
+        self.assertIn('move_item', value['supportedActions'])
+        self.assertEqual(value['catalog']['actions'], [])
+        self.native.failure = OSError('Disconnected')
+        self.bridge.poll()
+        self.assertIsNone(self.bridge.state()['supportedActions'])
+        self.assertIsNone(self.bridge.state()['bridgeVersion'])
+
     def test_dispenser_metadata_and_distances_follow_live_catalog(self):
         self.native.destinations = [dict(id='d8', objectInstanceId=78, label='DispenserCrate 3 (2)',
                                         kind='ingredient_supply', foodName='Cheese_Raw',

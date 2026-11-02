@@ -59,6 +59,7 @@ class HarnessBridge:
         self.generation = 0
         self.observed = None
         self.value = {'connected': False, 'sessionId': None, 'catalog': {},
+                      'bridgeVersion': None, 'supportedActions': None,
                       'control': {}, 'error': 'Connecting to the game bridge',
                       'lastCommand': None}
 
@@ -80,6 +81,8 @@ class HarnessBridge:
         with self.state_lock:
             self.observed = self.clock()
             self.value.update(connected=True, sessionId=self.client.hello['sessionId'],
+                              bridgeVersion=self.client.hello.get('bridgeVersion'),
+                              supportedActions=self.client.hello.get('actions'),
                               catalog=catalog, control=control, error=None,
                               updatedAt=time.time())
             if not control.get('ownedByYou'):
@@ -96,7 +99,8 @@ class HarnessBridge:
         with self.state_lock:
             self.observed = None
             self.owner = None
-            self.value.update(connected=False, sessionId=None, catalog={}, control={}, error=str(error))
+            self.value.update(connected=False, sessionId=None, bridgeVersion=None,
+                              supportedActions=None, catalog={}, control={}, error=str(error))
 
     def poll(self):
         with self.io_lock:

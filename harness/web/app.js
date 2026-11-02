@@ -59,8 +59,15 @@ function setJobOptions(select, choices) {
 }
 function renderJobs(catalog, busy, live) {
   const kind = el('job-kind').value;
+  const control = state?.control || {};
   const names = (catalog.actions || []).map(action => action.name);
-  const blocked = !live || pending || busy || !names.includes(kind);
+  // The handshake lists implemented commands even while pause or an active job
+  // hides their live affordances. Older harness processes lack this metadata;
+  // their navigation-only bridge also has no unified action receipt.
+  const unsupported = live && (Array.isArray(state.supportedActions)
+    ? !state.supportedActions.includes(kind) : !control.action && !names.includes(kind));
+  const inputBlocked = !control.available && control.reason !== 'game_unfocused';
+  const blocked = !live || pending || busy || unsupported || inputBlocked || !names.includes(kind);
   el('job-kind').disabled = !live || pending || busy;
   const items = (catalog.items || []).filter(item => !item.supply && !item.inUse);
   let sources = items.map(item => ({value: item.id, label: nameOf(item)}));
@@ -70,11 +77,25 @@ function renderJobs(catalog, busy, live) {
   if (kind === 'return_utensil') sources = items.filter(item => item.utensilType && item.empty).map(item => ({value: item.id, label: nameOf(item)}));
   if (kind === 'clear_station') sources = (catalog.deliveryDestinations || []).filter(item => item.kind !== 'item').map(item => ({value: item.id, label: nameOf(item)}));
   setJobOptions(el('job-source'), sources);
-  setJobOptions(el('job-destination'), (catalog.deliveryDestinations || []).filter(item => kind !== 'clear_station' || item.id !== el('job-source').value).map(item => ({value: item.id, label: nameOf(item)})));
+  const destinations = (catalog.deliveryDestinations || []).filter(item => kind !== 'clear_station' || item.id !== el('job-source').value).map(item => ({value: item.id, label: nameOf(item)}));
+  setJobOptions(el('job-destination'), destinations);
   el('job-source-label').hidden = kind === 'get_plate';
   el('job-destination-label').hidden = kind === 'return_utensil';
-  el('job-source').disabled = blocked; el('job-destination').disabled = blocked;
+  el('job-source').disabled = blocked || !sources.length; el('job-destination').disabled = blocked || !destinations.length;
   el('job-run').disabled = blocked || (kind !== 'get_plate' && !el('job-source').value) || (kind !== 'return_utensil' && !el('job-destination').value);
+  let message = '';
+  if (!live) message = 'Waiting for fresh bridge state before jobs can run.';
+  else if (unsupported) message = `The running bridge${state.bridgeVersion ? ` (${state.bridgeVersion})` : ''} does not support this job. Quit Overcooked! 2, run python3 scripts/install.py, then relaunch with python3 scripts/launch.py and refresh this page.`;
+  else if (pending) message = 'Sending the selected job…';
+  else if (busy) message = 'Player 2 is running an action. Wait for it to finish or press Stop to choose another job.';
+  else if (inputBlocked) message = explain(control.reason) || 'The game is not accepting Player 2 actions.';
+  else if (!names.includes(kind)) message = explain(catalog.reason || catalog.navigation?.catalogReason) || 'This job is not currently available.';
+  else if (kind !== 'get_plate' && !sources.length) message = kind === 'fetch_ingredient' ? 'No ingredients are currently observed.'
+    : kind === 'get_utensil' || kind === 'return_utensil' ? 'No suitable utensils are currently observed.' : 'No source items or stations are currently available.';
+  else if (kind !== 'return_utensil' && !destinations.length) message = 'No delivery destinations are currently observed.';
+  else if (el('job-run').disabled) message = 'Choose the required fields to run this job.';
+  el('job-status').textContent = message;
+  el('job-status').hidden = !message;
 }
 function actionChoices(d) {
   const choices = d.walkReachable ? [{value: 'navigate_to', label: 'Navigate'}] : [];
@@ -200,7 +221,7 @@ function render() {
     const atIndex = el('rows').children[index];
     if (atIndex !== row.tr) el('rows').insertBefore(row.tr, atIndex || null);
   }
-  el('details').textContent = JSON.stringify({sessionId: state?.sessionId, pad: control.pad, side: control.side, navigation: nav, action: receipt, error: state?.error}, null, 2);
+  el('details').textContent = JSON.stringify({sessionId: state?.sessionId, bridgeVersion: state?.bridgeVersion, supportedActions: state?.supportedActions, pad: control.pad, side: control.side, navigation: nav, action: receipt, error: state?.error}, null, 2);
 }
 
 async function post(path, data = {}) {

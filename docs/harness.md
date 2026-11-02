@@ -27,6 +27,15 @@ removed selections clear rather than silently switching to another item.
 Parent and child phases remain visible through pickup and delivery. Stop and
 browser-disconnect cleanup cancel the entire job.
 
+If the job fields are disabled, the message below the form explains whether the
+bridge needs an update, the game is paused, another action is running, or the
+required items/destinations are missing. The page can be newer than the plugin
+loaded by the game. After building new actions, **quit the game**, run
+`python3 scripts/install.py`, and relaunch with `python3 scripts/launch.py`.
+Refresh the page afterward. Restart `python3 -m harness.server` to expose the
+bridge's version and implemented command list in **Bridge details**; these come
+from the connected plugin, independently of its currently available actions.
+
 
 - Select an action in a target's dropdown, then **Run**. **Navigate** sends the
   exact chosen destination to `navigate_to`. Other options include pickup,
