@@ -163,6 +163,10 @@ def navigate(args):
                         result['success'] = nav['reason'] == 'arrived'
                         result['reason'] = nav['reason']
                         result['arrival'] = nav.get('arrival')
+                        result['teleportsCompleted'] = nav.get('teleportsCompleted', 0)
+                        if result['success'] and result['teleportsCompleted'] < getattr(args, 'min_teleports', 0):
+                            result['success'] = False
+                            result['reason'] = 'insufficient_teleports'
                         break
                     time.sleep(.1)
                 else:
@@ -200,6 +204,8 @@ def main():
     run.add_argument('--repeat', type=int, choices=range(1, 101), metavar='1..100', default=1)
     run.add_argument('--fps', type=int, choices=range(10, 241), metavar='10..240')
     run.add_argument('--trace-dir', type=Path)
+    run.add_argument('--min-teleports', type=int, choices=range(0, 101), default=0,
+                     help='Require this many completed native portal transitions as well as arrival')
     fps = sub.add_parser('fps')
     fps.add_argument('fps', type=int, choices=range(10, 241), metavar='10..240')
     for name in ('status', 'reset', 'levels', 'stop'):

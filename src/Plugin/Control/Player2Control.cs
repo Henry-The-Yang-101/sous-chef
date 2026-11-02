@@ -82,7 +82,7 @@ namespace SousChef.Plugin.Control
             if (target == null) return "player2_absent_or_ambiguous";
             var provider = target.GetComponent<PlayerIDProvider>();
             if (provider == null || provider.GetID() != PlayerInputLookup.Player.Two || config == null || !config.IsLocal()) return "player2_not_local";
-            if (!target.enabled || !target.gameObject.activeInHierarchy || target.ControlScheme == null ||
+            if ((!target.enabled && !navigation.NativeTeleportInProgress(target)) || !target.gameObject.activeInHierarchy || target.ControlScheme == null ||
                 target.ControlScheme.Player != PlayerInputLookup.Player.Two) return "player2_not_ready";
             if (target.m_bRespawning) return "input_suppressed";
             if (!target.CanButtonBePressed())

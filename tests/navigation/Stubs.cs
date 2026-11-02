@@ -60,6 +60,7 @@ namespace UnityEngine
         public Transform parent;
         public Vector3 up { get { return Vector3.up; } }
         public Vector3 forward { get { return Rotate(Vector3.forward, yaw); } }
+        public Vector3 right { get { return Rotate(Vector3.right, yaw); } }
         public Matrix4x4 localToWorldMatrix { get { return new Matrix4x4 { Position = position, Yaw = yaw }; } }
         public bool IsChildOf(Transform other) { for (Transform t = this; t != null; t = t.parent) if (t == other) return true; return false; }
         private static Vector3 Rotate(Vector3 p, float angle) { float c = (float)Math.Cos(angle), s = (float)Math.Sin(angle); return new Vector3(p.x*c + p.z*s, p.y, p.z*c - p.x*s); }
@@ -224,7 +225,37 @@ public class PlayerPhysicsSurface : UnityEngine.MonoBehaviour { public PlayerPhy
 public class Steppable : UnityEngine.MonoBehaviour { }
 public class RespawnCollider : UnityEngine.MonoBehaviour { }
 public class ServerFireHazard : UnityEngine.MonoBehaviour { }
-public class Teleportal : UnityEngine.MonoBehaviour { }
+public class ManualAnimation { public float m_CurveTime = 1; public UnityEngine.Vector3 m_TargetPositionValue; }
+public class Teleportal : UnityEngine.MonoBehaviour
+{
+    public UnityEngine.GameObject m_exitPortal;
+    public UnityEngine.Transform m_teleportPoint;
+    public float m_teleportArc = 90, m_receiveDelay, m_cooldownTime;
+}
+public class ServerTeleportablePlayer : UnityEngine.MonoBehaviour
+{
+    public bool Travelling;
+    public bool CanTeleport(ServerTeleportal p) { return enabled && !Travelling; }
+    public bool IsTeleporting() { return Travelling; }
+}
+public class ClientTeleportablePlayer : UnityEngine.MonoBehaviour
+{ public bool Travelling; public bool IsTeleporting() { return Travelling; } }
+public class ServerTeleportal : UnityEngine.MonoBehaviour
+{
+    public bool Ready = true, Receiving;
+    public bool CanTeleport(ServerTeleportablePlayer p) { return Ready; }
+    public bool IsReceiving() { return Receiving; }
+}
+public class TeleportalPlayerSender : UnityEngine.MonoBehaviour { public ManualAnimation m_SenderAnimation = new ManualAnimation(); }
+public class ServerTeleportalPlayerSender : UnityEngine.MonoBehaviour { }
+public class TeleportalPlayerReceiver : UnityEngine.MonoBehaviour
+{
+    public UnityEngine.Transform m_attachPoint;
+    public bool m_groundPlayer = true;
+    public ManualAnimation m_ReceiverAnimation = new ManualAnimation();
+}
+public class ServerTeleportalPlayerReceiver : UnityEngine.MonoBehaviour
+{ public bool Ready = true; public bool CanTeleportTo(ServerTeleportablePlayer p) { return Ready; } }
 public class WashingStation : UnityEngine.MonoBehaviour { }
 public class RubbishBin : UnityEngine.MonoBehaviour { }
 public class ServerWorkstation : UnityEngine.MonoBehaviour { }

@@ -394,9 +394,97 @@ internal static class Program
         Time.realtimeSinceStartup += .02f; navigation.Tick(w.Chef);
         Check(navigation.Action.Reason == "not_grounded", "a fall beyond native ground-probe range is not retained as stair settling");
     }
+    private static Teleportal AddPortal(World w, Vector3 position)
+    {
+        var go = new GameObject("portal"); go.transform.position = position;
+        var portal = go.Add(new Teleportal()); go.Add(new ServerTeleportal());
+        go.Add(new TeleportalPlayerSender()); go.Add(new ServerTeleportalPlayerSender());
+        var point = new GameObject("attach"); point.transform.position = position + Vector3.up;
+        point.transform.parent = go.transform; portal.m_teleportPoint = point.transform;
+        go.Add(new TeleportalPlayerReceiver { m_attachPoint = point.transform,
+            m_ReceiverAnimation = new ManualAnimation { m_TargetPositionValue = new Vector3(.9f,0,0) } });
+        go.Add(new ServerTeleportalPlayerReceiver());
+        w.Colliders.Add(go.Add(new BoxCollider { isTrigger = true, center = new Vector3(0,.5f,0), size = new Vector3(.6f,1,.6f) }));
+        return portal;
+    }
+    private static World PortalWorld(out Teleportal a, out Teleportal b)
+    {
+        var w = new World();
+        w.AddFloor((x,z) => Math.Abs(z)<2 && ((x>-1 && x<4) || (x>9 && x<14)) ? 0 : (float?)null);
+        a = AddPortal(w, Vector3.zero); b = AddPortal(w, new Vector3(10,0,0));
+        a.m_exitPortal = b.gameObject; // Deliberately one-way.
+        w.Chef.gameObject.Add(new ServerTeleportablePlayer());
+        w.Chef.gameObject.Add(new ClientTeleportablePlayer());
+        w.Chef.transform.position = new Vector3(1.1f,0,0);
+        Physics.Overlap = (low,high,r) => w.Colliders.Where(c => c is BoxCollider && c.enabled &&
+            low.x >= c.bounds.min.x-r && low.x <= c.bounds.max.x+r &&
+            low.z >= c.bounds.min.z-r && low.z <= c.bounds.max.z+r &&
+            high.y+r>c.bounds.min.y && low.y-r<c.bounds.max.y).ToArray();
+        Physics.Cast = (low,high,r,d,length) => Enumerable.Range(0,Math.Max(2,(int)(length/.02f)+2))
+            .SelectMany(i => Physics.Overlap(low+d*(length*i/Math.Max(1,(int)(length/.02f)+1)),high+d*(length*i/Math.Max(1,(int)(length/.02f)+1)),r))
+            .Distinct().Select(c => new RaycastHit {collider=c}).ToArray();
+        return w;
+    }
+    private static void Portals()
+    {
+        Teleportal a,b; var w = PortalWorld(out a,out b); var physics = w.Ready();
+        PortalLink link = physics.Portal(a.GetInstanceID());
+        Check(link != null && link.Valid && Math.Abs(link.Exit.x-10.9f)<.001f,"portal landing follows receiver animation and grounded attach point");
+        Check(!physics.Segment(w.Chef.transform.position,link.Entry),"ordinary walking still blocks portal trigger");
+        Check(physics.PortalEntry(w.Chef.transform.position,link),"selected portal permits its supported entry connector");
+        Check(!physics.PortalEntry(new Vector3(-.8f,0,0),link),"entry from outside native activation cone is rejected");
+        var search = new WalkSearch(physics.Starts(),physics.Neighbours,16000,()=>true);
+        WalkCell far = search.Settled.First(c=>c.Portal==0 && c.X==30 && c.Z==0);
+        Check(search.Complete && search.Route(far).Count(c=>c.Portal!=0)==1,"Dijkstra crosses a disconnected island with an explicit portal edge");
+        Check(search.Distances[far]<4,"transport displacement is not charged as walking distance");
+        var virtualCell = search.Route(far).First(c=>c.Portal!=0);
+        Check(!virtualCell.Equals(new WalkCell(virtualCell.X,virtualCell.Y,virtualCell.Z)),"portal arrival and ordinary lattice nodes have distinct identity");
+        w.Chef.transform.position = new Vector3(12,0,0); physics.Refresh(w.Chef);
+        search = new WalkSearch(physics.Starts(),physics.Neighbours,16000,()=>true);
+        Check(!search.Settled.Any(c=>c.X<10),"one-way portal does not invent a reverse edge");
+        w.Chef.transform.position = new Vector3(1.1f,0,0);
+        b.GetComponent<ServerTeleportalPlayerReceiver>().enabled = false; physics.Refresh(w.Chef);
+        Check(!physics.Portal(a.GetInstanceID()).Valid,"disabled receiver invalidates link");
+        b.GetComponent<ServerTeleportalPlayerReceiver>().enabled = true;
+        var wall = new GameObject("exit wall"); wall.transform.position = new Vector3(10.9f,0,0);
+        var block = wall.Add(new BoxCollider {center=new Vector3(0,.5f,0),size=new Vector3(.5f,1,.5f)}); w.Colliders.Add(block);
+        physics.Refresh(w.Chef); Check(!physics.Portal(a.GetInstanceID()).Valid,"blocked native landing removes portal from graph");
+        block.enabled=false; physics.Refresh(w.Chef); Check(physics.Portal(a.GetInstanceID()).Valid,"clearing exit restores portal without restarting physics");
+        a.m_exitPortal=null; physics.Refresh(w.Chef); Check(physics.Portal(a.GetInstanceID())==null,"unlinking portal removes cached transport edge");
+
+        w = PortalWorld(out a,out b);
+        var station = w.AddStation(); station.transform.position = new Vector3(12,0,0);
+        // The fixture's station selection is supplied independently of pathfinding.
+        var navigation = w.Navigate(station);
+        a.GetComponent<ServerTeleportal>().Ready = false;
+        Time.realtimeSinceStartup += .02f; navigation.Tick(w.Chef);
+        Check(navigation.Action.State=="navigating" && (string)((Json.Record)navigation.Describe())["phase"]=="waiting_portal" && w.LastInput.sqrMagnitude==0,
+            "cooldown keeps the action neutral before portal entry");
+        a.GetComponent<ServerTeleportal>().Ready = true;
+        Time.realtimeSinceStartup += .02f; navigation.Tick(w.Chef);
+        Check(w.LastInput.x<-.9f,"ready portal is entered using ordinary movement");
+        var traveller=w.Chef.GetComponent<ServerTeleportablePlayer>(); traveller.Travelling=true;
+        w.Chef.enabled=false; w.Chef.GetComponent<CapsuleCollider>().enabled=false;
+        Time.realtimeSinceStartup+=.02f; navigation.Tick(w.Chef);
+        Check(navigation.NativeTeleportInProgress(w.Chef) && w.LastInput.sqrMagnitude==0 && navigation.Action.State=="navigating",
+            "native transport keeps neutral ownership while chef collider and controls are disabled");
+        traveller.Travelling=false; w.Chef.enabled=true; w.Chef.GetComponent<CapsuleCollider>().enabled=true;
+        w.Chef.transform.position=new Vector3(10.9f,0,0);
+        Time.realtimeSinceStartup+=.02f; navigation.Tick(w.Chef);
+        Check((int)((Json.Record)navigation.Describe())["teleportsCompleted"]==1,"linked native arrival records exactly one completed transport");
+        Time.realtimeSinceStartup+=.02f; navigation.Tick(w.Chef);
+        Check(navigation.Action.State=="navigating" && (string)((Json.Record)navigation.Describe())["phase"]!="teleporting","walking resumes from actual exit without another request");
+        navigation.Stop("stopped"); Check(!navigation.NativeTeleportInProgress(w.Chef),"stop clears portal control exception");
+
+        w=PortalWorld(out a,out b); station=w.AddStation(); station.transform.position=new Vector3(12,0,0);
+        navigation=w.Navigate(station); a.GetComponent<ServerTeleportal>().Ready=false;
+        Time.realtimeSinceStartup+=.02f; navigation.Tick(w.Chef);
+        Time.realtimeSinceStartup+=8; navigation.Tick(w.Chef);
+        Check(navigation.Action.Reason=="teleport_timeout","permanently busy portal ends within a bounded timeout");
+    }
     private static void Main()
     {
-        CapturedStairCorner(); CapturedStairContact(); GroundSettling(); StepsAndRamps(); InteriorFlow(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
+        Portals(); CapturedStairCorner(); CapturedStairContact(); GroundSettling(); StepsAndRamps(); InteriorFlow(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
         Console.WriteLine("PASS: " + checks + " navigator integration checks (analytical geometry; not PhysX)");
     }
 }

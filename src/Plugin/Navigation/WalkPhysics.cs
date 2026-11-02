@@ -8,7 +8,7 @@ namespace SousChef.Plugin.Navigation
 {
     // All calls run on Unity's main thread, using the same colliders as gameplay.
     // A fine lattice is only a search index; standability and every edge use physics.
-    internal sealed class WalkPhysics
+    internal sealed partial class WalkPhysics
     {
         public const float Spacing = .4f, HeightBand = .2f, Range = 60f;
         private const float Skin = .045f;
@@ -67,7 +67,7 @@ namespace SousChef.Plugin.Navigation
 
         public void Reset()
         {
-            chef = null; probes.Clear(); edges.Clear(); stamps.Clear(); meshes.Clear(); dangers.Clear(); nativeSteps.Clear(); surfaces.Clear(); surfaceHistories.Clear(); properties.Clear(); grids.Clear(); ignoredChefColliders.Clear();
+            chef = null; probes.Clear(); edges.Clear(); stamps.Clear(); meshes.Clear(); dangers.Clear(); nativeSteps.Clear(); surfaces.Clear(); surfaceHistories.Clear(); properties.Clear(); grids.Clear(); ignoredChefColliders.Clear(); portals.Clear(); exitPortal = null;
         }
         public string Refresh(PlayerControls player)
         {
@@ -181,6 +181,7 @@ namespace SousChef.Plugin.Navigation
                 foreach (WalkCell cell in dirty) { probes.Remove(cell); edges.Remove(cell); }
                 if (dirty.Count > 0) Changed = true;
             }
+            RefreshPortals();
             return player.GroundCollider == null ? "not_grounded" : null;
         }
         private int ShapeKey(Collider c, bool reconcile)
@@ -248,6 +249,7 @@ namespace SousChef.Plugin.Navigation
         private bool Blocks(Collider c)
         {
             if (c == null || !c.enabled || !c.gameObject.activeInHierarchy || Own(c)) return false;
+            if (c == permittedPortalTrigger && c.isTrigger) return false;
             if (Dangerous(c)) return true;
             if (c.isTrigger) return false;
             return (collisionMask & (1 << c.gameObject.layer)) != 0;
@@ -344,7 +346,7 @@ namespace SousChef.Plugin.Navigation
             result = new Probe { Valid = valid, Point = point, Ground = support }; probes[hint] = result;
             return result;
         }
-        public Vector3 Point(WalkCell cell) { return Sample(cell).Point; }
+        public Vector3 Point(WalkCell cell) { return cell.Portal == 0 ? Sample(cell).Point : portals[cell.Portal].Exit; }
         public IEnumerable<WalkEdge> Starts()
         {
             var result = new List<WalkEdge>(); Vector3 start = Position;
@@ -356,7 +358,7 @@ namespace SousChef.Plugin.Navigation
             {
                 var key = new WalkCell(x + dx, y, z + dz); Probe probe = Sample(key);
                 int history = 0;
-                if (probe.Valid && Segment(start, probe.Point, ContactRadius, true, null, value => history = value))
+                if (probe.Valid && StartSegment(start, probe.Point, value => history = value))
                 {
                     WalkCell resolved = Resolved(key, probe); resolved.SurfaceHistory = history;
                     result.Add(new WalkEdge(resolved, Vector3.Distance(start, probe.Point)));
@@ -367,6 +369,11 @@ namespace SousChef.Plugin.Navigation
             return result;
         }
         public IEnumerable<WalkEdge> Neighbours(WalkCell cell)
+        {
+            if (cell.Portal != 0) return PortalDepartures(portals[cell.Portal]);
+            return WithPortals(cell, WalkingNeighbours(cell));
+        }
+        private IEnumerable<WalkEdge> WalkingNeighbours(WalkCell cell)
         {
             List<CachedEdge> result;
             WalkCell geometryCell = GeometryCell(cell);
@@ -430,7 +437,11 @@ namespace SousChef.Plugin.Navigation
         {
             bool entering = Vector3.Distance(from, Position) < .02f;
             int result = surfaceHistory;
-            bool clear = Segment(from, to, entering ? ContactRadius : radius, true, null, value => result = value, surfaceHistory);
+            Collider saved = permittedPortalTrigger;
+            if (entering && CanExitPortal(from, to)) permittedPortalTrigger = exitPortal;
+            bool clear;
+            try { clear = Segment(from, to, entering ? ContactRadius : radius, true, null, value => result = value, surfaceHistory); }
+            finally { permittedPortalTrigger = saved; }
             surfaceHistory = result; return clear;
         }
         private bool Segment(Vector3 from, Vector3 to, float clearance, bool checkFlow, List<GroundSample> samples = null, Action<int> history = null, int initialHistory = 0)

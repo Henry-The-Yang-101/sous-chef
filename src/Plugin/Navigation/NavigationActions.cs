@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace SousChef.Plugin.Navigation
 {
-    internal sealed class NavigationActions
+    internal sealed partial class NavigationActions
     {
         private sealed class Destination
         {
@@ -147,7 +147,7 @@ namespace SousChef.Plugin.Navigation
             // Neutral first; callers must not observe idle with stale movement input.
             neutral();
             if (target != null && target.Object != null) lastDestination = Identity(target);
-            Action.Stop(reason); settlingSince = -1; target = null; route = null; facingSince = -1; arrival.Reset(); haveMotion = motionSampleValid = false;
+            Action.Stop(reason); activePortal = null; portalSteps.Clear(); settlingSince = -1; target = null; route = null; facingSince = -1; arrival.Reset(); haveMotion = motionSampleValid = false;
         }
         public void Invalidate(string reason)
         {
@@ -158,14 +158,16 @@ namespace SousChef.Plugin.Navigation
         {
             return Json.Object("state", Action.State, "destinationId", Action.Destination, "reason", Action.Reason,
                 "destination", target == null ? lastDestination : Identity(target),
-                "phase", Action.State == "idle" ? "idle" : settlingSince >= 0 ? "settling_ground" : facingSince < 0 ? "walking" : "aligning", "arrival", arrivalDetails,
+                "phase", Action.State == "idle" ? "idle" : activePortal != null ? portalPhase : settlingSince >= 0 ? "settling_ground" : facingSince < 0 ? "walking" : "aligning", "arrival", arrivalDetails,
+                "teleportsCompleted", teleportsCompleted, "portal", DescribePortal(),
                 "executionTrace", physics.TraceEnabled ? executionTrace.ToArray() : null,
                 "revision", Action.Revision, "catalogRevision", revision, "catalogReason", unavailable,
                 "catalogComplete", unavailable == null && search != null && search.Complete,
                 "catalogAgeSeconds", lastPlan < 0 ? null : (object)(Time.realtimeSinceStartup - lastPlan),
                 "diagnostics", Json.Object("planMilliseconds", planMilliseconds, "prepareMilliseconds", prepareMilliseconds,
                     "searchMilliseconds", searchMilliseconds, "matchMilliseconds", matchMilliseconds, "searchNodes", nodeCount,
-                    "physicsQueries", physics.Queries, "candidateCount", candidateCount, "startCount", startCount, "observationError", observationError));
+                    "physicsQueries", physics.Queries, "candidateCount", candidateCount, "startCount", startCount, "observationError", observationError,
+                    "portals", physics.PortalDiagnostics()));
         }
         private static object Identity(Destination d)
         {
@@ -181,17 +183,23 @@ namespace SousChef.Plugin.Navigation
         public object Available(PlayerControls player)
         {
             warmTicks = 8;
-            Refresh(player, true);
-            if (Action.State == "navigating") ApplyPlan();
+            if (activePortal == null)
+            {
+                Refresh(player, true);
+                if (Action.State == "navigating") ApplyPlan();
+            }
             var destinations = new List<object>();
             foreach (Destination d in available.Values)
             {
                 if (d.IsPoint) continue; // Generated release stances are internal, never wire target IDs.
+                int portalCount = 0;
+                var cells = search == null ? null : search.Route(d.Goal);
+                if (cells != null) foreach (WalkCell cell in cells) if (cell.Portal != 0) portalCount++;
                 Vector3 offset = d.Object.transform.position - physics.Position; offset.y = 0;
                 destinations.Add(Json.Object("id", d.Id, "label", d.Object.name, "kind", d.Kind,
                     "foodName", FoodName(d.Object),
                     "objectInstanceId", d.Object.GetInstanceID(), "position", Values.Vector(d.Object.transform.position),
-                    "approachPosition", Values.Vector(d.Approach), "routeDistance", d.Distance, "directDistance", offset.magnitude));
+                    "approachPosition", Values.Vector(d.Approach), "routeDistance", d.Distance, "routeTeleports", portalCount, "directDistance", offset.magnitude));
             }
             destinations.Sort(delegate(object a, object b) { return String.CompareOrdinal((string)((Json.Record)a)["id"], (string)((Json.Record)b)["id"]); });
             var actions = new List<object> { Json.Object("name", "stop", "parameters", new Dictionary<string, object>()) };
@@ -209,7 +217,7 @@ namespace SousChef.Plugin.Navigation
             if (!Action.Start(owner, destination, true)) return "action_in_progress";
             target = chosen; lastDestination = Identity(chosen); started = lastProgress = Time.realtimeSinceStartup; progressPosition = physics.Position;
             arrivalDetails = null; arrival.Reset(); facingSince = -1; haveMotion = motionSampleValid = false;
-            settlingSince = -1; executionTrace.Clear(); SetRoute(chosen); Trace("start", chosen.Approach, Vector3.zero); return null;
+            settlingSince = -1; teleportsCompleted = 0; executionTrace.Clear(); SetRoute(chosen); Trace("start", chosen.Approach, Vector3.zero); return null;
         }
         private bool ApplyPlan()
         {
@@ -230,6 +238,20 @@ namespace SousChef.Plugin.Navigation
             Vector3 from = physics.Position; int surfaceHistory = 0;
             for (int i = waypoint; i < route.Count; i++)
             {
+                PortalLink portal;
+                if (portalSteps.TryGetValue(i, out portal))
+                {
+                    if (!physics.PortalGeometry(portal) || !physics.PortalEntry(from, portal, surfaceHistory) ||
+                        Vector3.Distance(portal.Entry, route[i]) > .04f || i + 1 >= route.Count ||
+                        Vector3.Distance(portal.Exit, route[i + 1]) > .04f) return false;
+                    from = portal.Exit; surfaceHistory = 0; i++;
+                    if (++i < route.Count)
+                    {
+                        if (!physics.PortalSegment(from, route[i], portal.ExitTrigger)) return false;
+                        from = route[i];
+                    }
+                    continue;
+                }
                 if (!physics.Segment(from, route[i], ref surfaceHistory)) return false;
                 from = route[i];
             }
@@ -237,7 +259,16 @@ namespace SousChef.Plugin.Navigation
         }
         private void SetRoute(Destination chosen)
         {
-            route = new List<Vector3>(); foreach (WalkCell cell in search.Route(chosen.Goal)) route.Add(physics.Point(cell));
+            route = new List<Vector3>(); portalSteps.Clear();
+            foreach (WalkCell cell in search.Route(chosen.Goal))
+            {
+                if (cell.Portal != 0)
+                {
+                    PortalLink portal = physics.Portal(cell.Portal);
+                    portalSteps[route.Count] = portal; route.Add(portal.Entry);
+                }
+                route.Add(physics.Point(cell));
+            }
             if (route.Count == 0 || Vector3.Distance(route[route.Count - 1], chosen.Approach) > .001f) route.Add(chosen.Approach);
             waypoint = 0;
         }
@@ -255,6 +286,7 @@ namespace SousChef.Plugin.Navigation
                 (!target.IsPoint && !Eligible(target.Object, player, out target.Kind))) { Stop("destination_unavailable"); return; }
             int commandMilliseconds = WalkingCommand.Milliseconds(Time.unscaledDeltaTime);
             if (commandMilliseconds == 0) { Stop("unsafe_update_interval"); return; }
+            if (activePortal != null) { TickPortal(commandMilliseconds); return; }
             string error = physics.Refresh(player);
             if ((error == null || error == "not_grounded") && physics.NeedsGroundSettling())
             {
@@ -295,6 +327,12 @@ namespace SousChef.Plugin.Navigation
                 if (!ApplyPlan()) return;
                 if (!TryWalkingGoal(position, out goal)) { Stop("route_blocked"); return; }
             }
+            PortalLink nextPortal;
+            if (portalSteps.TryGetValue(waypoint, out nextPortal))
+            {
+                activePortal = nextPortal; portalStarted = Time.realtimeSinceStartup; sawTeleport = false;
+                TickPortal(commandMilliseconds); return;
+            }
             // Use the same drift compensation and actual next-step safety check
             // during the final approach, including when facing a counter.
             Vector3 direction = goal - position; direction.y = 0;
@@ -331,16 +369,18 @@ namespace SousChef.Plugin.Navigation
         }
         private bool TryWalkingGoal(Vector3 position, out Vector3 goal)
         {
+            int limit = route.Count - 1;
+            for (int i = waypoint; i < route.Count; i++) if (portalSteps.ContainsKey(i)) { limit = i; break; }
             waypoint = WalkSegments.Advance(waypoint, route.Count, delegate(int index)
             {
                 Vector3 offset = route[index] - position;
                 return WalkHeight.WaypointReached(offset.x, offset.y, offset.z, physics.StepHeight);
-            }, delegate(int index) { return physics.Segment(position, route[index]); });
+            }, delegate(int index) { return index <= limit && RouteSegment(position, index); });
             goal = route[waypoint];
             // Shortcut only across freshly checked supported space; no corner cutting.
-            for (int i = Math.Min(route.Count - 1, waypoint + 3); i > waypoint; i--)
-                if (Vector3.Distance(position, route[i]) < 1.4f && physics.Segment(position, route[i])) { waypoint = i; goal = route[i]; break; }
-            return physics.Segment(position, goal);
+            for (int i = Math.Min(limit, waypoint + 3); i > waypoint; i--)
+                if (Vector3.Distance(position, route[i]) < 1.4f && RouteSegment(position, i)) { waypoint = i; goal = route[i]; break; }
+            return RouteSegment(position, waypoint);
         }
         private bool TargetMoved()
         {
@@ -528,6 +568,7 @@ namespace SousChef.Plugin.Navigation
                 var byXZ = new Dictionary<long, List<WalkCell>>();
                 foreach (WalkCell cell in search.Settled)
                 {
+                    if (cell.Portal != 0) continue;
                     long key = ((long)cell.X << 32) ^ (uint)cell.Z; List<WalkCell> bucket;
                     if (!byXZ.TryGetValue(key, out bucket)) { bucket = new List<WalkCell>(); byXZ[key] = bucket; }
                     bucket.Add(cell);

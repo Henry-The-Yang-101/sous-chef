@@ -42,11 +42,11 @@ namespace SousChef.Core
     }
     public struct WalkCell : IEquatable<WalkCell>
     {
-        public int X, Y, Z, SurfaceHistory;
-        public WalkCell(int x, int y, int z, int surfaceHistory = 0) { X = x; Y = y; Z = z; SurfaceHistory = surfaceHistory; }
-        public bool Equals(WalkCell other) { return X == other.X && Y == other.Y && Z == other.Z && SurfaceHistory == other.SurfaceHistory; }
+        public int X, Y, Z, SurfaceHistory, Portal;
+        public WalkCell(int x, int y, int z, int surfaceHistory = 0, int portal = 0) { X = x; Y = y; Z = z; SurfaceHistory = surfaceHistory; Portal = portal; }
+        public bool Equals(WalkCell other) { return X == other.X && Y == other.Y && Z == other.Z && SurfaceHistory == other.SurfaceHistory && Portal == other.Portal; }
         public override bool Equals(object other) { return other is WalkCell && Equals((WalkCell)other); }
-        public override int GetHashCode() { unchecked { return (X * 73856093) ^ (Y * 19349663) ^ (Z * 83492791) ^ (SurfaceHistory * 397); } }
+        public override int GetHashCode() { unchecked { return (X * 73856093) ^ (Y * 19349663) ^ (Z * 83492791) ^ (SurfaceHistory * 397) ^ Portal; } }
     }
     public struct WalkEdge
     {
