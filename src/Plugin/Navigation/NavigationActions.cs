@@ -247,7 +247,7 @@ namespace SousChef.Plugin.Navigation
                     from = portal.Exit; surfaceHistory = 0; i++;
                     if (++i < route.Count)
                     {
-                        if (!physics.PortalSegment(from, route[i], portal.ExitTrigger, ref surfaceHistory)) return false;
+                        if (!physics.PortalDeparture(from, route[i], portal, ref surfaceHistory)) return false;
                         from = route[i];
                     }
                     continue;
@@ -313,7 +313,7 @@ namespace SousChef.Plugin.Navigation
             // actual displacement for the stall watchdog, not Euclidean goal distance.
             if (Vector3.Distance(position, progressPosition) > .15f)
             { progressPosition = position; lastProgress = Time.realtimeSinceStartup; }
-            if (arrival.ShouldSettle(Vector3.Distance(position, target.Approach)))
+            if (arrival.ShouldSettle(Vector3.Distance(position, target.Approach)) || BrakeForArrival(position, commandMilliseconds))
             { Align(position, commandMilliseconds); return; }
             if (Time.realtimeSinceStartup - lastProgress > 2f) { Stop("no_progress"); return; }
             facingSince = -1; arrival.Reset(); arrivalDetails = null;
@@ -379,8 +379,24 @@ namespace SousChef.Plugin.Navigation
             goal = route[waypoint];
             // Shortcut only across freshly checked supported space; no corner cutting.
             for (int i = Math.Min(limit, waypoint + 3); i > waypoint; i--)
-                if (Vector3.Distance(position, route[i]) < 1.4f && RouteSegment(position, i)) { waypoint = i; goal = route[i]; break; }
+                if (Vector3.Distance(position, route[i]) < (portalSteps.ContainsKey(i) ? 2f : 1.4f) && RouteSegment(position, i))
+                { waypoint = i; goal = route[i]; break; }
             return RouteSegment(position, waypoint);
+        }
+        private bool BrakeForArrival(Vector3 position, int commandMilliseconds)
+        {
+            Vector3 delta = target.Approach - position;
+            if (delta.magnitude > .6f) return false;
+            Vector3 velocity = chef.Motion.GetVelocityXZ();
+            if (chef.WindReceiver != null) velocity += chef.WindReceiver.GetVelocity();
+            if (chef.SurfaceMovable != null) velocity += chef.SurfaceMovable.GetVelocity();
+            velocity -= targetVelocity;
+            float window = Mathf.Max(Time.fixedDeltaTime, Mathf.Max(commandMilliseconds / 1000f, Time.deltaTime));
+            // The preceding native motion can still integrate before neutral
+            // takes effect. Brake on its predicted arrival, but only actual pose,
+            // speed and selection can satisfy Align's completion checks.
+            return Vector3.Dot(delta, velocity) > 0 &&
+                (delta - velocity * window).magnitude <= ArrivalCheck.PositionTolerance;
         }
         private bool TargetMoved()
         {

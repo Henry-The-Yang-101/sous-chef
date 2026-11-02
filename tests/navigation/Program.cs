@@ -458,6 +458,9 @@ internal static class Program
         Check(physics.Neighbours(portalStart).Any(e=>e.Cell.Portal!=0),"changed flow restores cached portal connector without a geometry edit");
         var virtualCell = search.Route(far).First(c=>c.Portal!=0);
         Check(!virtualCell.Equals(new WalkCell(virtualCell.X,virtualCell.Y,virtualCell.Z)),"portal arrival and ordinary lattice nodes have distinct identity");
+        w.Chef.transform.position=link.Exit; physics.LeavePortal(link); physics.Refresh(w.Chef);
+        Check(!physics.Segment(link.Exit,new Vector3(9.1f,0,0)),"exit exemption cannot cross back through the portal to an equal or greater radius");
+        Check(physics.Segment(link.Exit,new Vector3(11.5f,0,0)),"exit exemption permits walking outward");
         w.Chef.transform.position = new Vector3(12,0,0); physics.Refresh(w.Chef);
         search = new WalkSearch(physics.Starts(),physics.Neighbours,16000,()=>true);
         Check(!search.Settled.Any(c=>c.X<10),"one-way portal does not invent a reverse edge");
@@ -513,6 +516,13 @@ internal static class Program
         navigation.Stop("stopped"); Check(!navigation.NativeTeleportInProgress(w.Chef),"stop clears portal control exception");
 
         w=PortalWorld(out a,out b); station=w.AddStation(); station.transform.position=new Vector3(12,0,0);
+        w.Chef.transform.position=new Vector3(1.7f,0,.5f);
+        navigation=w.Navigate(station); Time.realtimeSinceStartup+=.02f; navigation.Tick(w.Chef);
+        Check((string)((Json.Record)navigation.Describe())["phase"]=="entering_portal" && w.LastInput.sqrMagnitude==0,
+            "portal braking lookahead reaches beyond the ordinary 1.4-unit walking shortcut");
+        navigation.Stop("stopped");
+
+        w=PortalWorld(out a,out b); station=w.AddStation(); station.transform.position=new Vector3(12,0,0);
         navigation=w.Navigate(station); a.GetComponent<ServerTeleportal>().Ready=false;
         Time.realtimeSinceStartup+=.02f; navigation.Tick(w.Chef);
         Time.realtimeSinceStartup+=8; navigation.Tick(w.Chef);
@@ -555,9 +565,22 @@ internal static class Program
         Physics.Ray=(p,d,length,mask)=>new[]{new RaycastHit {collider=floor,point=new Vector3(p.x,.01f,p.z),normal=Vector3.up,distance=p.y-.01f}};
         Check(!physics.Segment(Vector3.zero,new Vector3(1,0,0)),"a ray at a different ledge height cannot explain a sphere-contact seam");
     }
+    private static void NativeArrivalBraking()
+    {
+        var w=new World(); w.AddFloor((x,z)=>Math.Abs(x)<3 && Math.Abs(z)<3 ? 0 : (float?)null);
+        w.Chef.transform.position=new Vector3(0,0,-1.35f); var station=w.AddStation(); var navigation=w.Navigate(station);
+        Time.deltaTime=Time.unscaledDeltaTime=.05f; w.Chef.Motion.Velocity=new Vector3(0,0,4);
+        Time.realtimeSinceStartup+=.05f; navigation.Tick(w.Chef);
+        Check(w.LastInput.sqrMagnitude==0 && navigation.Action.State=="navigating", "neutral starts before delayed native motion overshoots the final stance");
+        var receipt=(Json.Record)((Json.Record)navigation.Describe())["arrival"];
+        Check(!(bool)receipt["positioned"],"predicted arrival cannot substitute for actual position and settling");
+        w.Chef.transform.position=new Vector3(0,0,-1.15f); w.Chef.Motion.Velocity=Vector3.zero;
+        for(int i=0;i<5;i++) {Time.realtimeSinceStartup+=.05f; navigation.Tick(w.Chef);}
+        Check(navigation.Action.Reason=="arrived","braking still finishes only after actual native settling");
+    }
     private static void Main()
     {
-        NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedStairContact(); GroundSettling(); StepsAndRamps(); InteriorFlow(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
+        NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedStairContact(); GroundSettling(); StepsAndRamps(); InteriorFlow(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
         Console.WriteLine("PASS: " + checks + " navigator integration checks (analytical geometry; not PhysX)");
     }
 }

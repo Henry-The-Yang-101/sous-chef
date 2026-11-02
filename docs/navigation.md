@@ -248,6 +248,10 @@ Settling checks combine native locomotion, wind/platform drift and observed pose
 changes. The previous chef pose is transported with the target's transform to
 account for shared platform translation and rotation; a first observation cannot
 establish settled speed.
+Neutral braking can begin one native movement window before the checked stance,
+because the previous movement command can still integrate after an Update changes
+input. That prediction never counts as arrival; the actual pose and settling
+checks above must still pass.
 Once settling begins, up to 0.28 units of stance error is allowed so small braking
 drift does not repeatedly restart full-speed walking. A larger displacement resets
 this latch. Near the destination, the chosen approach is retained in the target's

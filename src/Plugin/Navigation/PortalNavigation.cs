@@ -240,7 +240,9 @@ namespace SousChef.Plugin.Navigation
             for (int dx = -3; dx <= 3; dx++) for (int dz = -3; dz <= 3; dz++)
             {
                 var key = new WalkCell(x + dx, y, z + dz); Probe probe = Sample(key);
-                if (!probe.Valid || Vector3.Distance(probe.Point, link.Exit) > 1.6f) continue;
+                if (!probe.Valid || Vector3.Distance(probe.Point, link.Exit) > 1.6f ||
+                    (probe.Point - Position).sqrMagnitude > (Range - 2) * (Range - 2) ||
+                    !PortalOutward(link.ExitTrigger, link.Exit, probe.Point)) continue;
                 int history;
                 if (PortalConnectorClear(link, key, false, out history))
                 {
@@ -254,8 +256,17 @@ namespace SousChef.Plugin.Navigation
             if (exitPortal == null || !exitPortal.enabled) return false;
             Vector3 centre = exitPortal.bounds.center; centre.y = from.y;
             if (Vector3.Distance(from, centre) > 2f) { exitPortal = null; return false; }
-            return (to - centre).sqrMagnitude >= (from - centre).sqrMagnitude - .001f;
+            return PortalOutward(exitPortal, from, to);
         }
+        private static bool PortalOutward(Collider trigger, Vector3 from, Vector3 to)
+        {
+            Vector3 away = from - trigger.bounds.center; away.y = 0;
+            // Endpoint radius alone also accepts a chord through the trigger
+            // to the opposite side. Require the whole segment to move outward.
+            return Vector3.Dot(to - from, away) >= -.0001f;
+        }
+        public bool PortalDeparture(Vector3 from, Vector3 to, PortalLink link, ref int history)
+        { return PortalOutward(link.ExitTrigger, from, to) && PortalSegment(from, to, link.ExitTrigger, ref history); }
         private bool StartSegment(Vector3 from, Vector3 to, Action<int> history)
         {
             Collider saved = permittedPortalTrigger;

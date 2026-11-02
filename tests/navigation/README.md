@@ -17,6 +17,8 @@ directed portal chains/cycles across decks, activation cones, receiver animation
 endpoints, disabled links, blocked landings and connectors, cached portal geometry
 with live flow, cooldown waits, native transport with disabled controls, bounded
 timeouts, wrong exits, and route retention after transport with an incomplete search;
+independently confirmed native flat-mesh seam contacts and early neutral arrival
+braking without accepting predicted arrival;
 native-size spherical contact at measured wizard-stair wedge lips, steep ramps,
 step-component cache reconciliation, conveyor-corner history across graph edges,
 intermediate conveyor/wind samples, changing
