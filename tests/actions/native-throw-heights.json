@@ -1,0 +1,300 @@
+[
+  {
+    "name": "upper-counter-unavailable-60",
+    "level": "s_wizard_5_5",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Cheese_Raw"
+      }
+    ],
+    "operation": "throw_to",
+    "target": {
+      "label": "countertop_01_standard_gold (14)",
+      "position": [
+        31.200000762939453,
+        2,
+        -7.200000286102295
+      ]
+    },
+    "expected": "no_reachable_throw_position",
+    "expectOffered": false,
+    "probeCurrent": true,
+    "expectCurrentFeasible": false
+  },
+  {
+    "name": "upper-board-unavailable-60",
+    "level": "s_wizard_5_5",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Cheese_Raw"
+      }
+    ],
+    "operation": "throw_to",
+    "target": "countertop_01_chopping_board_gold (1)",
+    "expected": "no_reachable_throw_position",
+    "expectOffered": false,
+    "probeCurrent": true,
+    "expectCurrentFeasible": false
+  },
+  {
+    "name": "cheese-level-counter-60",
+    "level": "s_wizard_5_5",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Cheese_Raw"
+      }
+    ],
+    "operation": "throw_to",
+    "target": "countertop_01_standard_gold (4)",
+    "expected": "throw_received",
+    "expectOffered": true,
+    "probeCurrent": true
+  },
+  {
+    "name": "chocolate-counter-down-60",
+    "level": "s_wizard_school_3_4",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Chocolate"
+      }
+    ],
+    "operation": "throw_to",
+    "target": "countertop_01_standard_gold (13)",
+    "expected": "throw_received",
+    "expectOffered": true,
+    "probeCurrent": true,
+    "expectArc": {
+      "minimumDrop": 1.5,
+      "minimumFlightSeconds": 1
+    }
+  },
+  {
+    "name": "flour-counter-down-60",
+    "level": "s_wizard_school_3_4",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Flour"
+      }
+    ],
+    "operation": "throw_to",
+    "target": "countertop_01_standard_gold (13)",
+    "expected": "throw_received",
+    "expectOffered": true,
+    "expectArc": {
+      "minimumDrop": 1.5,
+      "minimumFlightSeconds": 1
+    }
+  },
+  {
+    "name": "egg-climb-then-counter-down-60",
+    "level": "s_wizard_school_3_4",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Egg"
+      }
+    ],
+    "operation": "throw_to",
+    "target": "countertop_01_standard_gold (13)",
+    "expected": "throw_received",
+    "expectOffered": true,
+    "probeCurrent": true,
+    "expectArc": {
+      "minimumClimb": 1.5,
+      "minimumDrop": 1.5,
+      "minimumFlightSeconds": 1
+    },
+    "expectCurrentFeasible": false
+  },
+  {
+    "name": "egg-player-upstairs-60",
+    "level": "s_wizard_school_3_4",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Egg"
+      },
+      {
+        "operation": "stage_player",
+        "playerId": 1,
+        "position": [
+          15.6,
+          0,
+          11.4
+        ],
+        "yaw": 180
+      }
+    ],
+    "operation": "throw_to_player",
+    "target": 1,
+    "expected": "throw_received",
+    "expectOffered": true,
+    "probeCurrent": true,
+    "expectArc": {
+      "minimumClimb": 1,
+      "minimumRise": 0.2
+    },
+    "expectCurrentFeasible": false
+  },
+  {
+    "name": "upper-counter-unavailable-20",
+    "level": "s_wizard_5_5",
+    "fps": 20,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Cheese_Raw"
+      }
+    ],
+    "operation": "throw_to",
+    "target": {
+      "label": "countertop_01_standard_gold (14)",
+      "position": [
+        31.200000762939453,
+        2,
+        -7.200000286102295
+      ]
+    },
+    "expected": "no_reachable_throw_position",
+    "expectOffered": false,
+    "probeCurrent": true,
+    "expectCurrentFeasible": false
+  },
+  {
+    "name": "upper-board-unavailable-20",
+    "level": "s_wizard_5_5",
+    "fps": 20,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Cheese_Raw"
+      }
+    ],
+    "operation": "throw_to",
+    "target": "countertop_01_chopping_board_gold (1)",
+    "expected": "no_reachable_throw_position",
+    "expectOffered": false,
+    "probeCurrent": true,
+    "expectCurrentFeasible": false
+  },
+  {
+    "name": "cheese-level-counter-20",
+    "level": "s_wizard_5_5",
+    "fps": 20,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Cheese_Raw"
+      }
+    ],
+    "operation": "throw_to",
+    "target": "countertop_01_standard_gold (4)",
+    "expected": "throw_received",
+    "expectOffered": true,
+    "probeCurrent": true
+  },
+  {
+    "name": "chocolate-counter-down-20",
+    "level": "s_wizard_school_3_4",
+    "fps": 20,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Chocolate"
+      }
+    ],
+    "operation": "throw_to",
+    "target": "countertop_01_standard_gold (13)",
+    "expected": "throw_received",
+    "expectOffered": true,
+    "probeCurrent": true,
+    "expectArc": {
+      "minimumDrop": 1.5,
+      "minimumFlightSeconds": 1
+    }
+  },
+  {
+    "name": "flour-counter-down-20",
+    "level": "s_wizard_school_3_4",
+    "fps": 20,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Flour"
+      }
+    ],
+    "operation": "throw_to",
+    "target": "countertop_01_standard_gold (13)",
+    "expected": "throw_received",
+    "expectOffered": true,
+    "expectArc": {
+      "minimumDrop": 1.5,
+      "minimumFlightSeconds": 1
+    }
+  },
+  {
+    "name": "egg-climb-then-counter-down-20",
+    "level": "s_wizard_school_3_4",
+    "fps": 20,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Egg"
+      }
+    ],
+    "operation": "throw_to",
+    "target": "countertop_01_standard_gold (13)",
+    "expected": "throw_received",
+    "expectOffered": true,
+    "probeCurrent": true,
+    "expectArc": {
+      "minimumClimb": 1.5,
+      "minimumDrop": 1.5,
+      "minimumFlightSeconds": 1
+    },
+    "expectCurrentFeasible": false
+  },
+  {
+    "name": "egg-player-upstairs-20",
+    "level": "s_wizard_school_3_4",
+    "fps": 20,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Egg"
+      },
+      {
+        "operation": "stage_player",
+        "playerId": 1,
+        "position": [
+          15.6,
+          0,
+          11.4
+        ],
+        "yaw": 180
+      }
+    ],
+    "operation": "throw_to_player",
+    "target": 1,
+    "expected": "throw_received",
+    "expectOffered": true,
+    "probeCurrent": true,
+    "expectArc": {
+      "minimumClimb": 1,
+      "minimumRise": 0.2
+    },
+    "expectCurrentFeasible": false
+  }
+]

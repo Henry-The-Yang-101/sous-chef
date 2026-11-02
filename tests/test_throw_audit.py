@@ -11,6 +11,21 @@ import throw_audit as audit
 
 
 class ThrowAuditTests(unittest.TestCase):
+    def test_throw_option_waits_for_definitive_preview(self):
+        class Client:
+            calls = 0
+
+            def available_actions(self):
+                self.calls += 1
+                return {'complete': True, 'players': [{'id': 'p1', 'label': 'Player 1',
+                        'playerId': 1, 'throw': {'state': 'pending' if self.calls == 1 else 'unavailable'}}]}
+
+        client = Client()
+        with patch.object(audit.time, 'sleep'):
+            _, row = audit.throw_option(client, 'throw_to_player', 1, 1)
+        self.assertEqual(client.calls, 2)
+        self.assertEqual(row['throw']['state'], 'unavailable')
+
     def test_snapshot_waits_past_cached_capture(self):
         class Bridge:
             session_id = 'native'

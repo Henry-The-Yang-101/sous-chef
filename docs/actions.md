@@ -31,7 +31,23 @@ Targets include `operations`, `workConditions`, `waitConditions` and
 `activationStates` to describe compatible request combinations. A separate
 `players` list binds logical player IDs to current chef object identities for
 pass requests. The browser rechecks these identities and operations before
-dispatch. Expensive walking/throw feasibility is still validated at execution.
+dispatch. Throw operations and their parameter enums now require a checked
+native arc and a reachable release stance, including height differences. A
+target above the current arc can remain available if P2 can walk to a higher
+release stance. Downward throws use their actual longer flight time and range;
+player catches use three-dimensional distance and the native forward scan.
+
+Each compatible target/player has a `throw` preview with `state` (`pending`,
+`feasible`, or `unavailable`), `reason` and, when feasible, `plan`. Planning runs
+in bounded read-only Update slices while the catalogue is being observed.
+Pending choices are withheld; poll again to discover completed plans.
+`throwOptionsComplete` reports whether the currently observed preview queue has
+finished, independently of walking discovery's `complete` flag. Negative
+previews are retried after two seconds. Movement, facing, cargo and receiver
+changes invalidate cached proofs, and positive arcs/stances are rechecked when
+listed. Execution plans again and revalidates at release because other chefs,
+obstacles and wind can change. Nearby native counter/ground handoffs remain
+available when their own checked handoff plan succeeds.
 
 ```python
 from clients.actions import ActionClient

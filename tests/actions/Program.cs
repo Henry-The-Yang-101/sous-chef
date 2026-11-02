@@ -618,6 +618,24 @@ internal static class Program
         Check(pass.Origin.y-pass.Arrival.y>1 && Vector3.Distance(pass.Arrival,human.transform.position)<1.8f,"downward pass accounts for three dimensional catch distance and earlier interception");
         human.transform.position=Vector3.up*6;w.Chef.transform.position=new Vector3(0,0,-4);item.transform.position=w.Chef.transform.position+new Vector3(0,1,.4f);
         Check(planner.Prepare(w.Chef,item,human)==null && !planner.From(w.Chef.transform.position,false,out pass),"player above the native arc plus catch radius cannot be targeted as a flat pass");
+
+        w=new World(t=>t.Add(new Catcher()));item=w.Ingredient("tomato");item.Add(new Throwable());
+        item.Add(new PhysicalAttachment()).m_rigidBodyParams.m_drag=.2f;item.Add(new BoxCollider {size=Vector3.one*.2f});
+        w.Chef.gameObject.Add(new AttachmentThrower());w.Chef.gameObject.Add(new ClientAttachmentThrower());w.Chef.gameObject.Add(new ServerAttachmentThrower());
+        w.Chef.transform.position=new Vector3(0,0,-5);item.transform.position=w.Chef.transform.position+new Vector3(0,1,.4f);w.Hold(item);
+        w.Target.transform.position=new Vector3(0,2,4.5f);var ramp=w.Colliders[0];ramp.gameObject.Add(new Steppable());
+        Physics.Nearby=(p,r)=>w.Colliders.Where(c=>Vector3.Distance(p,c.bounds.ClosestPoint(p))<=r).ToArray();
+        Physics.Ray=(p,d,length,mask)=>{
+            float height=p.z < -3 ? 0 : p.z < -1.4f ? (float)Math.Floor((p.z+3)/.4f+1)*.4f : 2;
+            return d.y<-.9f && p.y>=height && p.y-height<=length ? new[] {new RaycastHit {collider=ramp,point=new Vector3(p.x,height,p.z),normal=Vector3.up,distance=p.y-height}} : new RaycastHit[0];};
+        var elevatedNavigation=new NavigationActions((d,ms)=>{},()=>{});
+        for(int i=0;i<10;i++)elevatedNavigation.Available(w.Chef);planner=new ThrowPlanner();
+        Check(planner.Prepare(w.Chef,item,w.Target)==null && !planner.From(w.Chef.transform.position,false,out pass),"raised receiver cannot be reached from the lower current pose");
+        string found=FindPlan(planner,elevatedNavigation,out pass);
+        Check(found==null && pass.Stance.y>1.9f && pass.WalkDistance>1,"planner climbs the reachable walking graph before throwing to a raised receiver");
+        options=new ThrowOptions(elevatedNavigation);options.Begin(w.Chef);
+        for(int i=0;i<300 && !options.Check(w.Target,out info);i++)options.Tick(w.Chef);
+        Check(options.Check(w.Target,out info),"raised receiver remains an option when a higher certified release stance is reachable");
     }
     private static void NearbyHandoffs()
     {

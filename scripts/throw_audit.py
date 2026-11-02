@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Run throw cases against an already started, isolated native simulator.
 
-Cases are JSON; setup uses ordinary P2 actions/input. No transforms, ownership,
-physics parameters, receiver input, or game clocks are modified by this runner.
+Cases are JSON; setup uses ordinary P2 actions/input, optionally with an explicit
+supported chef pose fixture. Ownership, physics parameters, receiver input and
+game clocks are never modified by this runner.
 Full snapshots provide item identity/holder evidence independent of receipts.
 """
 import argparse
@@ -93,6 +94,22 @@ def resolve(options, selector):
     return found[0]
 
 
+def throw_option(client, operation, selector, timeout):
+    """Wait for a definitive preview, rather than treating pending as a refusal."""
+    deadline = time.monotonic() + timeout
+    while True:
+        available = catalog(client, timeout)
+        if operation == 'throw_to_player':
+            row = resolve(available['players'], {'playerId': selector})
+        else:
+            row = resolve(available['targets'], selector)
+        if row.get('throw', {}).get('state') != 'pending':
+            return available, row
+        if time.monotonic() >= deadline:
+            raise RuntimeError('Throw option preview did not finish: ' + str(selector))
+        time.sleep(.1)
+
+
 def execute(client, operation, argument, trace, timeout, cancel=None, cancel_mode='stop'):
     started = time.monotonic()
     result = {'operation': operation, 'argument': argument, 'phases': []}
@@ -156,6 +173,13 @@ def run_case(args, case, index):
             if client.hello['sessionId'] != initial['sessionId']:
                 raise RuntimeError('Control belongs to another native session')
             for i, step in enumerate(case.get('setup', [])):
+                if step['operation'] == 'stage_player':
+                    command = 'stage-player ' + ' '.join(str(v) for v in
+                              [step['playerId'], *step['position'], step['yaw']])
+                    sim.command(args.runtime, command)
+                    time.sleep(.25)
+                    result['setup'].append(dict(step, evidence=json.loads((args.runtime / 'staging.json').read_text())))
+                    continue
                 if step['operation'] == 'input':
                     client.claim()
                     client.hold(step['seconds'], step.get('x', 0), step.get('y', 0), step.get('buttons', ()))
@@ -177,8 +201,21 @@ def run_case(args, case, index):
                 if not ok and not step.get('allowFailure'):
                     raise RuntimeError('Setup failed: ' + str(receipt['outcome']))
             available = catalog(client, args.timeout)
+            if 'expectOffered' in case:
+                available, row = throw_option(client, case['operation'], case['target'], args.timeout)
+                operation = case['operation']
+                key = 'player_id' if operation == 'throw_to_player' else 'target_id'
+                choices = next((action['parameters'][key]['options'] for action in available['actions']
+                                if action['name'] == operation), [])
+                result['option'] = {'offered': operation in row['operations'],
+                                    'inParameterEnum': any(choice['id'] == row['id'] for choice in choices),
+                                    'preview': row.get('throw')}
             write(directory / 'catalog.json', available)
             before = snapshot(args.snapshot_port, initial['sessionId'], directory / 'before.json')
+            if case.get('probeCurrent'):
+                row = resolve(available['players'], {'playerId': case['target']}) if case['operation'] == 'throw_to_player' else resolve(available['targets'], case['target'])
+                sim.command(args.runtime, 'probe-throw ' + str(row['objectInstanceId']))
+                result['currentPoseThrow'] = json.loads((args.runtime / 'throw-probe.json').read_text())
             cargo = carrier_items(before)
             cargo = cargo[0] if cargo else None
             result['cargoBefore'] = None if cargo is None else {
@@ -217,6 +254,11 @@ def run_case(args, case, index):
             if isinstance(expected, str):
                 expected = [expected]
             result['matchesExpectation'] = result['action']['outcome'] in expected
+            if 'expectCurrentFeasible' in case:
+                result['matchesExpectation'] &= result.get('currentPoseThrow', {}).get('feasible') == case['expectCurrentFeasible']
+            if 'expectOffered' in case:
+                result['matchesExpectation'] &= all(result['option'][key] == case['expectOffered']
+                                                     for key in ('offered', 'inParameterEnum'))
             receipt = result['action'].get('receipt') or {}
             if receipt.get('state') == 'succeeded':
                 # Counter handoffs deliberately name the player as the command
@@ -230,6 +272,26 @@ def run_case(args, case, index):
                 result['matchesExpectation'] &= result['receiptIndependentlyConfirmed']
             elif case.get('expectRetained', True):
                 result['matchesExpectation'] &= result['cargoRetained']
+            if 'expectArc' in case:
+                details = receipt.get('details') or {}
+                plan = details.get('result', details).get('throw') or {}
+                checks = {}
+                for key, value in case['expectArc'].items():
+                    if key == 'minimumDrop':
+                        checks[key] = plan.get('releaseHeight', -1e9) - plan.get('arrivalHeight', 1e9) >= value
+                    elif key == 'minimumReleaseFoot':
+                        checks[key] = plan.get('releasePosition', [0, -1e9, 0])[1] >= value
+                    elif key == 'minimumFlightSeconds':
+                        checks[key] = plan.get('flightSeconds', -1) >= value
+                    elif key == 'minimumRise':
+                        checks[key] = plan.get('arrivalHeight', -1e9) - plan.get('releaseHeight', 1e9) >= value
+                    elif key == 'minimumClimb':
+                        actor = next(o for o in before['objects'] if o['name'] == 'Player 2' and fields(o, 'ServerPlayerAttachmentCarrier'))
+                        checks[key] = plan.get('releasePosition', [0, -1e9, 0])[1] - actor['transform']['position'][1] >= value
+                    else:
+                        raise ValueError('Unknown arc check: ' + key)
+                result['arcChecks'] = checks
+                result['matchesExpectation'] &= all(checks.values())
     except (OSError, RuntimeError, TimeoutError, ValueError, StopIteration) as error:
         result.update(setupError=str(error), matchesExpectation=False)
     write(directory / 'report.json', result)

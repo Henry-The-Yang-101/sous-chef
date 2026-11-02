@@ -112,6 +112,8 @@ namespace SousChef.Plugin
                         else if (value == "aim-cannon-down") AimLoadedCannon();
                         else if (value == "advance-phase") AdvancePhase();
                         else if (value.StartsWith("stage-portal ", StringComparison.Ordinal)) StagePortal(Int32.Parse(value.Substring(13)));
+                        else if (value.StartsWith("stage-player ", StringComparison.Ordinal)) StagePlayer(value.Substring(13));
+                        else if (value.StartsWith("probe-throw ", StringComparison.Ordinal)) ProbeThrow(Int32.Parse(value.Substring(12)));
                         else if (value.StartsWith("probe-walk ", StringComparison.Ordinal)) ProbeWalk(value.Substring(11));
                         else if (value.StartsWith("load ", StringComparison.Ordinal)) Load(value.Substring(5));
                         else if (value.StartsWith("fps ", StringComparison.Ordinal)) SetFrameRate(Int32.Parse(value.Substring(4)));
@@ -205,6 +207,45 @@ namespace SousChef.Plugin
             Physics.SyncTransforms();
             Write("staging.json", Json.Object("kind", "explicit_supported_portal_initial_pose", "entranceId", id,
                 "before", Values.Vector(before), "after", Values.Vector(chef.transform.position)));
+        }
+        private void ProbeThrow(int id)
+        {
+            PlayerControls chef = null; GameObject target = null;
+            foreach (var p in UnityEngine.Object.FindObjectsOfType<PlayerControls>())
+                if (p.PlayerIDProvider != null && p.PlayerIDProvider.GetID() == PlayerInputLookup.Player.Two) chef = p;
+            foreach (var go in UnityEngine.Object.FindObjectsOfType<GameObject>()) if (go.GetInstanceID() == id) target = go;
+            if (chef == null || target == null || !KitchenGate.Inspect().InRound) throw new InvalidOperationException("No current chef/throw target");
+            var planner = new Actions.ThrowPlanner(); Actions.ThrowPlan plan = null;
+            string error = planner.Prepare(chef, Actions.ActionObservations.Held(chef), target);
+            Vector3 foot = chef.transform.position; foot.y = chef.GetComponent<CapsuleCollider>().bounds.min.y;
+            bool feasible = error == null && planner.From(foot, false, out plan);
+            Write("throw-probe.json", Json.Object("feasible", feasible, "error", error, "diagnostics", planner.Diagnostics,
+                "plan", plan == null ? null : plan.Describe()));
+        }
+        private void StagePlayer(string arguments)
+        {
+            // Explicit fixture setup in the isolated simulator, never called
+            // by an action. Keep native colliders, physics and catch controls.
+            string[] values = arguments.Split(' ');
+            if (values.Length != 5) throw new ArgumentException("stage-player requires player ID, foot XYZ and yaw degrees");
+            int id = Int32.Parse(values[0]); PlayerControls player = null;
+            foreach (var p in UnityEngine.Object.FindObjectsOfType<PlayerControls>())
+                if (p.PlayerIDProvider != null && (int)p.PlayerIDProvider.GetID() + 1 == id) player = p;
+            if (player == null || !player.enabled || player.m_bRespawning || player.Motion.GetVelocity().magnitude > .05f ||
+                Navigation.PortalLink.Travelling(player) || !KitchenGate.Inspect().InRound)
+                throw new InvalidOperationException("Staging requires a stationary, enabled chef in a kitchen");
+            var culture = System.Globalization.CultureInfo.InvariantCulture;
+            var point = new Vector3(Single.Parse(values[1], culture), Single.Parse(values[2], culture), Single.Parse(values[3], culture));
+            float yaw = Single.Parse(values[4], culture);
+            var physics = new Navigation.WalkPhysics(); Vector3 stance; Collider ground;
+            if (physics.Refresh(player) != null || !physics.Stand(point, out stance, out ground) || Vector3.Distance(point, stance) > .05f ||
+                Single.IsNaN(yaw) || Single.IsInfinity(yaw)) throw new InvalidOperationException("No supported clear staging stance");
+            Vector3 before = player.transform.position;
+            player.transform.position += stance - physics.Position;
+            player.transform.rotation = Quaternion.Euler(0, yaw, 0);
+            Physics.SyncTransforms();
+            Write("staging.json", Json.Object("kind", "explicit_supported_throw_initial_pose", "playerId", id,
+                "before", Values.Vector(before), "after", Values.Vector(player.transform.position), "forward", Values.Vector(player.transform.forward)));
         }
         private void ProbeWalk(string arguments)
         {
