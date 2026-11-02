@@ -172,7 +172,12 @@ namespace UnityEngine
 }
 
 #pragma warning disable CS0414 // Reflection fields must match the installed game.
-public class GroundCast : UnityEngine.MonoBehaviour { private UnityEngine.LayerMask m_landscapeMask = 1; }
+public class GroundCast : UnityEngine.MonoBehaviour {
+    private UnityEngine.LayerMask m_landscapeMask = 1;
+    public UnityEngine.Vector3 GetGroundPoint() { return transform.position; }
+    public UnityEngine.Vector3 GetGroundNormal() { return UnityEngine.Vector3.up; }
+    public float GetGroundDistance() { return 0; }
+}
 public class PlayerControlsImpl_Default { }
 public class PlayerControls : UnityEngine.MonoBehaviour
 {

@@ -43,7 +43,24 @@ namespace SousChef.Plugin.Navigation
         private int nodeCount, candidateCount, startCount;
         private string observationError;
         private bool planning;
-        public NavigationActions(Action<Vector3, int> walk, Action halt) { move = walk; neutral = halt; }
+        private readonly Queue<object> executionTrace = new Queue<object>();
+        private void Trace(string phase, Vector3 goal, Vector3 input)
+        {
+            if (!physics.TraceEnabled || chef == null) return;
+            var ground = chef.GetComponent<GroundCast>();
+            var points = new List<object>();
+            if (route != null) for (int i = waypoint; i < Math.Min(route.Count, waypoint + 5); i++) points.Add(Values.Vector(route[i]));
+            executionTrace.Enqueue(Json.Object("time", Time.realtimeSinceStartup, "frame", Time.frameCount,
+                "phase", phase, "position", Values.Vector(physics.Position), "velocity", Values.Vector(chef.Motion.GetVelocity()),
+                "groundId", chef.GroundCollider == null ? 0 : chef.GroundCollider.GetInstanceID(),
+                "groundPoint", ground == null ? null : Values.Vector(ground.GetGroundPoint()),
+                "groundNormal", ground == null ? null : Values.Vector(ground.GetGroundNormal()),
+                "groundDistance", ground == null ? 0 : ground.GetGroundDistance(),
+                "goal", Values.Vector(goal), "input", Values.Vector(input), "route", points,
+                "failure", physics.Failure, "startFailures", phase == "no_safe_start" ? physics.StartFailures : null));
+            while (executionTrace.Count > 96) executionTrace.Dequeue();
+        }
+        public NavigationActions(Action<Vector3, int> walk, Action halt) { move = walk; neutral = halt; physics.TraceEnabled = Environment.GetEnvironmentVariable("SOUS_CHEF_NAV_TRACE") == "1"; }
         public GameObject Resolve(string id)
         {
             foreach (Destination d in identities.Values) if (d.Id == id && d.Object != null && d.Object.activeInHierarchy) return d.Object;
@@ -120,6 +137,7 @@ namespace SousChef.Plugin.Navigation
         }
         public void Stop(string reason)
         {
+            Trace(reason, Vector3.zero, Vector3.zero);
             // Neutral first; callers must not observe idle with stale movement input.
             neutral();
             if (target != null && target.Object != null) lastDestination = Identity(target);
@@ -135,6 +153,7 @@ namespace SousChef.Plugin.Navigation
             return Json.Object("state", Action.State, "destinationId", Action.Destination, "reason", Action.Reason,
                 "destination", target == null ? lastDestination : Identity(target),
                 "phase", Action.State == "idle" ? "idle" : facingSince < 0 ? "walking" : "aligning", "arrival", arrivalDetails,
+                "executionTrace", physics.TraceEnabled ? executionTrace.ToArray() : null,
                 "revision", Action.Revision, "catalogRevision", revision, "catalogReason", unavailable,
                 "catalogComplete", unavailable == null && search != null && search.Complete,
                 "catalogAgeSeconds", lastPlan < 0 ? null : (object)(Time.realtimeSinceStartup - lastPlan),
@@ -184,7 +203,7 @@ namespace SousChef.Plugin.Navigation
             if (!Action.Start(owner, destination, true)) return "action_in_progress";
             target = chosen; lastDestination = Identity(chosen); started = lastProgress = Time.realtimeSinceStartup; progressPosition = physics.Position;
             arrivalDetails = null; arrival.Reset(); facingSince = -1; haveMotion = motionSampleValid = false;
-            SetRoute(chosen); return null;
+            executionTrace.Clear(); SetRoute(chosen); Trace("start", chosen.Approach, Vector3.zero); return null;
         }
         private bool ApplyPlan()
         {
@@ -279,6 +298,7 @@ namespace SousChef.Plugin.Navigation
             }
             if (!WalkingSteering.Direction(direction.x, direction.z, drift.x, drift.z, speed, out x, out z)) { Stop("flow_prevents_walking"); return; }
             Vector3 input = new Vector3(x, 0, z);
+            Trace("steer", goal, input);
             float stepTime = Mathf.Max(commandMilliseconds / 1000f, Time.deltaTime);
             // Near the checked final stance validate the next actual walking step;
             // the longer lookahead would extend through the counter beyond the stop.

@@ -5,8 +5,8 @@ namespace SousChef.Core
 {
     public static class WalkSegments
     {
-        // Shared by graph edges and execution, including the endpoints. A centre
-        // ray or one midpoint alone cannot certify the chef's supported footprint.
+        // Shared by graph edges and execution, including the endpoints. A single
+        // support probe or midpoint alone cannot certify the whole walking segment.
         public static bool Check(float length, Func<float, bool> supported)
         {
             if (Single.IsNaN(length) || Single.IsInfinity(length) || length < 0) return false;

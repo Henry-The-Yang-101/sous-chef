@@ -39,6 +39,16 @@ namespace SousChef.Plugin.Navigation
         private int groundMask, collisionMask, interactMask;
         private bool useGridSelection;
         private float radius, nativeRadius, height, pivotToFoot, lastReconcile, walkingSpeed, stepHeight;
+        public bool TraceEnabled;
+        public object StartFailures { get; private set; }
+        private string failureReason;
+        private Vector3 failurePoint;
+        private Collider failureCollider;
+        public object Failure { get { return Json.Object("reason", failureReason, "point", Values.Vector(failurePoint),
+            "collider", failureCollider == null ? null : failureCollider.gameObject.name,
+            "colliderId", failureCollider == null ? 0 : failureCollider.GetInstanceID()); } }
+        private bool Fail(string reason, Vector3 point, Collider collider = null)
+        { failureReason = reason; failurePoint = point; failureCollider = collider; return false; }
         public bool Overflow { get; private set; }
         public int Queries { get; private set; }
         public bool Changed { get; private set; }
@@ -308,7 +318,7 @@ namespace SousChef.Plugin.Navigation
         private bool Stand(Vector3 guess, out Vector3 point, out Collider support, float clearance, out RaycastHit hit)
         {
             point = guess; support = null;
-            if (!Ground(guess, out hit)) return false;
+            if (!Ground(guess, out hit)) return Fail("ground_probe", guess);
             point.y = hit.point.y; support = hit.collider;
             // GroundCast supports the rounded capsule across narrow tread seams.
             // Requiring a ray under every footprint edge rejects real stairs even
@@ -317,7 +327,7 @@ namespace SousChef.Plugin.Navigation
             Vector3 low, high; Capsule(point, out low, out high, clearance);
             int count = Physics.OverlapCapsuleNonAlloc(low, high, clearance, overlaps, ~0, QueryTriggerInteraction.Collide); Queries++;
             if (count == overlaps.Length) { Overflow = true; return false; }
-            for (int i = 0; i < count; i++) if (Blocks(overlaps[i])) return false;
+            for (int i = 0; i < count; i++) if (Blocks(overlaps[i])) return Fail("body_overlap", point, overlaps[i]);
             return true;
         }
         private Vector3 Approximate(WalkCell cell) { return new Vector3(cell.X * Spacing, cell.Y * HeightBand, cell.Z * Spacing); }
@@ -335,6 +345,7 @@ namespace SousChef.Plugin.Navigation
         public IEnumerable<WalkEdge> Starts()
         {
             var result = new List<WalkEdge>(); Vector3 start = Position;
+            var failures = TraceEnabled ? new List<object>() : null;
             int x = Mathf.RoundToInt(start.x / Spacing), z = Mathf.RoundToInt(start.z / Spacing), y = Mathf.RoundToInt(start.y / HeightBand);
             // A corner contact may have no padded node in the immediate 3x3 ring.
             // Longer connectors still undergo complete support and collision checks.
@@ -347,7 +358,9 @@ namespace SousChef.Plugin.Navigation
                     WalkCell resolved = Resolved(key, probe); resolved.SurfaceHistory = history;
                     result.Add(new WalkEdge(resolved, Vector3.Distance(start, probe.Point)));
                 }
+                else if (failures != null) failures.Add(Json.Object("node", Values.Vector(probe.Point), "standable", probe.Valid, "failure", probe.Valid ? Failure : null));
             }
+            StartFailures = failures;
             return result;
         }
         public IEnumerable<WalkEdge> Neighbours(WalkCell cell)
@@ -437,9 +450,10 @@ namespace SousChef.Plugin.Navigation
                 // collision: use consistent native clearance along this connector.
                 // Lattice nodes and edges retain padded clearance. The contact skin
                 // is bounded, and every sample still checks support and hazards.
-                if (!Stand(guess, out point, out ground, clearance, out centre) ||
-                    !WalkHeight.Connected(guess.y, point.y, StepHeight) ||
-                    !WalkHeight.Connected(previous.y, point.y, StepHeight) || (havePrevious && !SupportConnected(previousGround, centre))) return false;
+                if (!Stand(guess, out point, out ground, clearance, out centre)) return false;
+                if (!WalkHeight.Connected(guess.y, point.y, StepHeight) || !WalkHeight.Connected(previous.y, point.y, StepHeight))
+                    return Fail("support_height", point, ground);
+                if (havePrevious && !SupportConnected(previousGround, centre)) return Fail("support_discontinuity", point, ground);
                 if (checkFlow)
                 {
                     if (!havePrevious && initialHistory != 0)
@@ -472,7 +486,7 @@ namespace SousChef.Plugin.Navigation
             Capsule(from, out low, out high, clearance);
             int count = Physics.CapsuleCastNonAlloc(low, high, clearance, delta / length, hits, length, ~0, QueryTriggerInteraction.Collide); Queries++;
             if (count == hits.Length) { Overflow = true; return false; }
-            for (int i = 0; i < count; i++) if (Blocks(hits[i].collider)) return false;
+            for (int i = 0; i < count; i++) if (Blocks(hits[i].collider)) return Fail("body_sweep", from, hits[i].collider);
             return true;
         }
         private void TrackSurface(Collider ground, Vector3 point, ref IMovingSurface current, ref IMovingSurface previous)

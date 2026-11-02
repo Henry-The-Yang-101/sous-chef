@@ -263,3 +263,11 @@ Sequences remain internal to the direct-input lease. An autonomous action renews
 its own short input lease; the decision maker does not issue keepalive inputs.
 Closing its owning connection cancels it. Idle connections may stay open (four
 maximum); input TTLs and bounded dispatch/write timeouts still apply.
+
+For execution diagnosis, launch the plugin with `SOUS_CHEF_NAV_TRACE=1`.
+`navigation.executionTrace` retains up to 96 recent controller decisions, including
+native ground contact, route points, commanded input, and the rejected physics
+check. A `no_safe_start` stop also includes the attempted start connectors. Tracing
+is off by default and does not change movement decisions. Capture this trace and
+the gameplay stream together; a reachable destination or a manually assisted
+arrival does not establish that the controller can execute a stair route.
