@@ -340,7 +340,10 @@ internal static class Program
         w.Chef.GroundCollider = null; w.Chef.transform.position += Vector3.up * .35f;
         Time.realtimeSinceStartup += .02f; navigation.Tick(w.Chef);
         Check(navigation.Action.State == "navigating" && w.LastInput.magnitude == 0 && w.LastMilliseconds > 0, "native stair hop keeps the action with neutral input above a checked landing");
-        w.Chef.GroundCollider = floor; w.Chef.transform.position -= Vector3.up * .35f;
+        w.Chef.GroundCollider = floor; w.Chef.GetComponent<GroundCast>().Distance = .24f;
+        Time.realtimeSinceStartup += .02f; navigation.Tick(w.Chef);
+        Check(navigation.Action.State == "navigating" && w.LastInput.magnitude == 0, "native proximity contact above the tread does not prematurely resume movement");
+        w.Chef.GetComponent<GroundCast>().Distance = 0; w.Chef.transform.position -= Vector3.up * .35f;
         Time.realtimeSinceStartup += .1f; navigation.Tick(w.Chef);
         Check(navigation.Action.State == "navigating" && navigation.Action.Revision == revision && w.LastInput.magnitude > .9f, "landing resumes the same request without requiring another Run click");
         w.Chef.GroundCollider = null; w.Chef.transform.position += Vector3.up * .35f;

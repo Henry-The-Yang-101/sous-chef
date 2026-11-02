@@ -490,6 +490,10 @@ namespace SousChef.Plugin.Navigation
         // carries the capsule more than 0.3 units above a tread. A clear landing
         // below the current body permits neutral input while gravity settles it;
         // this does not authorize walking while airborne or over a missing floor.
+        public bool NeedsGroundSettling
+        {
+            get { return chef.GroundCollider == null || chef.GetComponent<GroundCast>().GetGroundDistance() > Skin; }
+        }
         public bool ClearLanding()
         {
             if (chef == null) return false;

@@ -283,6 +283,7 @@ endpoints can otherwise incorrectly certify that approach.
 A running action can enter `settling_ground` when native stair momentum lifts the
 chef beyond GroundCast's contact distance. It issues neutral input while checking
 a clear, collision-free landing below the body, within the native step-height
-range. Ground contact resumes the same action and forces replanning; absent or
+range. Body contact (native ground distance within the collision skin) resumes the same
+action and forces replanning; the native proximity flag alone is insufficient. Absent or
 blocked support stops immediately, and contact must return within the existing
 two-second stall interval. This does not allow airborne steering across holes.

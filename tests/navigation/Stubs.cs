@@ -176,7 +176,8 @@ public class GroundCast : UnityEngine.MonoBehaviour {
     private UnityEngine.LayerMask m_landscapeMask = 1;
     public UnityEngine.Vector3 GetGroundPoint() { return transform.position; }
     public UnityEngine.Vector3 GetGroundNormal() { return UnityEngine.Vector3.up; }
-    public float GetGroundDistance() { return 0; }
+    public float Distance;
+    public float GetGroundDistance() { return Distance; }
 }
 public class PlayerControlsImpl_Default { }
 public class PlayerControls : UnityEngine.MonoBehaviour

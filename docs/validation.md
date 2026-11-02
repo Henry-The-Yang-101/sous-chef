@@ -542,3 +542,11 @@ support-transition refinement. All 92 navigation checks, 815 core assertions,
 181 action checks, assembly audit, and 66 Python tests pass. Live validation of
 this correction is pending installation; analytical results alone do not prove
 execution. Conveyor routing has not been revalidated live in this kitchen.
+
+The first live test of `293dfdf` passed the previously blocked entrance and retained
+an airborne interval, but ended `route_blocked` on a later wedge. The trace shows
+movement resumed with native ground distance 0.2384, before the chef settled onto
+the tread. GroundCast's proximity flag is not resting contact. The follow-up
+waits with neutral input until native distance falls within collision skin, and
+adds a regression for this exact early-contact condition (93 navigation checks).
+Single-request live completion is still pending this follow-up installation.

@@ -251,7 +251,7 @@ namespace SousChef.Plugin.Navigation
             int commandMilliseconds = WalkingCommand.Milliseconds(Time.unscaledDeltaTime);
             if (commandMilliseconds == 0) { Stop("unsafe_update_interval"); return; }
             string error = physics.Refresh(player);
-            if (error == "not_grounded" && physics.ClearLanding())
+            if ((error == null || error == "not_grounded") && physics.NeedsGroundSettling && physics.ClearLanding())
             {
                 if (settlingSince < 0) settlingSince = Time.realtimeSinceStartup;
                 if (Time.realtimeSinceStartup - settlingSince > 2f) { Stop("ground_contact_timeout"); return; }
