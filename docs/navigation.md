@@ -65,7 +65,8 @@ claim the chef. Concurrent navigation/raw-input commands cannot override an acti
 
 The navigator runs against Unity's live physics scene, independently of NDJSON
 sampling. It uses the chef's scaled capsule dimensions and native ground/layer
-masks. Ground rays check floor support across the footprint; capsule overlaps and
+masks. A native-radius sphere cast resolves the supported centre pose; ground rays check
+floor support across the footprint. Capsule overlaps and
 sweeps check clearance along edges. This accounts for rotating walls, moving
 parents, enabled/disabled collision, narrow passages and other physical objects.
 Triggers are not automatically solid walls; known fire, respawn and teleport
@@ -125,9 +126,11 @@ are shortest on that sampled graph, not guaranteed continuous-world geodesics.
 Supported heights resolve to canonical height keys, so the same stair tread
 reached from above and below shares a node while stacked decks remain distinct.
 Stairs use the chef's native `StepHeightMax` (capped at 0.65 units) per transition,
-not a limit on total elevation change. Footprint probes allow that step variation;
-the planning capsule rests on the highest supported footprint point. Ground
-normals use the native GroundCast limit of 58 degrees.
+not a limit on total elevation change. The centre probe uses spherical contact,
+matching native GroundCast at ramp edges and stair wedge lips, and converts the
+contact into the capsule’s supported foot height. Footprint rays confirm nearby
+support without treating a sloped footprint’s full height span as one riser.
+Ground normals use the native GroundCast limit of 58 degrees.
 Height alone does not make a ledge climbable: discontinuities between support
 samples require `Steppable` on the upper collider's exact GameObject, matching
 the native collision handler. Continuous slopes, including ramp-to-floor joins,
@@ -165,7 +168,11 @@ be conservatively omitted. Height checks exclude drops/jumps and steep or abrupt
 unsupported transitions; teleporters and cannons are not walking shortcuts.
 
 Floor conveyors and supported moving surfaces contribute native surface velocity;
-wind is evaluated using current volumes, filters and direction. A directed edge is
+wind is evaluated using current volumes, filters and direction. Travelator corner
+velocity retains the entering surface, including across graph edges and remaining
+route checks. The graph distinguishes arrivals with different prior surfaces while
+sharing their geometry probes. Connectors from the chef use native surface history.
+A directed edge is
 excluded when walking cannot counter its cross-flow or make forward progress.
 Execution compensates using the chef's actual wind/surface velocities. Countertop
 conveyors move the destination rather than the chef. Slipperiness affects momentum

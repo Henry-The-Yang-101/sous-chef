@@ -202,10 +202,10 @@ namespace SousChef.Plugin.Navigation
         private bool RemainingRouteClear()
         {
             if (target == null || target.Object == null || route == null || TargetMoved()) return false;
-            Vector3 from = physics.Position;
+            Vector3 from = physics.Position; int surfaceHistory = 0;
             for (int i = waypoint; i < route.Count; i++)
             {
-                if (!physics.Segment(from, route[i])) return false;
+                if (!physics.Segment(from, route[i], ref surfaceHistory)) return false;
                 from = route[i];
             }
             return !physics.Overflow;
@@ -493,7 +493,8 @@ namespace SousChef.Plugin.Navigation
                             Vector3 point = physics.Point(cell); float connector = Vector3.Distance(point, d.Approach);
                             if (connector > WalkPhysics.Spacing * 2) continue;
                             float cost = search.Distances[cell] + connector;
-                            if (cost < pointBest && physics.Segment(point, d.Approach)) { pointBest = cost; pointGoal = cell; }
+                            int surfaceHistory = cell.SurfaceHistory;
+                            if (cost < pointBest && physics.Segment(point, d.Approach, ref surfaceHistory)) { pointBest = cost; pointGoal = cell; }
                         }
                         if (pointBest < Single.MaxValue)
                         { d.Goal = pointGoal; d.Distance = pointBest; d.LocalApproach = d.Object.transform.InverseTransformPoint(d.Approach); available[d.Id] = d; }
@@ -526,7 +527,7 @@ namespace SousChef.Plugin.Navigation
                             foreach (WalkCell cell in bucket)
                             {
                                 float distance = search.Distances[cell]; Vector3 stance, point = physics.Point(cell);
-                                if ((distance >= best && (!retainApproach || distance >= preferred)) || !physics.Approach(point, c, out stance)) continue;
+                                if ((distance >= best && (!retainApproach || distance >= preferred)) || !physics.Approach(point, c, out stance, cell.SurfaceHistory)) continue;
                                 distance += Vector3.Distance(point, stance);
                                 if (distance < best) { best = distance; goal = cell; bestApproach = stance; }
                                 if (retainApproach && distance < preferred && Vector3.Distance(stance, retained) < .04f)

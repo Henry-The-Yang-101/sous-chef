@@ -16,6 +16,7 @@ namespace SousChef.Plugin.Navigation
         private static readonly FieldInfo windFilter = typeof(WindVolume).GetField("m_windFilter", BindingFlags.Instance | BindingFlags.NonPublic);
         private static readonly FieldInfo gridSelection = typeof(PlayerControls).GetField("m_bGridSelection", BindingFlags.Instance | BindingFlags.NonPublic);
         private static readonly FieldInfo interactionMask = typeof(PlayerControls).GetField("m_interactMask", BindingFlags.Instance | BindingFlags.NonPublic);
+        private static readonly FieldInfo previousSurface = typeof(SurfaceMovable).GetField("m_prevSurface", BindingFlags.Instance | BindingFlags.NonPublic);
         private readonly Collider[] nearby = new Collider[4096], overlaps = new Collider[128];
         private readonly RaycastHit[] hits = new RaycastHit[128];
         private readonly Dictionary<WalkCell, Probe> probes = new Dictionary<WalkCell, Probe>();
@@ -27,6 +28,7 @@ namespace SousChef.Plugin.Navigation
         private readonly Dictionary<int, bool> dangers = new Dictionary<int, bool>();
         private readonly Dictionary<int, bool> nativeSteps = new Dictionary<int, bool>();
         private readonly Dictionary<int, IMovingSurface> surfaces = new Dictionary<int, IMovingSurface>();
+        private readonly Dictionary<int, IMovingSurface> surfaceHistories = new Dictionary<int, IMovingSurface>();
         private readonly Dictionary<int, PlayerPhysicsSurface> properties = new Dictionary<int, PlayerPhysicsSurface>();
         private readonly Dictionary<int, float> speeds = new Dictionary<int, float>();
         private readonly Dictionary<int, IGridLocation> grids = new Dictionary<int, IGridLocation>();
@@ -54,7 +56,7 @@ namespace SousChef.Plugin.Navigation
 
         public void Reset()
         {
-            chef = null; probes.Clear(); edges.Clear(); stamps.Clear(); meshes.Clear(); dangers.Clear(); nativeSteps.Clear(); surfaces.Clear(); properties.Clear(); grids.Clear(); ignoredChefColliders.Clear();
+            chef = null; probes.Clear(); edges.Clear(); stamps.Clear(); meshes.Clear(); dangers.Clear(); nativeSteps.Clear(); surfaces.Clear(); surfaceHistories.Clear(); properties.Clear(); grids.Clear(); ignoredChefColliders.Clear();
         }
         public string Refresh(PlayerControls player)
         {
@@ -160,7 +162,7 @@ namespace SousChef.Plugin.Navigation
                         Vector3 min = bounds.min, max = bounds.max;
                         if (p.x >= min.x - padding && p.x <= max.x + padding &&
                             p.z >= min.z - padding && p.z <= max.z + padding &&
-                            p.y >= min.y - height - 1 && p.y <= max.y + 1)
+                            p.y >= min.y - height - StepHeight - nativeRadius - .2f && p.y <= max.y + StepHeight + nativeRadius + .2f)
                         { dirty.Add(pair.Key); break; }
                     }
                 }
@@ -250,29 +252,41 @@ namespace SousChef.Plugin.Navigation
         private bool SupportConnected(RaycastHit from, RaycastHit to)
         {
             if (!WalkHeight.Connected(from.point.y, to.point.y, StepHeight)) return false;
+            return ContinuousSupport(from, to) || NativeStep(to.point.y > from.point.y ? to.collider : from.collider);
+        }
+        private static bool ContinuousSupport(RaycastHit from, RaycastHit to)
+        {
             Vector3 delta = to.point - from.point; delta.y = 0;
             float rise = to.point.y - from.point.y;
             float a = -Vector3.Dot(from.normal, delta) / from.normal.y;
             float b = -Vector3.Dot(to.normal, delta) / to.normal.y;
             // Continuous slopes (including a ramp joining a flat floor) do not
             // need a step component. A discontinuity between flat treads does.
-            if (rise >= Mathf.Min(0, Mathf.Min(a, b)) - .025f && rise <= Mathf.Max(0, Mathf.Max(a, b)) + .025f) return true;
-            return NativeStep(rise > 0 ? to.collider : from.collider);
+            return rise >= Mathf.Min(0, Mathf.Min(a, b)) - .025f && rise <= Mathf.Max(0, Mathf.Max(a, b)) + .025f;
         }
-        private bool Ground(Vector3 point, out RaycastHit best)
+        private bool Ground(Vector3 point, out RaycastHit best, bool footprint = false)
         {
             best = new RaycastHit(); float step = StepHeight;
-            int count = Physics.RaycastNonAlloc(point + Vector3.up * (step + .12f), Vector3.down, hits,
-                2 * step + .24f, groundMask, QueryTriggerInteraction.Ignore); Queries++;
+            // Match GroundCast's spherical contact for the chef centre. Rays miss
+            // the rounded contact at the lips of native stair wedges.
+            float r = footprint ? 0 : nativeRadius;
+            float reach = step + (footprint ? nativeRadius : 0) + .12f;
+            Vector3 origin = point + Vector3.up * (reach + r);
+            int count = footprint ? Physics.RaycastNonAlloc(origin, Vector3.down, hits, 2 * reach, groundMask, QueryTriggerInteraction.Ignore) :
+                Physics.SphereCastNonAlloc(origin, r, Vector3.down, hits, 2 * reach, groundMask, QueryTriggerInteraction.Ignore);
+            Queries++;
             if (count == hits.Length) { Overflow = true; return false; }
             float distance = Single.MaxValue;
             for (int i = 0; i < count; i++)
             {
                 var hit = hits[i];
-                // GroundCast accepts surfaces through 58 degrees in this game.
                 if (hit.collider == null || Own(hit.collider) || Dangerous(hit.collider) || hit.normal.y < .52992f ||
-                    Mathf.Abs(hit.point.y - point.y) > step + .04f || hit.distance >= distance) continue;
-                best = hit; distance = hit.distance;
+                    hit.distance <= 0 || hit.distance >= distance) continue;
+                // SphereCast returns the contact point, not the capsule's foot.
+                // Index and sweep the supported body pose; retain the native normal.
+                Vector3 foot = footprint ? hit.point : origin + Vector3.down * (hit.distance + r);
+                if (Mathf.Abs(foot.y - point.y) > reach - .08f) continue;
+                best = hit; best.point = foot; distance = hit.distance;
             }
             return distance != Single.MaxValue;
         }
@@ -297,20 +311,15 @@ namespace SousChef.Plugin.Navigation
             point = guess; support = null;
             if (!Ground(guess, out hit)) return false;
             point.y = hit.point.y; support = hit.collider;
-            float highest = point.y, lowest = point.y;
-            // Whole-footprint support: do not bridge a hole with the chef centre alone.
+            // Keep footprint support checks, but do not demand that ray heights
+            // form a staircase. Native spherical contact already supplies the
+            // continuous body pose and slope; wedge lips are not Steppable ledges.
             for (int i = 0; i < 4; i++)
             {
                 Vector3 offset = i < 2 ? Vector3.right * (i == 0 ? clearance : -clearance) : Vector3.forward * (i == 2 ? clearance : -clearance);
                 RaycastHit edge;
-                if (!Ground(point + offset, out edge) || !SupportConnected(hit, edge)) return false;
-                highest = Mathf.Max(highest, edge.point.y); lowest = Mathf.Min(lowest, edge.point.y);
+                if (!Ground(point + offset, out edge, true)) return false;
             }
-            if (!WalkHeight.Connected(lowest, highest, StepHeight)) return false;
-            // Model native step-up support under the capsule footprint. Raising
-            // only the planning body avoids treating a walkable riser as a wall;
-            // actual movement remains entirely in the game's locomotion code.
-            point.y = highest;
             Vector3 low, high; Capsule(point, out low, out high, clearance);
             int count = Physics.OverlapCapsuleNonAlloc(low, high, clearance, overlaps, ~0, QueryTriggerInteraction.Collide); Queries++;
             if (count == overlaps.Length) { Overflow = true; return false; }
@@ -320,6 +329,7 @@ namespace SousChef.Plugin.Navigation
         private Vector3 Approximate(WalkCell cell) { return new Vector3(cell.X * Spacing, cell.Y * HeightBand, cell.Z * Spacing); }
         private Probe Sample(WalkCell hint)
         {
+            hint = GeometryCell(hint);
             Probe result;
             if (probes.TryGetValue(hint, out result)) return result;
             Vector3 point; Collider support;
@@ -337,14 +347,20 @@ namespace SousChef.Plugin.Navigation
             for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++)
             {
                 var key = new WalkCell(x + dx, y, z + dz); Probe probe = Sample(key);
-                if (probe.Valid && Segment(start, probe.Point)) result.Add(new WalkEdge(Resolved(key, probe), Vector3.Distance(start, probe.Point)));
+                int history = 0;
+                if (probe.Valid && Segment(start, probe.Point, ContactRadius, true, null, value => history = value))
+                {
+                    WalkCell resolved = Resolved(key, probe); resolved.SurfaceHistory = history;
+                    result.Add(new WalkEdge(resolved, Vector3.Distance(start, probe.Point)));
+                }
             }
             return result;
         }
         public IEnumerable<WalkEdge> Neighbours(WalkCell cell)
         {
             List<CachedEdge> result;
-            if (edges.TryGetValue(cell, out result)) return FilterFlow(cell, result);
+            WalkCell geometryCell = GeometryCell(cell);
+            if (edges.TryGetValue(geometryCell, out result)) return FilterFlow(cell, result);
             result = new List<CachedEdge>(); Probe from = Sample(cell);
             for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++)
             {
@@ -356,7 +372,7 @@ namespace SousChef.Plugin.Navigation
                 if (Segment(from.Point, to.Point, radius, false, support))
                     result.Add(new CachedEdge { Edge = new WalkEdge(Resolved(next, to), Vector3.Distance(from.Point, to.Point)), Support = support.ToArray() });
             }
-            edges[cell] = result; return FilterFlow(cell, result);
+            edges[geometryCell] = result; return FilterFlow(cell, result);
         }
         private IEnumerable<WalkEdge> FilterFlow(WalkCell from, List<CachedEdge> candidates)
         {
@@ -369,10 +385,26 @@ namespace SousChef.Plugin.Navigation
                 // geometry. Moving closer must reveal previously clipped edges.
                 if (!b.Valid || (b.Point - Position).sqrMagnitude > (Range - 2) * (Range - 2)) continue;
                 bool clear = true;
+                IMovingSurface current = MovingSurface(a.Ground), previous = null;
+                if (from.SurfaceHistory != 0) surfaceHistories.TryGetValue(from.SurfaceHistory, out previous);
                 foreach (GroundSample sample in cached.Support)
-                    if (sample.Ground == null || !CanWalkDirection(a.Point, b.Point, sample.Ground, sample.Point)) { clear = false; break; }
-                if (clear) yield return edge;
+                {
+                    TrackSurface(sample.Ground, sample.Point, ref current, ref previous);
+                    if (sample.Ground == null || !CanWalkDirection(a.Point, b.Point, sample.Ground, sample.Point, previous)) { clear = false; break; }
+                }
+                if (clear)
+                {
+                    WalkCell destination = edge.Cell; destination.SurfaceHistory = SurfaceHistory(previous);
+                    yield return new WalkEdge(destination, edge.Distance);
+                }
             }
+        }
+        private static WalkCell GeometryCell(WalkCell cell) { return new WalkCell(cell.X, cell.Y, cell.Z); }
+        private int SurfaceHistory(IMovingSurface surface)
+        {
+            var component = surface as Component;
+            if (component == null) return 0;
+            int id = component.GetInstanceID(); surfaceHistories[id] = surface; return id;
         }
         private WalkCell Resolved(WalkCell hint, Probe probe)
         {
@@ -383,14 +415,25 @@ namespace SousChef.Plugin.Navigation
             return key;
         }
         public bool Segment(Vector3 from, Vector3 to)
+        { int history = 0; return Segment(from, to, ref history); }
+        public bool Segment(Vector3 from, Vector3 to, ref int surfaceHistory)
         {
             bool entering = Vector3.Distance(from, Position) < .02f;
-            return Segment(from, to, entering ? ContactRadius : radius, true);
+            int result = surfaceHistory;
+            bool clear = Segment(from, to, entering ? ContactRadius : radius, true, null, value => result = value, surfaceHistory);
+            surfaceHistory = result; return clear;
         }
-        private bool Segment(Vector3 from, Vector3 to, float clearance, bool checkFlow, List<GroundSample> samples = null)
+        private bool Segment(Vector3 from, Vector3 to, float clearance, bool checkFlow, List<GroundSample> samples = null, Action<int> history = null, int initialHistory = 0)
         {
             Vector3 previous = from;
             RaycastHit previousGround = new RaycastHit(); bool havePrevious = false;
+            IMovingSurface currentSurface = null, priorSurface = null;
+            if (checkFlow && initialHistory == 0 && Vector3.Distance(from, Position) < .02f)
+            {
+                currentSurface = MovingSurface(chef.GroundCollider);
+                if (currentSurface != null && chef.SurfaceMovable != null && previousSurface != null)
+                    priorSurface = previousSurface.GetValue(chef.SurfaceMovable) as IMovingSurface;
+            }
             bool clear = WalkSegments.Check(Vector3.Distance(from, to), delegate(float fraction)
             {
                 Vector3 point; Collider ground; RaycastHit centre;
@@ -402,13 +445,20 @@ namespace SousChef.Plugin.Navigation
                 // is bounded, and every sample still checks support and hazards.
                 if (!Stand(guess, out point, out ground, clearance, out centre) ||
                     !WalkHeight.Connected(guess.y, point.y, StepHeight) ||
-                    !WalkHeight.Connected(previous.y, point.y, StepHeight) || (havePrevious && !SupportConnected(previousGround, centre)) ||
-                    (checkFlow && !CanWalkDirection(from, to, ground, point))) return false;
+                    !WalkHeight.Connected(previous.y, point.y, StepHeight) || (havePrevious && !SupportConnected(previousGround, centre))) return false;
+                if (checkFlow)
+                {
+                    if (!havePrevious && initialHistory != 0)
+                    { currentSurface = MovingSurface(ground); surfaceHistories.TryGetValue(initialHistory, out priorSurface); }
+                    TrackSurface(ground, centre.point, ref currentSurface, ref priorSurface);
+                }
+                if (checkFlow && !CanWalkDirection(from, to, ground, centre.point, priorSurface)) return false;
                 if (!StepSweep(previous, point, clearance)) return false;
-                if (samples != null) samples.Add(new GroundSample { Point = point, Ground = ground });
+                if (samples != null) samples.Add(new GroundSample { Point = centre.point, Ground = ground });
                 previous = point; previousGround = centre; havePrevious = true;
                 return true;
             });
+            if (clear && !Overflow && history != null) history(SurfaceHistory(priorSurface));
             return clear && !Overflow;
         }
         private bool StepSweep(Vector3 from, Vector3 to, float clearance)
@@ -431,11 +481,24 @@ namespace SousChef.Plugin.Navigation
             for (int i = 0; i < count; i++) if (Blocks(hits[i].collider)) return false;
             return true;
         }
-        public Vector3 Flow(Vector3 at, Collider ground)
+        private void TrackSurface(Collider ground, Vector3 point, ref IMovingSurface current, ref IMovingSurface previous)
+        {
+            IMovingSurface next = MovingSurface(ground);
+            if (next == null) { current = previous = null; return; }
+            if (next == current) return;
+            previous = current;
+            // Native travelators retain their entering belt through a corner.
+            // For a connector starting under the chef, preserve that live history.
+            if (current == null && ground == chef.GroundCollider && Vector3.Distance(point, Position) < .1f &&
+                chef.SurfaceMovable != null && previousSurface != null)
+                previous = previousSurface.GetValue(chef.SurfaceMovable) as IMovingSurface;
+            current = next;
+        }
+        public Vector3 Flow(Vector3 at, Collider ground, IMovingSurface previous = null)
         {
             Vector3 drift = Vector3.zero;
             IMovingSurface surface = MovingSurface(ground);
-            if (surface != null) drift += surface.CalculateVelocityAtPoint(at, null);
+            if (surface != null) drift += surface.CalculateVelocityAtPoint(at, previous);
             foreach (var pair in winds)
             {
                 WindVolume wind = pair.Value;
@@ -471,12 +534,12 @@ namespace SousChef.Plugin.Navigation
             // speed or surface velocity is retained across updates.
             speeds[id] = speed; return speed;
         }
-        private bool CanWalkDirection(Vector3 from, Vector3 to, Collider ground, Vector3 at)
+        private bool CanWalkDirection(Vector3 from, Vector3 to, Collider ground, Vector3 at, IMovingSurface previous = null)
         {
             if ((to - from).sqrMagnitude < .0001f) return true;
             float speed = Speed(ground);
             if (winds.Count == 0 && MovingSurface(ground) == null) return speed > .1f;
-            Vector3 drift = Flow(at, ground); float x, z;
+            Vector3 drift = Flow(at, ground, previous); float x, z;
             return WalkingSteering.Direction(to.x - from.x, to.z - from.z, drift.x, drift.z, speed, out x, out z);
         }
         private IGridLocation Grid(Collider target)
@@ -491,7 +554,7 @@ namespace SousChef.Plugin.Navigation
             }
             return grid;
         }
-        public bool Approach(Vector3 foot, Collider target, out Vector3 stance)
+        public bool Approach(Vector3 foot, Collider target, out Vector3 stance, int surfaceHistory = 0)
         {
             stance = foot;
             if (target == null || (interactMask & (1 << target.gameObject.layer)) == 0) return false;
@@ -524,7 +587,7 @@ namespace SousChef.Plugin.Navigation
             Vector3 supported; Collider support;
             if (!Stand(stance, out supported, out support) || Mathf.Abs(supported.y - foot.y) > .22f) return false;
             stance = supported;
-            return Sight(stance, target) && Segment(foot, stance);
+            return Sight(stance, target) && Segment(foot, stance, ref surfaceHistory);
         }
         public bool Sight(Vector3 foot, Collider target)
         {

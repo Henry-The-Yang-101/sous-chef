@@ -19,6 +19,12 @@ internal static class Program
         public Vector3 Velocity;
         public Vector3 CalculateVelocityAtPoint(Vector3 point, IMovingSurface previous) { return Velocity; }
     }
+    private sealed class CornerBelt : MonoBehaviour, IMovingSurface
+    {
+        public IMovingSurface Entering;
+        public Vector3 CalculateVelocityAtPoint(Vector3 point, IMovingSurface previous)
+        { return previous == Entering ? new Vector3(1,0,0) : new Vector3(-5,0,0); }
+    }
     private sealed class StationGrid : MonoBehaviour, IGridLocation
     {
         public GridManager Manager;
@@ -51,6 +57,36 @@ internal static class Program
             };
             Physics.Overlap = (a,b,r) => new Collider[0];
             Physics.Cast = (a,b,r,d,length) => new RaycastHit[0];
+            Physics.GroundSphere = (p,r,d,length) =>
+            {
+                if (d.y > -.99f) return new RaycastHit[0];
+                var hits = new List<RaycastHit>();
+                foreach (Floor floor in Colliders.OfType<Floor>())
+                {
+                    if (!floor.enabled) continue;
+                    Vector3 contact = p - floor.Normal*r, normal=floor.Normal;
+                    float? y = floor.Elevation(contact.x,contact.z);
+                    float centreY=float.NegativeInfinity;
+                    if (y.HasValue) {contact.y=y.Value;centreY=contact.y+normal.y*r;}
+                    else
+                    {
+                        // Rounded contact at an analytical surface's boundary.
+                        // Sampling is fixture-only; production uses PhysX SphereCast.
+                        for (int axis=0;axis<2;axis++) for(int i=-32;i<=32;i++)
+                        {
+                            float offset=r*i/32f;
+                            Vector3 q=p+(axis==0 ? Vector3.right : Vector3.forward)*offset;
+                            float? edgeY=floor.Elevation(q.x,q.z); if(!edgeY.HasValue) continue;
+                            q.y=edgeY.Value;float rise=(float)Math.Sqrt(Math.Max(0,r*r-offset*offset));
+                            if(q.y+rise<=centreY) continue;
+                            centreY=q.y+rise;contact=q;normal=(new Vector3(p.x,centreY,p.z)-q).normalized;
+                        }
+                    }
+                    float distance=p.y-centreY;
+                    if (distance>0 && distance<=length) hits.Add(new RaycastHit {collider=floor,point=contact,normal=normal,distance=distance});
+                }
+                return hits.ToArray();
+            };
         }
         public Floor AddFloor(Func<float,float,float?> elevation, Vector3? normal = null)
         {
@@ -93,7 +129,7 @@ internal static class Program
         var w = new World(); w.AddFloor((x,z) => x < .5f ? 0 : (float?)null);
         Floor upper = w.AddFloor((x,z) => x >= .5f ? .5f : (float?)null);
         var physics = w.Ready(); Vector3 point; Collider support;
-        Check(!physics.Stand(new Vector3(.4f,0,0),out point,out support),"a low non-Steppable lip cannot raise the planning body");
+        Check(physics.Stand(new Vector3(.4f,0,0),out point,out support) && point.y > .4f,"sphere probe resolves a supported candidate; a route must separately prove the ascent");
         Check(!physics.Segment(Vector3.zero,new Vector3(1,.5f,0)),"non-Steppable ascent is not executable");
         Check(!physics.Segment(new Vector3(1,.5f,0),Vector3.zero),"non-Steppable drop is not a walking shortcut");
         var nearLip = new WalkCell(0,0,0);
@@ -105,6 +141,26 @@ internal static class Program
         Check(physics.Neighbours(nearLip).Any(e => e.Cell.X == 1 && e.Cell.Z == 0),"adding Steppable invalidates the old cached rejection");
         w = new World(); w.AddFloor((x,z) => .5f*x,new Vector3(-.5f,1,0).normalized); physics=w.Ready();
         Check(physics.Segment(Vector3.zero,new Vector3(1,.5f,0)),"continuous ramp does not require Steppable");
+        w = new World(); w.Chef.GetComponent<CapsuleCollider>().radius = .4f; w.AddFloor((x,z) => 1.2f*x,new Vector3(-1.2f,1,0).normalized); physics=w.Ready();
+        Check(physics.Stand(Vector3.zero,out point,out support),"50-degree ramp supports a footprint spanning more than one step height");
+        Check(physics.Segment(Vector3.zero,new Vector3(1,1.2f,0)),"steep continuous ramp remains traversable");
+        w = new World();
+        w.Chef.GetComponent<CapsuleCollider>().radius = .4f;
+        // Flat treads joined by a 50-degree wedge, as in the installed festive stairs.
+        w.AddFloor((x,z) => x <= 0 ? 0 : (float?)null);
+        w.AddFloor((x,z) => x > 0 && x < .4f ? 1.2f*x : (float?)null,new Vector3(-1.2f,1,0).normalized);
+        w.AddFloor((x,z) => x >= .4f ? .48f : (float?)null);
+        physics=w.Ready();
+        Check(physics.Segment(new Vector3(-.6f,0,0),new Vector3(1,.48f,0)),"footprint follows the wedge between flat treads without demanding Steppable");
+        w = new World(); w.Chef.GetComponent<CapsuleCollider>().radius = .4f;
+        // Cross-section measured in s_wizard_school_3_4: the wedge begins
+        // 0.17 above the lower tread. Rounded native contact bridges this lip.
+        w.AddFloor((x,z) => x <= .345f ? 0 : (float?)null);
+        w.AddFloor((x,z) => x >= .229111f && x < .515248f ? .170646f+1.191754f*(x-.229111f) : (float?)null,new Vector3(-1.191754f,1,0).normalized);
+        w.AddFloor((x,z) => x >= .515248f ? .502f : (float?)null);
+        physics=w.Ready();
+        Check(physics.Segment(new Vector3(-.6f,0,0),new Vector3(1,.502f,0)),"native-sized sphere contact traverses the captured wizard stair wedge lip");
+        Check(physics.Segment(new Vector3(1,.502f,0),new Vector3(-.6f,0,0)),"captured stair wedge also connects on descent");
     }
     private static void InteriorFlow()
     {
@@ -126,6 +182,22 @@ internal static class Program
         physics=w.Ready();
         Check(!physics.Neighbours(start).Any(e => e.Cell.Equals(end)),"interior wind is checked at support samples");
         Check(!physics.Segment(Vector3.zero,new Vector3(1,0,0)),"wind near the start cannot hide outside a long segment's midpoint");
+
+        w=new World(); var incoming=w.AddFloor((x,z) => x < .1f ? 0 : (float?)null);
+        var entering=incoming.gameObject.Add(new Belt {Velocity=new Vector3(1,0,0)});
+        var corner=w.AddFloor((x,z) => x >= .1f ? 0 : (float?)null);
+        corner.gameObject.Add(new CornerBelt {Entering=entering}); physics=w.Ready();
+        Check(physics.Segment(Vector3.zero,new Vector3(.4f,0,0)),"corner belt receives the previous surface for every sample after entering");
+        var cornerCell=physics.Neighbours(start).First(e=>e.Cell.X==1 && e.Cell.Z==0).Cell;
+        Check(cornerCell.SurfaceHistory!=0,"cached edges retain entering conveyor as graph state");
+        Check(!cornerCell.Equals(end),"same position with a different entering belt is a distinct flow state");
+        Check(physics.Neighbours(cornerCell).Any(e=>e.Cell.X==2 && e.Cell.Z==0),"conveyor history persists across multiple graph edges");
+        Check(!physics.Neighbours(end).Any(e=>e.Cell.X==2 && e.Cell.Z==0),"cached geometry does not reuse another arrival's flow permission");
+        int history=0;
+        Check(physics.Segment(Vector3.zero,new Vector3(.4f,0,0),ref history) &&
+            physics.Segment(new Vector3(.4f,0,0),new Vector3(.8f,0,0),ref history),"remaining route checks carry conveyor history across segment boundaries");
+        w.Chef.GroundCollider=corner; w.Chef.transform.position=new Vector3(.15f,0,0); w.Chef.SurfaceMovable.SetPrevious(entering); physics.Refresh(w.Chef);
+        Check(physics.Segment(w.Chef.transform.position,new Vector3(.4f,0,0)),"execution connector retains the chef's native previous belt after crossing a seam");
     }
     private static void MovingBoundary()
     {

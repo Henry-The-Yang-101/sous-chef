@@ -13,7 +13,9 @@ analytical floors and injectable collision queries. No game process, input
 connection or installed plugin is touched.
 
 Coverage includes non-Steppable ledges, native stair markers, continuous ramps,
-step-component cache reconciliation, intermediate conveyor/wind samples, changing
+native-size spherical contact at measured wizard-stair wedge lips, steep ramps,
+step-component cache reconciliation, conveyor-corner history across graph edges,
+intermediate conveyor/wind samples, changing
 flow on cached edges, moving search boundaries, arrival under wind and external
 pushes, shared platform translation/rotation, fallback from an unreachable
 retained side, preserved reachable-side preference, slow-frame movement windows

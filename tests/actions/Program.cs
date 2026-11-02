@@ -43,6 +43,7 @@ internal static class Program
             Colliders.Add(floor);Colliders.Add(box);
             Physics.Nearby=(p,r)=>Colliders.ToArray();
             Physics.Ray=(p,d,length,mask)=>d.y<-.9f && p.y>=0 && p.y<=length ? new[] {new RaycastHit {collider=floor,point=new Vector3(p.x,0,p.z),normal=Vector3.up,distance=p.y}} : new RaycastHit[0];
+            Physics.GroundSphere=(p,r,d,length)=>Physics.Ray(p-Vector3.up*r,d,length,1);
             Physics.Overlap=(a,b,r)=>new Collider[0];Physics.Cast=(a,b,r,d,l)=>new RaycastHit[0];
             Physics.Penetration=(a,p,q,b,r,s)=>false;Physics.gravity=new Vector3(0,-9.81f,0);
             Chef.CurrentInteractionObjects.m_TheOriginalHandlePickup=Target;

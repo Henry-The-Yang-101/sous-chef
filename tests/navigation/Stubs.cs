@@ -138,7 +138,8 @@ namespace UnityEngine
         public static Func<Collider,Vector3,Quaternion,Collider,Vector3,Quaternion,bool> Penetration=(a,p,q,b,r,s)=>false;
         public static bool ComputePenetration(Collider a,Vector3 p,Quaternion q,Collider b,Vector3 r,Quaternion s,out Vector3 direction,out float distance) { direction=Vector3.zero;distance=0;return Penetration(a,p,q,b,r,s); }
         public static Func<Vector3,float,Vector3,float,RaycastHit[]> Sphere = (p,r,d,length) => new RaycastHit[0];
-        public static int SphereCastNonAlloc(Vector3 p,float r,Vector3 d,RaycastHit[] output,float length,int mask,QueryTriggerInteraction q) { return Copy(Sphere(p,r,d,length),output); }
+        public static Func<Vector3,float,Vector3,float,RaycastHit[]> GroundSphere = (p,r,d,length) => new RaycastHit[0];
+        public static int SphereCastNonAlloc(Vector3 p,float r,Vector3 d,RaycastHit[] output,float length,int mask,QueryTriggerInteraction q) { return Copy((mask==1 ? GroundSphere : Sphere)(p,r,d,length),output); }
         public static Func<Vector3,Vector3,float,int,RaycastHit[]> Ray;
         public static Func<Vector3,Vector3,float,Collider[]> Overlap;
         public static Func<Vector3,Vector3,float,Vector3,float,RaycastHit[]> Cast;
@@ -201,7 +202,12 @@ public static class PlayerInputLookup
 public class WindVolume : UnityEngine.MonoBehaviour { private UnityEngine.LayerMask m_windFilter = ~0; public UnityEngine.Vector3 Velocity; public UnityEngine.Vector3 GetVelocity() { return Velocity; } }
 #pragma warning restore CS0414
 public class WindAccumulator : UnityEngine.MonoBehaviour { public UnityEngine.Vector3 Velocity; public UnityEngine.Vector3 GetVelocity() { return Velocity; } }
-public class SurfaceMovable : UnityEngine.MonoBehaviour { public UnityEngine.Vector3 Velocity; public UnityEngine.Vector3 GetVelocity() { return Velocity; } }
+public class SurfaceMovable : UnityEngine.MonoBehaviour
+{
+    private IMovingSurface m_prevSurface;
+    public void SetPrevious(IMovingSurface value) { m_prevSurface=value; }
+    public UnityEngine.Vector3 Velocity; public UnityEngine.Vector3 GetVelocity() { return Velocity; }
+}
 public class RigidbodyMotion { public UnityEngine.Vector3 Velocity; public UnityEngine.Vector3 GetVelocity() { return Velocity; } public UnityEngine.Vector3 GetVelocityXZ() { return Velocity; } }
 public interface IMovingSurface { UnityEngine.Vector3 CalculateVelocityAtPoint(UnityEngine.Vector3 point, IMovingSurface previous); }
 public class PlayerPhysicsSurfaceProperties { public bool UseOverrideGravityNormal; public float Slidiness,Slippiness,SpeedMultiplier=1; }
