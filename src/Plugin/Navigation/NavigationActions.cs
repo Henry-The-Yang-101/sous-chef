@@ -58,7 +58,7 @@ namespace SousChef.Plugin.Navigation
                 "groundNormal", ground == null ? null : Values.Vector(ground.GetGroundNormal()),
                 "groundDistance", ground == null ? 0 : ground.GetGroundDistance(),
                 "goal", Values.Vector(goal), "input", Values.Vector(input), "route", points,
-                "failure", physics.Failure, "startFailures", phase == "no_safe_start" ? physics.StartFailures : null));
+                "settlement", physics.Settlement, "failure", physics.Failure, "startFailures", phase == "no_safe_start" ? physics.StartFailures : null));
             while (executionTrace.Count > 96) executionTrace.Dequeue();
         }
         public NavigationActions(Action<Vector3, int> walk, Action halt) { move = walk; neutral = halt; physics.TraceEnabled = Environment.GetEnvironmentVariable("SOUS_CHEF_NAV_TRACE") == "1"; }
@@ -251,7 +251,7 @@ namespace SousChef.Plugin.Navigation
             int commandMilliseconds = WalkingCommand.Milliseconds(Time.unscaledDeltaTime);
             if (commandMilliseconds == 0) { Stop("unsafe_update_interval"); return; }
             string error = physics.Refresh(player);
-            if ((error == null || error == "not_grounded") && physics.NeedsGroundSettling && physics.ClearLanding())
+            if ((error == null || error == "not_grounded") && physics.NeedsGroundSettling())
             {
                 if (settlingSince < 0) settlingSince = Time.realtimeSinceStartup;
                 if (Time.realtimeSinceStartup - settlingSince > 2f) { Stop("ground_contact_timeout"); return; }

@@ -283,7 +283,11 @@ endpoints can otherwise incorrectly certify that approach.
 A running action can enter `settling_ground` when native stair momentum lifts the
 chef beyond GroundCast's contact distance. It issues neutral input while checking
 a clear, collision-free landing below the body, within the native step-height
-range. Body contact (native ground distance within the collision skin) resumes the same
-action and forces replanning; the native proximity flag alone is insufficient. Absent or
-blocked support stops immediately, and contact must return within the existing
-two-second stall interval. This does not allow airborne steering across holes.
+range. Current capsule geometry, rather than the cached GroundCast distance, determines
+when the body has settled. A temporary overlap is recoverable only when it is
+with the independently probed supporting collider, the supported pose is clear,
+and native `ComputePenetration` proves an upward resolution within step height.
+The game resolves that contact under neutral input; the bridge never adjusts the
+chef's position. Other blocking overlaps still stop the action. Settling forces
+replanning and must finish within the existing two-second stall interval. This
+does not allow airborne steering across holes.

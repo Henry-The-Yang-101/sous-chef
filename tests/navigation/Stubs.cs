@@ -136,7 +136,9 @@ namespace UnityEngine
         public static Vector3 gravity = new Vector3(0,-9.81f,0);
         public static Func<Vector3,float,Collider[]> Nearby;
         public static Func<Collider,Vector3,Quaternion,Collider,Vector3,Quaternion,bool> Penetration=(a,p,q,b,r,s)=>false;
-        public static bool ComputePenetration(Collider a,Vector3 p,Quaternion q,Collider b,Vector3 r,Quaternion s,out Vector3 direction,out float distance) { direction=Vector3.zero;distance=0;return Penetration(a,p,q,b,r,s); }
+        public static Vector3 PenetrationDirection = Vector3.up;
+        public static float PenetrationDistance = .01f;
+        public static bool ComputePenetration(Collider a,Vector3 p,Quaternion q,Collider b,Vector3 r,Quaternion s,out Vector3 direction,out float distance) { bool hit=Penetration(a,p,q,b,r,s);direction=PenetrationDirection;distance=PenetrationDistance;return hit; }
         public static Func<Vector3,float,Vector3,float,RaycastHit[]> Sphere = (p,r,d,length) => new RaycastHit[0];
         public static Func<Vector3,float,Vector3,float,RaycastHit[]> GroundSphere = (p,r,d,length) => new RaycastHit[0];
         public static int SphereCastNonAlloc(Vector3 p,float r,Vector3 d,RaycastHit[] output,float length,int mask,QueryTriggerInteraction q) { return Copy((mask==1 ? GroundSphere : Sphere)(p,r,d,length),output); }

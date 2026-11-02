@@ -41,6 +41,7 @@ namespace SousChef.Plugin.Navigation
         private float radius, nativeRadius, height, pivotToFoot, lastReconcile, walkingSpeed, stepHeight;
         public bool TraceEnabled;
         public object StartFailures { get; private set; }
+        public object Settlement { get; private set; }
         private string failureReason;
         private Vector3 failurePoint;
         private Collider failureCollider;
@@ -490,17 +491,45 @@ namespace SousChef.Plugin.Navigation
         // carries the capsule more than 0.3 units above a tread. A clear landing
         // below the current body permits neutral input while gravity settles it;
         // this does not authorize walking while airborne or over a missing floor.
-        public bool NeedsGroundSettling
+        public bool NeedsGroundSettling()
         {
-            get { return chef.GroundCollider == null || chef.GetComponent<GroundCast>().GetGroundDistance() > Skin; }
-        }
-        public bool ClearLanding()
-        {
+            Settlement = null;
             if (chef == null) return false;
-            Vector3 position = Position, support; Collider ground;
-            if (!Stand(position, out support, out ground, ContactRadius) ||
-                support.y > position.y + .025f || position.y - support.y > StepHeight) return false;
-            return Sweep(position, support, ContactRadius);
+            Vector3 position = Position, support; Collider ground; RaycastHit hit;
+            if (!Stand(position, out support, out ground, ContactRadius, out hit)) return false;
+            float gap = position.y - support.y;
+            // Use the current body and live geometry. GroundCast's cached point
+            // may still describe the preceding physics pose in this Update.
+            if (gap >= -.025f && gap <= StepHeight && (gap > Skin || chef.GroundCollider == null))
+            {
+                if (!Sweep(position, support, ContactRadius)) return false;
+                if (TraceEnabled) Settlement = Json.Object("reason", "landing", "gap", gap, "support", ground.GetInstanceID());
+                return true;
+            }
+            // A moving native capsule can temporarily penetrate a stair wedge.
+            // A cast starting in that contact rejects every direction, including
+            // escape. Prove that only the standable ground overlaps our inset body
+            // and that PhysX resolves the real capsule upward. Let native physics
+            // perform that resolution under neutral input; never move/teleport it.
+            Vector3 low, high; Capsule(position, out low, out high, ContactRadius);
+            int count = Physics.OverlapCapsuleNonAlloc(low, high, ContactRadius, overlaps, ~0, QueryTriggerInteraction.Collide); Queries++;
+            if (count == overlaps.Length) { Overflow = true; return false; }
+            bool contact = false;
+            for (int i = 0; i < count; i++)
+            {
+                if (!Blocks(overlaps[i])) continue;
+                if (overlaps[i] != ground) return false;
+                contact = true;
+            }
+            if (!contact) return false;
+            Vector3 direction; float distance;
+            Queries++;
+            bool resolves = Physics.ComputePenetration(capsule, capsule.transform.position, capsule.transform.rotation,
+                ground, ground.transform.position, ground.transform.rotation, out direction, out distance) &&
+                distance > 0 && distance <= StepHeight && direction.y >= .52992f;
+            if (resolves && TraceEnabled) Settlement = Json.Object("reason", "native_penetration", "depth", distance,
+                "direction", Values.Vector(direction), "support", ground.GetInstanceID());
+            return resolves;
         }
         private bool StepSweep(Vector3 from, Vector3 to, float clearance)
         {

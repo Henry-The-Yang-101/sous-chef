@@ -550,3 +550,14 @@ the tread. GroundCast's proximity flag is not resting contact. The follow-up
 waits with neutral input until native distance falls within collision skin, and
 adds a regression for this exact early-contact condition (93 navigation checks).
 Single-request live completion is still pending this follow-up installation.
+
+The next live run (`168ec7a`) exposed the remaining initial-contact failure at
+[15.38606, -0.99343, 5.78242]. Independent solid-box replay finds a clear supported
+pose at y=-0.91567, but all 25 initial sweeps hit the current wedge because the
+moving native capsule temporarily penetrates it. GroundCast still described the
+previous body position [15.45501, ..., 5.55534]. A new measured fixture reproduces
+both the rejected starts and their recovery after native contact resolution.
+Settling now uses current geometry and native `ComputePenetration`; it permits
+neutral waiting only for a clear landing or a verified upward supporting-ground
+contact, rejects other overlaps, and remains bounded. All 99 navigation checks
+pass; another single-request live climb is required before declaring completion.

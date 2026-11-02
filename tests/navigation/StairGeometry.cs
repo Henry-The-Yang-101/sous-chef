@@ -20,7 +20,7 @@ internal sealed class RecordedBox : Collider
         return q;
     }
     private float Distance(Vector3 p) { return Vector3.Distance(p, Closest(p)); }
-    public float CapsuleDistance(Vector3 a, Vector3 b)
+    private Vector3 CapsuleClosest(Vector3 a, Vector3 b)
     {
         float lo = 0, hi = 1;
         for (int i = 0; i < 24; i++)
@@ -28,8 +28,12 @@ internal sealed class RecordedBox : Collider
             float l = (2 * lo + hi) / 3, h = (lo + 2 * hi) / 3;
             if (Distance(Vector3.Lerp(a, b, l)) < Distance(Vector3.Lerp(a, b, h))) hi = h; else lo = l;
         }
-        return Math.Min(Math.Min(Distance(a), Distance(b)), Distance(Vector3.Lerp(a, b, (lo + hi) / 2)));
+        Vector3 result = Vector3.Lerp(a, b, (lo + hi) / 2);
+        if (Distance(a) < Distance(result)) result = a;
+        if (Distance(b) < Distance(result)) result = b;
+        return result;
     }
+    public float CapsuleDistance(Vector3 a, Vector3 b) { return Distance(CapsuleClosest(a, b)); }
     public RaycastHit? Sphere(Vector3 p, float radius, Vector3 direction, float length)
     {
         float t = 0;
@@ -58,10 +62,10 @@ internal sealed class RecordedBox : Collider
         return false;
     }
     private static Vector3 Read(JsonElement v) { return new Vector3(v[0].GetSingle(), v[1].GetSingle(), v[2].GetSingle()); }
-    public static List<RecordedBox> Install()
+    public static List<RecordedBox> Install(string fixture = "wizard-stair-corner.json")
     {
         var boxes = new List<RecordedBox>();
-        using (var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "fixtures/wizard-stair-corner.json"))))
+        using (var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "fixtures", fixture))))
             foreach (var record in json.RootElement.EnumerateArray())
             {
                 var m = record.GetProperty("matrix");
@@ -82,6 +86,18 @@ internal sealed class RecordedBox : Collider
         Physics.GroundSphere = (p, r, d, length) => boxes.Select(b => b.Sphere(p, r, d, length)).Where(h => h.HasValue).Select(h => h.Value).ToArray();
         Physics.Overlap = (a, b, r) => boxes.Where(c => c.CapsuleDistance(a, b) < r - .00001f).Cast<Collider>().ToArray();
         Physics.Cast = (a, b, r, d, length) => boxes.Where(c => c.Cast(a, b, r, d, length)).Select(c => new RaycastHit { collider = c }).ToArray();
+        Physics.Penetration = (a, ap, ar, b, bp, br) =>
+        {
+            var capsule = a as CapsuleCollider; var box = b as RecordedBox;
+            if (capsule == null || box == null) return false;
+            Vector3 centre = ap + capsule.center;
+            float halfAxis = Math.Max(0, capsule.height * .5f - capsule.radius);
+            Vector3 closest = box.CapsuleClosest(centre - Vector3.up * halfAxis, centre + Vector3.up * halfAxis);
+            Vector3 offset = closest - box.Closest(closest);
+            Physics.PenetrationDirection = offset.normalized;
+            Physics.PenetrationDistance = capsule.radius - offset.magnitude;
+            return Physics.PenetrationDistance > 0;
+        };
         return boxes;
     }
 }

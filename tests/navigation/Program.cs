@@ -55,6 +55,7 @@ internal static class Program
                 }
                 return hits.ToArray();
             };
+            Physics.Penetration = (a,p,ar,b,q,br) => false;
             Physics.Overlap = (a,b,r) => new Collider[0];
             Physics.Cast = (a,b,r,d,length) => new RaycastHit[0];
             Physics.GroundSphere = (p,r,d,length) =>
@@ -332,6 +333,24 @@ internal static class Program
         Check(!physics.Segment(w.Chef.transform.position,new Vector3(16.4f,-1.74191f,4.4f)), "planner rejects captured corner shortcut instead of bridging its blocked strip");
         Check(physics.Segment(new Vector3(15,-1.835624f,3.9f),new Vector3(15,-1.505f,4.9f)), "same captured wedge remains traversable through its front");
     }
+    private static void CapturedStairContact()
+    {
+        var w = new World();
+        var shape = w.Chef.GetComponent<CapsuleCollider>(); shape.radius = .4f; shape.height = 2; shape.center = Vector3.up;
+        var boxes = RecordedBox.Install("wizard-stair-contact.json"); w.Chef.GroundCollider = boxes[0];
+        w.Chef.transform.position = new Vector3(15.3860645f, -.993433f, 5.7824163f);
+        var physics = w.Ready(); Vector3 support; Collider ground;
+        Check(physics.Stand(w.Chef.transform.position, out support, out ground), "mid-stair capture has a clear supported body pose");
+        Check(!physics.Starts().Any(), "native initial penetration makes every ordinary start sweep fail");
+        Check(physics.NeedsGroundSettling(), "current capsule penetration identifies native upward contact recovery despite stale ground data");
+        w.Chef.transform.position = support;
+        Check(!physics.NeedsGroundSettling() && physics.Starts().Any(), "native contact resolution makes the same route start usable again");
+        w.Chef.transform.position = new Vector3(15.3860645f, -.993433f, 5.7824163f);
+        var overlap = Physics.Overlap;
+        var wall = new GameObject("unrelated wall").Add(new Collider());
+        Physics.Overlap = (a,b,r) => a.y < -.55f ? overlap(a,b,r).Concat(new[] {wall}).ToArray() : overlap(a,b,r);
+        Check(!physics.NeedsGroundSettling(), "an unrelated blocking overlap cannot be waved through as stair recovery");
+    }
     private static void GroundSettling()
     {
         var w = new World(); var floor = w.AddFloor((x,z) => Math.Abs(x)<2 && Math.Abs(z)<2 ? 0 : (float?)null);
@@ -359,7 +378,7 @@ internal static class Program
     }
     private static void Main()
     {
-        CapturedStairCorner(); GroundSettling(); StepsAndRamps(); InteriorFlow(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
+        CapturedStairCorner(); CapturedStairContact(); GroundSettling(); StepsAndRamps(); InteriorFlow(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
         Console.WriteLine("PASS: " + checks + " navigator integration checks (analytical geometry; not PhysX)");
     }
 }

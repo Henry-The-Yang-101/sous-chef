@@ -34,3 +34,9 @@ and preserves a front-on route. The pre-fix controller fails this regression.
 This replay still is not Unity PhysX; live execution remains a separate check.
 Ground-settling regressions cover neutral input, automatic continuation, missing
 floor rejection, and timeout without native ground reacquisition.
+
+`wizard-stair-contact.json` captures the mid-stair initial penetration that made
+all 25 starts fail. Its regression proves upward native resolution is eligible
+for neutral settling, the resolved pose restores usable starts, and an unrelated
+wall overlap is not eligible. GroundCast's stale point is not used as proof that
+the current body is resting.
