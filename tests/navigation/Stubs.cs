@@ -55,6 +55,7 @@ namespace UnityEngine
     public class Transform : Component
     {
         public Vector3 position, lossyScale = Vector3.one;
+        public Vector3[] Basis;
         public float yaw;
         public Quaternion rotation { get { return new Quaternion {Yaw=yaw}; } }
         public Transform parent;
@@ -65,7 +66,7 @@ namespace UnityEngine
         public bool IsChildOf(Transform other) { for (Transform t = this; t != null; t = t.parent) if (t == other) return true; return false; }
         private static Vector3 Rotate(Vector3 p, float angle) { float c = (float)Math.Cos(angle), s = (float)Math.Sin(angle); return new Vector3(p.x*c + p.z*s, p.y, p.z*c - p.x*s); }
         public Vector3 TransformPoint(Vector3 p) { return position + TransformVector(p); }
-        public Vector3 TransformVector(Vector3 p) { return Rotate(new Vector3(p.x*lossyScale.x, p.y*lossyScale.y, p.z*lossyScale.z), yaw); }
+        public Vector3 TransformVector(Vector3 p) { p=new Vector3(p.x*lossyScale.x,p.y*lossyScale.y,p.z*lossyScale.z); return Basis==null ? Rotate(p,yaw) : Basis[0]*p.x+Basis[1]*p.y+Basis[2]*p.z; }
         public Vector3 InverseTransformPoint(Vector3 p) { p = Rotate(p - position, -yaw); return new Vector3(p.x/lossyScale.x, p.y/lossyScale.y, p.z/lossyScale.z); }
     }
     public struct Vector3

@@ -18,6 +18,7 @@ namespace SousChef.Plugin.Navigation
         private static readonly FieldInfo interactionMask = typeof(PlayerControls).GetField("m_interactMask", BindingFlags.Instance | BindingFlags.NonPublic);
         private static readonly FieldInfo previousSurface = typeof(SurfaceMovable).GetField("m_prevSurface", BindingFlags.Instance | BindingFlags.NonPublic);
         private readonly Collider[] nearby = new Collider[4096], overlaps = new Collider[128];
+        private readonly List<Collider> settlingContacts = new List<Collider>();
         private readonly RaycastHit[] hits = new RaycastHit[128];
         private readonly Dictionary<WalkCell, Probe> probes = new Dictionary<WalkCell, Probe>();
         private readonly Dictionary<WalkCell, List<CachedEdge>> edges = new Dictionary<WalkCell, List<CachedEdge>>();
@@ -276,9 +277,12 @@ namespace SousChef.Plugin.Navigation
             float b = -Vector3.Dot(to.normal, delta) / to.normal.y;
             // Continuous slopes (including a ramp joining a flat floor) do not
             // need a step component. A discontinuity between flat treads does.
-            // Only roundoff belongs in this bound: adding the body skin here
-            // masks real height jumps and makes certification depend on sampling phase.
-            return rise >= Mathf.Min(0, Mathf.Min(a, b)) - .0001f && rise <= Mathf.Max(0, Mathf.Max(a, b)) + .0001f;
+            // Native sphere casts at rounded slope/tread joins have millimetre
+            // error between the reconstructed foot and returned tangent normal.
+            // Keep flat/flat ledges and near-flat mesh seams on the strict bound;
+            // every accepted slope connector still undergoes the full body sweep.
+            float tolerance = from.normal.y < .99f || to.normal.y < .99f ? .0025f : .0001f;
+            return rise >= Mathf.Min(0, Mathf.Min(a, b)) - tolerance && rise <= Mathf.Max(0, Mathf.Max(a, b)) + tolerance;
         }
         private bool Ground(Vector3 point, out RaycastHit best, float dropDistance = -1)
         {
@@ -341,6 +345,7 @@ namespace SousChef.Plugin.Navigation
             point = guess; support = null;
             if (!Ground(guess, out hit, dropDistance)) return Fail("ground_probe", guess);
             point.y = hit.point.y; support = hit.collider;
+            if (!SlopeInterior(point, support, clearance)) return Fail("slope_side_clearance", point, support);
             // GroundCast supports the rounded capsule across narrow tread seams.
             // Requiring a ray under every footprint edge rejects real stairs even
             // while the native sphere has stable contact. Segment checks repeat
@@ -350,6 +355,28 @@ namespace SousChef.Plugin.Navigation
             if (count == overlaps.Length) { Overflow = true; return false; }
             for (int i = 0; i < count; i++) if (Blocks(overlaps[i])) return Fail("body_overlap", point, overlaps[i]);
             return true;
+        }
+        // A sphere can touch a ramp while its centre is outside the side face.
+        // That diagonal approach is standable in isolation but native slope
+        // motion can push the next frame into the tread's vertical side. Reserve
+        // the chef footprint across the ramp, using its live oriented geometry.
+        private bool SlopeInterior(Vector3 point, Collider support, float clearance)
+        {
+            var box = support as BoxCollider;
+            if (box == null) return true;
+            Vector3 a = box.transform.TransformVector(Vector3.right);
+            Vector3 b = box.transform.TransformVector(Vector3.up);
+            Vector3 c = box.transform.TransformVector(Vector3.forward);
+            if (Mathf.Abs(b.normalized.y) > .99f) return true;
+            bool alongX = Mathf.Abs(a.normalized.y) < .01f;
+            Vector3 lateral = alongX ? a : Mathf.Abs(c.normalized.y) < .01f ? c : Vector3.zero;
+            float width = alongX ? box.size.x * a.magnitude : box.size.z * c.magnitude;
+            if (lateral.sqrMagnitude < .001f || width < nativeRadius * 3) return true;
+            float offset = Mathf.Abs(Vector3.Dot(point - box.transform.TransformPoint(box.center), lateral.normalized));
+            // Plan inside the full footprint. Actual-body connectors retain a
+            // smaller reserve for native lateral drift while exiting the ramp.
+            float margin = clearance >= radius - .0001f ? nativeRadius + .1f : nativeRadius * .5f;
+            return offset + margin <= width * .5f;
         }
         private Vector3 Approximate(WalkCell cell) { return new Vector3(cell.X * Spacing, cell.Y * HeightBand, cell.Z * Spacing); }
         private Probe Sample(WalkCell hint)
@@ -536,14 +563,18 @@ namespace SousChef.Plugin.Navigation
             // range below a capsule foot is 1 + radius; this differs from the
             // maximum step UP. Route probes retain their normal step bounds.
             float landingDrop = 1f + nativeRadius;
-            if (!Stand(position, out support, out ground, ContactRadius, out hit,
-                chef.GroundCollider == null ? landingDrop : -1)) return false;
+            if (!Stand(position, out support, out ground, ContactRadius, out hit, landingDrop))
+            { if (TraceEnabled) Settlement = Json.Object("rejected", "support", "failure", Failure); return false; }
             float gap = position.y - support.y;
             // Use the current body and live geometry. GroundCast's cached point
             // may still describe the preceding physics pose in this Update.
-            if (gap >= -.025f && gap <= landingDrop && chef.GroundCollider == null)
+            // The support and sweep capsule already use Skin. At low Update
+            // rates native motion can reach that skin before GroundCast's next
+            // update; do not reject the same clear pose using a smaller epsilon.
+            if (gap >= -Skin && gap <= landingDrop && (chef.GroundCollider == null || gap > .3f))
             {
-                if (!Sweep(position, support, ContactRadius)) return false;
+                if (!Sweep(position, support, ContactRadius))
+                { if (TraceEnabled) Settlement = Json.Object("rejected", "landing_sweep", "failure", Failure); return false; }
                 if (TraceEnabled) Settlement = Json.Object("reason", "landing", "gap", gap, "support", ground.GetInstanceID());
                 return true;
             }
@@ -558,16 +589,34 @@ namespace SousChef.Plugin.Navigation
             if (count == overlaps.Length) { Overflow = true; return false; }
             bool contact = false;
             var contacts = TraceEnabled ? new List<object>() : null;
-            for (int i = 0; i < count; i++)
+            // Stand/Sweep reuse the query buffers; retain the original overlap
+            // set while independently checking a native lateral depenetration.
+            settlingContacts.Clear();
+            for (int i = 0; i < count; i++) if (Blocks(overlaps[i])) settlingContacts.Add(overlaps[i]);
+            foreach (Collider collider in settlingContacts)
             {
-                Collider collider = overlaps[i];
-                if (!Blocks(collider)) continue;
                 if (Dangerous(collider) || (groundMask & (1 << collider.gameObject.layer)) == 0) return false;
                 Vector3 direction; float distance;
                 Queries++;
                 if (!Physics.ComputePenetration(capsule, capsule.transform.position, capsule.transform.rotation,
                     collider, collider.transform.position, collider.transform.rotation, out direction, out distance) ||
-                    distance <= 0 || distance > StepHeight || direction.y < .52992f) return false;
+                    distance <= 0 || distance > StepHeight)
+                { if (TraceEnabled) Settlement = Json.Object("rejected", "penetration", "collider", collider.name, "direction", Values.Vector(direction), "depth", distance); return false; }
+                if (direction.y < .52992f)
+                {
+                    // A landing can penetrate a tread lip before the next solver
+                    // step. Its shortest escape is sideways, even though a clear
+                    // resting pose is immediately above. Permit only shallow
+                    // ground contacts whose native horizontal resolution retains
+                    // a checked landing and clear supported connector.
+                    Vector3 resolved = position + direction * (distance + .01f), landing;
+                    Collider landingGround; RaycastHit landingHit;
+                    if (direction.y < -.01f || distance > nativeRadius * .25f ||
+                        support.y < position.y || support.y - position.y > StepHeight ||
+                        !Stand(resolved, out landing, out landingGround, ContactRadius, out landingHit) ||
+                        !Segment(support, landing, ContactRadius, false))
+                    { if (TraceEnabled) Settlement = Json.Object("rejected", "lateral_penetration", "collider", collider.name, "direction", Values.Vector(direction), "depth", distance); return false; }
+                }
                 contact = true;
                 if (contacts != null) contacts.Add(Json.Object("collider", collider.GetInstanceID(), "depth", distance, "direction", Values.Vector(direction)));
             }

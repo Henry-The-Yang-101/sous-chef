@@ -128,6 +128,30 @@ def start(args):
         raise
 
 
+def summarize_trace(samples):
+    """Summarize deduplicated native decisions; neutral input is not a physics stall."""
+    decisions = sorted(samples.values(), key=lambda row: row['frame'])
+    pauses, current = [], None
+    for decision in decisions:
+        if decision['phase'] == 'settling_ground':
+            if current is None:
+                current = [decision['time'], decision['time']]
+                pauses.append(current)
+            current[1] = decision['time']
+        elif current is not None:
+            current[1] = decision['time']
+            current = None
+    return {
+        'decisionFrames': len(decisions),
+        'groundPauseCount': len(pauses),
+        'longestGroundPauseSeconds': max((end - start for start, end in pauses), default=0),
+        'neutralGroundCommandSeconds': sum(end - start for start, end in pauses),
+        'steeringAdjustments': sum(row['phase'] == 'steer_adjusted' for row in decisions),
+        'firstPosition': decisions[0]['position'] if decisions else None,
+        'lastPosition': decisions[-1]['position'] if decisions else None,
+    }
+
+
 def navigate_leg(client, target, args, trace):
     result = {'success': False}
     catalog_deadline = time.monotonic() + args.timeout
@@ -147,12 +171,17 @@ def navigate_leg(client, target, args, trace):
         raise RuntimeError(f'Expected one reachable target matching {target!r}, found {len(matches)}')
     result['target'] = matches[0]
     started = time.monotonic()
+    native_trace = {}
     client.navigate_to(matches[0]['id'])
     while time.monotonic() - started < args.timeout:
         status = client.status()
         trace.write(json.dumps(status) + '\n')
         trace.flush()
         nav = status['navigation']
+        for decision in nav.get('executionTrace') or []:
+            # The endpoint repeats a rolling window; the final decision in a
+            # frame supersedes a proposed heading that was subsequently changed.
+            native_trace[decision['frame']] = decision
         if nav['state'] != 'navigating':
             result['success'] = nav['reason'] == getattr(args, 'arrival', 'arrived')
             result['reason'] = nav['reason']
@@ -167,6 +196,7 @@ def navigate_leg(client, target, args, trace):
         client.stop()
         result['reason'] = 'test_timeout'
     result['seconds'] = time.monotonic() - started
+    result['motion'] = summarize_trace(native_trace)
     return result
 
 

@@ -13,6 +13,19 @@ import native_simulator as sim
 
 
 class NativeSimulatorTests(unittest.TestCase):
+    def test_motion_summary_reports_neutral_episodes_separately_from_arrival(self):
+        samples = {frame: {'frame': frame, 'time': time, 'phase': phase, 'position': [0, 0, frame]}
+                   for frame, time, phase in ((1, 0., 'steer'), (2, .1, 'settling_ground'),
+                       (3, .15, 'settling_ground'), (4, .3, 'steer_adjusted'),
+                       (5, .4, 'settling_ground'), (6, .5, 'arrived'))}
+        result = sim.summarize_trace(samples)
+        self.assertEqual(result['groundPauseCount'], 2)
+        self.assertAlmostEqual(result['longestGroundPauseSeconds'], .2)
+        self.assertAlmostEqual(result['neutralGroundCommandSeconds'], .3)
+        self.assertEqual(result['steeringAdjustments'], 1)
+        self.assertEqual(result['lastPosition'], [0, 0, 6])
+        self.assertEqual(sim.summarize_trace({})['decisionFrames'], 0)
+
     def test_reset_waits_for_new_ready_generation(self):
         states = [
             {'generation': 1, 'inRound': True},

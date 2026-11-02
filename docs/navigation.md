@@ -335,16 +335,19 @@ route rather than braking off the stair merely because the body is above a tread
 Current capsule geometry detects temporary penetrations independently of the cached
 ground point. An overlap is recoverable only when it is
 with ground-layer colliders, the independently probed supported pose is clear,
-and native `ComputePenetration` proves an upward resolution within step height
-for every contact. Treads and wedges can overlap the capsule simultaneously.
+and native `ComputePenetration` proves an upward resolution within step height,
+or a shallow lateral ground resolution with an independently checked landing
+and supported connector. Deep lateral contacts and unrelated walls are rejected.
+Treads and wedges can overlap the capsule simultaneously.
 The game resolves that contact under neutral input; the bridge never adjusts the
 chef's position. Other blocking overlaps still stop the action. Settling forces
 replanning and must finish within the existing two-second stall interval. This
 does not allow airborne steering across holes.
 
-The continuous-support height bound allows floating-point roundoff only. Body
-clearance is not a height-discontinuity allowance: mixing the two made a small
-jump pass or fail depending on where a segment's samples started. If native
+The continuous-support height bound allows floating-point roundoff on flat
+contacts and 2.5 mm of native sphere-query tangent error at sloped joins. Body
+clearance is not a height-discontinuity allowance. Every accepted connector still
+requires a clear capsule sweep. If native
 motion displaces the chef from a previously valid connector, execution now
 replans from the actual position before declaring the destination blocked.
 Native sphere casts at internal flat-mesh seams can also report a slightly
