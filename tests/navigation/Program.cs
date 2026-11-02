@@ -314,6 +314,18 @@ internal static class Program
     }
     private static void SlowFrames()
     {
+        var cruise = new World(); cruise.AddFloor((x,z) => Math.Abs(x)<4 && Math.Abs(z)<4 ? 0 : (float?)null);
+        cruise.Chef.transform.position = new Vector3(0,0,-2.3f);
+        var cruiseNavigation = cruise.Navigate(cruise.AddStation());
+        Time.realtimeSinceStartup += .02f; cruiseNavigation.Tick(cruise.Chef);
+        Check(cruise.LastMilliseconds == 54 && cruise.LastInput.magnitude > .9f,
+            "open supported travel certifies a longer window through ordinary native read jitter");
+        cruise = new World(); cruise.AddFloor((x,z) => Math.Abs(x)<4 && Math.Abs(z)<4 ? 0 : (float?)null);
+        cruise.Chef.transform.position = new Vector3(0,0,-1.3f);
+        cruiseNavigation = cruise.Navigate(cruise.AddStation());
+        Time.realtimeSinceStartup += .02f; cruiseNavigation.Tick(cruise.Chef);
+        Check(cruise.LastMilliseconds == 17 && cruise.LastInput.magnitude > .9f,
+            "final approach keeps the original movement and braking window");
         var w=new World(); w.AddFloor((x,z) => Math.Abs(x)<2 && Math.Abs(z)<2 ? 0 : (float?)null);
         w.Chef.transform.position=new Vector3(0,0,-1.3f); var station=w.AddStation(); var navigation=w.Navigate(station);
         Time.deltaTime=Time.unscaledDeltaTime=.1f; Time.realtimeSinceStartup += .1f; navigation.Tick(w.Chef);

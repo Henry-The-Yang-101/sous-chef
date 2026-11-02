@@ -33,6 +33,11 @@ namespace SousChef.Core
     {
         public static int OwnershipMilliseconds(int movementMilliseconds)
         { return Math.Max(500, movementMilliseconds + 50); }
+        // Optional continuation through one delayed Update plus a physics tick.
+        // The caller must certify this entire motion window before using it.
+        // Keep slow-frame commands unchanged and ordinary extensions <= 100 ms.
+        public static int ContinuationMilliseconds(int frameMilliseconds)
+        { return frameMilliseconds <= 0 ? 0 : Math.Max(frameMilliseconds, Math.Min(100, frameMilliseconds * 2 + 20)); }
         // The motion window is also enforced at the native input read. Keep a
         // separate, longer ownership lease so frame jitter can neutralize input
         // without abandoning the action. Long stalls still stop safely.

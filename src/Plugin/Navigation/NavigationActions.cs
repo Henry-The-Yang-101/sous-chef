@@ -389,6 +389,18 @@ namespace SousChef.Plugin.Navigation
                     if (!found) { Stop("next_step_unsafe"); return; }
                 }
             }
+            // Native input can be read before this component's next Update.
+            // A lease lasting exactly the preceding frame often expires there.
+            // Extend only a fully checked straight continuation, away from the
+            // final stance. Arrival braking keeps its original frame horizon.
+            if (Vector3.Distance(position, target.Approach) > .8f)
+            {
+                int continuation = WalkingCommand.ContinuationMilliseconds(commandMilliseconds);
+                // A preceding native velocity may integrate for one fixed step
+                // before the expired input is read and neutralized.
+                Vector3 extended = position + (input * speed + drift) * (continuation / 1000f + Time.fixedDeltaTime);
+                if (continuation > commandMilliseconds && physics.Segment(position, extended)) commandMilliseconds = continuation;
+            }
             move(input, commandMilliseconds);
         }
         private bool ContinueAboveSupport(int commandMilliseconds)
@@ -401,7 +413,10 @@ namespace SousChef.Plugin.Navigation
             for (int i = limit; i >= waypoint; i--)
             {
                 Vector3 input;
-                if (!physics.TryLandingWalk(route[i], Mathf.Max(commandMilliseconds / 1000f, Time.deltaTime), out input)) continue;
+                int continuation = WalkingCommand.ContinuationMilliseconds(commandMilliseconds);
+                if (physics.TryLandingWalk(route[i], Mathf.Max(continuation / 1000f, Time.deltaTime), out input))
+                    commandMilliseconds = continuation;
+                else if (!physics.TryLandingWalk(route[i], Mathf.Max(commandMilliseconds / 1000f, Time.deltaTime), out input)) continue;
                 waypoint = i;
                 followingSupport = true;
                 Trace("following_support", route[i], input); move(input, commandMilliseconds); return true;

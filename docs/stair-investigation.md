@@ -184,6 +184,29 @@ descending tread penetration followed by a 60 ms decision gap and a temporarily
 zero native horizontal velocity. This is not evidence of perfectly continuous
 motion; further input-timing diagnostics are needed before calling it flawless.
 
+## Remaining input-timing pause
+
+Actual native-read diagnostics confirmed another cause: about one in ten decision
+frames in `.local/stair-input-trace-60` returned zero because a 17–23 ms command
+had expired before a 26–38 ms Update arrived. Navigation was still issuing nonzero
+steering. Keeping ownership alive alone could not prevent this brief braking.
+
+The controller now offers a separately checked continuation window away from the
+final stance: twice the preceding frame window plus 20 ms, capped at 100 ms.
+Already slower frame windows are unchanged. The extra travel and one following
+fixed physics step must pass full support and capsule checks; otherwise the
+shorter certified command remains usable. Landing continuation uses its enlarged
+body envelope for the longer window too. Arrival and portal braking retain the
+original frame window, preventing a longer lease from causing premature arrival
+braking or entry overshoot. Input expiry and disconnect still neutralize control.
+
+The first window experiment, `.local/stair-window-60`, completed ten of ten round
+trips. Its longest horizontal pauses were 53 ms climbing and 41 ms descending,
+with maximum backward stair motion of 0.028 units. The final version additionally
+checks the fixed-step tail and is undergoing the same cross-rate matrix under
+`.local/stair-checked-*`. Automated checks pass 823 core assertions, 188 navigator
+checks, 181 action checks, and 79 Python tests.
+
 A concurrent teleporter investigation uses its own runtime under
 `/private/tmp/sous-chef-teleporter-runtime` and ports 25712–25714. Later stair runs
 use the existing private stair runtime on ports 24702–24704, through the same

@@ -26,7 +26,8 @@ flow on cached edges, moving search boundaries, arrival under wind and external
 pushes, shared platform translation/rotation, fallback from an unreachable
 retained side, preserved reachable-side preference, slow-frame movement windows
 and rejected overshoot. The core suite separately checks input expiry while
-retaining ownership and renewal after frame jitter.
+retaining ownership and renewal after frame jitter. Open-corridor continuation
+and unchanged final-approach windows have separate production-controller checks.
 
 These doubles do not emulate PhysX, native step projection, friction or Unity
 update ordering. Building against the installed assemblies checks API compatibility;
