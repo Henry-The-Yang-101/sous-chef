@@ -256,7 +256,7 @@ public class TeleportalPlayerReceiver : UnityEngine.MonoBehaviour
     public ManualAnimation m_ReceiverAnimation = new ManualAnimation();
 }
 public class ServerTeleportalPlayerReceiver : UnityEngine.MonoBehaviour
-{ public bool Ready = true; public bool CanTeleportTo(ServerTeleportablePlayer p) { return Ready; } }
+{ public bool Ready = true, Receiving; public bool IsReceiving() { return Receiving; } public bool CanTeleportTo(ServerTeleportablePlayer p) { return Ready; } }
 public class WashingStation : UnityEngine.MonoBehaviour { }
 public class RubbishBin : UnityEngine.MonoBehaviour { }
 public class ServerWorkstation : UnityEngine.MonoBehaviour { }

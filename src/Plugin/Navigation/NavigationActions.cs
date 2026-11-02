@@ -333,7 +333,7 @@ namespace SousChef.Plugin.Navigation
             PortalLink nextPortal;
             if (portalSteps.TryGetValue(waypoint, out nextPortal))
             {
-                activePortal = nextPortal; portalStarted = Time.realtimeSinceStartup; sawTeleport = false; portalBrakeFrames = 2;
+                activePortal = nextPortal; portalStarted = Time.realtimeSinceStartup; sawTeleport = sawReceive = false; portalBrakeFrames = 2;
                 TickPortal(commandMilliseconds); return;
             }
             // Use the same drift compensation and actual next-step safety check

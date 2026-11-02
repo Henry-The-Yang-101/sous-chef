@@ -530,6 +530,32 @@ internal static class Program
         a.m_exitPortal=null; physics.Refresh(w.Chef); Check(physics.Portal(a.GetInstanceID())==null,"unlinking portal removes cached transport edge");
 
         w = PortalWorld(out a,out b);
+        var receiverOnly = new GameObject("moving receiver only");
+        var attachOnly = new GameObject("moving attach"); attachOnly.transform.position = new Vector3(10,2.5f,0);
+        var receiver = receiverOnly.Add(new TeleportalPlayerReceiver { m_attachPoint = attachOnly.transform,
+            m_ReceiverAnimation = new ManualAnimation { m_TargetPositionValue = new Vector3(.9f,0,0) } });
+        receiverOnly.Add(new ServerTeleportalPlayerReceiver());
+        a.m_exitPortal = receiverOnly; physics = w.Ready(); link = physics.Portal(a.GetInstanceID());
+        Check(link.Valid && link.ExitServer == null && link.ExitTrigger == null && Math.Abs(link.Exit.y)<.001f,
+            "receiver-only endpoint accepts the native ray-miss fallback with a checked vertical landing");
+        attachOnly.transform.position += Vector3.up;
+        physics.Refresh(w.Chef); Check(!link.Valid,"receiver fallback rejects a fall beyond the bounded landing sweep");
+        attachOnly.transform.position = new Vector3(10,1,0); receiver.m_groundPlayer=false;
+        physics.Refresh(w.Chef); Check(link.Valid,"native ungrounded receiver supports a safe vertical landing");
+        Check(!physics.PortalLandingClear(new Vector3(10.9f,1,0),new Vector3(11.9f,0,0),null),
+            "portal landing cannot excuse lateral displacement");
+        var airborneWall = new GameObject("airborne exit obstruction"); airborneWall.transform.position=new Vector3(10.9f,1,0);
+        w.Colliders.Add(airborneWall.Add(new BoxCollider { center=new Vector3(0,.5f,0),size=new Vector3(.3f,.3f,.3f) }));
+        physics.Refresh(w.Chef); Check(!link.Valid,"clear floor below an obstructed native animation endpoint is rejected");
+        w.Colliders.Last().enabled=false;
+        var ceiling = new GameObject("native receiver ceiling");
+        var ceilingShape=ceiling.Add(new BoxCollider { center=new Vector3(10.9f,2.8f,0),size=new Vector3(5,.4f,5) }); w.Colliders.Add(ceilingShape);
+        attachOnly.transform.position = new Vector3(10,2,0);
+        physics.Refresh(w.Chef); Check(link.Valid,"elevated native exit can separate downward from a level ceiling into checked clear space");
+        ceiling.tag="Hazard"; Time.realtimeSinceStartup+=.21f; physics.Refresh(w.Chef);
+        Check(!link.Valid,"ceiling separation never exempts hazards");
+
+        w = PortalWorld(out a,out b);
         var station = w.AddStation(); station.transform.position = new Vector3(12,0,0);
         // The fixture's station selection is supplied independently of pathfinding.
         var navigation = w.Navigate(station);
@@ -544,10 +570,14 @@ internal static class Program
         Time.realtimeSinceStartup+=.02f; navigation.Tick(w.Chef);
         Check(w.LastInput.x<-.9f,"ready portal is entered using ordinary movement after braking");
         var traveller=w.Chef.GetComponent<ServerTeleportablePlayer>(); traveller.Travelling=true;
+        b.GetComponent<ServerTeleportalPlayerReceiver>().Receiving=true;
         w.Chef.enabled=false; w.Chef.GetComponent<CapsuleCollider>().enabled=false;
         Time.realtimeSinceStartup+=.02f; navigation.Tick(w.Chef);
         Check(navigation.NativeTeleportInProgress(w.Chef) && w.LastInput.sqrMagnitude==0 && navigation.Action.State=="navigating",
             "native transport keeps neutral ownership while chef collider and controls are disabled");
+        // ManualAnimation fixes its destination when receiving begins, even if
+        // the receiver keeps moving during the native animation.
+        b.GetComponent<TeleportalPlayerReceiver>().m_attachPoint.position += new Vector3(1,0,0);
         traveller.Travelling=false; w.Chef.enabled=true; w.Chef.GetComponent<CapsuleCollider>().enabled=true;
         w.Chef.transform.position=new Vector3(10.9f,0,0);
         Time.realtimeSinceStartup+=.02f; navigation.Tick(w.Chef);

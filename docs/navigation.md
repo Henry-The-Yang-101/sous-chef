@@ -173,18 +173,22 @@ directed transitions as described below.
 
 The graph reads each live `Teleportal.m_exitPortal` link, the native player sender
 and receiver, and the receiver's attach point and animation endpoint. It supports
-one-way links, chains, cycles and exits on different decks. Routes minimize
+one-way links, chains, cycles, receiver-only endpoints and exits on different decks. Routes minimize
 walking distance: entry and exit connectors count toward `routeDistance`, while
 transport displacement does not. `routeTeleports` reports the number of portal
-transitions in a destination's selected route. This is not a shortest-time estimate.
+transitions in a destination's selected route; `routePortalIds` identifies their
+native source components. This is not a shortest-time estimate.
 
 Entry must lie inside the native activation cone, on supported floor, near the
 front of the trigger. Its centre can be behind the portal's solid frame. Only that
 trigger is exempted from the entry connector's collision check; walls, other
 portals, fire and respawn hazards still block it. The native landing must be
-supported and clear, with a checked connection back to walking cells. Receivers
-that do not ground the chef, missing endpoints and disabled senders/receivers are
-conservatively omitted. Normal discovery radius and node limits still apply.
+supported and clear, with a checked connection back to walking cells. An elevated receiver may finish above that floor: the navigator mirrors the
+native grounded-ray/fallback offset and checks a vertical landing of at most
+three units. Only downward separation from the horizontal underside of a level
+box is allowed for native ceiling contact; hazards, side overlaps and blocked
+landing sweeps are rejected. Missing endpoints and disabled senders/receivers are
+omitted. Normal discovery radius and node limits still apply.
 
 Portal connector geometry is cached and invalidated by geometry and endpoint
 changes; environmental flow remains live. Execution checks the actual entry step
@@ -201,7 +205,10 @@ The temporary disabled chef/collider state is accepted only for an active portal
 transition with native teleport state. Pause, focus, ownership, respawn, menu and
 round checks remain in force. The bridge never calls the teleport method or
 writes the chef's transform. Completion requires native teleport state to finish
-and the chef to reach the linked receiver's landing. `teleportsCompleted` counts
+and the chef to reach the linked receiver's landing. Moving receiver destinations
+are captured when native receiving starts, matching the animation's fixed world
+target. Neutral control continues during a checked native fall to the landing;
+this shares the portal timeout. `teleportsCompleted` counts
 confirmed transitions. A fresh search continues from the actual exit. If its
 budget expires, the checked route tail can be retained without trying to walk
 across the completed teleport. Lookahead never skips a pending portal.

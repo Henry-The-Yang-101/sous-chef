@@ -9,7 +9,8 @@ namespace SousChef.Plugin.Navigation
         private readonly Dictionary<int, PortalLink> portalSteps = new Dictionary<int, PortalLink>();
         private PortalLink activePortal;
         private float portalStarted;
-        private bool sawTeleport;
+        private bool sawTeleport, sawReceive;
+        private Vector3 expectedPortalExit;
         private int teleportsCompleted;
         private int portalBrakeFrames;
         private string portalPhase;
@@ -32,6 +33,11 @@ namespace SousChef.Plugin.Navigation
             if (PortalLink.Travelling(chef))
             {
                 if (!sawTeleport) Trace("teleport_started", activePortal.Exit, Vector3.zero);
+                if (!sawReceive && activePortal.ServerReceiver.IsReceiving())
+                {
+                    if (!physics.PortalGeometry(activePortal)) { Stop("teleport_exit_unsafe"); return; }
+                    expectedPortalExit = activePortal.Exit; sawReceive = true;
+                }
                 sawTeleport = true; portalPhase = "teleporting";
                 move(Vector3.zero, commandMilliseconds); return;
             }
@@ -40,8 +46,12 @@ namespace SousChef.Plugin.Navigation
                 // Native animations restore the collider and controls themselves.
                 // Accept only the linked exit, then build a fresh walking tree.
                 string error = physics.Refresh(chef);
+                if ((error == "not_grounded" || (error == null && physics.Position.y - expectedPortalExit.y > .15f)) &&
+                    sawReceive && physics.PortalLandingClear(physics.Position, expectedPortalExit, activePortal.ExitTrigger))
+                { move(Vector3.zero, commandMilliseconds); return; }
                 if (error != null) { Stop(error); return; }
-                if (!physics.PortalGeometry(activePortal) || Vector3.Distance(physics.Position, activePortal.Exit) > .6f)
+                if (!sawReceive) expectedPortalExit = activePortal.Exit;
+                if (Vector3.Distance(physics.Position, expectedPortalExit) > .6f)
                 { Stop("teleport_exit_mismatch"); return; }
                 physics.LeavePortal(activePortal); teleportsCompleted++;
                 Trace("teleport_complete", activePortal.Exit, Vector3.zero);
