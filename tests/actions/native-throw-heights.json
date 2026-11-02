@@ -296,5 +296,85 @@
       "minimumRise": 0.2
     },
     "expectCurrentFeasible": false
+  },
+  {
+    "name": "lettuce-descend-for-safe-player-catch-60",
+    "level": "s_wizard_5_5",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Lettuce"
+      },
+      {
+        "operation": "stage_player",
+        "playerId": 2,
+        "position": [
+          8.4,
+          2,
+          -6
+        ],
+        "yaw": 90
+      },
+      {
+        "operation": "stage_player",
+        "playerId": 1,
+        "position": [
+          16.8,
+          0,
+          -6
+        ],
+        "yaw": 270
+      }
+    ],
+    "operation": "throw_to_player",
+    "target": 1,
+    "expected": "throw_received",
+    "expectOffered": true,
+    "expectArc": {
+      "minimumDescent": 1
+    },
+    "probeCurrent": true,
+    "expectCurrentFeasible": false
+  },
+  {
+    "name": "lettuce-descend-for-safe-player-catch-20",
+    "level": "s_wizard_5_5",
+    "fps": 20,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Lettuce"
+      },
+      {
+        "operation": "stage_player",
+        "playerId": 2,
+        "position": [
+          8.4,
+          2,
+          -6
+        ],
+        "yaw": 90
+      },
+      {
+        "operation": "stage_player",
+        "playerId": 1,
+        "position": [
+          16.8,
+          0,
+          -6
+        ],
+        "yaw": 270
+      }
+    ],
+    "operation": "throw_to_player",
+    "target": 1,
+    "expected": "throw_received",
+    "expectOffered": true,
+    "expectArc": {
+      "minimumDescent": 1
+    },
+    "probeCurrent": true,
+    "expectCurrentFeasible": false
   }
 ]

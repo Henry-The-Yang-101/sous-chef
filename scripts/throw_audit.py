@@ -285,9 +285,10 @@ def run_case(args, case, index):
                         checks[key] = plan.get('flightSeconds', -1) >= value
                     elif key == 'minimumRise':
                         checks[key] = plan.get('arrivalHeight', -1e9) - plan.get('releaseHeight', 1e9) >= value
-                    elif key == 'minimumClimb':
+                    elif key in ('minimumClimb', 'minimumDescent'):
                         actor = next(o for o in before['objects'] if o['name'] == 'Player 2' and fields(o, 'ServerPlayerAttachmentCarrier'))
-                        checks[key] = plan.get('releasePosition', [0, -1e9, 0])[1] - actor['transform']['position'][1] >= value
+                        climb = plan.get('releasePosition', [0, -1e9, 0])[1] - actor['transform']['position'][1]
+                        checks[key] = (climb if key == 'minimumClimb' else -climb) >= value
                     else:
                         raise ValueError('Unknown arc check: ' + key)
                 result['arcChecks'] = checks
