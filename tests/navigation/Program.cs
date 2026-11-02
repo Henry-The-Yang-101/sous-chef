@@ -161,6 +161,12 @@ internal static class Program
         physics=w.Ready();
         Check(physics.Segment(new Vector3(-.6f,0,0),new Vector3(1,.502f,0)),"native-sized sphere contact traverses the captured wizard stair wedge lip");
         Check(physics.Segment(new Vector3(1,.502f,0),new Vector3(-.6f,0,0)),"captured stair wedge also connects on descent");
+        w = new World(); w.Chef.GetComponent<CapsuleCollider>().radius = .4f;
+        w.AddFloor((x,z) => x <= 0 || x >= .17f ? 0 : (float?)null); physics=w.Ready();
+        Check(physics.Segment(new Vector3(-.6f,0,0),new Vector3(.8f,0,0)),"native capsule support spans a narrow tread seam without requiring every footprint ray to hit");
+        w = new World(); w.Chef.GetComponent<CapsuleCollider>().radius = .4f;
+        w.AddFloor((x,z) => x <= 0 || x >= 1 ? 0 : (float?)null); physics=w.Ready();
+        Check(!physics.Segment(new Vector3(-.6f,0,0),new Vector3(1.6f,0,0)),"a gap wider than native support remains non-walkable");
     }
     private static void InteriorFlow()
     {
@@ -270,7 +276,8 @@ internal static class Program
         Floor floor=w.AddFloor((x,z) =>
         {
             if (Math.Abs(x)>=2 || Math.Abs(z)>=2) return null;
-            if (bridge || z<=-.6f || x>=-.3f || (x>=-1.4f && x<=-.6f && Math.Abs(z)<=.3f)) return 0;
+            // The disconnected island needs a gap wider than the native capsule.
+            if (bridge || z<=-.6f || x>=-.1f || (x>=-1.4f && x<=-.7f && Math.Abs(z)<=.1f)) return 0;
             return null;
         });
         w.Chef.transform.position=new Vector3(-1,0,0); var station=w.AddStation(); var navigation=w.Navigate(station);

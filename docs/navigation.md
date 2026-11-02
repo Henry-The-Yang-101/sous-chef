@@ -66,8 +66,7 @@ claim the chef. Concurrent navigation/raw-input commands cannot override an acti
 
 The navigator runs against Unity's live physics scene, independently of NDJSON
 sampling. It uses the chef's scaled capsule dimensions and native ground/layer
-masks. A native-radius sphere cast resolves the supported centre pose; ground rays check
-floor support across the footprint. Capsule overlaps and
+masks. A native-radius sphere cast resolves the supported centre pose. Capsule overlaps and
 sweeps check clearance along edges. This accounts for rotating walls, moving
 parents, enabled/disabled collision, narrow passages and other physical objects.
 Triggers are not automatically solid walls; known fire, respawn and teleport
@@ -129,8 +128,8 @@ reached from above and below shares a node while stacked decks remain distinct.
 Stairs use the chef's native `StepHeightMax` (capped at 0.65 units) per transition,
 not a limit on total elevation change. The centre probe uses spherical contact,
 matching native GroundCast at ramp edges and stair wedge lips, and converts the
-contact into the capsule’s supported foot height. Footprint rays confirm nearby
-support without treating a sloped footprint’s full height span as one riser.
+contact into the capsule’s supported foot height. Narrow tread seams and capsule overhang are allowed when this native sphere
+remains supported; a ray under every footprint edge is not required.
 Ground normals use the native GroundCast limit of 58 degrees.
 Height alone does not make a ledge climbable: discontinuities between support
 samples require `Steppable` on the upper collider's exact GameObject, matching
@@ -142,14 +141,14 @@ cached probes and edges.
 Segments sample support at most 0.15 units apart. Height-changing segments sweep
 up, across, then down to check risers and overhead clearance instead of casting
 straight through the staircase. No ground collider is ignored wholesale. Every
-sample must have footprint support and remain within the native step limit of
+sample must have native spherical support and remain within the native step limit of
 the preceding support. Intermediate waypoints allow native stepping lag in height
 while still requiring horizontal progress; final station arrival remains subject
 to the position, facing and selection checks below. Both staircases participate
 in the same shortest-path search, with fresh collision checks for shortcuts.
-Flat graph edges use the same sampled footprint and capsule checks as execution;
-a clear midpoint and capsule sweep alone cannot certify floor support beside a
-hole. Cached edges use padded clearance regardless of the chef's current pose.
+Flat graph edges use the same sampled spherical support and capsule checks as
+execution; a clear midpoint and capsule sweep alone cannot certify continuous
+support beside a hole. Cached edges use padded clearance regardless of the chef's current pose.
 Environmental flow is checked live separately from cached geometry. Each cached
 edge retains every sampled support point and ground collider, so a narrow belt
 between calm endpoints still participates in each live flow check. Wind is also

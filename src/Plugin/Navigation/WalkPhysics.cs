@@ -264,16 +264,15 @@ namespace SousChef.Plugin.Navigation
             // need a step component. A discontinuity between flat treads does.
             return rise >= Mathf.Min(0, Mathf.Min(a, b)) - .025f && rise <= Mathf.Max(0, Mathf.Max(a, b)) + .025f;
         }
-        private bool Ground(Vector3 point, out RaycastHit best, bool footprint = false)
+        private bool Ground(Vector3 point, out RaycastHit best)
         {
             best = new RaycastHit(); float step = StepHeight;
             // Match GroundCast's spherical contact for the chef centre. Rays miss
             // the rounded contact at the lips of native stair wedges.
-            float r = footprint ? 0 : nativeRadius;
-            float reach = step + (footprint ? nativeRadius : 0) + .12f;
+            float r = nativeRadius;
+            float reach = step + .12f;
             Vector3 origin = point + Vector3.up * (reach + r);
-            int count = footprint ? Physics.RaycastNonAlloc(origin, Vector3.down, hits, 2 * reach, groundMask, QueryTriggerInteraction.Ignore) :
-                Physics.SphereCastNonAlloc(origin, r, Vector3.down, hits, 2 * reach, groundMask, QueryTriggerInteraction.Ignore);
+            int count = Physics.SphereCastNonAlloc(origin, r, Vector3.down, hits, 2 * reach, groundMask, QueryTriggerInteraction.Ignore);
             Queries++;
             if (count == hits.Length) { Overflow = true; return false; }
             float distance = Single.MaxValue;
@@ -284,7 +283,7 @@ namespace SousChef.Plugin.Navigation
                     hit.distance <= 0 || hit.distance >= distance) continue;
                 // SphereCast returns the contact point, not the capsule's foot.
                 // Index and sweep the supported body pose; retain the native normal.
-                Vector3 foot = footprint ? hit.point : origin + Vector3.down * (hit.distance + r);
+                Vector3 foot = origin + Vector3.down * (hit.distance + r);
                 if (Mathf.Abs(foot.y - point.y) > reach - .08f) continue;
                 best = hit; best.point = foot; distance = hit.distance;
             }
@@ -311,15 +310,10 @@ namespace SousChef.Plugin.Navigation
             point = guess; support = null;
             if (!Ground(guess, out hit)) return false;
             point.y = hit.point.y; support = hit.collider;
-            // Keep footprint support checks, but do not demand that ray heights
-            // form a staircase. Native spherical contact already supplies the
-            // continuous body pose and slope; wedge lips are not Steppable ledges.
-            for (int i = 0; i < 4; i++)
-            {
-                Vector3 offset = i < 2 ? Vector3.right * (i == 0 ? clearance : -clearance) : Vector3.forward * (i == 2 ? clearance : -clearance);
-                RaycastHit edge;
-                if (!Ground(point + offset, out edge, true)) return false;
-            }
+            // GroundCast supports the rounded capsule across narrow tread seams.
+            // Requiring a ray under every footprint edge rejects real stairs even
+            // while the native sphere has stable contact. Segment checks repeat
+            // this support test along the entire route; broad gaps still fail.
             Vector3 low, high; Capsule(point, out low, out high, clearance);
             int count = Physics.OverlapCapsuleNonAlloc(low, high, clearance, overlaps, ~0, QueryTriggerInteraction.Collide); Queries++;
             if (count == overlaps.Length) { Overflow = true; return false; }
