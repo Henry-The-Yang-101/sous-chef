@@ -65,6 +65,16 @@ namespace SousChef.Plugin.Actions
             if (item == null) return false;
             var ingredient = item.GetComponent<IngredientPropertiesComponent>();
             var definition = ingredient == null ? null : ActionObservations.Read<UnityEngine.Object>(ingredient, "m_ingredientOrderNode");
+            // Assembly bases such as buns/tortillas are preparation containers,
+            // not IngredientPropertiesComponents or WorkableItems. A filled base
+            // is an assembled meal, never a substitute for the empty ingredient.
+            var preparation = item.GetComponent<PreparationContainer>();
+            if (definition == null && preparation != null)
+            {
+                var contents = item.GetComponent<ServerIngredientContainer>();
+                if (contents != null && contents.GetContentsCount() != 0) return false;
+                definition = ActionObservations.Read<UnityEngine.Object>(preparation, "m_ingredientOrderNode");
+            }
             if (definition != null)
             {
                 id = "i" + ActionObservations.Read<int>(definition, "m_uID"); name = definition.name; return true;

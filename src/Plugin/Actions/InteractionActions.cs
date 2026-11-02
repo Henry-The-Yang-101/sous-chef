@@ -358,12 +358,11 @@ namespace SousChef.Plugin.Actions
                 {
                     AssembledDefinitionNode expected = ActionObservations.Composition(supply.m_itemPrefab), actual = ActionObservations.Composition(carrying);
                     matches = expected != null && actual != null && AssembledDefinitionNode.Matching(expected, actual);
-                    if (!matches && expected == null && actual == null)
+                    if (!matches)
                     {
-                        var prefabWork = supply.m_itemPrefab == null ? null : supply.m_itemPrefab.GetComponent<WorkableItem>();
-                        var carriedWork = carrying.GetComponent<WorkableItem>();
-                        matches = prefabWork != null && carriedWork != null && prefabWork.GetNextPrefab() != null &&
-                            System.Object.ReferenceEquals(prefabWork.GetNextPrefab(), carriedWork.GetNextPrefab());
+                        string prefabId, prefabName, carriedId, carriedName;
+                        matches = LogisticsInventory.IngredientIdentity(supply.m_itemPrefab, out prefabId, out prefabName) &&
+                            LogisticsInventory.IngredientIdentity(carrying, out carriedId, out carriedName) && prefabId == carriedId;
                     }
                 }
                 if (matches) evidence = ItemEvidence(carrying); return matches;

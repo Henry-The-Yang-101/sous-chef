@@ -344,6 +344,26 @@ internal static class Program
         foreach(string command in new[] {"clear_station r d1 d2 extra","move_item r d1 nope","get_utensil r s%%% d2","fetch_ingredient r sCg d2","return_utensil r d1 d2"})
         {bool failed=false;try{ControlCommand.Parse(command);}catch(ArgumentException){failed=true;}Check(failed,"malformed logistics command is rejected");}
     }
+    private static void PreparationSupplies()
+    {
+        var w=new World(); var destination=w.Delivery();
+        var definition=new Definition {name="Bun",m_uID=16088};
+        var prefab=new GameObject("ChoppedBun"); prefab.Add(new PreparationContainer {m_ingredientOrderNode=definition});
+        w.Target.Add(new PickupItemSpawner {m_itemPrefab=prefab});
+        string id,name; Check(LogisticsInventory.IngredientIdentity(prefab,out id,out name) && id=="i16088" && name=="Bun","preparation supply uses its native ingredient definition");
+        Check(w.Logistics.Start(w.Chef,1,new ControlCommand {Operation="fetch_ingredient",Selector=id,Destination=w.IdOf(destination)})==null,"bun fetch starts from preparation supply");
+        w.Arrive(); var bun=new GameObject("ChoppedBun(Clone)"); bun.Add(new PreparationContainer {m_ingredientOrderNode=definition});
+        var contents=bun.Add(new ServerIngredientContainer()); bun.Add(new IngredientPropertiesForTest()); w.Hold(bun); w.Verify();
+        Check(w.Logistics.Run.Phase=="delivering","prefab without runtime composition matches spawned preparation base with composition");
+        w.ArriveAt(destination); w.Hold(null); destination.GetComponent<ServerAttachStation>().Item=bun; w.Verify();
+        Check(w.Logistics.Run.State=="succeeded","bun fetch verifies delivery");
+        contents.Contents.Add(new AssembledDefinitionNode("Meat"));
+        Check(!LogisticsInventory.IngredientIdentity(bun,out id,out name),"filled bun cannot substitute for an empty bun");
+        var plate=new GameObject("Plate");plate.Add(new ServerPlate());
+        Check(!LogisticsInventory.IngredientIdentity(plate,out id,out name),"ordinary containers are not inferred to be ingredients");
+    }
+    private sealed class IngredientPropertiesForTest : MonoBehaviour, IOrderDefinition
+    { public AssembledDefinitionNode GetOrderComposition() { return new AssembledDefinitionNode("Bun composite"); } }
     private static void RawIngredientSupplies()
     {
         var w=new World(); var destination=w.Delivery();
@@ -437,6 +457,6 @@ internal static class Program
         Check(!drops.Plan(w.Chef,item,player,out drop),"nearby horizontal position on a different deck is not a valid drop handoff");
         Physics.Sphere=(p,r,d,length)=>new RaycastHit[0];
     }
-    private static void Main() { Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();Throws();GeneratedStances();LogisticsJobs();RawIngredientSupplies();WindAndHeight();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
+    private static void Main() { Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();Throws();GeneratedStances();LogisticsJobs();PreparationSupplies();RawIngredientSupplies();WindAndHeight();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
     private static ClientInteractable GetCurrentlyInteractingForTest(this PlayerControls chef) { return chef.GetComponent<ClientPlayerControlsImpl_Default>().Current; }
 }

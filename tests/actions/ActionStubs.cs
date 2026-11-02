@@ -20,6 +20,7 @@ public class IngredientPropertiesComponent : MonoBehaviour, IOrderDefinition
     public AssembledDefinitionNode GetOrderComposition() { return Node; }
 }
 public class Definition : UnityEngine.Object { public int m_uID; }
+public class PreparationContainer : MonoBehaviour { public UnityEngine.Object m_ingredientOrderNode; }
 public class ItemPropertiesComponent : MonoBehaviour { public UnityEngine.Object m_itemDefinition; }
 public class CleanPlateStack : MonoBehaviour { }
 public interface IContainerTransferBehaviour { bool CanTransferToContainer(ServerIngredientContainer target); }
