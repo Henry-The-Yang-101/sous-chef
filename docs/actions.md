@@ -219,11 +219,11 @@ Wind volumes are sampled from current native state; future changes, native
 Update/FixedUpdate ordering, human movement after release and changing collision
 geometry can invalidate a prediction. The implementation is **not a live-verified perfect-throw guarantee**.
 
-The [2026-11-02 native throw audit](throw-audit.md) found a current blocker:
-all 13 ordinary airborne fixtures rejected real ingredients as
-`unsupported_throw_geometry`. Nearby counter handoff and its stop/disconnect
-paths were verified separately. Airborne trajectory and catch accuracy remain
-unverified.
+The [2026-11-02 native corrections and verification](throw-fix.md) replace the
+oversized pivot sphere with native collider queries, use actual receiving
+surfaces, and account for the chef's forward catch scan. Planning continues in
+bounded Update slices and reserves clearance for walking arrival error. Requests
+without a supported clear throw/catch window retain cargo and report a blocker.
 
 ## Wire additions
 

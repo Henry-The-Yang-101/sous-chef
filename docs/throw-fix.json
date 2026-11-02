@@ -1,0 +1,1647 @@
+{
+  "date": "2026-11-02",
+  "sourceCommit": "0d6fa6d",
+  "commits": [
+    "16e0882",
+    "608a570",
+    "f30ef53",
+    "1de2c26",
+    "0d6fa6d"
+  ],
+  "runtime": ".local/throw-fix-final-20261102",
+  "process": {
+    "pid": 47089,
+    "level": "s_wizard_5_5",
+    "portBase": 27112,
+    "bridgeSha256": "b5292629681aee2519d4354bc1feebe87aad8da3bc060e18f97deb2ed4a199dd"
+  },
+  "loadedBridgeSha256": "b5292629681aee2519d4354bc1feebe87aad8da3bc060e18f97deb2ed4a199dd",
+  "gameAssemblySha256": "8d548c632f48b07883e4e9861ddb834588f6edca9ff56920316daf5e33647159",
+  "sessionId": "5d029037a1794fbca53184c8682ac118",
+  "unityVersion": "2017.4.8f1",
+  "graphicsDevice": "Null",
+  "fixedDeltaTime": 0.019999999552965164,
+  "physicsAutoSimulation": true,
+  "summary": {
+    "passed": 30,
+    "total": 30,
+    "supportedDeliveriesPassed": 13,
+    "supportedDeliveriesTotal": 13,
+    "ingredientTypes": [
+      "Cheese_Raw",
+      "Chocolate",
+      "ChoppedBun",
+      "ChoppedCheese",
+      "Egg",
+      "Flour",
+      "Lettuce",
+      "Meat"
+    ],
+    "requestedFps": [
+      20,
+      60
+    ]
+  },
+  "checks": {
+    "coreAndAssembly": 825,
+    "navigation": 207,
+    "actions": 233,
+    "python": 90,
+    "log": ".local/throw-fix-final-20261102/check.log"
+  },
+  "results": [
+    {
+      "name": "cheese-counter-60",
+      "operation": "throw_to",
+      "level": "s_wizard_5_5",
+      "fps": 60,
+      "expected": "throw_received",
+      "observed": "throw_received",
+      "matchesExpectation": true,
+      "seconds": 2.1458,
+      "phases": [
+        "planning_throw",
+        "navigating",
+        "throw_hold",
+        "flight",
+        "idle"
+      ],
+      "cargo": "Cheese_Raw",
+      "cargoInstanceId": -73906,
+      "cargoRetained": false,
+      "holdersAfter": [
+        {
+          "name": "countertop_01_standard_gold (4)",
+          "instanceId": 582464,
+          "component": "ServerAttachStation"
+        }
+      ],
+      "ownedAfter": false,
+      "snapshotSequences": [
+        69,
+        72
+      ],
+      "evidence": ".local/throw-fix-final-20261102/verified-regressions/01-cheese-counter-60",
+      "state": "succeeded",
+      "independentlyConfirmed": true,
+      "throw": {
+        "releasePosition": [
+          20.243940353393555,
+          0,
+          -3.073307514190674
+        ],
+        "direction": [
+          0.20342803001403809,
+          0,
+          -0.9790899157524109
+        ],
+        "origin": [
+          20.37687873840332,
+          0.548389732837677,
+          -3.7131333351135254
+        ],
+        "predictedArrival": [
+          21.66703224182129,
+          0.49968230724334717,
+          -9.922588348388672
+        ],
+        "initialVelocity": [
+          3.6617045402526855,
+          3.8260183334350586,
+          -17.623619079589844
+        ],
+        "launchSpeed": 18.402132034301758,
+        "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+        "windDisplacement": [
+          -1.9073486328125e-06,
+          0,
+          1.9073486328125e-06
+        ],
+        "releaseHeight": 0.548389732837677,
+        "arrivalHeight": 0.49968230724334717,
+        "peakHeight": 1.0133341550827026,
+        "drag": 2,
+        "flightSeconds": 0.6489641666412354,
+        "walkDistance": 0,
+        "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+      },
+      "observedLaunchVelocity": [
+        3.6617045402526855,
+        3.8260183334350586,
+        -17.623619079589844
+      ],
+      "launchVelocityError": 0.0
+    },
+    {
+      "name": "cheese-player-60",
+      "operation": "throw_to_player",
+      "level": "s_wizard_5_5",
+      "fps": 60,
+      "expected": "throw_received",
+      "observed": "throw_received",
+      "matchesExpectation": true,
+      "seconds": 0.7779,
+      "phases": [
+        "navigating",
+        "throw_hold",
+        "flight",
+        "idle"
+      ],
+      "cargo": "Cheese_Raw",
+      "cargoInstanceId": -84982,
+      "cargoRetained": false,
+      "holdersAfter": [
+        {
+          "name": "Player 1",
+          "instanceId": 598798,
+          "component": "ServerPlayerAttachmentCarrier"
+        }
+      ],
+      "ownedAfter": false,
+      "snapshotSequences": [
+        79,
+        82
+      ],
+      "evidence": ".local/throw-fix-final-20261102/verified-regressions/02-cheese-player-60",
+      "state": "succeeded",
+      "independentlyConfirmed": true,
+      "throw": {
+        "releasePosition": [
+          20.576171875,
+          0,
+          -8.333683967590332
+        ],
+        "direction": [
+          -0.6528715491294861,
+          0,
+          0.7574686408042908
+        ],
+        "origin": [
+          20.149526596069336,
+          0.5483899712562561,
+          -7.838685512542725
+        ],
+        "predictedArrival": [
+          17.001970291137695,
+          0.9508258104324341,
+          -4.186854362487793
+        ],
+        "initialVelocity": [
+          -11.751688003540039,
+          3.8260183334350586,
+          13.634435653686523
+        ],
+        "launchSpeed": 18.402130126953125,
+        "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+        "windDisplacement": [
+          1.9073486328125e-06,
+          2.384185791015625e-07,
+          4.76837158203125e-07
+        ],
+        "releaseHeight": 0.5483899712562561,
+        "arrivalHeight": 0.9508258104324341,
+        "peakHeight": 1.0133343935012817,
+        "drag": 2,
+        "flightSeconds": 0.40000003576278687,
+        "walkDistance": 0,
+        "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+      },
+      "observedLaunchVelocity": [
+        -11.751688003540039,
+        3.8260183334350586,
+        13.634435653686523
+      ],
+      "launchVelocityError": 0.0
+    },
+    {
+      "name": "cheese-counter-20",
+      "operation": "throw_to",
+      "level": "s_wizard_5_5",
+      "fps": 20,
+      "expected": "throw_received",
+      "observed": "throw_received",
+      "matchesExpectation": true,
+      "seconds": 2.436,
+      "phases": [
+        "planning_throw",
+        "navigating",
+        "aiming",
+        "throw_hold",
+        "flight",
+        "idle"
+      ],
+      "cargo": "Cheese_Raw",
+      "cargoInstanceId": -96140,
+      "cargoRetained": false,
+      "holdersAfter": [
+        {
+          "name": "countertop_01_standard_gold (4)",
+          "instanceId": 615284,
+          "component": "ServerAttachStation"
+        }
+      ],
+      "ownedAfter": false,
+      "snapshotSequences": [
+        90,
+        93
+      ],
+      "evidence": ".local/throw-fix-final-20261102/verified-regressions/03-cheese-counter-20",
+      "state": "succeeded",
+      "independentlyConfirmed": true,
+      "throw": {
+        "releasePosition": [
+          20.200105667114258,
+          2.384185791015625e-07,
+          -2.794426918029785
+        ],
+        "direction": [
+          0.2014797329902649,
+          0,
+          -0.9794926643371582
+        ],
+        "origin": [
+          20.331769943237305,
+          0.5483903288841248,
+          -3.4345154762268066
+        ],
+        "predictedArrival": [
+          21.60956573486328,
+          0.49968230724334717,
+          -9.646529197692871
+        ],
+        "initialVelocity": [
+          3.6266350746154785,
+          3.8260183334350586,
+          -17.63086700439453
+        ],
+        "launchSpeed": 18.402130126953125,
+        "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+        "windDisplacement": [
+          -3.814697265625e-06,
+          0,
+          -1.9073486328125e-06
+        ],
+        "releaseHeight": 0.5483903288841248,
+        "arrivalHeight": 0.49968230724334717,
+        "peakHeight": 1.0133347511291504,
+        "drag": 2,
+        "flightSeconds": 0.6489644050598145,
+        "walkDistance": 0,
+        "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+      },
+      "observedLaunchVelocity": [
+        3.6266369819641113,
+        3.8260183334350586,
+        -17.63086700439453
+      ],
+      "launchVelocityError": 1.9073486328125e-06
+    },
+    {
+      "name": "cheese-player-20",
+      "operation": "throw_to_player",
+      "level": "s_wizard_5_5",
+      "fps": 20,
+      "expected": "throw_received",
+      "observed": "throw_received",
+      "matchesExpectation": true,
+      "seconds": 0.9016,
+      "phases": [
+        "navigating",
+        "aiming",
+        "throw_hold",
+        "flight",
+        "idle"
+      ],
+      "cargo": "Cheese_Raw",
+      "cargoInstanceId": -107170,
+      "cargoRetained": false,
+      "holdersAfter": [
+        {
+          "name": "Player 1",
+          "instanceId": 631618,
+          "component": "ServerPlayerAttachmentCarrier"
+        }
+      ],
+      "ownedAfter": false,
+      "snapshotSequences": [
+        101,
+        104
+      ],
+      "evidence": ".local/throw-fix-final-20261102/verified-regressions/04-cheese-player-20",
+      "state": "succeeded",
+      "independentlyConfirmed": true,
+      "throw": {
+        "releasePosition": [
+          20.351566314697266,
+          -4.76837158203125e-06,
+          -8.418240547180176
+        ],
+        "direction": [
+          -0.6269680261611938,
+          0,
+          0.7790449857711792
+        ],
+        "origin": [
+          19.941848754882812,
+          0.5483876466751099,
+          -7.90914249420166
+        ],
+        "predictedArrival": [
+          17.018938064575195,
+          0.9695513248443604,
+          -4.277251720428467
+        ],
+        "initialVelocity": [
+          -11.28542423248291,
+          3.8260183334350586,
+          14.022809982299805
+        ],
+        "launchSpeed": 18.402130126953125,
+        "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+        "windDisplacement": [
+          0,
+          2.980232238769531e-07,
+          4.76837158203125e-07
+        ],
+        "releaseHeight": 0.5483876466751099,
+        "arrivalHeight": 0.9695513248443604,
+        "peakHeight": 1.0133321285247803,
+        "drag": 2,
+        "flightSeconds": 0.3800000250339508,
+        "walkDistance": 0,
+        "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+      },
+      "observedLaunchVelocity": [
+        -11.28542423248291,
+        3.8260183334350586,
+        14.022809982299805
+      ],
+      "launchVelocityError": 0.0
+    },
+    {
+      "name": "meat-player",
+      "operation": "throw_to_player",
+      "level": "s_wizard_5_5",
+      "fps": 60,
+      "expected": "throw_received",
+      "observed": "throw_received",
+      "matchesExpectation": true,
+      "seconds": 0.6657,
+      "phases": [
+        "navigating",
+        "throw_hold",
+        "flight",
+        "idle"
+      ],
+      "cargo": "Meat",
+      "cargoInstanceId": -118282,
+      "cargoRetained": false,
+      "holdersAfter": [
+        {
+          "name": "Player 1",
+          "instanceId": 648028,
+          "component": "ServerPlayerAttachmentCarrier"
+        }
+      ],
+      "ownedAfter": false,
+      "snapshotSequences": [
+        111,
+        114
+      ],
+      "evidence": ".local/throw-fix-final-20261102/verified-regressions/05-meat-player",
+      "state": "succeeded",
+      "independentlyConfirmed": true,
+      "throw": {
+        "releasePosition": [
+          16.954973220825195,
+          -2.2649765014648438e-06,
+          -8.39838981628418
+        ],
+        "direction": [
+          -0.1514551341533661,
+          0,
+          0.9884641766548157
+        ],
+        "origin": [
+          16.855998992919922,
+          0.5483887195587158,
+          -7.752439022064209
+        ],
+        "predictedArrival": [
+          16.349201202392578,
+          1.0048936605453491,
+          -4.444852828979492
+        ],
+        "initialVelocity": [
+          -2.7261924743652344,
+          3.8260183334350586,
+          17.792354583740234
+        ],
+        "launchSpeed": 18.402130126953125,
+        "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+        "windDisplacement": [
+          0,
+          1.1920928955078125e-07,
+          4.76837158203125e-07
+        ],
+        "releaseHeight": 0.5483887195587158,
+        "arrivalHeight": 1.0048936605453491,
+        "peakHeight": 1.0133332014083862,
+        "drag": 2,
+        "flightSeconds": 0.23999996483325958,
+        "walkDistance": 0,
+        "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+      },
+      "observedLaunchVelocity": [
+        -2.7261924743652344,
+        3.8260183334350586,
+        17.792354583740234
+      ],
+      "launchVelocityError": 0.0
+    },
+    {
+      "name": "lettuce-player",
+      "operation": "throw_to_player",
+      "level": "s_wizard_5_5",
+      "fps": 60,
+      "expected": "throw_received",
+      "observed": "throw_received",
+      "matchesExpectation": true,
+      "seconds": 2.2513,
+      "phases": [
+        "planning_throw",
+        "navigating",
+        "throw_hold",
+        "flight",
+        "idle"
+      ],
+      "cargo": "Lettuce",
+      "cargoInstanceId": -129362,
+      "cargoRetained": false,
+      "holdersAfter": [
+        {
+          "name": "Player 1",
+          "instanceId": 664438,
+          "component": "ServerPlayerAttachmentCarrier"
+        }
+      ],
+      "ownedAfter": false,
+      "snapshotSequences": [
+        121,
+        124
+      ],
+      "evidence": ".local/throw-fix-final-20261102/verified-regressions/06-lettuce-player",
+      "state": "succeeded",
+      "independentlyConfirmed": true,
+      "throw": {
+        "releasePosition": [
+          15.481460571289062,
+          -4.649162292480469e-06,
+          -6.547670841217041
+        ],
+        "direction": [
+          0.1992218792438507,
+          0,
+          0.9799544215202332
+        ],
+        "origin": [
+          15.611650466918945,
+          0.5483874678611755,
+          -5.907280445098877
+        ],
+        "predictedArrival": [
+          16.039478302001953,
+          0.9074037671089172,
+          -3.8028347492218018
+        ],
+        "initialVelocity": [
+          3.585993766784668,
+          3.8260183334350586,
+          17.639179229736328
+        ],
+        "launchSpeed": 18.402130126953125,
+        "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+        "windDisplacement": [
+          0,
+          5.960464477539063e-08,
+          0
+        ],
+        "releaseHeight": 0.5483874678611755,
+        "arrivalHeight": 0.9074037671089172,
+        "peakHeight": 0.9681439399719238,
+        "drag": 2,
+        "flightSeconds": 0.13999998569488525,
+        "walkDistance": 0,
+        "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+      },
+      "observedLaunchVelocity": [
+        3.5859930515289307,
+        3.8260183334350586,
+        17.639179229736328
+      ],
+      "launchVelocityError": 7.152557373046875e-07
+    },
+    {
+      "name": "choppedbun-player",
+      "operation": "throw_to_player",
+      "level": "s_wizard_5_5",
+      "fps": 60,
+      "expected": "throw_received",
+      "observed": "throw_received",
+      "matchesExpectation": true,
+      "seconds": 2.273,
+      "phases": [
+        "planning_throw",
+        "navigating",
+        "throw_hold",
+        "flight",
+        "idle"
+      ],
+      "cargo": "ChoppedBun",
+      "cargoInstanceId": -140560,
+      "cargoRetained": false,
+      "holdersAfter": [
+        {
+          "name": "Player 1",
+          "instanceId": 680848,
+          "component": "ServerPlayerAttachmentCarrier"
+        }
+      ],
+      "ownedAfter": false,
+      "snapshotSequences": [
+        131,
+        134
+      ],
+      "evidence": ".local/throw-fix-final-20261102/verified-regressions/07-choppedbun-player",
+      "state": "succeeded",
+      "independentlyConfirmed": true,
+      "throw": {
+        "releasePosition": [
+          15.488668441772461,
+          -7.152557373046875e-07,
+          -6.866344451904297
+        ],
+        "direction": [
+          0.1805892437696457,
+          0,
+          0.9835585951805115
+        ],
+        "origin": [
+          15.606681823730469,
+          0.5483890771865845,
+          -6.223598480224609
+        ],
+        "predictedArrival": [
+          15.99449634552002,
+          0.9074053764343262,
+          -4.11141300201416
+        ],
+        "initialVelocity": [
+          3.2506062984466553,
+          3.8260183334350586,
+          17.70405387878418
+        ],
+        "launchSpeed": 18.402130126953125,
+        "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+        "windDisplacement": [
+          0,
+          5.960464477539063e-08,
+          0
+        ],
+        "releaseHeight": 0.5483890771865845,
+        "arrivalHeight": 0.9074053764343262,
+        "peakHeight": 0.9905206561088562,
+        "drag": 2,
+        "flightSeconds": 0.13999998569488525,
+        "walkDistance": 0,
+        "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+      },
+      "observedLaunchVelocity": [
+        3.2506062984466553,
+        3.8260183334350586,
+        17.70405387878418
+      ],
+      "launchVelocityError": 0.0
+    },
+    {
+      "name": "chopped-cheese-player",
+      "operation": "throw_to_player",
+      "level": "s_wizard_5_5",
+      "fps": 60,
+      "expected": "throw_received",
+      "observed": "throw_received",
+      "matchesExpectation": true,
+      "seconds": 2.3094,
+      "phases": [
+        "planning_throw",
+        "navigating",
+        "aiming",
+        "throw_hold",
+        "flight",
+        "idle"
+      ],
+      "cargo": "ChoppedCheese",
+      "cargoInstanceId": -152018,
+      "cargoRetained": false,
+      "holdersAfter": [
+        {
+          "name": "Player 1",
+          "instanceId": 697258,
+          "component": "ServerPlayerAttachmentCarrier"
+        }
+      ],
+      "ownedAfter": false,
+      "snapshotSequences": [
+        141,
+        144
+      ],
+      "evidence": ".local/throw-fix-final-20261102/verified-regressions/08-chopped-cheese-player",
+      "state": "succeeded",
+      "independentlyConfirmed": true,
+      "throw": {
+        "releasePosition": [
+          16.09562110900879,
+          -3.5762786865234375e-07,
+          -6.955333232879639
+        ],
+        "direction": [
+          0.01719098538160324,
+          0,
+          0.9998522400856018
+        ],
+        "origin": [
+          16.106855392456055,
+          0.5483896136283875,
+          -6.301939487457275
+        ],
+        "predictedArrival": [
+          16.143774032592773,
+          0.9074059128761292,
+          -4.1547627449035645
+        ],
+        "initialVelocity": [
+          0.30943775177001953,
+          3.8260183334350586,
+          17.99734115600586
+        ],
+        "launchSpeed": 18.402132034301758,
+        "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+        "windDisplacement": [
+          1.9073486328125e-06,
+          5.960464477539063e-08,
+          4.76837158203125e-07
+        ],
+        "releaseHeight": 0.5483896136283875,
+        "arrivalHeight": 0.9074059128761292,
+        "peakHeight": 0.9923480749130249,
+        "drag": 2,
+        "flightSeconds": 0.13999998569488525,
+        "walkDistance": 0,
+        "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+      },
+      "observedLaunchVelocity": [
+        0.3094378709793091,
+        3.8260183334350586,
+        17.99734115600586
+      ],
+      "launchVelocityError": 1.1920928955078125e-07
+    },
+    {
+      "name": "chopped-cheese-counter",
+      "operation": "throw_to",
+      "level": "s_wizard_5_5",
+      "fps": 60,
+      "expected": "throw_received",
+      "observed": "throw_received",
+      "matchesExpectation": true,
+      "seconds": 3.3603,
+      "phases": [
+        "planning_throw",
+        "navigating",
+        "throw_hold",
+        "flight",
+        "idle"
+      ],
+      "cargo": "ChoppedCheese",
+      "cargoInstanceId": -163772,
+      "cargoRetained": false,
+      "holdersAfter": [
+        {
+          "name": "countertop_01_standard_gold (4)",
+          "instanceId": 713744,
+          "component": "ServerAttachStation"
+        }
+      ],
+      "ownedAfter": false,
+      "snapshotSequences": [
+        151,
+        154
+      ],
+      "evidence": ".local/throw-fix-final-20261102/verified-regressions/09-chopped-cheese-counter",
+      "state": "succeeded",
+      "independentlyConfirmed": true,
+      "throw": {
+        "releasePosition": [
+          19.04954719543457,
+          -4.76837158203125e-07,
+          -3.009920358657837
+        ],
+        "direction": [
+          0.36092856526374817,
+          0,
+          -0.9325934648513794
+        ],
+        "origin": [
+          19.285409927368164,
+          0.5483894944190979,
+          -3.61936092376709
+        ],
+        "predictedArrival": [
+          21.57422637939453,
+          0.4999999701976776,
+          -9.533376693725586
+        ],
+        "initialVelocity": [
+          6.496714115142822,
+          3.8260183334350586,
+          -16.78668212890625
+        ],
+        "launchSpeed": 18.402130126953125,
+        "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+        "windDisplacement": [
+          -1.9073486328125e-06,
+          0,
+          0
+        ],
+        "releaseHeight": 0.5483894944190979,
+        "arrivalHeight": 0.4999999701976776,
+        "peakHeight": 1.0133339166641235,
+        "drag": 2,
+        "flightSeconds": 0.6488364934921265,
+        "walkDistance": 0,
+        "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+      },
+      "observedLaunchVelocity": [
+        6.4967145919799805,
+        3.8260183334350586,
+        -16.78668212890625
+      ],
+      "launchVelocityError": 4.76837158203125e-07
+    },
+    {
+      "name": "chocolate-counter",
+      "operation": "throw_to",
+      "level": "s_wizard_school_3_4",
+      "fps": 60,
+      "expected": "throw_received",
+      "observed": "throw_received",
+      "matchesExpectation": true,
+      "seconds": 1.7535,
+      "phases": [
+        "planning_throw",
+        "navigating",
+        "throw_hold",
+        "flight",
+        "idle"
+      ],
+      "cargo": "Chocolate",
+      "cargoInstanceId": -176332,
+      "cargoRetained": false,
+      "holdersAfter": [
+        {
+          "name": "countertop_01_standard_gold (13)",
+          "instanceId": 729462,
+          "component": "ServerAttachStation"
+        }
+      ],
+      "ownedAfter": false,
+      "snapshotSequences": [
+        161,
+        164
+      ],
+      "evidence": ".local/throw-fix-final-20261102/verified-regressions/10-chocolate-counter",
+      "state": "succeeded",
+      "independentlyConfirmed": true,
+      "throw": {
+        "releasePosition": [
+          14.492671012878418,
+          -1.9073486328125e-06,
+          9.71782112121582
+        ],
+        "direction": [
+          -0.010877647437155247,
+          0,
+          -0.9999408721923828
+        ],
+        "origin": [
+          14.485563278198242,
+          0.5483887195587158,
+          9.064369201660156
+        ],
+        "predictedArrival": [
+          14.399796485900879,
+          -1.335000991821289,
+          1.1804003715515137
+        ],
+        "initialVelocity": [
+          -0.1957976520061493,
+          3.8260183334350586,
+          -17.99893569946289
+        ],
+        "launchSpeed": 18.402130126953125,
+        "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+        "windDisplacement": [
+          -2.86102294921875e-06,
+          -1.1920928955078125e-06,
+          -4.76837158203125e-07
+        ],
+        "releaseHeight": 0.5483887195587158,
+        "arrivalHeight": -1.335000991821289,
+        "peakHeight": 1.0133332014083862,
+        "drag": 2,
+        "flightSeconds": 1.1939022541046143,
+        "walkDistance": 0,
+        "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+      },
+      "observedLaunchVelocity": [
+        -0.1957976520061493,
+        3.8260183334350586,
+        -17.99893569946289
+      ],
+      "launchVelocityError": 0.0
+    },
+    {
+      "name": "flour-counter",
+      "operation": "throw_to",
+      "level": "s_wizard_school_3_4",
+      "fps": 60,
+      "expected": "throw_received",
+      "observed": "throw_received",
+      "matchesExpectation": true,
+      "seconds": 5.4923,
+      "phases": [
+        "planning_throw",
+        "navigating",
+        "throw_hold",
+        "flight",
+        "idle"
+      ],
+      "cargo": "Flour",
+      "cargoInstanceId": -188618,
+      "cargoRetained": false,
+      "holdersAfter": [
+        {
+          "name": "countertop_01_standard_gold (13)",
+          "instanceId": 750116,
+          "component": "ServerAttachStation"
+        }
+      ],
+      "ownedAfter": false,
+      "snapshotSequences": [
+        171,
+        174
+      ],
+      "evidence": ".local/throw-fix-final-20261102/verified-regressions/11-flour-counter",
+      "state": "succeeded",
+      "independentlyConfirmed": true,
+      "throw": {
+        "releasePosition": [
+          14.646723747253418,
+          1.1920928955078125e-06,
+          9.82480239868164
+        ],
+        "direction": [
+          -0.028595009818673134,
+          0,
+          -0.9995911121368408
+        ],
+        "origin": [
+          14.628036499023438,
+          0.5483911633491516,
+          9.171579360961914
+        ],
+        "predictedArrival": [
+          14.402586936950684,
+          -1.3350014686584473,
+          1.2903666496276855
+        ],
+        "initialVelocity": [
+          -0.5147101879119873,
+          3.8260183334350586,
+          -17.992639541625977
+        ],
+        "launchSpeed": 18.402130126953125,
+        "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+        "windDisplacement": [
+          5.7220458984375e-06,
+          -1.1920928955078125e-06,
+          -9.5367431640625e-07
+        ],
+        "releaseHeight": 0.5483911633491516,
+        "arrivalHeight": -1.3350014686584473,
+        "peakHeight": 1.0133355855941772,
+        "drag": 2,
+        "flightSeconds": 1.1939029693603516,
+        "walkDistance": 0,
+        "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+      },
+      "observedLaunchVelocity": [
+        -0.5147101879119873,
+        3.8260183334350586,
+        -17.992639541625977
+      ],
+      "launchVelocityError": 0.0
+    },
+    {
+      "name": "egg-counter",
+      "operation": "throw_to",
+      "level": "s_wizard_school_3_4",
+      "fps": 60,
+      "expected": "throw_received",
+      "observed": "throw_received",
+      "matchesExpectation": true,
+      "seconds": 3.5229,
+      "phases": [
+        "planning_throw",
+        "navigating",
+        "throw_hold",
+        "flight",
+        "idle"
+      ],
+      "cargo": "Egg",
+      "cargoInstanceId": -201106,
+      "cargoRetained": false,
+      "holdersAfter": [
+        {
+          "name": "countertop_01_standard_gold (13)",
+          "instanceId": 770770,
+          "component": "ServerAttachStation"
+        }
+      ],
+      "ownedAfter": false,
+      "snapshotSequences": [
+        181,
+        184
+      ],
+      "evidence": ".local/throw-fix-final-20261102/verified-regressions/12-egg-counter",
+      "state": "succeeded",
+      "independentlyConfirmed": true,
+      "throw": {
+        "releasePosition": [
+          15.710709571838379,
+          -3.5762786865234375e-06,
+          9.742101669311523
+        ],
+        "direction": [
+          -0.15166683495044708,
+          0,
+          -0.9884316921234131
+        ],
+        "origin": [
+          15.611597061157227,
+          0.5483868718147278,
+          9.096171379089355
+        ],
+        "predictedArrival": [
+          14.415791511535645,
+          -1.335000991821289,
+          1.302945613861084
+        ],
+        "initialVelocity": [
+          -2.7300031185150146,
+          3.8260183334350586,
+          -17.791770935058594
+        ],
+        "launchSpeed": 18.402132034301758,
+        "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+        "windDisplacement": [
+          1.9073486328125e-06,
+          -1.1920928955078125e-06,
+          -1.430511474609375e-06
+        ],
+        "releaseHeight": 0.5483868718147278,
+        "arrivalHeight": -1.335000991821289,
+        "peakHeight": 1.0133312940597534,
+        "drag": 2,
+        "flightSeconds": 1.193901777267456,
+        "walkDistance": 0,
+        "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+      },
+      "observedLaunchVelocity": [
+        -2.7300033569335938,
+        3.8260183334350586,
+        -17.791770935058594
+      ],
+      "launchVelocityError": 2.384185791015625e-07
+    },
+    {
+      "name": "empty-hands-counter",
+      "operation": "throw_to",
+      "level": "s_wizard_5_5",
+      "fps": 60,
+      "expected": "hands_empty",
+      "observed": "hands_empty",
+      "matchesExpectation": true,
+      "seconds": 0.0258,
+      "phases": [
+        "idle"
+      ],
+      "cargo": null,
+      "cargoInstanceId": null,
+      "cargoRetained": true,
+      "holdersAfter": [],
+      "ownedAfter": false,
+      "snapshotSequences": [
+        191,
+        192
+      ],
+      "evidence": ".local/throw-fix-final-20261102/verified-regressions/13-empty-hands-counter"
+    },
+    {
+      "name": "empty-hands-player",
+      "operation": "throw_to_player",
+      "level": "s_wizard_5_5",
+      "fps": 60,
+      "expected": "hands_empty",
+      "observed": "hands_empty",
+      "matchesExpectation": true,
+      "seconds": 0.0281,
+      "phases": [
+        "idle"
+      ],
+      "cargo": null,
+      "cargoInstanceId": null,
+      "cargoRetained": true,
+      "holdersAfter": [],
+      "ownedAfter": false,
+      "snapshotSequences": [
+        199,
+        200
+      ],
+      "evidence": ".local/throw-fix-final-20261102/verified-regressions/14-empty-hands-player"
+    },
+    {
+      "name": "pan-counter",
+      "operation": "throw_to",
+      "level": "s_wizard_5_5",
+      "fps": 60,
+      "expected": "item_not_throwable",
+      "observed": "item_not_throwable",
+      "matchesExpectation": true,
+      "seconds": 0.0272,
+      "phases": [
+        "idle"
+      ],
+      "cargo": "utensil_frying_pan_01",
+      "cargoInstanceId": 821934,
+      "cargoRetained": true,
+      "holdersAfter": [
+        {
+          "name": "Player 2",
+          "instanceId": 821734,
+          "component": "ServerPlayerAttachmentCarrier"
+        }
+      ],
+      "ownedAfter": false,
+      "snapshotSequences": [
+        207,
+        208
+      ],
+      "evidence": ".local/throw-fix-final-20261102/verified-regressions/15-pan-counter",
+      "state": "blocked"
+    },
+    {
+      "name": "pan-player",
+      "operation": "throw_to_player",
+      "level": "s_wizard_5_5",
+      "fps": 60,
+      "expected": "item_not_throwable",
+      "observed": "item_not_throwable",
+      "matchesExpectation": true,
+      "seconds": 0.0273,
+      "phases": [
+        "idle"
+      ],
+      "cargo": "utensil_frying_pan_01",
+      "cargoInstanceId": 838344,
+      "cargoRetained": true,
+      "holdersAfter": [
+        {
+          "name": "Player 2",
+          "instanceId": 838144,
+          "component": "ServerPlayerAttachmentCarrier"
+        }
+      ],
+      "ownedAfter": false,
+      "snapshotSequences": [
+        215,
+        216
+      ],
+      "evidence": ".local/throw-fix-final-20261102/verified-regressions/16-pan-player",
+      "state": "blocked"
+    },
+    {
+      "name": "plate-counter",
+      "operation": "throw_to",
+      "level": "s_wizard_5_5",
+      "fps": 60,
+      "expected": "item_not_throwable",
+      "observed": "item_not_throwable",
+      "matchesExpectation": true,
+      "seconds": 0.0268,
+      "phases": [
+        "idle"
+      ],
+      "cargo": "equipment_plate_01",
+      "cargoInstanceId": 855088,
+      "cargoRetained": true,
+      "holdersAfter": [
+        {
+          "name": "Player 2",
+          "instanceId": 854554,
+          "component": "ServerPlayerAttachmentCarrier"
+        }
+      ],
+      "ownedAfter": false,
+      "snapshotSequences": [
+        223,
+        224
+      ],
+      "evidence": ".local/throw-fix-final-20261102/verified-regressions/17-plate-counter",
+      "state": "blocked"
+    },
+    {
+      "name": "plate-player",
+      "operation": "throw_to_player",
+      "level": "s_wizard_5_5",
+      "fps": 60,
+      "expected": "item_not_throwable",
+      "observed": "item_not_throwable",
+      "matchesExpectation": true,
+      "seconds": 0.0269,
+      "phases": [
+        "idle"
+      ],
+      "cargo": "equipment_plate_01",
+      "cargoInstanceId": 871498,
+      "cargoRetained": true,
+      "holdersAfter": [
+        {
+          "name": "Player 2",
+          "instanceId": 870964,
+          "component": "ServerPlayerAttachmentCarrier"
+        }
+      ],
+      "ownedAfter": false,
+      "snapshotSequences": [
+        231,
+        232
+      ],
+      "evidence": ".local/throw-fix-final-20261102/verified-regressions/18-plate-player",
+      "state": "blocked"
+    },
+    {
+      "name": "missing-player-3",
+      "operation": "throw_to_player",
+      "level": "s_wizard_5_5",
+      "fps": 60,
+      "expected": "target_unavailable",
+      "observed": "target_unavailable",
+      "matchesExpectation": true,
+      "seconds": 0.0301,
+      "phases": [
+        "idle"
+      ],
+      "cargo": "Cheese_Raw",
+      "cargoInstanceId": -277532,
+      "cargoRetained": true,
+      "holdersAfter": [
+        {
+          "name": "Player 2",
+          "instanceId": 887374,
+          "component": "ServerPlayerAttachmentCarrier"
+        }
+      ],
+      "ownedAfter": false,
+      "snapshotSequences": [
+        239,
+        240
+      ],
+      "evidence": ".local/throw-fix-final-20261102/verified-regressions/19-missing-player-3"
+    },
+    {
+      "name": "missing-player-4",
+      "operation": "throw_to_player",
+      "level": "s_wizard_5_5",
+      "fps": 60,
+      "expected": "target_unavailable",
+      "observed": "target_unavailable",
+      "matchesExpectation": true,
+      "seconds": 0.0264,
+      "phases": [
+        "idle"
+      ],
+      "cargo": "Cheese_Raw",
+      "cargoInstanceId": -288536,
+      "cargoRetained": true,
+      "holdersAfter": [
+        {
+          "name": "Player 2",
+          "instanceId": 903784,
+          "component": "ServerPlayerAttachmentCarrier"
+        }
+      ],
+      "ownedAfter": false,
+      "snapshotSequences": [
+        247,
+        248
+      ],
+      "evidence": ".local/throw-fix-final-20261102/verified-regressions/20-missing-player-4"
+    },
+    {
+      "name": "native-use-control",
+      "operation": "native_throw",
+      "level": "s_wizard_5_5",
+      "fps": 60,
+      "expected": "native_throw_observed",
+      "observed": "native_throw_observed",
+      "matchesExpectation": true,
+      "seconds": 0,
+      "phases": null,
+      "cargo": "Cheese_Raw",
+      "cargoInstanceId": -299540,
+      "cargoRetained": false,
+      "holdersAfter": [],
+      "ownedAfter": null,
+      "snapshotSequences": [
+        255,
+        258
+      ],
+      "evidence": ".local/throw-fix-final-20261102/verified-regressions/21-native-use-control",
+      "nativeFlying": true
+    },
+    {
+      "name": "chocolate-player-outside-catch-scan",
+      "operation": "throw_to_player",
+      "level": "s_wizard_school_3_4",
+      "fps": 60,
+      "expected": "no_reachable_throw_position",
+      "observed": "no_reachable_throw_position",
+      "matchesExpectation": true,
+      "seconds": 0.1662,
+      "phases": [
+        "planning_throw",
+        "idle"
+      ],
+      "cargo": "Chocolate",
+      "cargoInstanceId": -311806,
+      "cargoRetained": true,
+      "holdersAfter": [
+        {
+          "name": "Player 2",
+          "instanceId": 937382,
+          "component": "ServerPlayerAttachmentCarrier"
+        }
+      ],
+      "ownedAfter": false,
+      "snapshotSequences": [
+        265,
+        268
+      ],
+      "evidence": ".local/throw-fix-final-20261102/verified-regressions/22-chocolate-player-outside-catch-scan",
+      "state": "blocked",
+      "expectationReason": "No supported release stance in this fixture satisfies the receiver's native forward PI/2 catch scan."
+    },
+    {
+      "name": "flour-player-outside-catch-scan",
+      "operation": "throw_to_player",
+      "level": "s_wizard_school_3_4",
+      "fps": 60,
+      "expected": "no_reachable_throw_position",
+      "observed": "no_reachable_throw_position",
+      "matchesExpectation": true,
+      "seconds": 0.1832,
+      "phases": [
+        "planning_throw",
+        "idle"
+      ],
+      "cargo": "Flour",
+      "cargoInstanceId": -324070,
+      "cargoRetained": true,
+      "holdersAfter": [
+        {
+          "name": "Player 2",
+          "instanceId": 958036,
+          "component": "ServerPlayerAttachmentCarrier"
+        }
+      ],
+      "ownedAfter": false,
+      "snapshotSequences": [
+        275,
+        278
+      ],
+      "evidence": ".local/throw-fix-final-20261102/verified-regressions/23-flour-player-outside-catch-scan",
+      "state": "blocked",
+      "expectationReason": "No supported release stance in this fixture satisfies the receiver's native forward PI/2 catch scan."
+    },
+    {
+      "name": "airborne-stop",
+      "operation": "throw_to_player",
+      "level": "s_wizard_5_5",
+      "fps": 60,
+      "expected": "stopped",
+      "observed": "stopped",
+      "matchesExpectation": true,
+      "seconds": 0.436,
+      "phases": [
+        "navigating",
+        "throw_hold",
+        "flight",
+        "idle"
+      ],
+      "cargo": "Cheese_Raw",
+      "cargoInstanceId": -335066,
+      "cargoRetained": false,
+      "holdersAfter": [
+        {
+          "name": "Player 1",
+          "instanceId": 981634,
+          "component": "ServerPlayerAttachmentCarrier"
+        }
+      ],
+      "ownedAfter": false,
+      "snapshotSequences": [
+        285,
+        288
+      ],
+      "evidence": ".local/throw-fix-final-20261102/verified-regressions/24-airborne-stop",
+      "state": "cancelled",
+      "cancelledAt": "flight",
+      "throwReleased": true,
+      "observedLaunchVelocity": [
+        -11.751688957214355,
+        3.8260183334350586,
+        13.634434700012207
+      ]
+    },
+    {
+      "name": "airborne-disconnect",
+      "operation": "throw_to_player",
+      "level": "s_wizard_5_5",
+      "fps": 60,
+      "expected": "control_lost",
+      "observed": "control_lost",
+      "matchesExpectation": true,
+      "seconds": 0.384,
+      "phases": [
+        "navigating",
+        "aiming",
+        "throw_hold",
+        "flight",
+        "idle"
+      ],
+      "cargo": "Cheese_Raw",
+      "cargoInstanceId": -346174,
+      "cargoRetained": false,
+      "holdersAfter": [
+        {
+          "name": "Player 1",
+          "instanceId": 998044,
+          "component": "ServerPlayerAttachmentCarrier"
+        }
+      ],
+      "ownedAfter": false,
+      "snapshotSequences": [
+        295,
+        298
+      ],
+      "evidence": ".local/throw-fix-final-20261102/verified-regressions/25-airborne-disconnect",
+      "state": "cancelled",
+      "cancelledAt": "flight",
+      "throwReleased": true,
+      "observedLaunchVelocity": [
+        -11.751688957214355,
+        3.8260183334350586,
+        13.634434700012207
+      ]
+    },
+    {
+      "name": "busy-player",
+      "operation": "throw_to_player",
+      "level": "s_wizard_5_5",
+      "fps": 60,
+      "expected": "player_cannot_catch",
+      "observed": "player_cannot_catch",
+      "matchesExpectation": true,
+      "seconds": 0.0238,
+      "phases": [
+        "idle"
+      ],
+      "cargo": "Meat",
+      "cargoInstanceId": -357534,
+      "cargoRetained": true,
+      "holdersAfter": [
+        {
+          "name": "Player 2",
+          "instanceId": 1011030,
+          "component": "ServerPlayerAttachmentCarrier"
+        }
+      ],
+      "ownedAfter": false,
+      "snapshotSequences": [
+        305,
+        306
+      ],
+      "evidence": ".local/throw-fix-final-20261102/verified-regressions/26-busy-player",
+      "state": "blocked"
+    },
+    {
+      "name": "flour-incompatible-receiver",
+      "operation": "throw_to",
+      "level": "s_wizard_school_3_4",
+      "fps": 60,
+      "expected": "target_cannot_catch",
+      "observed": "target_cannot_catch",
+      "matchesExpectation": true,
+      "seconds": 0.0433,
+      "phases": [
+        "idle"
+      ],
+      "cargo": "Flour",
+      "cargoInstanceId": -369808,
+      "cargoRetained": true,
+      "holdersAfter": [
+        {
+          "name": "Player 2",
+          "instanceId": 1028218,
+          "component": "ServerPlayerAttachmentCarrier"
+        }
+      ],
+      "ownedAfter": false,
+      "snapshotSequences": [
+        313,
+        314
+      ],
+      "evidence": ".local/throw-fix-final-20261102/verified-regressions/27-flour-incompatible-receiver",
+      "state": "blocked",
+      "expectationReason": "The selected counter has a native receiver that cannot catch this ingredient."
+    },
+    {
+      "name": "flour-constrained-counter",
+      "operation": "throw_to",
+      "level": "s_wizard_school_3_4",
+      "fps": 60,
+      "expected": [
+        "no_reachable_throw_position",
+        "throw_received"
+      ],
+      "observed": "no_reachable_throw_position",
+      "matchesExpectation": true,
+      "seconds": 0.1161,
+      "phases": [
+        "planning_throw",
+        "idle"
+      ],
+      "cargo": "Flour",
+      "cargoInstanceId": -382064,
+      "cargoRetained": true,
+      "holdersAfter": [
+        {
+          "name": "Player 2",
+          "instanceId": 1048872,
+          "component": "ServerPlayerAttachmentCarrier"
+        }
+      ],
+      "ownedAfter": false,
+      "snapshotSequences": [
+        322,
+        323
+      ],
+      "evidence": ".local/throw-fix-final-20261102/verified-regressions/28-flour-constrained-counter",
+      "state": "blocked",
+      "expectationReason": "Either certify and deliver through the constrained geometry, or retain cargo; a released miss is a failure."
+    },
+    {
+      "name": "egg-player-outside-catch-scan",
+      "operation": "throw_to_player",
+      "level": "s_wizard_school_3_4",
+      "fps": 60,
+      "expected": "no_reachable_throw_position",
+      "observed": "no_reachable_throw_position",
+      "matchesExpectation": true,
+      "seconds": 0.1515,
+      "phases": [
+        "planning_throw",
+        "idle"
+      ],
+      "cargo": "Egg",
+      "cargoInstanceId": -394302,
+      "cargoRetained": true,
+      "holdersAfter": [
+        {
+          "name": "Player 2",
+          "instanceId": 1069526,
+          "component": "ServerPlayerAttachmentCarrier"
+        }
+      ],
+      "ownedAfter": false,
+      "snapshotSequences": [
+        330,
+        333
+      ],
+      "evidence": ".local/throw-fix-final-20261102/verified-regressions/29-egg-player-outside-catch-scan",
+      "state": "blocked",
+      "expectationReason": "No supported release stance in this fixture satisfies the receiver's native forward PI/2 catch scan."
+    },
+    {
+      "name": "lettuce-player-20",
+      "operation": "throw_to_player",
+      "level": "s_wizard_5_5",
+      "fps": 20,
+      "expected": "throw_received",
+      "observed": "throw_received",
+      "matchesExpectation": true,
+      "seconds": 2.5279,
+      "phases": [
+        "planning_throw",
+        "navigating",
+        "aiming",
+        "throw_hold",
+        "flight",
+        "idle"
+      ],
+      "cargo": "Lettuce",
+      "cargoInstanceId": -405420,
+      "cargoRetained": false,
+      "holdersAfter": [
+        {
+          "name": "Player 1",
+          "instanceId": 1093124,
+          "component": "ServerPlayerAttachmentCarrier"
+        }
+      ],
+      "ownedAfter": false,
+      "snapshotSequences": [
+        341,
+        344
+      ],
+      "evidence": ".local/throw-fix-final-20261102/verified-regressions/30-lettuce-player-20",
+      "state": "succeeded",
+      "independentlyConfirmed": true,
+      "throw": {
+        "releasePosition": [
+          15.6044921875,
+          -6.4373016357421875e-06,
+          -6.805577278137207
+        ],
+        "direction": [
+          0.15268589556217194,
+          0,
+          0.9882747530937195
+        ],
+        "origin": [
+          15.70427131652832,
+          0.5483874082565308,
+          -6.159749507904053
+        ],
+        "predictedArrival": [
+          16.03216552734375,
+          0.9074037075042725,
+          -4.037436008453369
+        ],
+        "initialVelocity": [
+          2.7483460903167725,
+          3.8260183334350586,
+          17.7889461517334
+        ],
+        "launchSpeed": 18.402130126953125,
+        "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+        "windDisplacement": [
+          1.9073486328125e-06,
+          5.960464477539063e-08,
+          0
+        ],
+        "releaseHeight": 0.5483874082565308,
+        "arrivalHeight": 0.9074037075042725,
+        "peakHeight": 0.9854263067245483,
+        "drag": 2,
+        "flightSeconds": 0.13999998569488525,
+        "walkDistance": 0,
+        "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+      },
+      "observedLaunchVelocity": [
+        2.7483458518981934,
+        3.8260183334350586,
+        17.7889461517334
+      ],
+      "launchVelocityError": 2.384185791015625e-07
+    }
+  ],
+  "installed": {
+    "relativePath": "BepInEx/plugins/SousChef/SousChef.Bridge.dll",
+    "bridgeSha256": "b5292629681aee2519d4354bc1feebe87aad8da3bc060e18f97deb2ed4a199dd",
+    "matchesNativeTestedDll": true,
+    "previousInstallationBackup": ".local/throw-fix-final-20261102/installed-before"
+  },
+  "simulatorStopped": true
+}

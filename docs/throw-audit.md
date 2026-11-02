@@ -1,6 +1,9 @@
 # Native throw audit — 2026-11-02
 
-**Ordinary airborne throws are currently blocked.** All 13 functional fixtures
+This is the baseline captured before the fixes. See the
+[current implementation and regression results](throw-fix.md).
+
+**Baseline: ordinary airborne throws were blocked.** All 13 functional fixtures
 returned `unsupported_throw_geometry` before releasing an item. A nearby counter
 handoff succeeded, and ordinary native use input threw the exact cheese rejected
 by the planner. The 38 rejection/ownership checks passed.
