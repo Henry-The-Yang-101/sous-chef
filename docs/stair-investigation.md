@@ -61,8 +61,9 @@ its planning and recovery lifecycle. Regression coverage keeps the harness poll
 in the middle of an airborne recovery and verifies the action survives.
 
 Ramp-box geometry reserves a full chef footprint laterally in planned nodes.
-Actual-body connectors use a smaller reserve to accommodate native drift while
-entering or exiting that interior route. Both use current collider transforms;
+Actual-body connectors use the physical capsule/support checks when entering or
+exiting that interior route; the planner's extra margin is not an invisible wall
+that invalidates a safe native exit. Both use current collider transforms;
 the implementation has no kitchen, collider-name, or coordinate checks.
 
 Sloped contact continuity permits up to 0.0025 units of tangent-query error.
@@ -104,7 +105,13 @@ Local artifacts are ignored by Git because they contain game geometry:
   separation between planning and actual-body clearance.
 - `.local/stair-reserve-20`: eight of ten round trips; exposed the inconsistent
   landing-skin threshold.
-- `.local/stair-skin-20`: validation of the corrected landing-skin threshold.
+- `.local/stair-skin-20`: ten of ten complete round trips with the corrected
+  landing-skin threshold.
+- `.local/stair-skin-60`: nine of ten complete round trips. The failure was a
+  safe bottom exit incorrectly rejected by the extra planning margin. This
+  motivated keeping that extra margin out of actual-body connector validity.
+- `.local/stair-skin-motion-summary.json`: both batches' reconstructed motion
+  summaries from the deduplicated native traces.
 - `.local/stair-*-check.log` and `.local/stair-*-navigation.log`: automated checks.
 
 Successful runs still include short neutral recovery episodes. Reliability and
