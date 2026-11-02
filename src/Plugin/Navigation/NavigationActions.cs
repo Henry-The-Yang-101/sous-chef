@@ -183,10 +183,13 @@ namespace SousChef.Plugin.Navigation
         public object Available(PlayerControls player)
         {
             warmTicks = 8;
-            if (activePortal == null)
+            // Observation must not replan an in-flight action. Tick owns the
+            // ground-settling/transport checks and only replans at a usable pose.
+            // A harness catalogue poll during a native stair hop otherwise turns
+            // a recoverable contact transition into an immediate not_grounded stop.
+            if (Action.State != "navigating")
             {
                 Refresh(player, true);
-                if (Action.State == "navigating") ApplyPlan();
             }
             var destinations = new List<object>();
             foreach (Destination d in available.Values)

@@ -295,6 +295,7 @@ internal static class Program
         string id=navigation.Action.Destination;
         bridge=false; floor.testBounds=new Bounds(Vector3.zero,new Vector3(201,2,201));
         w.Chef.transform.position=new Vector3(-1,0,-.85f); Time.realtimeSinceStartup += .21f;
+        navigation.Tick(w.Chef);
         var catalog=(Json.Record)navigation.Available(w.Chef);
         var destination=((List<object>)catalog["destinations"]).Cast<Json.Record>().FirstOrDefault(d => (string)d["id"]==id);
         Check(destination != null,"reachable destination survives loss of retained side");
@@ -305,6 +306,7 @@ internal static class Program
         w=new World(); w.AddFloor((x,z) => Math.Abs(x)<2 && Math.Abs(z)<2 ? 0 : (float?)null);
         w.Chef.transform.position=new Vector3(-1,0,0); station=w.AddStation(); navigation=w.Navigate(station); id=navigation.Action.Destination;
         w.Chef.transform.position=new Vector3(-.3f,0,-.7f); Time.realtimeSinceStartup += .02f;
+        navigation.Tick(w.Chef);
         catalog=(Json.Record)navigation.Available(w.Chef);
         destination=((List<object>)catalog["destinations"]).Cast<Json.Record>().First(d => (string)d["id"]==id);
         approach=(float[])destination["approachPosition"];
@@ -371,6 +373,9 @@ internal static class Program
         w.Chef.GroundCollider = null; w.Chef.transform.position += Vector3.up * .35f;
         Time.realtimeSinceStartup += .02f; navigation.Tick(w.Chef);
         Check(navigation.Action.State == "navigating" && w.LastInput.magnitude == 0 && w.LastMilliseconds > 0, "native stair hop keeps the action with neutral input above a checked landing");
+        navigation.Available(w.Chef);
+        Check(navigation.Action.State == "navigating" && navigation.Action.Revision == revision,
+            "a concurrent harness catalogue read cannot cancel a recovering stair hop");
         w.Chef.GroundCollider = floor; w.Chef.GetComponent<GroundCast>().Distance = .24f;
         Time.realtimeSinceStartup += .02f; navigation.Tick(w.Chef);
         Check(navigation.Action.State == "navigating" && w.LastInput.magnitude > .9f, "valid native proximity contact permits a checked route instead of repeatedly braking off the stair");
