@@ -76,7 +76,6 @@ namespace SousChef.Plugin.Navigation
             GroundCast ground = player.GetComponent<GroundCast>();
             if (shape == null || !shape.enabled || shape.direction != 1 || ground == null || landscape == null || windFilter == null || gridSelection == null || interactionMask == null)
                 return "unsupported_chef_geometry";
-            if (player.GroundCollider == null) return "not_grounded";
             if (Vector3.Dot(player.transform.up, Vector3.up) < .99f) return "unsupported_gravity";
             if (chef != player || capsule != shape) Reset();
             chef = player; capsule = shape;
@@ -181,7 +180,7 @@ namespace SousChef.Plugin.Navigation
                 foreach (WalkCell cell in dirty) { probes.Remove(cell); edges.Remove(cell); }
                 if (dirty.Count > 0) Changed = true;
             }
-            return null;
+            return player.GroundCollider == null ? "not_grounded" : null;
         }
         private int ShapeKey(Collider c, bool reconcile)
         {
@@ -441,10 +440,10 @@ namespace SousChef.Plugin.Navigation
                 if (currentSurface != null && chef.SurfaceMovable != null && previousSurface != null)
                     priorSurface = previousSurface.GetValue(chef.SurfaceMovable) as IMovingSurface;
             }
-            bool clear = WalkSegments.Check(Vector3.Distance(from, to), delegate(float fraction)
+            Func<Vector3, int, bool> visit = null;
+            visit = delegate(Vector3 guess, int depth)
             {
                 Vector3 point; Collider ground; RaycastHit centre;
-                Vector3 guess = Vector3.Lerp(from, to, fraction);
                 // Only the connector from the actual chef uses contact clearance.
                 // Growing a capsule while sliding away from a wall invents a
                 // collision: use consistent native clearance along this connector.
@@ -453,6 +452,20 @@ namespace SousChef.Plugin.Navigation
                 if (!Stand(guess, out point, out ground, clearance, out centre)) return false;
                 if (!WalkHeight.Connected(guess.y, point.y, StepHeight) || !WalkHeight.Connected(previous.y, point.y, StepHeight))
                     return Fail("support_height", point, ground);
+                bool nativeStep = havePrevious && !ContinuousSupport(previousGround, centre) &&
+                    NativeStep(point.y > previous.y ? centre.collider : previousGround.collider);
+                // A coarse chord can bridge the unstandable strip at a wedge's
+                // side: its sphere contact crosses the native slope cutoff there.
+                // Refine changing support within the body skin, before certifying
+                // the connection. Flat interiors retain the coarse sampling rate.
+                Vector3 horizontal = point - previous; horizontal.y = 0;
+                if (havePrevious && !nativeStep && horizontal.magnitude > Skin * .5f &&
+                    (previousGround.collider != centre.collider || nativeRadius * (previousGround.normal - centre.normal).magnitude > Skin * .5f))
+                {
+                    if (depth >= 8) return Fail("support_resolution", point, ground);
+                    if (!visit((previous + point) * .5f, depth + 1)) return false;
+                    return visit(guess, depth + 1);
+                }
                 if (havePrevious && !SupportConnected(previousGround, centre)) return Fail("support_discontinuity", point, ground);
                 if (checkFlow)
                 {
@@ -461,13 +474,29 @@ namespace SousChef.Plugin.Navigation
                     TrackSurface(ground, centre.point, ref currentSurface, ref priorSurface);
                 }
                 if (checkFlow && !CanWalkDirection(from, to, ground, centre.point, priorSurface)) return false;
-                if (!StepSweep(previous, point, clearance)) return false;
+                // Native Steppable collisions can lift the body vertically. Ordinary
+                // ramps cannot: sweep the actual continuous body trajectory, so
+                // a raised endpoint cannot hide a collision at the ramp's side.
+                if (!(nativeStep ? StepSweep(previous, point, clearance) : Sweep(previous, point, clearance))) return false;
                 if (samples != null) samples.Add(new GroundSample { Point = centre.point, Ground = ground });
                 previous = point; previousGround = centre; havePrevious = true;
                 return true;
-            });
+            };
+            bool clear = WalkSegments.Check(Vector3.Distance(from, to), fraction => visit(Vector3.Lerp(from, to, fraction), 0));
             if (clear && !Overflow && history != null) history(SurfaceHistory(priorSurface));
             return clear && !Overflow;
+        }
+        // GroundCast intentionally loses contact when native stair momentum
+        // carries the capsule more than 0.3 units above a tread. A clear landing
+        // below the current body permits neutral input while gravity settles it;
+        // this does not authorize walking while airborne or over a missing floor.
+        public bool ClearLanding()
+        {
+            if (chef == null) return false;
+            Vector3 position = Position, support; Collider ground;
+            if (!Stand(position, out support, out ground, ContactRadius) ||
+                support.y > position.y + .025f || position.y - support.y > StepHeight) return false;
+            return Sweep(position, support, ContactRadius);
         }
         private bool StepSweep(Vector3 from, Vector3 to, float clearance)
         {

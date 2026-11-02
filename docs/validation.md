@@ -521,3 +521,24 @@ No game was opened or controlled and no installed plugin was replaced. Native
 Update/FixedUpdate/trigger timing, changing wind fields, future human movement
 and collision behavior still require live validation before claiming perfect
 throws. Check log: `.local/logistics-wind-final-check.log`.
+
+### 2026-11-01: stair execution root-cause capture
+
+The previously reported Chocolate arrival was manually assisted and is not a
+successful autonomous stair validation. The opt-in trace (`e504810`) reproduced:
+
+- `next_step_unsafe` at the outside edge of the first wedge. Captured geometry
+  contains a body-blocked strip near x=16.42..16.46, z=4.4 between standable floor
+  and wedge endpoints. The old coarse segment checker skipped this strip.
+- `no_safe_start` when subsequent connectors swept from a body contacting the
+  wedge; retrying from a settled pose could resume.
+- `not_grounded` at the upper landing with foot y=0.3501 and upward velocity
+  0.9946, after native ground distance reached 0.2919. GroundCast rejects contacts
+  farther than 0.3 from the body, so the old controller cancelled an ordinary
+  native stair hop immediately.
+
+The new solid-box corner regression fails against `e504810` and passes with
+support-transition refinement. All 92 navigation checks, 815 core assertions,
+181 action checks, assembly audit, and 66 Python tests pass. Live validation of
+this correction is pending installation; analytical results alone do not prove
+execution. Conveyor routing has not been revalidated live in this kitchen.

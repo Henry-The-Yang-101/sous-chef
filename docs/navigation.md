@@ -271,3 +271,18 @@ check. A `no_safe_start` stop also includes the attempted start connectors. Trac
 is off by default and does not change movement decisions. Capture this trace and
 the gameplay stream together; a reachable destination or a manually assisted
 arrival does not establish that the controller can execute a stair route.
+
+Stair execution distinguishes continuous ramps from native `Steppable` objects.
+Only the latter permit an up/across/down body sweep. When the support collider or
+contact normal changes, segment checking subdivides that transition down to half
+the collision skin. This detects the blocked strip at a stair wedge's outside
+corner, where the capsule overlaps the wedge before its contact becomes shallow
+enough to meet the game's 58-degree ground limit. A coarse chord between valid
+endpoints can otherwise incorrectly certify that approach.
+
+A running action can enter `settling_ground` when native stair momentum lifts the
+chef beyond GroundCast's contact distance. It issues neutral input while checking
+a clear, collision-free landing below the body, within the native step-height
+range. Ground contact resumes the same action and forces replanning; absent or
+blocked support stops immediately, and contact must return within the existing
+two-second stall interval. This does not allow airborne steering across holes.

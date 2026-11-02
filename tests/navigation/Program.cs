@@ -320,9 +320,43 @@ internal static class Program
         Time.deltaTime=Time.unscaledDeltaTime=1; Time.realtimeSinceStartup += 1; navigation.Tick(w.Chef);
         Check(navigation.Action.Reason == "unsafe_update_interval" && w.LastMilliseconds == 0,"excessive update stall emits no new movement");
     }
+    private static void CapturedStairCorner()
+    {
+        var w = new World();
+        var shape = w.Chef.GetComponent<CapsuleCollider>(); shape.radius = .4f; shape.height = 2; shape.center = Vector3.up;
+        var boxes = RecordedBox.Install(); w.Chef.GroundCollider = boxes[0];
+        w.Chef.transform.position = new Vector3(16.765953f, -1.837692f, 4.441718f);
+        var physics = w.Ready(); Vector3 point; Collider ground;
+        Check(physics.Stand(new Vector3(16.4f,-1.74191f,4.4f), out point, out ground), "recorded stair corner endpoint is standable");
+        Check(!physics.Stand(new Vector3(16.426f,-1.8356f,4.4f), out point, out ground), "recorded corner contains a body-blocked strip below the native slope cutoff");
+        Check(!physics.Segment(w.Chef.transform.position,new Vector3(16.4f,-1.74191f,4.4f)), "planner rejects captured corner shortcut instead of bridging its blocked strip");
+        Check(physics.Segment(new Vector3(15,-1.835624f,3.9f),new Vector3(15,-1.505f,4.9f)), "same captured wedge remains traversable through its front");
+    }
+    private static void GroundSettling()
+    {
+        var w = new World(); var floor = w.AddFloor((x,z) => Math.Abs(x)<2 && Math.Abs(z)<2 ? 0 : (float?)null);
+        w.Chef.transform.position = new Vector3(0,0,-1.3f); var station = w.AddStation(); var navigation = w.Navigate(station);
+        long revision = navigation.Action.Revision;
+        w.Chef.GroundCollider = null; w.Chef.transform.position += Vector3.up * .35f;
+        Time.realtimeSinceStartup += .02f; navigation.Tick(w.Chef);
+        Check(navigation.Action.State == "navigating" && w.LastInput.magnitude == 0 && w.LastMilliseconds > 0, "native stair hop keeps the action with neutral input above a checked landing");
+        w.Chef.GroundCollider = floor; w.Chef.transform.position -= Vector3.up * .35f;
+        Time.realtimeSinceStartup += .1f; navigation.Tick(w.Chef);
+        Check(navigation.Action.State == "navigating" && navigation.Action.Revision == revision && w.LastInput.magnitude > .9f, "landing resumes the same request without requiring another Run click");
+        w.Chef.GroundCollider = null; w.Chef.transform.position += Vector3.up * .35f;
+        Time.realtimeSinceStartup += .02f; navigation.Tick(w.Chef);
+        Time.realtimeSinceStartup += 2.01f; navigation.Tick(w.Chef);
+        Check(navigation.Action.Reason == "ground_contact_timeout", "a landing that never regains native ground contact terminates within the stall deadline");
+
+        w = new World(); floor = w.AddFloor((x,z) => Math.Abs(x)<2 && Math.Abs(z)<2 ? 0 : (float?)null);
+        w.Chef.transform.position = new Vector3(0,0,-1.3f); station = w.AddStation(); navigation = w.Navigate(station);
+        floor.enabled = false; w.Chef.GroundCollider = null; w.Chef.transform.position += Vector3.up * .35f;
+        Time.realtimeSinceStartup += .02f; navigation.Tick(w.Chef);
+        Check(navigation.Action.Reason == "not_grounded", "missing floor is not treated as a harmless stair hop");
+    }
     private static void Main()
     {
-        StepsAndRamps(); InteriorFlow(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
+        CapturedStairCorner(); GroundSettling(); StepsAndRamps(); InteriorFlow(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
         Console.WriteLine("PASS: " + checks + " navigator integration checks (analytical geometry; not PhysX)");
     }
 }

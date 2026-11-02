@@ -11,5 +11,7 @@
     <Compile Include="../../src/Plugin/Navigation/*.cs" />
     <Compile Include="Stubs.cs" />
     <Compile Include="Program.cs" />
+    <Compile Include="StairGeometry.cs" />
+    <None Include="fixtures/*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

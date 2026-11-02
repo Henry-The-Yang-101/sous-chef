@@ -25,3 +25,12 @@ retaining ownership and renewal after frame jitter.
 These doubles do not emulate PhysX, native step projection, friction or Unity
 update ordering. Building against the installed assemblies checks API compatibility;
 real level traversal and low-FPS/native-input behavior still need live validation.
+
+`fixtures/wizard-stair-corner.json` contains eight measured floor/tread/wedge box
+transforms from the live Chocolate stair failure in `s_wizard_school_3_4`.
+`StairGeometry.cs` independently replays solid oriented-box contacts and continuous
+capsule sweeps. The regression checks the blocked strip between valid endpoints
+and preserves a front-on route. The pre-fix controller fails this regression.
+This replay still is not Unity PhysX; live execution remains a separate check.
+Ground-settling regressions cover neutral input, automatic continuation, missing
+floor rejection, and timeout without native ground reacquisition.

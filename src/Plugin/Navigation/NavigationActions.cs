@@ -43,6 +43,7 @@ namespace SousChef.Plugin.Navigation
         private int nodeCount, candidateCount, startCount;
         private string observationError;
         private bool planning;
+        private float settlingSince = -1;
         private readonly Queue<object> executionTrace = new Queue<object>();
         private void Trace(string phase, Vector3 goal, Vector3 input)
         {
@@ -91,7 +92,7 @@ namespace SousChef.Plugin.Navigation
             chef = player;
             var chosen = new Destination { Id = "throw_stance", Object = aim, Kind = "throw_stance", IsPoint = true, Approach = position };
             if (!Action.Start(owner, chosen.Id, true)) return "action_in_progress";
-            target = chosen; started = lastProgress = Time.realtimeSinceStartup; progressPosition = player.transform.position;
+            settlingSince = -1; target = chosen; started = lastProgress = Time.realtimeSinceStartup; progressPosition = player.transform.position;
             arrivalDetails = null; arrival.Reset(); facingSince = -1; haveMotion = motionSampleValid = false;
             Refresh(player, true);
             if (!ApplyPlan()) return Action.Reason;
@@ -141,7 +142,7 @@ namespace SousChef.Plugin.Navigation
             // Neutral first; callers must not observe idle with stale movement input.
             neutral();
             if (target != null && target.Object != null) lastDestination = Identity(target);
-            Action.Stop(reason); target = null; route = null; facingSince = -1; arrival.Reset(); haveMotion = motionSampleValid = false;
+            Action.Stop(reason); settlingSince = -1; target = null; route = null; facingSince = -1; arrival.Reset(); haveMotion = motionSampleValid = false;
         }
         public void Invalidate(string reason)
         {
@@ -152,7 +153,7 @@ namespace SousChef.Plugin.Navigation
         {
             return Json.Object("state", Action.State, "destinationId", Action.Destination, "reason", Action.Reason,
                 "destination", target == null ? lastDestination : Identity(target),
-                "phase", Action.State == "idle" ? "idle" : facingSince < 0 ? "walking" : "aligning", "arrival", arrivalDetails,
+                "phase", Action.State == "idle" ? "idle" : settlingSince >= 0 ? "settling_ground" : facingSince < 0 ? "walking" : "aligning", "arrival", arrivalDetails,
                 "executionTrace", physics.TraceEnabled ? executionTrace.ToArray() : null,
                 "revision", Action.Revision, "catalogRevision", revision, "catalogReason", unavailable,
                 "catalogComplete", unavailable == null && search != null && search.Complete,
@@ -203,7 +204,7 @@ namespace SousChef.Plugin.Navigation
             if (!Action.Start(owner, destination, true)) return "action_in_progress";
             target = chosen; lastDestination = Identity(chosen); started = lastProgress = Time.realtimeSinceStartup; progressPosition = physics.Position;
             arrivalDetails = null; arrival.Reset(); facingSince = -1; haveMotion = motionSampleValid = false;
-            executionTrace.Clear(); SetRoute(chosen); Trace("start", chosen.Approach, Vector3.zero); return null;
+            settlingSince = -1; executionTrace.Clear(); SetRoute(chosen); Trace("start", chosen.Approach, Vector3.zero); return null;
         }
         private bool ApplyPlan()
         {
@@ -250,7 +251,16 @@ namespace SousChef.Plugin.Navigation
             int commandMilliseconds = WalkingCommand.Milliseconds(Time.unscaledDeltaTime);
             if (commandMilliseconds == 0) { Stop("unsafe_update_interval"); return; }
             string error = physics.Refresh(player);
+            if (error == "not_grounded" && physics.ClearLanding())
+            {
+                if (settlingSince < 0) settlingSince = Time.realtimeSinceStartup;
+                if (Time.realtimeSinceStartup - settlingSince > 2f) { Stop("ground_contact_timeout"); return; }
+                Trace("settling_ground", Vector3.zero, Vector3.zero);
+                move(Vector3.zero, commandMilliseconds);
+                return;
+            }
             if (error != null) { Invalidate(error); return; }
+            if (settlingSince >= 0) { settlingSince = -1; lastPlan = -1; }
             // Any observed geometry change prompts a full reachability recheck in this
             // same tick, before emitting another input. Also poll dynamic affordances.
             if (physics.Changed || Time.realtimeSinceStartup - lastPlan >= .1f || TargetMoved())
