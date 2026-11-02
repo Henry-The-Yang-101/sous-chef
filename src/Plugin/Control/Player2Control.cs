@@ -180,7 +180,7 @@ namespace SousChef.Plugin.Control
             if (owner == 0 || lease.Owner(Now) != owner) { navigation.Stop("control_lost"); return; }
             float x = direction.x * (target.Movement.XAxisAllignment == PlayerControls.InversionType.Normal ? 1 : -1);
             float y = -direction.z * (target.Movement.YAxisAllignment == PlayerControls.InversionType.Normal ? 1 : -1);
-            string error = lease.Set(owner, new ControlCommand { Sequence = ++navigationSequence, Milliseconds = Math.Max(150, inputMilliseconds + 50),
+            string error = lease.Set(owner, new ControlCommand { Sequence = ++navigationSequence, Milliseconds = WalkingCommand.OwnershipMilliseconds(inputMilliseconds),
                 X = x, Y = y, Buttons = 0 }, Now, inputMilliseconds);
             if (error != null) navigation.Stop(error);
         }
