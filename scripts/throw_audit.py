@@ -6,10 +6,12 @@ physics parameters, receiver input, or game clocks are modified by this runner.
 Full snapshots provide item identity/holder evidence independent of receipts.
 """
 import argparse
+from contextlib import ExitStack
 import hashlib
 import json
 from pathlib import Path
 import sys
+import socket
 import time
 
 import native_simulator as sim
@@ -29,11 +31,18 @@ def fields(obj, component):
 
 
 def snapshot(port, session, path):
+    first_sequence = None
     with BridgeClient(port, timeout=10) as bridge:
         for message in bridge.messages():
             if bridge.session_id != session:
                 raise RuntimeError('Snapshot belongs to another native session')
             if message['type'] == 'snapshot' and message.get('inRound'):
+                # A newly connected stream can replay its last cached capture.
+                # Wait for the next capture so an after-action observation cannot
+                # accidentally describe the pre-action holder relationship.
+                if first_sequence is None:
+                    first_sequence = message['sequence']
+                    continue
                 write(path, message)
                 return message
     raise RuntimeError('No live native snapshot')
@@ -84,7 +93,7 @@ def resolve(options, selector):
     return found[0]
 
 
-def execute(client, operation, argument, trace, timeout, cancel=None):
+def execute(client, operation, argument, trace, timeout, cancel=None, cancel_mode='stop'):
     started = time.monotonic()
     result = {'operation': operation, 'argument': argument, 'phases': []}
     try:
@@ -95,7 +104,7 @@ def execute(client, operation, argument, trace, timeout, cancel=None):
     # A validation rejection can leave a previous receipt in status. Never
     # associate that receipt with the current request just because it is terminal.
     request_id = str(client.request_id - 1 if 'requestError' in result else client.request_id)
-    with trace.open('w') as recording:
+    with trace.open('w') as recording, ExitStack() as observers:
         while True:
             state = control['navigation'] if operation == 'navigate_to' else control['action']
             recording.write(json.dumps({'seconds': time.monotonic() - started, 'control': control}) + '\n')
@@ -106,7 +115,17 @@ def execute(client, operation, argument, trace, timeout, cancel=None):
                 break
             if cancel and not result.get('cancelledAt') and state.get('phase') == cancel:
                 result['cancelledAt'] = cancel
-                client.stop()
+                if cancel_mode == 'disconnect':
+                    port = client.socket.getpeername()[1]
+                    # Abrupt transport loss; close() normally sends release and
+                    # would therefore test a different cancellation path.
+                    client.claimed = False
+                    client.socket.shutdown(socket.SHUT_RDWR)
+                    client.reader.close()
+                    client.socket.close()
+                    client = observers.enter_context(ActionClient(port, timeout=10))
+                else:
+                    client.stop()
             if time.monotonic() - started > timeout:
                 result['testTimeout'] = True
                 client.stop()
@@ -164,25 +183,40 @@ def run_case(args, case, index):
                 'colliders': cargo['colliders'], 'transform': cargo['transform']}
             operation = case['operation']
             target = None
-            if operation == 'throw_to_player':
+            if operation in ('throw_to_player', 'native_throw'):
                 argument = case['target']
             else:
                 target = resolve(available['targets'], case['target'])
                 argument = target['id']
                 result['target'] = target
-            result['action'] = execute(client, operation, argument, directory / 'action.ndjson',
-                                       args.timeout, case.get('cancelAt'))
+            if operation == 'native_throw':
+                # Comparison fixture: try the production planner with this exact
+                # cargo first, then use only the normal P2 use button to launch.
+                result['plannerComparison'] = execute(client, 'throw_to_player', argument,
+                                                       directory / 'planner.ndjson', args.timeout)
+                client.claim()
+                client.hold(.15, buttons=('use',))
+                client.hold(.04)
+                write(directory / 'input-status.json', client.status())
+            else:
+                result['action'] = execute(client, operation, argument, directory / 'action.ndjson',
+                                           args.timeout, case.get('cancelAt'), case.get('cancelMode', 'stop'))
             after = snapshot(args.snapshot_port, initial['sessionId'], directory / 'after.json')
             post = next((o for o in after['objects'] if cargo and o['unityInstanceId'] == cargo['unityInstanceId']), None)
             result['holdersAfter'] = item_holders(after, post)
             result['cargoRetained'] = cargo is None or any(
                 o['unityInstanceId'] == cargo['unityInstanceId'] for o in carrier_items(after))
+            if operation == 'native_throw':
+                result['nativeThrowFields'] = fields(post, 'ServerThrowableItem') if post else {}
+                launched = bool(cargo and post and not result['cargoRetained']
+                                and result['nativeThrowFields'].get('m_flying') is True)
+                result['action'] = {'outcome': 'native_throw_observed' if launched else 'native_throw_not_observed'}
             result['nativeAfter'] = sim.read_status(args.runtime)
             expected = case['expected']
             if isinstance(expected, str):
                 expected = [expected]
             result['matchesExpectation'] = result['action']['outcome'] in expected
-            receipt = result['action']['receipt'] or {}
+            receipt = result['action'].get('receipt') or {}
             if receipt.get('state') == 'succeeded':
                 # Counter handoffs deliberately name the player as the command
                 # target; the receipt names the actual counter in details.

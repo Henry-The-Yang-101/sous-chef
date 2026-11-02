@@ -1,0 +1,178 @@
+[
+  {
+    "name": "nearby-counter-handoff",
+    "level": "s_wizard_5_5",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Cheese_Raw"
+      },
+      {
+        "operation": "navigate_to",
+        "target": {
+          "label": "countertop_01_standard_gold (14)",
+          "position": [
+            14.399999618530273,
+            0,
+            -2.4000000953674316
+          ]
+        },
+        "allowFailure": true
+      },
+      {
+        "operation": "input",
+        "seconds": 0.13,
+        "x": -1
+      },
+      {
+        "operation": "input",
+        "seconds": 0.1,
+        "x": -0.7,
+        "y": -0.7
+      },
+      {
+        "operation": "input",
+        "seconds": 0.025,
+        "y": -1
+      },
+      {
+        "operation": "input",
+        "seconds": 0.1,
+        "x": -1
+      },
+      {
+        "operation": "input",
+        "seconds": 0.05,
+        "y": -1
+      },
+      {
+        "operation": "input",
+        "seconds": 0.1,
+        "x": -1
+      }
+    ],
+    "operation": "throw_to_player",
+    "target": 1,
+    "expected": "item_handed_off_nearby"
+  },
+  {
+    "name": "nearby-counter-stop",
+    "level": "s_wizard_5_5",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Cheese_Raw"
+      },
+      {
+        "operation": "navigate_to",
+        "target": {
+          "label": "countertop_01_standard_gold (14)",
+          "position": [
+            14.399999618530273,
+            0,
+            -2.4000000953674316
+          ]
+        },
+        "allowFailure": true
+      },
+      {
+        "operation": "input",
+        "seconds": 0.13,
+        "x": -1
+      },
+      {
+        "operation": "input",
+        "seconds": 0.1,
+        "x": -0.7,
+        "y": -0.7
+      },
+      {
+        "operation": "input",
+        "seconds": 0.025,
+        "y": -1
+      },
+      {
+        "operation": "input",
+        "seconds": 0.1,
+        "x": -1
+      },
+      {
+        "operation": "input",
+        "seconds": 0.05,
+        "y": -1
+      },
+      {
+        "operation": "input",
+        "seconds": 0.1,
+        "x": -1
+      }
+    ],
+    "operation": "throw_to_player",
+    "target": 1,
+    "expected": "stopped",
+    "cancelAt": "drop_press",
+    "expectRetained": false
+  },
+  {
+    "name": "nearby-counter-disconnect",
+    "level": "s_wizard_5_5",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Cheese_Raw"
+      },
+      {
+        "operation": "navigate_to",
+        "target": {
+          "label": "countertop_01_standard_gold (14)",
+          "position": [
+            14.399999618530273,
+            0,
+            -2.4000000953674316
+          ]
+        },
+        "allowFailure": true
+      },
+      {
+        "operation": "input",
+        "seconds": 0.13,
+        "x": -1
+      },
+      {
+        "operation": "input",
+        "seconds": 0.1,
+        "x": -0.7,
+        "y": -0.7
+      },
+      {
+        "operation": "input",
+        "seconds": 0.025,
+        "y": -1
+      },
+      {
+        "operation": "input",
+        "seconds": 0.1,
+        "x": -1
+      },
+      {
+        "operation": "input",
+        "seconds": 0.05,
+        "y": -1
+      },
+      {
+        "operation": "input",
+        "seconds": 0.1,
+        "x": -1
+      }
+    ],
+    "operation": "throw_to_player",
+    "target": 1,
+    "expected": "control_lost",
+    "cancelAt": "drop_press",
+    "cancelMode": "disconnect",
+    "expectRetained": false
+  }
+]

@@ -4,12 +4,31 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import throw_audit as audit
 
 
 class ThrowAuditTests(unittest.TestCase):
+    def test_snapshot_waits_past_cached_capture(self):
+        class Bridge:
+            session_id = 'native'
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                pass
+
+            def messages(self):
+                yield {'type': 'snapshot', 'inRound': True, 'sequence': 1}
+                yield {'type': 'snapshot', 'inRound': True, 'sequence': 2}
+
+        with tempfile.TemporaryDirectory() as directory, patch.object(audit, 'BridgeClient', return_value=Bridge()):
+            result = audit.snapshot(1, 'native', Path(directory) / 'snapshot.json')
+        self.assertEqual(result['sequence'], 2)
+
     def test_rejection_does_not_reuse_previous_successful_receipt(self):
         class Client:
             request_id = 40

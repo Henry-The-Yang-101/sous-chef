@@ -258,7 +258,7 @@
     "setup": [
       {
         "operation": "pick_up",
-        "target": "equipment_plate_01"
+        "target": "countertop_01_standard_gold"
       }
     ],
     "operation": "throw_to",
@@ -272,7 +272,7 @@
     "setup": [
       {
         "operation": "pick_up",
-        "target": "equipment_plate_01"
+        "target": "countertop_01_standard_gold"
       }
     ],
     "operation": "throw_to_player",
@@ -306,5 +306,25 @@
     "operation": "throw_to_player",
     "target": 4,
     "expected": "target_unavailable"
+  },
+  {
+    "name": "native-use-comparison",
+    "level": "s_wizard_5_5",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Cheese_Raw"
+      },
+      {
+        "operation": "input",
+        "seconds": 0.25,
+        "y": -1
+      }
+    ],
+    "operation": "native_throw",
+    "target": 1,
+    "expected": "native_throw_observed",
+    "expectRetained": false
   }
 ]
