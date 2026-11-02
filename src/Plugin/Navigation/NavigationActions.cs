@@ -303,7 +303,7 @@ namespace SousChef.Plugin.Navigation
                 return;
             }
             if (player != chef || target == null || target.Object == null ||
-                (!target.IsPoint && !Eligible(target.Object, player, out target.Kind))) { Stop("destination_unavailable"); return; }
+                (!target.IsPoint && !Eligible(target.Object, player, out target.Kind, true))) { Stop("destination_unavailable"); return; }
             int commandMilliseconds = WalkingCommand.Milliseconds(Time.unscaledDeltaTime);
             if (commandMilliseconds == 0) { Stop("unsafe_update_interval"); return; }
             if (activePortal != null) { TickPortal(commandMilliseconds); return; }
@@ -589,8 +589,8 @@ namespace SousChef.Plugin.Navigation
             // Navigation answers whether this meaningful object can be approached.
             // Having dirty dishes, free hands or ingredients is a separate action
             // precondition, and must not hide a physically reachable destination.
-            // Ordinary empty counters are useful only when carrying something to
-            // place. Keep the catalogue focused on objects and task locations.
+            // Logistics must plan empty delivery surfaces before picking cargo
+            // up, so walking discovery explicitly includes those surfaces too.
             if (kind == "counter" || kind == "pickup_or_placement")
             {
                 if (includeEmpty) return placement != null || pickup != null;
@@ -624,9 +624,7 @@ namespace SousChef.Plugin.Navigation
             var removed = new List<int>();
             foreach (var pair in identities) if (pair.Value.Object == null) removed.Add(pair.Key);
             foreach (int key in removed) identities.Remove(key);
-            var walkTargets = new List<Destination>();
-            foreach (Destination d in found.Values) { string kind; if (Eligible(d.Object, player, out kind)) walkTargets.Add(d); }
-            return walkTargets;
+            return new List<Destination>(found.Values);
         }
         private void Refresh(PlayerControls player, bool force, bool alreadyRefreshed = false)
         {

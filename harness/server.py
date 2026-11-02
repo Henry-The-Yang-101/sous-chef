@@ -225,6 +225,11 @@ class HarnessBridge:
                         job_args = (arguments['utensil_type'], destination)
                     else:
                         job_args = (destination,)
+                    selector = '' if operation == 'get_plate' else job_args[0]
+                    pairs = catalog.get('jobOptions', {}).get(operation, [])
+                    if not any(p.get('sourceId') == selector and p.get('destinationIds') and
+                               (operation == 'return_utensil' or destination in p['destinationIds']) for p in pairs):
+                        raise HarnessError('That source and destination no longer form a valid job; choose again')
                 with self.state_lock:
                     if generation != self.generation:
                         raise HarnessError('Cancelled by Stop')

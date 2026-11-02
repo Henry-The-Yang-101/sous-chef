@@ -10,8 +10,8 @@ internal static class Program
 {
     private static int checks;
     private static void Check(bool value,string reason) { if (!value) throw new Exception(reason); checks++; }
-    private sealed class Pickup : MonoBehaviour, IPickup { public bool CanHandlePickup(ClientPlayerAttachmentCarrier c) { return true; } }
-    private sealed class Placement : MonoBehaviour, IPlacement { public bool CanHandlePlacement(ClientPlayerAttachmentCarrier c,Vector2 d,PlacementContext x) { return true; } }
+    private sealed class Pickup : MonoBehaviour, IPickup { public bool Allowed=true; public bool CanHandlePickup(ICarrier c) { return Allowed; } }
+    private sealed class Placement : MonoBehaviour, IPlacement { public Func<GameObject,bool> Accepts = item=>true; public bool CanHandlePlacement(ICarrier c,Vector2 d,PlacementContext x) { return Accepts(c.InspectCarriedItem()); } }
     private sealed class Throwable : MonoBehaviour, IClientThrowable, ICatchable { public bool CanHandleThrow(ClientAttachmentThrower t,Vector2 d) { return true; } }
     private sealed class Catcher : MonoBehaviour, IHandleCatch { public bool Allowed=true; public bool CanHandleCatch(ICatchable i,Vector2 d) { return Allowed; } }
     private sealed class World
@@ -291,7 +291,8 @@ internal static class Program
     private static void LogisticsJobs()
     {
         var w=new World();var destination=w.Delivery();var item=w.Ingredient("Tomato_Raw");w.Target.GetComponent<ServerAttachStation>().Item=item;
-        Check(w.Logistics.Start(w.Chef,1,new ControlCommand {Operation="move_item",Source=w.Id,Destination=w.IdOf(destination)})==null,"move_item resolves exact source and empty destination with empty hands");
+        string initialError=w.Logistics.Start(w.Chef,1,new ControlCommand {Operation="move_item",Source=w.Id,Destination=w.IdOf(destination)});
+        Check(initialError==null,"move_item resolves exact source and empty destination with empty hands: "+initialError);
         w.Arrive();w.Hold(item);w.Target.GetComponent<ServerAttachStation>().Item=null;w.Tick();
         Check(w.Logistics.Run.Phase=="delivering" && w.Skills.Run.Owner==w.Logistics.Run.Owner && w.Releases==0,"composed pickup retains the same owner into delivery without releasing bindings");
         w.ArriveAt(destination);destination.GetComponent<ServerAttachStation>().Item=item;w.Hold(null);w.Verify();
@@ -364,6 +365,53 @@ internal static class Program
     }
     private sealed class IngredientPropertiesForTest : MonoBehaviour, IOrderDefinition
     { public AssembledDefinitionNode GetOrderComposition() { return new AssembledDefinitionNode("Bun composite"); } }
+    private static Json.Record JobCatalog(World w, params string[] omitted)
+    {
+        var catalog=(Json.Record)w.Navigation.Available(w.Chef);
+        catalog["targets"]=w.Navigation.Targets().Select(w.Navigation.TargetIdentity).ToList();
+        catalog["destinations"]=((List<object>)catalog["destinations"]).Where(d=>!omitted.Contains((string)((Json.Record)d)["id"])).ToList();
+        w.Logistics.Decorate(catalog,w.Chef);return catalog;
+    }
+    private static List<Json.Record> JobRows(Json.Record catalog,string operation)
+    { var options=(Json.Record)catalog["jobOptions"]; return options[operation] != null ? ((List<object>)options[operation]).Cast<Json.Record>().ToList() : new List<Json.Record>(); }
+    private static void ValidJobOptions()
+    {
+        var w=new World();var item=w.Ingredient("Tomato_Raw");w.Target.GetComponent<ServerAttachStation>().Item=item;
+        var counter=w.Delivery();var restricted=w.Delivery();restricted.GetComponent<Placement>().Accepts=cargo=>false;
+        string counterId=w.IdOf(counter), restrictedId=w.IdOf(restricted);
+        var catalog=JobCatalog(w);var fetch=JobRows(catalog,"fetch_ingredient");
+        Check(fetch.Count==1 && ((List<string>)fetch[0]["destinationIds"]).Contains(counterId),"fetch offers a reachable empty counter before chef picks up cargo");
+        Check(!((List<string>)fetch[0]["destinationIds"]).Contains(restrictedId) && !((List<string>)fetch[0]["destinationIds"]).Contains(w.Id),"native placement veto and occupied source are excluded from delivery pairs");
+        Check(JobRows(catalog,"clear_station").Count==1 && (string)JobRows(catalog,"clear_station")[0]["sourceId"]==w.Id,"clear station offers occupied sources, never empty delivery counters");
+        catalog=JobCatalog(w,w.Id);
+        Check(JobRows(catalog,"fetch_ingredient").Count==0 && ((List<object>)catalog["ingredients"]).Count==0 && JobRows(catalog,"move_item").Count==0,"observed but uncertified source is withheld from every pickup job");
+        catalog=JobCatalog(w,counterId);
+        Check(JobRows(catalog,"fetch_ingredient").Count==0,"no fetch job is offered when its only compatible delivery is unreachable");
+        w.Target.GetComponent<Pickup>().Allowed=false;catalog=JobCatalog(w);
+        Check(JobRows(catalog,"fetch_ingredient").Count==0,"native pickup refusal hides otherwise reachable source");
+        w.Target.GetComponent<Pickup>().Allowed=true;w.Target.GetComponent<ClientInteractable>().Users=1;catalog=JobCatalog(w);
+        Check(JobRows(catalog,"fetch_ingredient").Count==0,"items in use are withheld");w.Target.GetComponent<ClientInteractable>().Users=0;
+        var unrelated=w.Ingredient("Onion");w.Hold(unrelated);catalog=JobCatalog(w);
+        Check(((List<object>)catalog["ingredients"]).Cast<Json.Record>().All(i=>(string)i["label"]!="Tomato_Raw"),"full hands cannot offer retrieval of another ingredient");
+        Check(w.Carrier.Item==unrelated && w.Chef.GetComponent<ClientPlayerAttachmentCarrier>().Item==unrelated,"catalogue previews preserve both real carrier objects");
+        w.Hold(null);w.Logistics.Start(w.Chef,1,new ControlCommand {Operation="move_item",Source=w.Id,Destination=counterId});catalog=JobCatalog(w);
+        Check(JobRows(catalog,"fetch_ingredient").Count==0 && ((List<object>)catalog["items"]).Count==0,"busy job publishes no stale selectable inventory");w.Logistics.Cancel("test_end");
+
+        w=new World();var otherSource=w.Delivery();otherSource.Add(new Pickup());
+        item=w.Ingredient("Tomato_Raw");var second=w.Ingredient("Tomato_Raw");w.Target.GetComponent<ServerAttachStation>().Item=item;otherSource.GetComponent<ServerAttachStation>().Item=second;
+        counter=w.Delivery();counter.GetComponent<Placement>().Accepts=cargo=>cargo==second;
+        Check(w.Logistics.Start(w.Chef,1,new ControlCommand {Operation="fetch_ingredient",Selector="Tomato_Raw",Destination=w.IdOf(counter)})==null &&
+            (string)((Json.Record)((Json.Record)w.Logistics.Describe())["details"])["sourceId"]==w.IdOf(otherSource),"executor chooses a compatible source instead of blindly taking nearest matching cargo");w.Logistics.Cancel("test_end");
+
+        var prefab=new GameObject("raw supply");prefab.Add(new PhysicalAttachment());var station=new GameObject("native counter");station.Add(new ServerAttachStation());var clientStation=station.Add(new ClientAttachStation());string delivery;
+        Check(LogisticsChecks.Delivery(w.Chef,"fetch_ingredient",prefab,station,out delivery,true)==null,"prospective prefab queries empty native holder despite missing runtime attachment interface");
+        clientStation.m_allowPlacementCallbacks.Add((cargo,context)=>true);
+        Check(LogisticsChecks.Delivery(w.Chef,"fetch_ingredient",prefab,station,out delivery,true)==null,"native true callback explicitly permits prospective placement");
+        clientStation.m_allowPlacementCallbacks.Add((cargo,context)=>false);
+        Check(LogisticsChecks.Delivery(w.Chef,"fetch_ingredient",prefab,station,out delivery,true)=="placement_unavailable","prospective supply still respects native placement vetoes");
+        clientStation.m_allowPlacementCallbacks.Clear();
+        Check(LogisticsChecks.Delivery(w.Chef,"fetch_ingredient",prefab,station,out delivery)=="placement_unavailable","spawned cargo must pass full native placement predicate");
+    }
     private static void RawIngredientSupplies()
     {
         var w=new World(); var destination=w.Delivery();
@@ -457,6 +505,6 @@ internal static class Program
         Check(!drops.Plan(w.Chef,item,player,out drop),"nearby horizontal position on a different deck is not a valid drop handoff");
         Physics.Sphere=(p,r,d,length)=>new RaycastHit[0];
     }
-    private static void Main() { Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();Throws();GeneratedStances();LogisticsJobs();PreparationSupplies();RawIngredientSupplies();WindAndHeight();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
+    private static void Main() { Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();Throws();GeneratedStances();LogisticsJobs();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();WindAndHeight();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
     private static ClientInteractable GetCurrentlyInteractingForTest(this PlayerControls chef) { return chef.GetComponent<ClientPlayerControlsImpl_Default>().Current; }
 }

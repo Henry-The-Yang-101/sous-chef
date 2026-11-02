@@ -23,16 +23,24 @@ class FakeBridge:
         self.targets = None
         self.players = []
         self.items, self.ingredients, self.utensil_types, self.delivery_destinations, self.jobs = [], [], [], [], []
+        self.job_options = None
 
     def available_actions(self):
         if self.failure:
             raise self.failure
         self.last_response = {'control': copy.deepcopy(self.control)}
         targets = self.targets if self.targets is not None else [dict(d, operations=['pick_up', 'work_at', 'wait_until']) for d in self.destinations]
+        job_options = self.job_options
+        if job_options is None:
+            sources = {'fetch_ingredient': [i['id'] for i in self.ingredients], 'get_utensil': self.utensil_types,
+                       'get_plate': [''], 'clear_station': [t['id'] for t in targets]}
+            job_options = {name: [{'sourceId': source, 'destinationIds': [d['id'] for d in self.delivery_destinations]}
+                                  for source in sources.get(name, [i['id'] for i in self.items])] for name in self.jobs}
         return {'destinations': copy.deepcopy(self.destinations), 'targets': copy.deepcopy(targets),
                 'players': copy.deepcopy(self.players), 'navigation': self.control['navigation'],
                 'items': copy.deepcopy(self.items), 'ingredients': copy.deepcopy(self.ingredients),
                 'utensilTypes': self.utensil_types[:], 'deliveryDestinations': copy.deepcopy(self.delivery_destinations),
+                'jobOptions': copy.deepcopy(job_options),
                 'actions': [{'name': name} for name in self.jobs]}
 
     def _job(self, operation, *arguments):
@@ -223,6 +231,25 @@ class HarnessTests(unittest.TestCase):
             self.navigate()
         self.bridge.poll()
         self.assertEqual(self.native.calls, [('navigate_to', 'd7')])
+
+    def test_job_pair_is_rechecked_even_if_both_fields_still_exist(self):
+        self.native.jobs = ['fetch_ingredient']
+        self.native.ingredients = [dict(id='i4', label='Bun')]
+        self.native.delivery_destinations = self.native.destinations[:]
+        self.native.job_options = {'fetch_ingredient': [{'sourceId': 'i4', 'destinationIds': ['d7']}]}
+        self.bridge.poll()
+        self.native.job_options['fetch_ingredient'][0]['destinationIds'] = ['d9']
+        with self.assertRaisesRegex(HarnessError, 'no longer form a valid job'):
+            self.bridge.act('tab-a', 'test-session', 'd7', 77, 'fetch_ingredient', {'ingredient': 'i4'})
+        self.assertEqual(self.native.calls, [])
+
+    def test_missing_or_empty_job_options_fail_closed(self):
+        self.native.jobs = ['get_plate']
+        self.native.delivery_destinations = self.native.destinations[:]
+        self.native.job_options = {}
+        with self.assertRaisesRegex(HarnessError, 'no longer form a valid job'):
+            self.bridge.act('tab-a', 'test-session', 'd7', 77, 'get_plate')
+        self.assertEqual(self.native.calls, [])
 
     def test_browser_click_focuses_game_then_revalidates_exact_target(self):
         self.native.control.update(available=False, reason='game_unfocused')

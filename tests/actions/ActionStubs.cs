@@ -39,6 +39,13 @@ public class ServerAttachStation : MonoBehaviour
     public GameObject InspectItem() { return Item; }
     public bool CanAttachToSelf(GameObject item,PlacementContext context) { return Item==null; }
 }
+public class ClientAttachStation : MonoBehaviour, IPlacement
+{
+    public GameObject Item;
+    public readonly List<Func<GameObject,PlacementContext,bool>> m_allowPlacementCallbacks = new List<Func<GameObject,PlacementContext,bool>>();
+    public GameObject InspectItem() { return Item; }
+    public bool CanHandlePlacement(ICarrier carrier,Vector2 direction,PlacementContext context) { return false; }
+}
 public class ServerStack : MonoBehaviour
 {
     public List<GameObject> m_stackItems = new List<GameObject>();

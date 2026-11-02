@@ -58,26 +58,28 @@ function setJobOptions(select, choices) {
   select.dataset.choices = signature;
 }
 function renderJobs(catalog, busy, live) {
-  const kind = el('job-kind').value;
   const control = state?.control || {};
-  const names = (catalog.actions || []).map(action => action.name);
-  // The handshake lists implemented commands even while pause or an active job
-  // hides their live affordances. Older harness processes lack this metadata;
-  // their navigation-only bridge also has no unified action receipt.
-  const unsupported = live && (Array.isArray(state.supportedActions)
-    ? !state.supportedActions.includes(kind) : !control.action && !names.includes(kind));
   const inputBlocked = !control.available && control.reason !== 'game_unfocused';
-  const blocked = !live || pending || busy || unsupported || inputBlocked || !names.includes(kind);
-  el('job-kind').disabled = !live || pending || busy;
-  const items = (catalog.items || []).filter(item => !item.supply && !item.inUse);
+  const jobOptions = catalog.jobOptions || {};
+  const jobs = Object.keys(jobOptions).filter(name => jobOptions[name].length);
+  setJobOptions(el('job-kind'), jobs.map(name => ({value: name, label: actionNames[name]})));
+  const kind = el('job-kind').value;
+  const options = jobOptions[kind] || [];
+  const sourceIds = new Set(options.map(option => option.sourceId));
+  const unsupported = live && !busy && !inputBlocked && !catalog.jobOptions;
+  const blocked = !live || pending || busy || unsupported || inputBlocked || !jobs.includes(kind);
+  el('job-kind').disabled = !live || pending || busy || !jobs.length;
+  const items = catalog.items || [];
   let sources = items.map(item => ({value: item.id, label: nameOf(item)}));
   el('job-source-name').textContent = kind === 'fetch_ingredient' ? 'Ingredient' : kind === 'get_utensil' ? 'Utensil type' : kind === 'clear_station' ? 'Station' : 'Item';
   if (kind === 'fetch_ingredient') sources = (catalog.ingredients || []).map(item => ({value: item.id, label: item.label.replaceAll('_', ' ')}));
   if (kind === 'get_utensil') sources = (catalog.utensilTypes || []).map(type => ({value: type, label: type.replaceAll('_', ' ')}));
-  if (kind === 'return_utensil') sources = items.filter(item => item.utensilType && item.empty).map(item => ({value: item.id, label: nameOf(item)}));
-  if (kind === 'clear_station') sources = (catalog.deliveryDestinations || []).filter(item => item.kind !== 'item').map(item => ({value: item.id, label: nameOf(item)}));
+  if (kind === 'clear_station') sources = (catalog.targets || []).map(item => ({value: item.id, label: nameOf(item)}));
+  sources = sources.filter(source => sourceIds.has(source.value));
   setJobOptions(el('job-source'), sources);
-  const destinations = (catalog.deliveryDestinations || []).filter(item => kind !== 'clear_station' || item.id !== el('job-source').value).map(item => ({value: item.id, label: nameOf(item)}));
+  const source = kind === 'get_plate' ? '' : el('job-source').value;
+  const destinationIds = new Set(options.find(option => option.sourceId === source)?.destinationIds || []);
+  const destinations = (catalog.deliveryDestinations || []).filter(item => destinationIds.has(item.id)).map(item => ({value: item.id, label: nameOf(item)}));
   setJobOptions(el('job-destination'), destinations);
   el('job-source-label').hidden = kind === 'get_plate';
   el('job-destination-label').hidden = kind === 'return_utensil';
@@ -85,14 +87,12 @@ function renderJobs(catalog, busy, live) {
   el('job-run').disabled = blocked || (kind !== 'get_plate' && !el('job-source').value) || (kind !== 'return_utensil' && !el('job-destination').value);
   let message = '';
   if (!live) message = 'Waiting for fresh bridge state before jobs can run.';
-  else if (unsupported) message = `The running bridge${state.bridgeVersion ? ` (${state.bridgeVersion})` : ''} does not support this job. Quit Overcooked! 2, run python3 scripts/install.py, then relaunch with python3 scripts/launch.py and refresh this page.`;
+  else if (unsupported) message = `The running bridge${state.bridgeVersion ? ` (${state.bridgeVersion})` : ''} needs current job options. Quit Overcooked! 2, run python3 scripts/install.py, then relaunch with python3 scripts/launch.py and refresh this page.`;
   else if (pending) message = 'Sending the selected job…';
   else if (busy) message = 'Player 2 is running an action. Wait for it to finish or press Stop to choose another job.';
   else if (inputBlocked) message = explain(control.reason) || 'The game is not accepting Player 2 actions.';
-  else if (!names.includes(kind)) message = explain(catalog.reason || catalog.navigation?.catalogReason) || 'This job is not currently available.';
-  else if (kind !== 'get_plate' && !sources.length) message = kind === 'fetch_ingredient' ? 'No ingredients are currently observed.'
-    : kind === 'get_utensil' || kind === 'return_utensil' ? 'No suitable utensils are currently observed.' : 'No source items or stations are currently available.';
-  else if (kind !== 'return_utensil' && !destinations.length) message = 'No delivery destinations are currently observed.';
+  else if (!jobs.length) message = explain(catalog.reason || catalog.navigation?.catalogReason) || 'No supply jobs are currently possible. Options update as the kitchen changes.';
+  else if (!kind) message = 'Choose an available job.';
   else if (el('job-run').disabled) message = 'Choose the required fields to run this job.';
   el('job-status').textContent = message;
   el('job-status').hidden = !message;

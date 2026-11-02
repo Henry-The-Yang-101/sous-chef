@@ -29,8 +29,11 @@ namespace SousChef.Plugin.Actions
         private readonly Dictionary<int, GameObject> homes = new Dictionary<int, GameObject>();
         private readonly Dictionary<int, GameObject> homeItems = new Dictionary<int, GameObject>();
         private readonly NavigationActions navigation;
+        private readonly Dictionary<string, float> distances = new Dictionary<string, float>();
         public LogisticsInventory(NavigationActions nav) { navigation = nav; }
-        public void Reset() { Items.Clear(); Errors.Clear(); homes.Clear(); homeItems.Clear(); }
+        public void Reset() { Items.Clear(); Errors.Clear(); homes.Clear(); homeItems.Clear(); distances.Clear(); }
+        public float DistanceTo(GameObject target)
+        { float cost; string id = Id(target); return id != null && distances.TryGetValue(id, out cost) ? cost : Single.MaxValue; }
         public static string Normalize(string text)
         {
             var result = new StringBuilder();
@@ -107,7 +110,7 @@ namespace SousChef.Plugin.Actions
         }
         public void Refresh(PlayerControls chef, Json.Record currentCatalog = null)
         {
-            Items.Clear(); Errors.Clear(); var distances = new Dictionary<string, float>();
+            Items.Clear(); Errors.Clear(); distances.Clear();
             var catalog = currentCatalog ?? (Json.Record)navigation.Available(chef);
             foreach (Json.Record d in (List<object>)catalog["destinations"]) distances[(string)d["id"]] = (float)d["routeDistance"];
             GameObject held = ActionObservations.Held(chef);

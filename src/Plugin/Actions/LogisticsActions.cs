@@ -44,6 +44,11 @@ namespace SousChef.Plugin.Actions
             selected = null; cargo = expected = originalSource = sourceStation = destination = null;
             sourceId = deliveryOperation = null; destinationId = command.Destination; delivered = 0; batchLimit = 1; spawnedChild = false; plates.Clear();
             string error = Select(); if (error != null) return error;
+            if (selected != null)
+            {
+                error = LogisticsChecks.Collect(chef, selected, command.Operation);
+                if (error != null) return error;
+            }
             if (command.Milliseconds == 0) command.Milliseconds = 120000;
             if (!Run.Start(owner, command, Time.realtimeSinceStartup)) return "action_in_progress";
             if (selected == null) { Finish("succeeded", "station_already_empty"); return null; }
@@ -77,6 +82,7 @@ namespace SousChef.Plugin.Actions
             {
                 destination = navigation.Resolve(destinationId);
                 if (destination == null) return "destination_unavailable";
+                if (Inventory.DistanceTo(destination) == Single.MaxValue) return "destination_unreachable";
             }
             if (request.Operation == "move_item" || request.Operation == "stage_item" || request.Operation == "return_utensil" || request.Operation == "clear_station")
             {
@@ -98,7 +104,7 @@ namespace SousChef.Plugin.Actions
                 {
                     if (selected.UtensilType == null) return "item_is_not_utensil";
                     if (!selected.Empty) return "utensil_has_contents";
-                    destination = ReturnDestination(selected.Item);
+                    destination = ReturnDestination(chef, selected.Item);
                     if (destination == null) return "no_available_utensil_home";
                     destinationId = Inventory.Id(destination); request.Destination = destinationId;
                 }
@@ -111,7 +117,10 @@ namespace SousChef.Plugin.Actions
                     bool matches = request.Operation == "fetch_ingredient" ? LogisticsInventory.IngredientMatches(candidate, request.Selector) :
                         request.Operation == "get_plate" ? candidate.CleanPlate :
                         candidate.UtensilType != null && candidate.Empty && candidate.UtensilType == LogisticsInventory.CanonicalUtensil(request.Selector);
-                    if (!matches || candidate.InUse || candidate.Distance == Single.MaxValue) continue;
+                    if (!matches || LogisticsChecks.Collect(chef, candidate, request.Operation) != null) continue;
+                    string delivery;
+                    if (candidate.Source == destination || candidate.Item == destination ||
+                        LogisticsChecks.Delivery(chef, request.Operation, LogisticsChecks.Payload(candidate), destination, out delivery, candidate.Supply) != null) continue;
                     if (request.Operation == "fetch_ingredient")
                     {
                         if (ingredientId != null && ingredientId != candidate.IngredientId) return "ambiguous_ingredient_use_catalogue_id";
@@ -124,7 +133,7 @@ namespace SousChef.Plugin.Actions
             }
             return null;
         }
-        private GameObject ReturnDestination(GameObject utensil)
+        private GameObject ReturnDestination(PlayerControls actor, GameObject utensil)
         {
             GameObject home = Inventory.Home(utensil), best = null; float score = Single.MaxValue;
             foreach (GameObject station in navigation.Targets())
@@ -132,10 +141,12 @@ namespace SousChef.Plugin.Actions
                 if (station == utensil || station.GetComponent<ServerRubbishBin>() != null) continue;
                 var attach = station.GetComponent<ServerAttachStation>();
                 if (attach == null) continue;
+                float distance = Inventory.DistanceTo(station);
+                if (distance == Single.MaxValue) continue;
                 if (System.Object.ReferenceEquals(attach.InspectItem(), utensil)) return station;
-                if (attach.InspectItem() != null || !attach.CanAttachToSelf(utensil, new PlacementContext(PlacementContext.Source.Player))) continue;
+                string delivery;
+                if (LogisticsChecks.Delivery(actor, "return_utensil", utensil, station, out delivery) != null) continue;
                 float preference = station == home ? 0 : station.GetComponent<CookingStation>() != null ? 1000 : 2000;
-                float distance = Vector3.Distance(station.transform.position, chef.transform.position);
                 if (preference + distance < score) { score = preference + distance; best = station; }
             }
             return best;
@@ -144,20 +155,7 @@ namespace SousChef.Plugin.Actions
         { return item != null && destination != null && System.Object.ReferenceEquals(ActionObservations.Occupant(destination), item); }
         private string Delivery(GameObject item)
         {
-            if (destination == null || !destination.activeInHierarchy) return "destination_unavailable";
-            if (destination.GetComponent<ServerRubbishBin>() != null) return "logistics_cannot_discard";
-            GameObject occupant = ActionObservations.Occupant(destination);
-            var contents = ActionObservations.Container(destination);
-            if (request.Operation != "stage_item" && item.GetComponent<IngredientPropertiesComponent>() != null && contents != null)
-            {
-                var transfer = GameObjectUtils.RequestInterface<IContainerTransferBehaviour>(item);
-                var composition = ActionObservations.Composition(item);
-                if (transfer == null || composition == null || !transfer.CanTransferToContainer(contents) || !contents.CanAddIngredient(composition)) return "incompatible_ingredient_destination";
-                deliveryOperation = "add_ingredient"; return null;
-            }
-            if (destination.GetComponent<ServerAttachStation>() == null && destination.GetComponent<ServerWashingStation>() == null) return "destination_is_not_surface";
-            if (occupant != null && !(item.GetComponent<ServerPlate>() != null && ActionObservations.StackCount(occupant) > 0)) return "destination_occupied";
-            deliveryOperation = "place_at"; return null;
+            return LogisticsChecks.Delivery(chef, request.Operation, item, destination, out deliveryOperation, selected.Supply && item == selected.Item);
         }
         private string StartPickup()
         {
@@ -225,34 +223,88 @@ namespace SousChef.Plugin.Actions
         {
             child.Cancel(reason); Run.Finish(state, reason); release();
         }
+        private static string OptionSource(string operation, LogisticsItem entry)
+        {
+            switch (operation)
+            {
+                case "fetch_ingredient": return entry.IngredientId;
+                case "get_plate": return entry.CleanPlate ? "" : null;
+                case "get_utensil": return entry.Empty ? entry.UtensilType : null;
+                case "return_utensil": return !entry.Supply && entry.Empty && entry.UtensilType != null ? entry.ItemId : null;
+                case "clear_station": return !entry.Supply && entry.Source.GetComponent<ServerAttachStation>() != null ? entry.SourceId : null;
+                default: return !entry.Supply ? entry.ItemId : null;
+            }
+        }
         public void Decorate(Json.Record catalog, PlayerControls actor)
         {
-            if (!Run.Running && !child.Run.Running) Inventory.Refresh(actor, catalog);
-            var items = new List<object>(); var ingredients = new List<object>(); var utensils = new List<string>(); var known = new HashSet<string>();
-            var destinations = new List<object>();
-            foreach (GameObject go in navigation.Targets())
-                if (go.GetComponent<ServerRubbishBin>() == null && (go.GetComponent<ServerAttachStation>() != null || go.GetComponent<ServerIngredientContainer>() != null)) destinations.Add(navigation.TargetIdentity(go));
-            foreach (LogisticsItem entry in Inventory.Items)
-            {
-                if (entry.Item == null || entry.Source == null) continue;
-                items.Add(entry.Describe());
-                if (entry.IngredientId != null && known.Add(entry.IngredientId)) ingredients.Add(Json.Object("id", entry.IngredientId, "label", entry.IngredientName));
-                if (entry.UtensilType != null && !utensils.Contains(entry.UtensilType)) utensils.Add(entry.UtensilType);
-            }
+            var items = new List<object>(); var ingredients = new List<object>(); var utensils = new List<string>();
+            var destinations = new List<object>(); var options = Json.Object();
+            foreach (string operation in ActionRun.LogisticsNames) options[operation] = new List<object>();
             catalog["items"] = items; catalog["ingredients"] = ingredients; catalog["utensilTypes"] = utensils;
-            catalog["deliveryDestinations"] = destinations; catalog["logisticsObservationErrors"] = Inventory.Errors;
+            catalog["deliveryDestinations"] = destinations; catalog["jobOptions"] = options;
+            catalog["logisticsObservationErrors"] = Inventory.Errors;
             if (Run.Running || child.Run.Running || navigation.Action.State != "idle") return;
+            Inventory.Refresh(actor, catalog);
+            var reachable = new Dictionary<string, Json.Record>();
+            foreach (Json.Record identity in (List<object>)catalog["destinations"]) reachable[(string)identity["id"]] = identity;
+            var usedItems = new HashSet<string>(); var usedDestinations = new HashSet<string>();
+            var ingredientIds = new HashSet<string>();
             var actions = (List<object>)catalog["actions"];
-            foreach (string name in ActionRun.LogisticsNames)
+            foreach (string operation in ActionRun.LogisticsNames)
             {
+                var rows = new Dictionary<string, Json.Record>();
+                foreach (LogisticsItem entry in Inventory.Items)
+                {
+                    try
+                    {
+                        if (entry.Item == null || entry.Source == null) continue;
+                        string source = OptionSource(operation, entry);
+                        if (source == null || LogisticsChecks.Collect(actor, entry, operation) != null) continue;
+                        var compatible = new List<string>();
+                        GameObject home = operation == "return_utensil" ? ReturnDestination(actor, entry.Item) : null;
+                        foreach (var pair in reachable)
+                        {
+                            GameObject station = navigation.Resolve(pair.Key);
+                            if (station == entry.Source || station == entry.Item || (operation == "return_utensil" && station != home)) continue;
+                            string delivery;
+                            if (LogisticsChecks.Delivery(actor, operation, LogisticsChecks.Payload(entry), station, out delivery, entry.Supply) == null) compatible.Add(pair.Key);
+                        }
+                        if (compatible.Count == 0) continue;
+                        Json.Record row;
+                        if (!rows.TryGetValue(source, out row))
+                        { row = Json.Object("sourceId", source, "destinationIds", new List<string>()); rows[source] = row; }
+                        var ids = (List<string>)row["destinationIds"];
+                        foreach (string id in compatible) { if (!ids.Contains(id)) ids.Add(id); usedDestinations.Add(id); }
+                        usedItems.Add(entry.ItemId);
+                        if (operation == "fetch_ingredient" && ingredientIds.Add(entry.IngredientId)) ingredients.Add(Json.Object("id", entry.IngredientId, "label", entry.IngredientName));
+                        if (operation == "get_utensil" && !utensils.Contains(entry.UtensilType)) utensils.Add(entry.UtensilType);
+                    }
+                    catch (Exception) { Inventory.Errors.Add(Json.Object("sourceId", entry.SourceId, "reason", "logistics_option_unavailable")); }
+                }
+                var choices = new List<object>(); foreach (Json.Record row in rows.Values) choices.Add(row);
+                options[operation] = choices;
+                if (choices.Count == 0) continue;
                 var parameters = Json.Object();
-                if (name == "move_item" || name == "stage_item" || name == "return_utensil") parameters["item_id"] = Json.Object("type", "enum", "options", items);
-                if (name == "clear_station") parameters["station_id"] = Json.Object("type", "enum", "options", catalog["targets"]);
-                if (name == "fetch_ingredient") parameters["ingredient"] = Json.Object("type", "enum", "options", ingredients);
-                if (name == "get_utensil") parameters["utensil_type"] = Json.Object("type", "enum", "options", utensils);
-                if (name != "return_utensil") parameters["destination_id"] = Json.Object("type", "enum", "options", destinations);
-                actions.Add(Json.Object("name", name, "parameters", parameters));
+                var sources = new List<object>(); var deliveries = new List<object>(); var destinationIds = new HashSet<string>();
+                foreach (Json.Record row in choices) foreach (string id in (List<string>)row["destinationIds"]) destinationIds.Add(id);
+                foreach (string id in destinationIds) deliveries.Add(reachable[id]);
+                if (operation == "move_item" || operation == "stage_item" || operation == "return_utensil")
+                {
+                    foreach (LogisticsItem entry in Inventory.Items) if (rows.ContainsKey(entry.ItemId)) sources.Add(entry.Describe());
+                    parameters["item_id"] = Json.Object("type", "enum", "options", sources);
+                }
+                if (operation == "clear_station")
+                {
+                    foreach (string id in rows.Keys) sources.Add(navigation.TargetIdentity(navigation.Resolve(id)));
+                    parameters["station_id"] = Json.Object("type", "enum", "options", sources);
+                }
+                if (operation == "fetch_ingredient") parameters["ingredient"] = Json.Object("type", "enum", "options", ingredients);
+                if (operation == "get_utensil") parameters["utensil_type"] = Json.Object("type", "enum", "options", utensils);
+                if (operation != "return_utensil") parameters["destination_id"] = Json.Object("type", "enum", "options", deliveries);
+                actions.Add(Json.Object("name", operation, "parameters", parameters));
             }
+            foreach (LogisticsItem entry in Inventory.Items) if (usedItems.Contains(entry.ItemId)) items.Add(entry.Describe());
+            foreach (string id in usedDestinations) destinations.Add(reachable[id]);
         }
     }
 }
