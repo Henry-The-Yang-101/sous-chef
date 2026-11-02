@@ -207,7 +207,19 @@ namespace SousChef.Plugin.Actions
                         }
                         else if (!Seed(origin, direction, launch, flight, out seedTime, out end)) continue;
                         Vector3 correction = center + ReceiverVelocity() * seedTime - end; correction.y = 0;
-                        for (int ring = -1; ring <= 1; ring++) yield return candidate + correction + radial * (ring * .25f);
+                        for (int ring = -1; ring <= 1; ring++)
+                        {
+                            Vector3 stance = candidate + correction + radial * (ring * .25f);
+                            yield return stance;
+                            if (player == null)
+                            {
+                                // Narrow release corridors can fall between
+                                // angular samples. Search their lateral room as
+                                // well as distance from the receiving surface.
+                                Vector3 lateral = new Vector3(-radial.z, 0, radial.x) * .2f;
+                                yield return stance + lateral; yield return stance - lateral;
+                            }
+                        }
                     }
                 }
         }
