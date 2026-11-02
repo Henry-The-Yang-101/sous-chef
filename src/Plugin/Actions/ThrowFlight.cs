@@ -13,7 +13,15 @@ namespace SousChef.Plugin.Actions
         private int kind;
         private Vector3 half, offset, axis;
         private Quaternion relativeRotation;
-        private float radius, segment;
+        private float radius, segment, nativeRadius, nativeHeight;
+        private Vector3 nativeCenter, signedScale, pivotOffset;
+        public static int DetachedLayer(GameObject item)
+        {
+            var swapper = item.GetComponent<PlacementLayerSwapper>();
+            int layer = swapper == null ? item.layer : ActionObservations.Read<int>(swapper, "m_defaultLayerId");
+            if (layer < 0 || layer > 31) throw new InvalidOperationException("unsupported_detached_item_layer");
+            return layer;
+        }
         private static Vector3 Abs(Vector3 v) { return new Vector3(Mathf.Abs(v.x), Mathf.Abs(v.y), Mathf.Abs(v.z)); }
         private static bool Finite(Vector3 v) { return ThrowTrajectory.Finite(v.x) && ThrowTrajectory.Finite(v.y) && ThrowTrajectory.Finite(v.z); }
         public bool Prepare(PlayerControls chef, GameObject item)
@@ -45,7 +53,11 @@ namespace SousChef.Plugin.Actions
             }
             else return false;
             if (!Finite(center)) return false;
+            nativeCenter = center; signedScale = shape.transform.lossyScale;
+            nativeRadius = sphere != null ? sphere.radius : capsule != null ? capsule.radius : 0;
+            nativeHeight = capsule != null ? capsule.height : 0;
             Quaternion inverse = Quaternion.Inverse(chef.transform.rotation);
+            pivotOffset = inverse * (shape.transform.position - item.transform.position);
             offset = inverse * (shape.transform.TransformPoint(center) - item.transform.position);
             relativeRotation = inverse * shape.transform.rotation;
             return Finite(offset);
@@ -57,11 +69,30 @@ namespace SousChef.Plugin.Actions
                 kind == 1 ? Vector3.one * radius : Abs(rotation * axis) * segment + Vector3.one * radius;
             return new Bounds(origin + facing * offset, extent * 2);
         }
+        public Vector3 CatchScanPoint(Vector3 origin, Vector3 direction, Vector3 point)
+        {
+            Quaternion facing = Quaternion.LookRotation(direction), rotation = facing * relativeRotation;
+            Vector3 center = origin + facing * offset;
+            // Mirror InteractWithItemHelper.GetClosestPointOnSurface without
+            // moving the real collider to a hypothetical flight position.
+            if (kind == 0) return BoundsAt(origin, direction).ClosestPoint(point);
+            if (kind == 1) return center + (point - center).normalized * nativeRadius;
+            Vector3 pivot = origin + facing * pivotOffset;
+            Vector3 local = Quaternion.Inverse(rotation) * (point - pivot);
+            local = new Vector3(local.x / signedScale.x, local.y / signedScale.y, local.z / signedScale.z) - nativeCenter;
+            float halfHeight = Mathf.Max(0, nativeHeight - 2 * nativeRadius) * .5f;
+            Vector3 axial = Vector3.up * Mathf.Clamp(local.y, -halfHeight, halfHeight);
+            Vector3 surface = axial + (local - axial).normalized * nativeRadius + nativeCenter;
+            return pivot + rotation * new Vector3(surface.x * signedScale.x, surface.y * signedScale.y, surface.z * signedScale.z);
+        }
         public Bounds Receiving(Bounds receiver, Vector3 direction)
         {
             Bounds shape = BoundsAt(Vector3.zero, direction);
             Vector3 center = receiver.center - shape.center; center.y = receiver.max.y - shape.min.y;
-            return new Bounds(center, new Vector3(Mathf.Max(.08f, receiver.size.x - shape.size.x), .16f, Mathf.Max(.08f, receiver.size.z - shape.size.z)));
+            // Native catchers accept an item centered over the receiving top;
+            // food need not fit wholly inside its footprint. The exact body
+            // sweeps still reject collisions with neighbouring stations/walls.
+            return new Bounds(center, new Vector3(Mathf.Max(.02f, receiver.size.x - .1f), .16f, Mathf.Max(.02f, receiver.size.z - .1f)));
         }
         public int Overlap(Vector3 origin, Vector3 direction, Collider[] output, int mask, float margin)
         {
@@ -122,7 +153,7 @@ namespace SousChef.Plugin.Actions
             shapeRotation = inverse * itemShape.transform.rotation;
             foreach (WindVolume volume in UnityEngine.Object.FindObjectsOfType<WindVolume>())
             {
-                if (!volume.isActiveAndEnabled || (ActionObservations.Read<LayerMask>(volume, "m_windFilter").value & (1 << item.layer)) == 0) continue;
+                if (!volume.isActiveAndEnabled || (ActionObservations.Read<LayerMask>(volume, "m_windFilter").value & (1 << ItemBody.DetachedLayer(item))) == 0) continue;
                 var colliders = new List<Collider>();
                 foreach (Collider shape in volume.GetComponents<Collider>())
                     if (shape.enabled && shape.gameObject.activeInHierarchy) colliders.Add(shape);
@@ -166,6 +197,7 @@ namespace SousChef.Plugin.Actions
     {
         public readonly List<Vector3> Points = new List<Vector3>();
         public readonly List<float> Times = new List<float>();
+        public readonly List<Vector3> Velocities = new List<Vector3>();
         public Vector3 End, InitialVelocity, FinalVelocity, WindDisplacement;
         public float PeakHeight;
     }
@@ -176,7 +208,7 @@ namespace SousChef.Plugin.Actions
         {
             var result = new FlightPath { InitialVelocity = launch, PeakHeight = origin.y };
             Vector3 position = origin, velocity = launch; ulong membership = wind.At(position, direction);
-            result.Points.Add(position); result.Times.Add(0);
+            result.Points.Add(position); result.Times.Add(0); result.Velocities.Add(velocity);
             int count = Mathf.CeilToInt(time / step);
             if (count < 1 || count > 4000) throw new InvalidOperationException("unsupported_flight_duration");
             float damping = Mathf.Max(0, 1 - drag * step), elapsed = 0;
@@ -192,7 +224,7 @@ namespace SousChef.Plugin.Actions
                 membership = nextMembership; position = next; elapsed += duration;
                 result.WindDisplacement += drift * duration;
                 result.PeakHeight = Mathf.Max(result.PeakHeight, position.y);
-                result.Points.Add(position); result.Times.Add(elapsed);
+                result.Points.Add(position); result.Times.Add(elapsed); result.Velocities.Add(velocity);
             }
             result.End = position; result.FinalVelocity = velocity; return result;
         }

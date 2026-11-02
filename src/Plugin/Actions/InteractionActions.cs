@@ -24,7 +24,7 @@ namespace SousChef.Plugin.Actions
         private ServerWorkableItem workable;
         private ServerInteractable interactable;
         private ServerInteractable.BeginInteractCallback triggered;
-        private int initialDirty, initialClean, initialStack, initialMatches, initialContents, pressFrame;
+        private int initialDirty, initialClean, initialStack, initialMatches, initialContents, pressFrame, planningFrame;
         private float phaseStarted, lastProgressTime, lastProgress;
         private bool triggeredByChef, pressed, throwReleased;
         private ThrowPlan throwPlan;
@@ -127,20 +127,7 @@ namespace SousChef.Plugin.Actions
                 if (request.Operation == "throw_to" || request.Operation == "throw_to_player")
                 {
                     error = throws.Prepare(chef, held, target);
-                    if (error == null) error = throws.Find(navigation, out throwPlan);
-                    if (error == null)
-                    {
-                        launchObserver = chef.GetComponent<ServerAttachmentThrower>();
-                        launchCallback = delegate(GameObject launched)
-                        {
-                            if (!System.Object.ReferenceEquals(launched, held)) return;
-                            var physical = launched.GetComponent<PhysicalAttachment>();
-                            if (physical != null && physical.m_motion != null) { observedLaunchVelocity = physical.m_motion.GetVelocity(); sawLaunch = true; }
-                        };
-                        launchObserver.RegisterThrowCallback(launchCallback);
-                        evidence = throwPlan.Describe(); Run.Advance("navigating");
-                        error = navigation.StartPosition(chef, owner, target, throwPlan.Stance);
-                    }
+                    if (error == null) error = PlanThrow(owner);
                 }
                 else
                 {
@@ -151,6 +138,23 @@ namespace SousChef.Plugin.Actions
                 return error;
             }
             catch (Exception) { Finish("failed", "observation_unavailable"); throw; }
+        }
+        private string PlanThrow(int owner)
+        {
+            planningFrame = Time.frameCount;
+            string error = throws.Find(navigation, out throwPlan);
+            if (error == ThrowPlanner.Pending) { SetPhase("planning_throw"); input(0); return null; }
+            if (error != null) { evidence = throws.Diagnostics; return error; }
+            launchObserver = chef.GetComponent<ServerAttachmentThrower>();
+            launchCallback = delegate(GameObject launched)
+            {
+                if (!System.Object.ReferenceEquals(launched, held)) return;
+                var physical = launched.GetComponent<PhysicalAttachment>();
+                if (physical != null && physical.m_motion != null) { observedLaunchVelocity = physical.m_motion.GetVelocity(); sawLaunch = true; }
+            };
+            launchObserver.RegisterThrowCallback(launchCallback);
+            evidence = throwPlan.Describe(); Run.Advance("navigating");
+            return navigation.StartPosition(chef, owner, target, throwPlan.Stance);
         }
         private string ValidateRequest()
         {
@@ -216,6 +220,15 @@ namespace SousChef.Plugin.Actions
                 // surviving carried identity before requiring a live source.
                 if (pressed && command.Operation == "pick_up" && Outcome()) { Finish("succeeded", "outcome_observed"); return; }
                 if (target == null || !target.activeInHierarchy) { Finish("blocked", "target_unavailable"); return; }
+                if (Run.Phase == "planning_throw")
+                {
+                    input(0);
+                    if (planningFrame == Time.frameCount) return;
+                    if (!System.Object.ReferenceEquals(ActionObservations.Held(chef), held)) { Finish("blocked", "held_item_changed"); return; }
+                    string error = PlanThrow(Run.Owner);
+                    if (error != null) Finish("blocked", error);
+                    return;
+                }
                 if (Run.Phase == "navigating")
                 {
                     if (navigation.Action.State == "navigating") return;
@@ -493,7 +506,7 @@ namespace SousChef.Plugin.Actions
             if (interactable != null && triggered != null) interactable.UnregisterTriggerCallbacks(triggered);
             interactable = null; triggered = null;
             if (launchObserver != null && launchCallback != null) launchObserver.UnregisterThrowCallback(launchCallback);
-            launchObserver = null; launchCallback = null;
+            launchObserver = null; launchCallback = null; throws.CancelPlanning();
             if (throwReleased && state != "succeeded") evidence = Json.Object("throwReleased", true, "throw", throwPlan.Describe());
             if (dropPlan != null && pressed && state != "succeeded") evidence = Json.Object("handoffRequested", true, "handoff", dropPlan.Describe());
             // Cancel the child while the parent still owns the input lease.

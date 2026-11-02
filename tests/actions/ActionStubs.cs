@@ -108,3 +108,5 @@ namespace Team17.Online.Multiplayer.Messaging
 {
     public class ChefEventMessage { public enum ChefEventType { Interact } }
 }
+
+public class PlacementLayerSwapper : MonoBehaviour { public int m_defaultLayerId=14; }

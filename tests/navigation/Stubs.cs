@@ -148,7 +148,8 @@ namespace UnityEngine
         public static Func<Vector3,Vector3,float,Collider[]> Overlap;
         public static Func<Vector3,Vector3,float,Vector3,float,RaycastHit[]> Cast;
         private static int Copy<T>(T[] source,T[] output) { int n=Math.Min(source.Length,output.Length); Array.Copy(source,output,n); return n; }
-        public static bool GetIgnoreLayerCollision(int a,int b) { return false; }
+        public static Func<int,int,bool> IgnoreLayers = (a,b)=>false;
+        public static bool GetIgnoreLayerCollision(int a,int b) { return IgnoreLayers(a,b); }
         public static int OverlapBoxNonAlloc(Vector3 p,Vector3 half,Collider[] output,Quaternion rotation,int mask,QueryTriggerInteraction q) { return Copy(Nearby(p,half.magnitude),output); }
         public static Vector3 LastBoxCenter,LastBoxHalf;
         public static int BoxCastNonAlloc(Vector3 p,Vector3 half,Vector3 d,RaycastHit[] output,Quaternion rotation,float length,int mask,QueryTriggerInteraction q) { LastBoxCenter=p;LastBoxHalf=half;return Copy(Sphere(p,half.magnitude,d,length),output); }
@@ -192,6 +193,7 @@ public class PlayerControls : UnityEngine.MonoBehaviour
 {
     private bool m_bGridSelection = true;
     private UnityEngine.LayerMask m_interactMask = ~0;
+    private UnityEngine.LayerMask m_catchMask = ~0;
     public sealed class MovementData { public float StepHeightMax=.65f,RunSpeed=4,MaxSpeed=4,TurnSpeed=360; }
     public MovementData Movement = new MovementData();
     public float MovementScale = 1;

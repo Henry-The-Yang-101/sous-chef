@@ -255,7 +255,15 @@ internal static class Program
         Check(body.Prepare(w.Chef,item) && Math.Abs(body.BoundsAt(Vector3.zero,Vector3.forward).min.y)<.0001f,"native lettuce sphere has its base at the item pivot, not 0.76 units below it");
         item=w.Ingredient("capsule");item.Add(new CapsuleCollider {radius=.2f,height=1.4f,direction=0});item.transform.lossyScale=new Vector3(2,1,3);
         Check(body.Prepare(w.Chef,item) && Math.Abs(body.BoundsAt(Vector3.zero,Vector3.forward).size.x-2.8f)<.0001f && Math.Abs(body.BoundsAt(Vector3.zero,Vector3.forward).size.z-1.2f)<.0001f,"capsule height and radius use their respective native scale axes");
+        item.layer=15;item.Add(new PlacementLayerSwapper {m_defaultLayerId=14});
+        Check(ItemBody.DetachedLayer(item)==14,"flight collision/wind filters use the native detached layer rather than the held layer");
         item=w.Ingredient("unsupported mesh");item.Add(new MeshCollider());Check(!body.Prepare(w.Chef,item),"unsupported collision meshes do not silently become point projectiles");
+    }
+    private static string FindPlan(ThrowPlanner planner,NavigationActions navigation,out ThrowPlan plan)
+    {
+        string error;int slices=0;
+        do {error=planner.Find(navigation,out plan);} while(error==ThrowPlanner.Pending && ++slices<200);
+        return error;
     }
     private static void Throws()
     {
@@ -267,9 +275,16 @@ internal static class Program
         w.Chef.transform.position=new Vector3(0,0,-distance-.4f);item.transform.position=w.Chef.transform.position+new Vector3(0,1,.4f);w.Hold(item);
         var colliders=UnityEngine.Object.All.OfType<Collider>().ToArray();
         Physics.Nearby=(p,r)=>colliders.Where(c=>Vector3.Distance(p,c.bounds.ClosestPoint(p))<=r).ToArray();
+        var block=new GameObject("player-only Block");block.layer=26;block.transform.parent=w.Target.transform;
+        block.Add(new BoxCollider {center=new Vector3(0,3,0),size=new Vector3(1,6,1)});
+        Physics.IgnoreLayers=(a,b)=>b==26;
         var planner=new ThrowPlanner();ThrowPlan plan;
-        Check(planner.Prepare(w.Chef,item,w.Target)==null && planner.From(w.Chef.transform.position,false,out plan),"production planner validates a damped throw to board receiving volume");
-        Check(planner.Find(w.Navigation,out plan)==null && plan.WalkDistance<.1f,"inverse search prefers an already reachable valid release stance");
+        Check(planner.Prepare(w.Chef,item,w.Target)==null && planner.From(w.Chef.transform.position,false,out plan),"production planner validates native receiving surface without including the taller player-only Block collider");
+        Physics.IgnoreLayers=(a,b)=>false;block.activeInHierarchy=false;
+        Check(FindPlan(planner,w.Navigation,out plan)==null && plan.WalkDistance<.1f,"inverse search prefers an already reachable valid release stance");
+        var catchTrigger=w.Target.Add(new BoxCollider {isTrigger=true,size=Vector3.one*2});
+        Physics.Sphere=(p,r,d,length)=>new[] {new RaycastHit {collider=catchTrigger}};
+        Check(planner.From(w.Chef.transform.position,false,out plan),"native receiver catch trigger is not an earlier physical obstruction on the landing arc");
         Physics.Sphere=(p,r,d,length)=>new[] {new RaycastHit {collider=colliders.First(c=>c.gameObject.name=="floor")}};
         Check(!planner.From(w.Chef.transform.position,false,out plan),"flight obstruction rejects a previously valid arc");Physics.Sphere=(p,r,d,l)=>new RaycastHit[0];
         w.Target.GetComponent<Catcher>().Allowed=false;
@@ -294,6 +309,9 @@ internal static class Program
         Physics.Sphere=(p,r,d,l)=>Vector3.Distance(p,player.transform.position)<.65f ? new[] {new RaycastHit {collider=playerBody}} : new RaycastHit[0];
         Check(planner.From(w.Chef.transform.position,false,out plan),"receiver body inside native catching range is the receiving contact, not an intervening obstruction");
         Physics.Sphere=(p,r,d,l)=>new RaycastHit[0];
+        human.transform.yaw=Mathf.PI*.5f;human.GetComponent<AttachmentCatcher>().m_catchAngleMax=140;
+        Check(!planner.From(w.Chef.transform.position,false,out plan),"native forward catch scan rejects a side pass even when the attachment catch-angle setting permits it");
+        human.GetComponent<AttachmentCatcher>().m_catchAngleMax=60;
         human.transform.yaw=0;Check(!planner.From(w.Chef.transform.position,false,out plan),"player facing away is outside native catch cone");
         human.GetComponent<ServerPlayerAttachmentCarrier>().Item=new GameObject("occupied hands");
         Check(planner.Prepare(w.Chef,item,human)=="player_cannot_catch","player pass respects occupied hands");
@@ -303,6 +321,30 @@ internal static class Program
         item.Destroyed=true;w.Hold(null);w.Tick();
         Check(w.Skills.Run.State=="running","destroyed projectile and empty receiver hands cannot falsely confirm a catch");
         w.Tick(3);Check(w.Skills.Run.Reason=="throw_missed","missed player pass terminates with an explicit outcome");
+    }
+    private static void IncrementalThrowPlanning()
+    {
+        var w=new World(t=>t.Add(new Catcher()));var item=w.Ingredient("tomato");item.Add(new Throwable());
+        item.Add(new PhysicalAttachment());item.Add(new BoxCollider {size=Vector3.one*.2f});
+        item.transform.position=w.Chef.transform.position+new Vector3(0,1,.4f);w.Hold(item);
+        w.Chef.gameObject.Add(new AttachmentThrower());w.Chef.gameObject.Add(new ClientAttachmentThrower());
+        var server=w.Chef.gameObject.Add(new ServerAttachmentThrower());
+        Physics.Nearby=(p,r)=>w.Colliders.Where(c=>Vector3.Distance(p,c.bounds.ClosestPoint(p))<=r).ToArray();
+        var planner=new ThrowPlanner();ThrowPlan plan;Check(planner.Prepare(w.Chef,item,w.Target)==null,"incremental throw fixture prepares native geometry");
+        bool delayed=false;
+        server.Override=d=>{if(!delayed){delayed=true;System.Threading.Thread.Sleep(35);}return new Vector3(d.x*8,8*Mathf.Tan(15*Mathf.Deg2Rad),d.y*8);};
+        string result=planner.Find(w.Navigation,out plan);
+        Check(result==ThrowPlanner.Pending && plan==null,"a cold planning slice remains pending instead of falsely proving no reachable release position");
+        for(int i=0;i<20 && result==ThrowPlanner.Pending;i++)result=planner.Find(w.Navigation,out plan);
+        Check(result==null && plan!=null && plan.WalkDistance>0,"later bounded planning slices retain candidates and find a reachable release stance");
+        planner.CancelPlanning();
+        int invocation=0;
+        server.Override=d=>{if(++invocation==2)System.Threading.Thread.Sleep(35);return new Vector3(d.x*8,8*Mathf.Tan(15*Mathf.Deg2Rad),d.y*8);};
+        Check(w.Start("throw_to")==null && w.Skills.Run.Phase=="planning_throw","executor retains its lease and exposes pending planning as an active action");
+        int calls=server.Calls;w.Skills.Tick();
+        Check(server.Calls==calls,"a pending request cannot spend a second planning slice in the same Unity frame");
+        w.Skills.Cancel("stopped");
+        Check(w.Skills.Run.Reason=="stopped" && w.Carrier.Item==item && !w.Inputs.Contains(2),"stop during planning releases without launching or losing cargo");
     }
     private static void GeneratedStances()
     {
@@ -500,7 +542,7 @@ internal static class Program
         var elevatedFloor=w.Colliders[0];elevatedFloor.transform.position=new Vector3(0,2,0);
         Physics.Ray=(p,d,length,mask)=>d.y<-.9f && p.y>=2 && p.y-2<=length ? new[] {new RaycastHit {collider=elevatedFloor,point=new Vector3(p.x,2,p.z),normal=Vector3.up,distance=p.y-2}} : new RaycastHit[0];
         planner.Prepare(w.Chef,item,w.Target);
-        Check(planner.Find(w.Navigation,out plan)==null && plan.Arrival.y>3 && plan.WindDisplacement.y>0,"inverse release search adjusts flight time and positions for an updraft and elevated receiving surface");
+        Check(FindPlan(planner,w.Navigation,out plan)==null && plan.Arrival.y>3 && plan.WindDisplacement.y>0,"inverse release search adjusts flight time and positions for an updraft and elevated receiving surface");
         crossVolume.enabled=false;
         w.Chef.transform.position=new Vector3(0,0,w.Chef.transform.position.z);item.transform.position=w.Chef.transform.position+new Vector3(0,1,.4f);planner.Prepare(w.Chef,item,w.Target);
         Check(!planner.From(w.Chef.transform.position,false,out plan),"unreachable target height is rejected instead of projecting a flat throw");
@@ -530,6 +572,6 @@ internal static class Program
         Check(!drops.Plan(w.Chef,item,player,out drop),"nearby horizontal position on a different deck is not a valid drop handoff");
         Physics.Sphere=(p,r,d,length)=>new RaycastHit[0];
     }
-    private static void Main() { Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();GeneratedStances();LogisticsJobs();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();WindAndHeight();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
+    private static void Main() { Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();GeneratedStances();LogisticsJobs();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();WindAndHeight();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
     private static ClientInteractable GetCurrentlyInteractingForTest(this PlayerControls chef) { return chef.GetComponent<ClientPlayerControlsImpl_Default>().Current; }
 }

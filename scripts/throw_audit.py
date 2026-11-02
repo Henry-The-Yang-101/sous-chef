@@ -190,10 +190,8 @@ def run_case(args, case, index):
                 argument = target['id']
                 result['target'] = target
             if operation == 'native_throw':
-                # Comparison fixture: try the production planner with this exact
-                # cargo first, then use only the normal P2 use button to launch.
-                result['plannerComparison'] = execute(client, 'throw_to_player', argument,
-                                                       directory / 'planner.ndjson', args.timeout)
+                # Native input baseline is independent of planner success: a
+                # successful pass would otherwise consume the comparison cargo.
                 client.claim()
                 client.hold(.15, buttons=('use',))
                 client.hold(.04)

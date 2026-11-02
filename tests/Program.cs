@@ -318,7 +318,9 @@ internal static class Program
             new[] { "PhysicalAttachment", "m_rigidBodyParams" },
             new[] { "PhysicalAttachment+RigidbodyParams", "m_drag", "m_useGravity", "m_constraints" },
             new[] { "AttachmentThrower", "m_throwForce", "m_throwInclination" },
-            new[] { "AttachmentCatcher", "m_catchAngleMax", "m_catchDistance" } })
+            new[] { "AttachmentCatcher", "m_catchAngleMax", "m_catchDistance" },
+            new[] { "PlacementLayerSwapper", "m_defaultLayerId" },
+            new[] { "PlayerControls", "m_catchMask" } })
         {
             Type type = assembly.GetType(contract[0]);
             foreach (string name in contract.Skip(1)) Assert(type?.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic) != null, "first-layer native field: " + contract[0] + "." + name);

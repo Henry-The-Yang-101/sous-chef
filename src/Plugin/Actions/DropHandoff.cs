@@ -53,6 +53,7 @@ namespace SousChef.Plugin.Actions
             if (wind.Prepare(chef, item) != null) return false;
             if (!itemBody.Prepare(chef, item)) return false;
             if (physical.m_container != null && (!physical.m_container.useGravity || ((int)physical.m_container.constraints & 14) != 0)) return false;
+            int detachedLayer = ItemBody.DetachedLayer(item);
             var path = ThrowFlight.Simulate(item.transform.position, chef.transform.forward, launch, Physics.gravity,
                 physical.m_container == null ? parameters.m_drag : physical.m_container.drag, 1.5f, Time.fixedDeltaTime, wind);
             for (int i = 1; i < path.Points.Count; i++)
@@ -66,7 +67,7 @@ namespace SousChef.Plugin.Actions
                     Collider c = hits[j].collider;
                     if (c == null || c.transform.IsChildOf(chef.transform) || c.transform.IsChildOf(item.transform)) continue;
                     if (c.GetComponentInParent<ServerFireHazard>() != null || c.GetComponentInParent<RespawnCollider>() != null || c.GetComponentInParent<Teleportal>() != null) return false;
-                    if (c.isTrigger) continue;
+                    if (c.isTrigger || Physics.GetIgnoreLayerCollision(detachedLayer, c.gameObject.layer)) continue;
                     if (hits[j].distance < closest) { closest = hits[j].distance; contact = hits[j]; }
                 }
                 if (closest == Single.MaxValue) continue;
