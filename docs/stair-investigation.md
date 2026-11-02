@@ -53,6 +53,14 @@ The failures had several independent causes:
 6. **Route checking and command checking are different operations.** A valid
    polyline can produce an unsafe full-window heading near a ramp edge. There
    was no local alternative-direction search before stopping the action.
+7. **Neutral recovery created avoidable pauses.** Native contact can remain stale
+   while the capsule is above a connected stair corridor. Waiting for its contact
+   distance to shrink produced pauses of up to 0.21 seconds in a later successful
+   batch. Native contact must inform velocity prediction, while independent live
+   geometry decides whether continuing movement is clear.
+8. **Ownership and movement expiry were coupled too closely.** A captured 166 ms
+   scheduling gap exceeded the 150 ms ownership lease. Movement had already
+   expired safely, but ownership loss unnecessarily cancelled the whole request.
 
 ## Implementation
 
@@ -73,10 +81,10 @@ still apply. Recorded box fixtures now expose their real oriented box geometry
 to the production clearance check.
 
 Landing recovery independently probes current support, even when native contact
-is non-null. It waits above the native contact range and through a clear landing
-within the same collision skin used by its sweep. Shallow lateral penetration
+is non-null. It retains recovery above the native contact range and through a clear
+landing within the same collision skin used by its sweep. Shallow lateral penetration
 is recoverable only for ground-layer contacts, within a quarter of the native
-capsule radius, with a clear resting pose above and a supported, unobstructed
+capsule radius plus the collision skin, with a clear resting pose above and a supported, unobstructed
 connector to the native separation's projected landing. Deep penetration, walls,
 missing floors, and unsafe landing connectors remain rejected. The bridge only
 issues input; it does not relocate the chef or change native physics.
@@ -87,10 +95,26 @@ toward the current waypoint and pass the same full-window support/capsule checks
 If no direction passes, the action still stops. Regression coverage checks both
 a safe local turn and an obstruction covering every candidate direction.
 
+For short hops above a continuously supported corridor, `following_support` checks
+both flat input and the game's slope-relative velocity, including its retained
+normal component. It sweeps an enlarged capsule from the floor up through the
+current body and upward-motion envelope. Previous horizontal velocity is checked
+separately. Low ceilings, holes, sharp momentum changes, excessive frame intervals,
+external flow, and slippery/sliding surfaces reject continuation. Near the final
+stance it uses the existing neutral arrival checks. Penetration recovery stays
+neutral; no body transform or physics velocity is changed by the bridge.
+
+Walking ownership now lasts at least 500 ms, independently of the short checked
+movement window. Inputs still expire at the original deadline; tests reproduce
+166 ms of jitter, successful renewal, and eventual ownership revocation.
+
 The simulator runner now includes per-leg motion summaries: native decision
 frames, neutral recovery episode count/duration, local steering adjustments,
-and first/last body positions. Neutral input duration is not itself a physical
-stall measurement; the raw positions and velocities remain in each trace.
+first/last body positions, maximum decision gap, and longest horizontal stationary
+interval (at most 0.1 units/second during walking, excluding final alignment).
+Neutral input duration is not itself a physical stall measurement; the raw
+positions and velocities remain in each trace. Alignment now has explicit trace
+records so dispenser-facing time is separate from stair motion.
 
 ## Evidence and remaining acceptance work
 
@@ -112,6 +136,13 @@ Local artifacts are ignored by Git because they contain game geometry:
   motivated keeping that extra margin out of actual-body connector validity.
 - `.local/stair-skin-motion-summary.json`: both batches' reconstructed motion
   summaries from the deduplicated native traces.
+- `.local/stair-airborne-60`: five of five round trips with the first continuation
+  prototype; a stale native contact still caused a 0.21-second climb pause.
+- `.local/stair-airborne-20`: nine of ten round trips; the remaining shallow tread
+  penetration exposed a missing collision-skin allowance in lateral recovery.
+- `.local/stair-continuous-20`: fifteen of fifteen round trips after checking the
+  native slope velocity and applying consistent contact skin. The longest neutral
+  recovery command lasted 0.083 seconds. Cross-rate acceptance runs follow below.
 - `.local/stair-*-check.log` and `.local/stair-*-navigation.log`: automated checks.
 
 Successful runs still include short neutral recovery episodes. Reliability and

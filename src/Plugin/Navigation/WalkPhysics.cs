@@ -553,8 +553,9 @@ namespace SousChef.Plugin.Navigation
         }
         // GroundCast intentionally loses contact when native stair momentum
         // carries the capsule more than 0.3 units above a tread. A clear landing
-        // below the current body permits neutral input while gravity settles it;
-        // this does not authorize walking while airborne or over a missing floor.
+        // below the current body permits recovery while gravity settles it.
+        // LandingWalking independently certifies any continuing movement; this
+        // predicate alone never authorizes walking over a missing floor.
         public bool NeedsGroundSettling()
         {
             Settlement = null;
@@ -609,10 +610,11 @@ namespace SousChef.Plugin.Navigation
                     // step. Its shortest escape is sideways, even though a clear
                     // resting pose is immediately above. Permit only shallow
                     // ground contacts whose native horizontal resolution retains
-                    // a checked landing and clear supported connector.
+                    // a checked landing and clear supported connector. Include
+                    // the same contact skin used by the independent body sweep.
                     Vector3 resolved = position + direction * (distance + .01f), landing;
                     Collider landingGround; RaycastHit landingHit;
-                    if (direction.y < -.01f || distance > nativeRadius * .25f ||
+                    if (direction.y < -.01f || distance > nativeRadius * .25f + Skin ||
                         support.y < position.y || support.y - position.y > StepHeight ||
                         !Stand(resolved, out landing, out landingGround, ContactRadius, out landingHit) ||
                         !Segment(support, landing, ContactRadius, false))

@@ -39,7 +39,11 @@ capsule sweeps. The regression checks the blocked strip between valid endpoints
 and preserves a front-on route. The pre-fix controller fails this regression.
 This replay still is not Unity PhysX; live execution remains a separate check.
 Ground-settling regressions cover neutral input, automatic continuation, missing
-floor rejection, and timeout without native ground reacquisition.
+floor rejection, and timeout without native ground reacquisition. Landing-continuation
+coverage includes stale native contacts, slope normals, low ceilings in the airborne
+body envelope, momentum changes, and missing support between route points. Shallow
+lateral contact recovery retains the capsule skin allowance and rejects blocked
+landings, deep contacts, and unrelated walls.
 
 `wizard-stair-contact.json` captures the mid-stair initial penetration that made
 all 25 starts fail. Its regression proves upward native resolution is eligible

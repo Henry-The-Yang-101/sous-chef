@@ -243,7 +243,8 @@ command uses the full preceding unscaled frame interval, rounded up to milliseco
 with a minimum native-step window of 17 ms. The safety projection also covers the
 scaled game delta when it is larger. There is no 60 ms cap that truncates a slow
 frame. Native input reads neutralize the command when its checked motion window
-expires; a separate, longer ownership lease permits renewal after frame jitter.
+expires; a separate 500 ms ownership lease permits renewal after frame jitter.
+That ownership grace does not extend the checked movement window.
 An update interval above 0.9 seconds or an invalid interval stops with
 `unsafe_update_interval`. Ownership expiry after a stall still stops the action.
 
@@ -305,7 +306,7 @@ record and include `control.navigation`. `actions` additionally returns
 raw label, kind, Unity instance ID and position. It survives completion/cancellation
 until another action or round reset, so an interruption cannot look like arrival
 at a different object. `destinationId` remains null when idle. While navigating,
-`phase` distinguishes `walking`, `aligning`, `settling_ground`, `entering_portal`,
+`phase` distinguishes `walking`, `aligning`, `settling_ground`, `following_support`, `entering_portal`,
 `waiting_portal` and `teleporting`; all are interrupted by Stop.
 
 Read-only catalogues can be queried while the game is unfocused, provided the
@@ -334,17 +335,24 @@ enough to meet the game's 58-degree ground limit. A coarse chord between valid
 endpoints can otherwise incorrectly certify that approach.
 
 A running action can enter `settling_ground` when native stair momentum lifts the
-chef beyond GroundCast's contact distance. It issues neutral input while checking
-a clear, collision-free landing below the body, within GroundCast's native downward
-search range. This is distinct from the maximum step-up height; route probes keep
+chef beyond GroundCast's contact distance. It independently checks a clear landing
+below the body, within GroundCast's native downward search range. When the remaining
+route provides continuous support, `following_support` can keep walking through
+this brief hop. It checks the full landing corridor and an enlarged capsule envelope
+covering the current height and upward velocity, the previous horizontal motion,
+and the new command. A retained native contact additionally requires checking the
+game's slope-relative movement basis and normal velocity. Missing floor, low
+ceilings, sharp momentum changes, slippery surfaces, external flow, and proximity
+to the final stance prevent this continuation. Other recoverable poses use neutral
+input. This is distinct from the maximum step-up height; route probes keep
 their original step bounds. A valid native proximity contact can continue a checked
 route rather than braking off the stair merely because the body is above a tread.
 Current capsule geometry detects temporary penetrations independently of the cached
 ground point. An overlap is recoverable only when it is
 with ground-layer colliders, the independently probed supported pose is clear,
 and native `ComputePenetration` proves an upward resolution within step height,
-or a shallow lateral ground resolution with an independently checked landing
-and supported connector. Deep lateral contacts and unrelated walls are rejected.
+or a shallow lateral ground resolution (at most one quarter of the native radius
+plus the collision skin) with an independently checked landing and supported connector. Deep lateral contacts and unrelated walls are rejected.
 Treads and wedges can overlap the capsule simultaneously.
 The game resolves that contact under neutral input; the bridge never adjusts the
 chef's position. Other blocking overlaps still stop the action. Settling forces
