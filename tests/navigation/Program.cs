@@ -764,9 +764,26 @@ internal static class Program
         for(int i=0;i<5;i++) {Time.realtimeSinceStartup+=.05f; navigation.Tick(w.Chef);}
         Check(navigation.Action.Reason=="arrived","braking still finishes only after actual native settling");
     }
+    private static void IdlePlanningCadence()
+    {
+        var w=new World(); w.AddFloor((x,z)=>Math.Abs(x)<2 && Math.Abs(z)<2 ? 0 : (float?)null); w.AddStation();
+        var navigation=new NavigationActions((direction,ms)=>{},()=>{});
+        navigation.Available(w.Chef);
+        var flags=System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic;
+        var reason=typeof(NavigationActions).GetField("unavailable",flags);
+        reason.SetValue(navigation,"planning_in_progress");
+        long revision=(long)((Json.Record)navigation.Describe())["catalogRevision"];
+        for(int i=0;i<5;i++) { navigation.Tick(w.Chef); Time.realtimeSinceStartup+=.01f; }
+        Check((long)((Json.Record)navigation.Describe())["catalogRevision"]==revision,"idle planner does not duplicate a catalogue rebuild on every render frame");
+        Time.realtimeSinceStartup+=.06f; navigation.Tick(w.Chef);
+        Check((long)((Json.Record)navigation.Describe())["catalogRevision"]==revision+1,"pending idle graph still warms after the pacing interval");
+        reason.SetValue(navigation,"planning_in_progress");
+        navigation.Available(w.Chef);
+        Check((long)((Json.Record)navigation.Describe())["catalogRevision"]==revision+2,"explicit catalogue request bypasses idle warming delay");
+    }
     private static void Main()
     {
-        NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
+        IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
         Console.WriteLine("PASS: " + checks + " navigator integration checks (analytical geometry; not PhysX)");
     }
 }

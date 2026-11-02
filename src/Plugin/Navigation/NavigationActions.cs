@@ -296,9 +296,13 @@ namespace SousChef.Plugin.Navigation
             followingSupport = false;
             if (Action.State != "navigating")
             {
-                // A cold physics graph may take several bounded updates to warm.
-                // Publish certified destinations while the remaining graph warms.
-                if (chef == player && (unavailable == "planning_budget_exceeded" || unavailable == "planning_in_progress") && warmTicks > 0)
+                // A cold graph may take several passes to warm. Do not repeat a
+                // full budget-limited search every render frame or immediately
+                // after Available() already refreshed it in the same Update.
+                // Explicit catalogue requests and active movement remain fresh;
+                // only speculative idle warming waits between passes.
+                if (chef == player && (unavailable == "planning_budget_exceeded" || unavailable == "planning_in_progress") &&
+                    warmTicks > 0 && Time.realtimeSinceStartup - lastPlan >= .1f)
                 { warmTicks--; Refresh(player, true); }
                 return;
             }
