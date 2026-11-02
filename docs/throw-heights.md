@@ -15,8 +15,23 @@ snapshots must show the exact item in the intended server holder.
 | Chocolate to lower counter | Offered and delivered; 1.883 m below release, flight approximately 1.194 s. |
 | Flour to lower counter | Offered and delivered with the same measured height/time relationship. |
 | Egg from lower deck to lower counter | P2 first climbs approximately 1.835 m to a reachable release stance, then delivers downward. |
-| Egg to chef upstairs | P2 climbs approximately 1.33 m onto the stairs before passing; the predicted catch is 0.412 m above release. |
-| Lettuce from upper deck to lower chef | Current pose is blocked by the recipient's body before the native catch window. P2 descends approximately 1.625 m to a safe release stance and completes the pass. |
+| Egg to chef upstairs | P2 climbs approximately 1.33 m onto the stairs before passing; the predicted catch is about 0.4 m above release. |
+| Lettuce from upper deck to lower chef | Current-pose sweeps meet the recipient's body before an acceptable native catch window. P2 descends approximately 1.4–1.6 m to a safe release stance and completes the pass. |
+
+The final build also passed the existing **30/30 throw regressions**, followed
+by **4/4 additional catalogue checks** for occupied hands and unsupported player
+catch windows: **50/50 native cases in total**. Those four checks explicitly
+confirm blocked passes are absent from both row operations and parameter enums,
+then request them directly to verify the native guard retains cargo. The full
+code check passed **825 core assertions, 207 navigation checks, 254 action checks
+and 91 Python tests**. The action suite includes a target disappearing during a
+pending preview and a nonthrowable nearby counter handoff.
+
+The exact native-tested DLL was installed for the next normal game launch,
+with the previous plugin/manifest backed up in
+`.local/throw-height-final-20261102/installed-before/`. All simulators started
+for this audit were stopped. The report records the matching installed/runtime
+DLL fingerprint and the full verification log path.
 
 These figures describe the held item's root height at release/catch, while
 climbs/descents describe the chef's foot height. Station receiving height uses
@@ -37,8 +52,8 @@ fixed height cutoff in option selection.
 The catalogue now runs separate read-only instances of the production throw
 planner. Only a valid arc with a certified walking route enables `throw_to` or
 `throw_to_player`. Work is spread over Updates with a 4 ms search slice, stopping
-at the first feasible stance. The two-second planning-work bound counts CPU
-work across slices rather than idle time between Updates. Normal execution
+at the first feasible stance. The two-second planning-work bound counts elapsed time inside search
+slices rather than idle time between Updates. Normal execution
 retains its 25 ms slices and chooses the least walking among valid candidates.
 Individual native geometry queries/candidate work are atomic and may exceed a
 slice; this is not a hard frame-time guarantee.
