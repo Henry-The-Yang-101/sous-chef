@@ -362,6 +362,10 @@ namespace SousChef.Plugin.Navigation
         // the chef footprint across the ramp, using its live oriented geometry.
         private bool SlopeInterior(Vector3 point, Collider support, float clearance)
         {
+            // Interior clearance shapes the planned route. A live connector can
+            // safely leave that margin while descending onto the adjacent floor;
+            // its actual capsule/support checks decide whether the exit is clear.
+            if (clearance < radius - .0001f) return true;
             var box = support as BoxCollider;
             if (box == null) return true;
             Vector3 a = box.transform.TransformVector(Vector3.right);
@@ -373,10 +377,7 @@ namespace SousChef.Plugin.Navigation
             float width = alongX ? box.size.x * a.magnitude : box.size.z * c.magnitude;
             if (lateral.sqrMagnitude < .001f || width < nativeRadius * 3) return true;
             float offset = Mathf.Abs(Vector3.Dot(point - box.transform.TransformPoint(box.center), lateral.normalized));
-            // Plan inside the full footprint. Actual-body connectors retain a
-            // smaller reserve for native lateral drift while exiting the ramp.
-            float margin = clearance >= radius - .0001f ? nativeRadius + .1f : nativeRadius * .5f;
-            return offset + margin <= width * .5f;
+            return offset + nativeRadius + .1f <= width * .5f;
         }
         private Vector3 Approximate(WalkCell cell) { return new Vector3(cell.X * Spacing, cell.Y * HeightBand, cell.Z * Spacing); }
         private Probe Sample(WalkCell hint)
