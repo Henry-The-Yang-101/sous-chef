@@ -39,7 +39,7 @@ namespace SousChef.Plugin.Navigation
         private GameObject held;
         private int groundMask, collisionMask, interactMask;
         private bool useGridSelection;
-        private float radius, nativeRadius, height, pivotToFoot, lastReconcile, walkingSpeed, stepHeight;
+        private float radius, nativeRadius, height, pivotToFoot, lastReconcile, walkingSpeed, stepHeight, bodyContactOffset;
         public bool TraceEnabled;
         public object StartFailures { get; private set; }
         public object Settlement { get; private set; }
@@ -95,14 +95,15 @@ namespace SousChef.Plugin.Navigation
             for (int i = 0; i < 32; i++) if (!Physics.GetIgnoreLayerCollision(chef.gameObject.layer, i)) nextCollisionMask |= 1 << i;
             nativeRadius = capsule.radius * Mathf.Max(Mathf.Abs(capsule.transform.lossyScale.x), Mathf.Abs(capsule.transform.lossyScale.z));
             float nextRadius = nativeRadius + .025f;
+            float nextBodyContact = Mathf.Min(.01f, Mathf.Max(0, capsule.contactOffset));
             float nextHeight = Mathf.Max(2 * nextRadius, capsule.height * Mathf.Abs(capsule.transform.lossyScale.y));
             // Unity's lossyScale jitters by a few float ULPs as a unit-scale chef
             // turns. Retain the padded dimensions through that numerical noise;
             // otherwise every turn discards the complete graph. The tolerance is
             // far smaller than the extra 0.025-unit collision margin.
-            if (groundMask != nextGroundMask || collisionMask != nextCollisionMask ||
+            if (groundMask != nextGroundMask || collisionMask != nextCollisionMask || bodyContactOffset != nextBodyContact ||
                 Mathf.Abs(radius - nextRadius) > .0001f || Mathf.Abs(height - nextHeight) > .0001f || stepHeight != StepHeight)
-            { probes.Clear(); edges.Clear(); Changed = true; radius = nextRadius; height = nextHeight; stepHeight = StepHeight; }
+            { probes.Clear(); edges.Clear(); Changed = true; radius = nextRadius; height = nextHeight; stepHeight = StepHeight; bodyContactOffset = nextBodyContact; }
             groundMask = nextGroundMask; collisionMask = nextCollisionMask;
             pivotToFoot = chef.transform.position.y - capsule.bounds.min.y;
             nearbyCount = Physics.OverlapSphereNonAlloc(chef.transform.position, Range, nearby, ~0, QueryTriggerInteraction.Collide); Queries++;
@@ -260,6 +261,21 @@ namespace SousChef.Plugin.Navigation
             if (c.isTrigger) return false;
             return (collisionMask & (1 << c.gameObject.layer)) != 0;
         }
+        private bool BlocksWalkingBody(Collider obstacle, float lowestFoot, float highestFoot, float queryBottom, float queryTop)
+        {
+            if (!Blocks(obstacle)) return false;
+            // Keep the original native query envelope. Only shallow vertical
+            // contact with horizontal, nonhazard boxes can consume one native
+            // contact offset (capped at 1 cm) beyond the existing contact Skin.
+            // Side walls, slopes, hazards and deeper penetrations still block.
+            if (bodyContactOffset <= 0 || Dangerous(obstacle) || !(obstacle is BoxCollider) ||
+                Mathf.Abs(Vector3.Dot(obstacle.transform.up, Vector3.up)) < .9999f) return true;
+            Bounds bounds = obstacle.bounds;
+            if (bounds.min.y >= queryTop - bodyContactOffset && bounds.min.y > highestFoot + height * .5f) return false;
+            if ((groundMask & (1 << obstacle.gameObject.layer)) != 0 &&
+                bounds.max.y <= queryBottom + bodyContactOffset && bounds.max.y < lowestFoot + height * .5f) return false;
+            return true;
+        }
         private bool NativeStep(Collider c)
         {
             bool value; int id = c.GetInstanceID();
@@ -361,7 +377,7 @@ namespace SousChef.Plugin.Navigation
             Vector3 low, high; Capsule(point, out low, out high, clearance);
             int count = Physics.OverlapCapsuleNonAlloc(low, high, clearance, overlaps, ~0, QueryTriggerInteraction.Collide); Queries++;
             if (count == overlaps.Length) { Overflow = true; return false; }
-            for (int i = 0; i < count; i++) if (Blocks(overlaps[i])) return Fail("body_overlap", point, overlaps[i]);
+            for (int i = 0; i < count; i++) if (BlocksWalkingBody(overlaps[i], point.y, point.y, low.y - clearance, high.y + clearance)) return Fail("body_overlap", point, overlaps[i]);
             return true;
         }
         // A sphere can touch a ramp while its centre is outside the side face.
@@ -602,7 +618,7 @@ namespace SousChef.Plugin.Navigation
             // Stand/Sweep reuse the query buffers; retain the original overlap
             // set while independently checking a native lateral depenetration.
             settlingContacts.Clear();
-            for (int i = 0; i < count; i++) if (Blocks(overlaps[i])) settlingContacts.Add(overlaps[i]);
+            for (int i = 0; i < count; i++) if (BlocksWalkingBody(overlaps[i], position.y, position.y, low.y - ContactRadius, high.y + ContactRadius)) settlingContacts.Add(overlaps[i]);
             foreach (Collider collider in settlingContacts)
             {
                 if (Dangerous(collider) || (groundMask & (1 << collider.gameObject.layer)) == 0) return false;
@@ -651,7 +667,7 @@ namespace SousChef.Plugin.Navigation
             Capsule(from, out low, out high, clearance);
             int count = Physics.CapsuleCastNonAlloc(low, high, clearance, delta / length, hits, length, ~0, QueryTriggerInteraction.Collide); Queries++;
             if (count == hits.Length) { Overflow = true; return false; }
-            for (int i = 0; i < count; i++) if (Blocks(hits[i].collider)) return Fail("body_sweep", from, hits[i].collider);
+            for (int i = 0; i < count; i++) if (BlocksWalkingBody(hits[i].collider, Mathf.Min(from.y, to.y), Mathf.Max(from.y, to.y), low.y - clearance + Mathf.Min(0, delta.y), high.y + clearance + Mathf.Max(0, delta.y))) return Fail("body_sweep", from, hits[i].collider);
             return true;
         }
         private void TrackSurface(Collider ground, Vector3 point, ref IMovingSurface current, ref IMovingSurface previous)

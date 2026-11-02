@@ -120,6 +120,7 @@ namespace UnityEngine
     public class Collider : Component
     {
         public bool enabled = true, isTrigger;
+        public float contactOffset = .01f;
         public Bounds testBounds;
         public virtual Bounds bounds { get { return testBounds; } }
         public Vector3 ClosestPointOnBounds(Vector3 p) { return bounds.ClosestPoint(p); }

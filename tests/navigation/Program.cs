@@ -863,6 +863,40 @@ internal static class Program
         Check(!physics.CanContinueSearch(),"a newly discovered moving surface invalidates the old static proof");physics.Starts().ToArray();
         Check(!physics.RememberSearch(),"unversioned moving-surface predicates retain fresh-search fallback");
     }
+    private static void ShallowCeilingContacts()
+    {
+        // Recorded s_sushi_1_1 floor top 0.05, two-unit chef and ceiling bottom 2.
+        var w=new World();w.AddFloor((x,z)=>.05f);
+        var body=w.Chef.GetComponent<CapsuleCollider>();body.height=2;body.radius=.4f;body.center=Vector3.up;
+        w.Chef.transform.position=new Vector3(14.1310482f,.05000013f,-4.6000347f);
+        var ceiling=new GameObject("Ceiling");ceiling.transform.position=new Vector3(14.39f,2.5f,-10.99017f);
+        var roof=ceiling.Add(new BoxCollider {size=new Vector3(50,1,50)});w.Colliders.Add(roof);
+        Physics.Overlap=(low,high,r)=>high.y+r>roof.bounds.min.y && low.y-r<roof.bounds.max.y ? new Collider[] {roof} : new Collider[0];
+        Physics.Cast=(low,high,r,d,length)=>Math.Max(high.y,high.y+d.y*length)+r>roof.bounds.min.y ? new[] {new RaycastHit {collider=roof}} : new RaycastHit[0];
+        var floorBox=new GameObject("raised floor contact").Add(new BoxCollider {center=new Vector3(14,-.2f,-4),size=new Vector3(50,.5f,50)});
+        floorBox.gameObject.layer=9;w.Colliders.Add(floorBox);
+        Physics.Overlap=(low,high,r)=>new Collider[] {roof,floorBox}.Where(c=>high.y+r>c.bounds.min.y && low.y-r<c.bounds.max.y).ToArray();
+        Physics.Cast=(low,high,r,d,length)=>new Collider[] {roof,floorBox}.Where(c=>Math.Max(high.y,high.y+d.y*length)+r>c.bounds.min.y && Math.Min(low.y,low.y+d.y*length)-r<c.bounds.max.y).Select(c=>new RaycastHit {collider=c}).ToArray();
+        var physics=w.Ready();
+        Check(physics.Starts().Any(),"native-height ceiling contact does not erase every starting cell on the recorded raised floor");
+        Check(physics.Segment(new Vector3(14,.05f,-4.4f),new Vector3(14.4f,.05f,-4.4f)),"the same bounded head contact allowance applies to walking sweeps");
+        w.Chef.transform.position=new Vector3(14.1310482f,0,-4.6000347f);physics.Refresh(w.Chef);
+        Check(physics.Starts().Any(),"the native resting pose can start while a raised floor consumes a shallow contact offset");
+        Check(!physics.NeedsGroundSettling(),"a stable shallow flat floor contact does not wait forever for native depenetration");
+        w.Chef.transform.position=new Vector3(14.1310482f,-.1f,-4.6000347f);physics.Refresh(w.Chef);
+        Check(!physics.Starts().Any(),"deeper ground penetration cannot use the shallow resting-contact allowance");
+        w.Chef.transform.position=new Vector3(14.1310482f,.05000013f,-4.6000347f);physics.Refresh(w.Chef);
+        ceiling.tag="Hazard";Time.realtimeSinceStartup+=.21f;physics.Refresh(w.Chef);
+        Vector3 point;Collider ground;
+        Check(!physics.Stand(new Vector3(14,.05f,-4.4f),out point,out ground),"overhead hazards retain the full original query envelope");
+        ceiling.tag="Untagged";ceiling.transform.position.y=2.4f;Time.realtimeSinceStartup+=.21f;physics.Refresh(w.Chef);
+        Check(!physics.Stand(new Vector3(14,.05f,-4.4f),out point,out ground),"a genuinely lower ceiling remains blocked");
+        ceiling.transform.position.y=2.5f;w.Chef.GetComponent<CapsuleCollider>().contactOffset=0;physics.Refresh(w.Chef);
+        Check(!physics.Stand(new Vector3(14,.05f,-4.4f),out point,out ground),"no extra allowance is invented when native contact offset is zero");
+        body.contactOffset=.01f;body.height=.8f;body.center=new Vector3(0,.4f,0);ceiling.transform.position.y=1.36f;
+        physics.Refresh(w.Chef);
+        Check(!physics.Stand(new Vector3(14,.05f,-4.4f),out point,out ground),"spherical capsules use the actual query top rather than overstating their contact allowance");
+    }
     private static void EquivalentVerticalStarts()
     {
         var w=new World();w.AddFloor((x,z)=>Math.Abs(x)<3 && Math.Abs(z)<3 ? 0 : (float?)null);
@@ -959,7 +993,7 @@ internal static class Program
     }
     private static void Main()
     {
-        SearchContinuity(); EquivalentVerticalStarts(); ConveyorSearchContinuity(); CertifiedStart(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); DirectedConveyors(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
+        SearchContinuity(); ShallowCeilingContacts(); EquivalentVerticalStarts(); ConveyorSearchContinuity(); CertifiedStart(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); DirectedConveyors(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
         WorkerStartingStateChanges();
         Console.WriteLine("PASS: " + checks + " navigator integration checks (analytical geometry; not PhysX)");
     }

@@ -865,3 +865,42 @@ reproduce the persistent held-item height fluctuation; on-screen benefit of this
 follow-up remains to be verified after installation. Check log:
 `.local/standing-start-check.log`. Native general-catalogue evidence:
 `.local/standing-native-results.json`.
+
+### Raised-floor ceiling contact and `no_safe_start` — bridge 0.7.2
+
+The reported localhost failure was reproduced in the user's `s_sushi_1_1`
+round. Player 2 stood on a floor whose top was approximately 0.05, under a ceiling
+whose underside was 2.0. The native chef capsule was 2.0 units high. The original
+0.045 contact inset still overlapped that ceiling by about 0.005, invalidating
+all starting cells before any worker search ran. The first isolated native
+`probe-walk` returned `body_overlap` with collider `Ceiling` at the recorded pose.
+
+Walking body queries now retain their original native overlap/sweep envelopes,
+including hazards. Horizontal, nonhazard box contacts at the top may consume up
+to one native chef contact offset, capped at 0.01, beyond the existing contact
+skin. The analogous bottom allowance applies only to ground-mask boxes. This
+also prevents a stable native resting pose slightly inside the raised floor
+from waiting indefinitely for depenetration. Side walls, slopes, lower ceilings,
+hazards, and deeper penetrations still block. The allowance uses the actual
+capsule query endpoints, including spherical/minimum-height capsules; changing
+the native contact offset invalidates cached probes and edges. No game collider,
+body position, physics setting or input gate is modified by this correction.
+
+The recorded geometry regression fails without the correction and passes with
+it. The full check passes 2,840 core assertions, 318 navigator integration checks,
+274 action checks, 98 Python tests and the 151-type installed-assembly audit.
+
+An isolated original Unity/PhysX replay of `s_sushi_1_1` then passed the recorded
+start/end/segment probe and returned 27 destinations. A normal `pick_up` of
+SushiPrawn followed by `place_at` on a counter both succeeded through the real
+executor. An independent full snapshot confirmed that the exact picked-up item
+(instance -13214) belonged to the target counter's `ServerAttachStation`
+(instance 492214), with no field/read errors. The isolated test used no staging,
+teleportation or replacement collision geometry. The live user's players were
+observed only.
+
+Private evidence: `.local/no-safe-start-context.json`,
+`.local/safe-start-regression-before.log`, `.local/safe-start-native-verify.log`,
+`.local/safe-start-native-results.json` and `.local/safe-start-check.log`.
+This is native validation of the reported room and actions, not an all-kitchen
+reachability or FPS guarantee.

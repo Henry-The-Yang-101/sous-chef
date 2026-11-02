@@ -430,3 +430,12 @@ position, shape and movement rules, geometry, support/wind proofs, and cached
 neighbour range decisions. Moving-surface starts keep strict invalidation. This
 is an equivalence check, not a positional tolerance: changed costs or native
 connector vetoes restart the search. Diagnostics count `startProofRevalidations`.
+
+Walking overlap/sweep queries keep their original envelope but allow a shallow
+horizontal box contact to consume at most one native chef contact offset (capped
+at 0.01) beyond the existing skin. This handles a raised floor under a native-height
+ceiling and the corresponding stable floor contact. The bottom exception requires
+a ground-mask box; neither exception applies to hazards or side/slope contacts.
+Lower ceilings and deeper penetrations remain blocked, and changing contact offset
+invalidates cached geometry queries. See the `s_sushi_1_1` native pickup/placement
+regression in [validation.md](validation.md).
