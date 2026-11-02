@@ -19,6 +19,8 @@ def write(path, value):
 
 def audit_level(runtime, level, output):
     result = dict(level, routes=[], covered=[], success=False)
+    if level['name'].startswith(('Throne_Room_', 'ThroneRoom_')):
+        return dict(result, success=True, reason='non_kitchen_story_scene')
     generation = sim.read_status(runtime).get('generation', 0) + 1
     sim.command(runtime, 'load ' + level['name'])
     try:
@@ -27,11 +29,14 @@ def audit_level(runtime, level, output):
         initial = sim.read_status(runtime)
         result.update(reason='round_not_ready', initial=initial)
         return result
+    time.sleep(1)
+    initial = sim.read_status(runtime)
     result['initial'] = initial
+    result['inactivePortals'] = [p for p in initial.get('portals', []) if p['playerSender'] and not p['enabled']]
     portals = [p for p in initial.get('portals', []) if p['enabled'] and p['playerSender'] and p['exitObjectId']]
     result['portals'] = portals
     if not portals:
-        result.update(success=True, reason='no_active_player_portals')
+        result.update(success=not result['inactivePortals'], reason='inactive_portals_uncovered' if result['inactivePortals'] else 'no_active_player_portals')
         return result
     expected = {p['id'] for p in portals}
     covered, attempted = set(), set()
@@ -45,8 +50,16 @@ def audit_level(runtime, level, output):
                 if catalog.get('complete') or time.monotonic() > deadline:
                     break
                 time.sleep(.15)
-            options = catalog.get('destinations', [])
             uncovered = expected - covered
+            # Rotating/animated portals can be physically closed during a native
+            # timed phase. Observe a full cycle before repositioning; never force
+            # their transforms or treat an ordinary walking arrival as coverage.
+            phase_deadline = time.monotonic() + 75
+            while uncovered and not any(uncovered.intersection(d.get('routePortalIds', [])) for d in catalog.get('destinations', [])):
+                if time.monotonic() >= phase_deadline: break
+                time.sleep(.5)
+                catalog = client.available_actions()
+            options = catalog.get('destinations', [])
             options = [d for d in options if (tuple(sorted(covered)), d['id']) not in attempted]
             options.sort(key=lambda d: (-len(uncovered.intersection(d.get('routePortalIds', []))), d['routeDistance']))
             if not options or not uncovered:
@@ -86,7 +99,7 @@ def audit_level(runtime, level, output):
                 covered.update(route['observedPortals'])
             else:
                 break # Preserve failed attempts; never hide them with an in-place retry.
-    result.update(covered=sorted(covered), success=expected.issubset(covered) and all(r['success'] for r in result['routes']))
+    result.update(covered=sorted(covered), success=expected.issubset(covered) and not result['inactivePortals'] and all(r['success'] for r in result['routes']))
     result['reason'] = 'covered' if result['success'] else 'failed_or_uncovered'
     return result
 

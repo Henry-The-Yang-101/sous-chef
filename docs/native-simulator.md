@@ -11,8 +11,9 @@ complete level traversal.
 
 ## Start and repeat
 
-Steam and the installed game/bridge launcher must be available. Close any other
-Overcooked process first; the simulator uses the existing bridge ports.
+Steam and the installed game/bridge launcher must be available. The default
+runtime uses the existing bridge ports and requires other game processes to be
+closed. Use an isolated runtime and port range to test concurrently (below).
 
 ```sh
 python3 scripts/native_simulator.py start --level s_wizard_school_3_4
@@ -29,8 +30,9 @@ The default level is the Chocolate stair kitchen, `s_wizard_school_3_4`.
 items, orders, and scripted objects. It waits for the new scene and actual round;
 old round state cannot satisfy the wait. Native loading/intro takes several
 seconds. `load` selects a named two-player kitchen from the native session's
-catalogue. The current catalogue contains 52 base-game entries. DLC session
-selection is not implemented.
+catalogue. `start --dlc ID` selects an installed cooperative DLC session; the
+default is `-1` (base game). `all-levels.json` inventories the installed session
+prefabs and their two-player scene variants (164 entries on the tested install).
 
 `navigate` resets before each attempt, waits for reachability discovery to finish,
 and makes exactly one normal `ActionClient.navigate_to` request. It accepts an
@@ -92,7 +94,29 @@ what the existing action API can execute.
 
 The simulator has its own BepInEx core/config/plugin copy and save directory under
 `.local/native-player/`; it does not replace the normal installed bridge build.
-`--runtime PATH` selects another directory, but concurrent games are not supported.
+For concurrent games, supply **both** a different `--runtime PATH` and an unused
+`start --port-base N`. The three ports are snapshot `N`, control `N+1`, gameplay
+`N+2`. Configuration, logs, saves, process ownership, and mailbox commands remain
+inside that runtime. The default launch guard still rejects accidental concurrent
+interactive/default-port launches. No command stops a process belonging to a
+different runtime.
+
+```sh
+python3 scripts/native_simulator.py --runtime /tmp/portal-audit start --port-base 25712 --level s_wizard_3_3
+python3 scripts/portal_audit.py --runtime /tmp/portal-audit --port-base 25712 --output /tmp/portal-results
+python3 scripts/native_simulator.py --runtime /tmp/portal-audit stop
+```
+
+The audit loads every installed two-player scene in its corresponding DLC
+session. It inventories scene portal components (including inactive ones),
+selects ordinary `navigate_to` destinations whose planned routes include untested
+entrances, and records the native transitions and final arrival. Timed portal
+phases are observed without changing transforms or advancing the game clock.
+A walking-only arrival cannot cover a portal; every observed entrance must be
+followed by a successful arrival. Failures and uncovered entrances remain in the
+report, with per-route NDJSON traces. `--resume` skips recorded scenes; use a new
+output directory for a new validation run. Story-only throne rooms are identified
+separately. An inactive player portal is not silently counted as tested.
 Files are private local runtime artifacts, not distributable game assets.
 
 The opt-in runtime requires `SOUS_CHEF_NATIVE_SIM`, `-batchmode`, and `-nographics`.
@@ -105,6 +129,10 @@ Two scoped Harmony prefixes redirect native saves into the simulator directory
 and bypass only the window-focus portion of native button gating. Player-control
 suppression, dialogs, menus, ownership, pause checks, input leases, and Player 2
 restrictions remain. Normal interactive launches do not enable these patches.
+Scene animators use `AlwaysAnimate` in the native headless runtime so camera
+culling cannot freeze timed kitchen geometry or intro animation events. This
+changes animation visibility policy only; native animation clips, timers, and
+physics still execute normally.
 Capture coroutines yield a regular frame in simulator mode because rendered
 `WaitForEndOfFrame` is unavailable in batchmode.
 

@@ -86,11 +86,14 @@ namespace SousChef.Plugin
                 foreach (var p in UnityEngine.Object.FindObjectsOfType<PlayerControls>())
                     players.Add(Json.Object("name", p.name, "position", new[] { p.transform.position.x, p.transform.position.y, p.transform.position.z }, "inputAllowed", p.CanButtonBePressed()));
                 var portals = new List<object>();
-                foreach (var portal in UnityEngine.Object.FindObjectsOfType<Teleportal>())
+                foreach (var portal in Resources.FindObjectsOfTypeAll<Teleportal>())
+                {
+                    if (!portal.gameObject.scene.IsValid() || !portal.gameObject.scene.isLoaded) continue;
                     portals.Add(Json.Object("id", portal.GetInstanceID(), "objectId", portal.gameObject.GetInstanceID(), "position", Values.Vector(portal.transform.position),
                         "exitObjectId", portal.m_exitPortal == null ? 0 : portal.m_exitPortal.GetInstanceID(),
-                        "playerSender", portal.GetComponent<ServerTeleportalPlayerSender>() != null,
+                        "playerSender", portal.GetComponent<TeleportalPlayerSender>() != null,
                         "enabled", portal.isActiveAndEnabled));
+                }
                 Write("status.json", Json.Object("dlc", dlc, "portals", portals,"phase", error != null ? "error" : inRound ? "ready" : phase, "error", error,
                     "scene", SceneManager.GetActiveScene().name, "requestedLevel", requested, "generation", generation,
                     "inRound", inRound, "players", players, "serverUsers", ServerUserSystem.m_Users.Count,
@@ -187,7 +190,15 @@ namespace SousChef.Plugin
         }
         private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
-            if (mode == LoadSceneMode.Single && scene.name == requested) loadedGeneration = generation;
+            if (mode == LoadSceneMode.Single && scene.name == requested)
+            {
+                loadedGeneration = generation;
+                // No render camera exists in batchmode. Native animations and
+                // their events must still advance, including kitchen intros.
+                foreach (var animator in Resources.FindObjectsOfTypeAll<Animator>())
+                    if (animator.gameObject.scene.IsValid() && animator.gameObject.scene.isLoaded)
+                        animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+            }
         }
         private void OnDestroy()
         {
