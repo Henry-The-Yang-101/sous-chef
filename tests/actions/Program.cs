@@ -237,6 +237,10 @@ internal static class Program
         var w=new World();var item=w.Ingredient("Cheese_Raw");
         var shape=item.Add(new BoxCollider {size=new Vector3(.73f,.3793645f,.6994182f),center=new Vector3(0,.19f,0)});
         item.transform.position=new Vector3(0,.55f,-1);
+        Vector3 spread=ThrowPlanner.PoseUncertainty(Vector3.forward,1,.3f);
+        Check(Math.Abs(spread.z-.3f)<.0001f && spread.x==0,"fixed-force radial range uncertainty persists at landing while lateral aim error can converge");
+        spread=ThrowPlanner.PoseUncertainty(Vector3.forward,0,.3f);
+        Check(spread.x>=.3f && spread.z>=.3f,"release clearance covers both horizontal directions before steering correction");
         var body=new ItemBody();
         Check(body.Prepare(w.Chef,item),"native cheese collider is supported despite its old pivot radius exceeding 0.6");
         Bounds bounds=body.BoundsAt(item.transform.position,Vector3.forward);
@@ -374,6 +378,12 @@ internal static class Program
         Check(((List<object>)catalog["destinations"]).All(d=>(string)((Json.Record)d)["id"]!="throw_stance"),"internal stance never leaks into wire destination options");
         w.Navigation.Stop("stopped");
         Check(w.Navigation.Action.State=="idle","generated stance navigation is interruptible");
+        Vector3 goal=w.Chef.transform.position;
+        Check(w.Navigation.StartPosition(w.Chef,1,w.Target,goal,true)==null,"throws can request strict generated-point arrival without changing ordinary navigation");
+        w.Chef.transform.position=goal+Vector3.forward*.19f;Time.realtimeSinceStartup+=.02f;Time.frameCount++;w.Navigation.Tick(w.Chef);
+        w.Chef.transform.position=goal+Vector3.forward*.23f;Time.realtimeSinceStartup+=.4f;Time.frameCount++;w.Navigation.Tick(w.Chef);
+        Check(w.Navigation.Action.State=="navigating","strict release stance cannot succeed inside the wider station-arrival hysteresis");
+        w.Navigation.Stop("stopped");
     }
     private static void LogisticsJobs()
     {

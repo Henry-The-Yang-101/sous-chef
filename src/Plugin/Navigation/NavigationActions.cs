@@ -16,7 +16,7 @@ namespace SousChef.Plugin.Navigation
             public WalkCell Goal;
             public Vector3 Approach, LocalApproach;
             public float Distance;
-            public bool IsPoint;
+            public bool IsPoint, StrictPointArrival;
         }
         private readonly WalkPhysics physics = new WalkPhysics();
         public readonly ChefActionState Action = new ChefActionState();
@@ -92,11 +92,11 @@ namespace SousChef.Plugin.Navigation
             { d = new Destination { Id = "d" + (++nextId), Object = go, Kind = "item" }; identities[go.GetInstanceID()] = d; }
             return d.Id;
         }
-        public string StartPosition(PlayerControls player, int owner, GameObject aim, Vector3 position)
+        public string StartPosition(PlayerControls player, int owner, GameObject aim, Vector3 position, bool strictArrival = false)
         {
             if (Action.State != "idle") return "action_in_progress";
             chef = player;
-            var chosen = new Destination { Id = "throw_stance", Object = aim, Kind = "throw_stance", IsPoint = true, Approach = position };
+            var chosen = new Destination { Id = "throw_stance", Object = aim, Kind = "throw_stance", IsPoint = true, StrictPointArrival = strictArrival, Approach = position };
             if (!Action.Start(owner, chosen.Id, true)) return "action_in_progress";
             settlingSince = -1; teleportsCompleted = 0; target = chosen; started = lastProgress = Time.realtimeSinceStartup; progressPosition = player.transform.position;
             arrivalDetails = null; arrival.Reset(); facingSince = -1; haveMotion = motionSampleValid = false;
@@ -533,6 +533,9 @@ namespace SousChef.Plugin.Navigation
             bool ready = target.IsPoint || canPickup || canPlace || canUse;
             Vector3 relativeVelocity = velocity + drift - targetVelocity; relativeVelocity.y = 0;
             float relativeSpeed = Mathf.Max(observedRelativeSpeed, relativeVelocity.magnitude);
+            // Throw certification reserves PositionTolerance, not the wider
+            // station-settling hysteresis. Refine an overshot generated stance.
+            if (target.StrictPointArrival && distance > ArrivalCheck.PositionTolerance) arrival.Reset();
             bool positioned = arrival.Observe(now, distance, dot, relativeSpeed, selected);
             arrivalDetails = Json.Object("stanceError", distance, "facingErrorDegrees", Mathf.Acos(Mathf.Clamp(dot, -1, 1)) * Mathf.Rad2Deg,
                 "relativeSpeed", motionSampleValid ? (object)relativeSpeed : null,

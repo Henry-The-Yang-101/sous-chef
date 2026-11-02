@@ -154,7 +154,7 @@ namespace SousChef.Plugin.Actions
             };
             launchObserver.RegisterThrowCallback(launchCallback);
             evidence = throwPlan.Describe(); Run.Advance("navigating");
-            return navigation.StartPosition(chef, owner, target, throwPlan.Stance);
+            return navigation.StartPosition(chef, owner, target, throwPlan.Stance, true);
         }
         private string ValidateRequest()
         {

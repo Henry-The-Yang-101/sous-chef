@@ -301,6 +301,8 @@ namespace SousChef.Plugin.Actions
             {
                 Bounds shifted = receiving; shifted.center = predicted;
                 if (!shifted.Contains(arrival)) return Reject("receiving_volume");
+                Vector3 rangeError = PoseUncertainty(direction, 1, stanceUncertainty);
+                if (!shifted.Contains(arrival + rangeError) || !shifted.Contains(arrival - rangeError)) return Reject("receiving_range_uncertainty");
                 if (path.Points[path.Points.Count - 1].y >= path.Points[path.Points.Count - 2].y) return Reject("ascending_arrival");
                 var catcher = GameObjectUtils.RequestInterface<IHandleCatch>(receiver);
                 var catchable = GameObjectUtils.RequestInterface<ICatchable>(item);
@@ -328,6 +330,13 @@ namespace SousChef.Plugin.Actions
             // its closest-point scan is narrower than AttachmentCatcher's cone.
             return scan.sqrMagnitude > .001f && scan.sqrMagnitude < 4 && Vector3.Dot(facing, scan.normalized) >= Mathf.Cos((45 - margin * 30) * Mathf.Deg2Rad);
         }
+        internal static Vector3 PoseUncertainty(Vector3 direction, float progress, float amount)
+        {
+            // Aim corrects lateral displacement toward the receiver, but fixed
+            // launch force cannot correct range error along the flight axis.
+            return new Vector3(amount * Mathf.Lerp(1, Mathf.Abs(direction.x), progress), 0,
+                amount * Mathf.Lerp(1, Mathf.Abs(direction.z), progress));
+        }
         private bool Clear(FlightPath path, Vector3 receiverVelocity, Vector3 direction, int lastStep, float stanceUncertainty)
         {
             int count = itemBody.Overlap(path.Points[0], direction, overlaps, mask, .01f, stanceUncertainty);
@@ -338,8 +347,8 @@ namespace SousChef.Plugin.Actions
                 Vector3 previous = path.Points[step - 1], next = path.Points[step], segment = next - previous;
                 // Navigation can settle anywhere inside its arrival tolerance.
                 // Cover that release-pose uncertainty while choosing a stance;
-                // its effect tapers toward the independently checked receiver.
-                float uncertainty = stanceUncertainty * (1 - path.Times[step - 1] / path.Times[lastStep]);
+                // lateral error tapers, while radial range uncertainty remains.
+                Vector3 uncertainty = PoseUncertainty(direction, path.Times[step - 1] / path.Times[lastStep], stanceUncertainty);
                 int n = itemBody.Cast(previous, direction, segment, hits, mask, .01f, uncertainty);
                 if (n >= hits.Length) return false;
                 bool receivingEnd = player == null ? step >= lastStep - 3 : PlayerCatchable(path, step, direction, receiverVelocity, 0);

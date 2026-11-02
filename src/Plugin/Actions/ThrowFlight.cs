@@ -109,13 +109,13 @@ namespace SousChef.Plugin.Actions
             Vector3 end = rotation * axis * segment;
             return Physics.OverlapCapsuleNonAlloc(center - end, center + end, radius + margin, output, mask, QueryTriggerInteraction.Collide);
         }
-        public int Cast(Vector3 origin, Vector3 direction, Vector3 movement, RaycastHit[] output, int mask, float margin, float horizontalUncertainty = 0)
+        public int Cast(Vector3 origin, Vector3 direction, Vector3 movement, RaycastHit[] output, int mask, float margin, Vector3 horizontalUncertainty = default(Vector3))
         {
             if (movement.sqrMagnitude < .00000001f) return 0;
-            if (horizontalUncertainty > 0)
+            if (horizontalUncertainty.sqrMagnitude > 0)
             {
                 Bounds bounds = BoundsAt(origin, direction);
-                Vector3 extra = new Vector3(margin + horizontalUncertainty, margin, margin + horizontalUncertainty);
+                Vector3 extra = new Vector3(margin + horizontalUncertainty.x, margin, margin + horizontalUncertainty.z);
                 return Physics.BoxCastNonAlloc(bounds.center, bounds.extents + extra, movement.normalized, output, Quaternion.LookRotation(Vector3.forward), movement.magnitude, mask, QueryTriggerInteraction.Collide);
             }
             Quaternion facing = Quaternion.LookRotation(direction), rotation = facing * relativeRotation;
