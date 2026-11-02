@@ -279,7 +279,7 @@ namespace SousChef.Plugin.Actions
                     if (!System.Object.ReferenceEquals(ActionObservations.Held(chef), held)) { Finish("blocked", "held_item_changed"); return; }
                     if (Time.frameCount <= pressFrame + 1 || Time.realtimeSinceStartup - phaseStarted < .08f) { input(2); return; }
                     ThrowPlan fresh; string error = throws.Prepare(chef, held, target);
-                    if (error != null || !throws.From(Foot(), true, out fresh)) { Finish("blocked", error ?? "throw_became_invalid"); return; }
+                    if (error != null || !throws.From(Foot(), true, out fresh)) { evidence = throws.Diagnostics; Finish("blocked", error ?? "throw_became_invalid"); return; }
                     throwPlan = fresh; evidence = fresh.Describe(); throwReleased = true; input(0); SetPhase("flight"); return;
                 }
                 if (Run.Phase == "flight")
@@ -473,7 +473,7 @@ namespace SousChef.Plugin.Actions
             input(0);
             if (!System.Object.ReferenceEquals(ActionObservations.Held(chef), held)) { Finish("blocked", "held_item_changed"); return; }
             string error = throws.Prepare(chef, held, target); ThrowPlan current;
-            if (error != null || !throws.From(Foot(), false, out current)) { Finish("blocked", error ?? "throw_became_invalid"); return; }
+            if (error != null || !throws.From(Foot(), false, out current)) { evidence = throws.Diagnostics; Finish("blocked", error ?? "throw_became_invalid"); return; }
             PlayerControlsHelper.TurnTowardsDirection(chef.gameObject, current.Direction, chef.Movement.TurnSpeed, Mathf.Min(Time.deltaTime, .05f));
             if (chef.Motion.GetVelocityXZ().magnitude > .1f || Vector3.Angle(chef.transform.forward, current.Direction) > .5f)
             { if (Time.realtimeSinceStartup - phaseStarted > 2) Finish("failed", "throw_alignment_failed"); return; }

@@ -94,8 +94,14 @@ namespace SousChef.Plugin.Actions
             // sweeps still reject collisions with neighbouring stations/walls.
             return new Bounds(center, new Vector3(Mathf.Max(.02f, receiver.size.x - .1f), .16f, Mathf.Max(.02f, receiver.size.z - .1f)));
         }
-        public int Overlap(Vector3 origin, Vector3 direction, Collider[] output, int mask, float margin)
+        public int Overlap(Vector3 origin, Vector3 direction, Collider[] output, int mask, float margin, float horizontalUncertainty = 0)
         {
+            if (horizontalUncertainty > 0)
+            {
+                Bounds bounds = BoundsAt(origin, direction);
+                Vector3 extra = new Vector3(margin + horizontalUncertainty, margin, margin + horizontalUncertainty);
+                return Physics.OverlapBoxNonAlloc(bounds.center, bounds.extents + extra, output, Quaternion.LookRotation(Vector3.forward), mask, QueryTriggerInteraction.Collide);
+            }
             Quaternion facing = Quaternion.LookRotation(direction), rotation = facing * relativeRotation;
             Vector3 center = origin + facing * offset;
             if (kind == 0) return Physics.OverlapBoxNonAlloc(center, half + Vector3.one * margin, output, rotation, mask, QueryTriggerInteraction.Collide);
@@ -103,9 +109,15 @@ namespace SousChef.Plugin.Actions
             Vector3 end = rotation * axis * segment;
             return Physics.OverlapCapsuleNonAlloc(center - end, center + end, radius + margin, output, mask, QueryTriggerInteraction.Collide);
         }
-        public int Cast(Vector3 origin, Vector3 direction, Vector3 movement, RaycastHit[] output, int mask, float margin)
+        public int Cast(Vector3 origin, Vector3 direction, Vector3 movement, RaycastHit[] output, int mask, float margin, float horizontalUncertainty = 0)
         {
             if (movement.sqrMagnitude < .00000001f) return 0;
+            if (horizontalUncertainty > 0)
+            {
+                Bounds bounds = BoundsAt(origin, direction);
+                Vector3 extra = new Vector3(margin + horizontalUncertainty, margin, margin + horizontalUncertainty);
+                return Physics.BoxCastNonAlloc(bounds.center, bounds.extents + extra, movement.normalized, output, Quaternion.LookRotation(Vector3.forward), movement.magnitude, mask, QueryTriggerInteraction.Collide);
+            }
             Quaternion facing = Quaternion.LookRotation(direction), rotation = facing * relativeRotation;
             Vector3 center = origin + facing * offset;
             if (kind == 0) return Physics.BoxCastNonAlloc(center, half + Vector3.one * margin, movement.normalized, output, rotation, movement.magnitude, mask, QueryTriggerInteraction.Collide);

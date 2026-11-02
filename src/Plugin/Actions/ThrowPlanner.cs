@@ -148,7 +148,8 @@ namespace SousChef.Plugin.Actions
                 if (!candidates.MoveNext()) return CompletePlanning(out plan);
                 Vector3 stance; ThrowPlan possible;
                 if (!navigation.TryStance(candidates.Current, out stance)) { Reject("unsupported_stance"); continue; }
-                if (!From(stance, false, out possible)) continue;
+                float uncertainty = Vector3.Distance(stance, chef.transform.position - Vector3.up * pivot) < .02f ? 0 : ArrivalCheck.PositionTolerance + .02f;
+                if (!From(stance, false, out possible, uncertainty)) continue;
                 float cost = navigation.RouteCost(stance);
                 if (cost == Single.MaxValue) { Reject("unreachable_stance"); continue; }
                 if (bestPlan != null && cost >= bestPlan.WalkDistance) continue;
@@ -167,33 +168,48 @@ namespace SousChef.Plugin.Actions
             candidates.Dispose(); candidates = null;
             plan = bestPlan; return plan == null ? "no_reachable_throw_position" : null;
         }
+        private IEnumerable<float> ReleaseTimes(float height, Vector3 center)
+        {
+            float flight;
+            if (ThrowTrajectory.FlightTime(center.y - (height + pivot + localRelease.y), vertical, Physics.gravity.y, drag, Time.fixedDeltaTime, out flight)) yield return flight;
+            else if (wind.HasWind) yield return .5f;
+            if (player != null)
+            {
+                // A chef catches inside a volume before the projectile reaches
+                // their feet. Include earlier native flight positions, rather
+                // than limiting passes to the descending ground-height ring.
+                yield return .35f; yield return .5f; yield return .2f;
+            }
+        }
         private IEnumerable<Vector3> CandidatePositions(NavigationActions navigation)
         {
             Vector3 center = receiving.center;
             yield return chef.transform.position - Vector3.up * pivot;
-            // Invert the native launch arc into a release ring. Three offsets
-            // account for the finite receiving volume without changing force.
             foreach (float height in navigation.ReleaseHeights(center, speed * 4))
-            {
-                float flight;
-                if (!ThrowTrajectory.FlightTime(center.y - (height + pivot + localRelease.y), vertical, Physics.gravity.y, drag, Time.fixedDeltaTime, out flight))
-                { if (!wind.HasWind) continue; flight = .5f; }
-                float distance = ThrowTrajectory.Displacement(speed, 0, drag, flight, Time.fixedDeltaTime) + new Vector2(localRelease.x, localRelease.z).magnitude;
-                Vector3 predictedCenter = center + ReceiverVelocity() * flight;
-                for (int i = 0; i < 24; i++)
+                foreach (float flight in ReleaseTimes(height, center))
                 {
-                    float angle = i * 2 * Mathf.PI / 24, r = Mathf.Max(.5f, distance);
-                    Vector3 radial = new Vector3(Mathf.Cos(angle), 0, Mathf.Sin(angle));
-                    Vector3 candidate = new Vector3(predictedCenter.x + radial.x * r, height, predictedCenter.z + radial.z * r);
-                    Vector3 direction = predictedCenter - candidate; direction.y = 0; direction.Normalize(); Vector3 launch;
-                    if (!NativeThrow.Velocity(chef, direction, out launch)) continue;
-                    Vector3 origin = candidate + Vector3.up * pivot + Quaternion.LookRotation(direction) * localRelease;
-                    Vector3 end; float seedTime;
-                    if (!Seed(origin, direction, launch, flight, out seedTime, out end)) continue;
-                    Vector3 correction = center + ReceiverVelocity() * seedTime - end; correction.y = 0;
-                    for (int ring = -1; ring <= 1; ring++) yield return candidate + correction + radial * (ring * .25f);
+                    float distance = ThrowTrajectory.Displacement(speed, 0, drag, flight, Time.fixedDeltaTime) + new Vector2(localRelease.x, localRelease.z).magnitude;
+                    Vector3 predictedCenter = center + ReceiverVelocity() * flight;
+                    const int angles = 36;
+                    for (int i = 0; i < angles; i++)
+                    {
+                        float angle = i * 2 * Mathf.PI / angles, r = Mathf.Max(.5f, distance);
+                        Vector3 radial = new Vector3(Mathf.Cos(angle), 0, Mathf.Sin(angle));
+                        Vector3 candidate = new Vector3(predictedCenter.x + radial.x * r, height, predictedCenter.z + radial.z * r);
+                        Vector3 direction = predictedCenter - candidate; direction.y = 0; direction.Normalize(); Vector3 launch;
+                        if (!NativeThrow.Velocity(chef, direction, out launch)) continue;
+                        Vector3 origin = candidate + Vector3.up * pivot + Quaternion.LookRotation(direction) * localRelease;
+                        Vector3 end; float seedTime;
+                        if (player != null)
+                        {
+                            seedTime = flight;
+                            end = ThrowFlight.Simulate(origin, direction, launch, Physics.gravity, drag, flight, Time.fixedDeltaTime, wind).End;
+                        }
+                        else if (!Seed(origin, direction, launch, flight, out seedTime, out end)) continue;
+                        Vector3 correction = center + ReceiverVelocity() * seedTime - end; correction.y = 0;
+                        for (int ring = -1; ring <= 1; ring++) yield return candidate + correction + radial * (ring * .25f);
+                    }
                 }
-            }
         }
         private bool Seed(Vector3 origin, Vector3 direction, Vector3 launch, float calmTime, out float time, out Vector3 end)
         {
@@ -216,7 +232,7 @@ namespace SousChef.Plugin.Actions
             }
             return false;
         }
-        public bool From(Vector3 stance, bool actualRelease, out ThrowPlan plan)
+        public bool From(Vector3 stance, bool actualRelease, out ThrowPlan plan, float stanceUncertainty = 0)
         {
             plan = null;
             if (actualRelease && chef.CurrentInteractionObjects.m_interactable != null && chef.CurrentInteractionObjects.m_interactable.CanInteract(chef.gameObject)) return Reject("interactable_selected");
@@ -265,7 +281,7 @@ namespace SousChef.Plugin.Actions
             {
                 lastStep = -1;
                 for (int i = 1; i < path.Points.Count; i++)
-                    if (PlayerCatchable(path, i, direction, velocity, .1f)) { lastStep = i; break; }
+                    if (PlayerCatchable(path, i, direction, velocity, .1f + stanceUncertainty)) { lastStep = i; break; }
                 if (lastStep < 0) return Reject("player_catch_window");
                 time = path.Times[lastStep]; arrival = path.Points[lastStep];
             }
@@ -280,7 +296,7 @@ namespace SousChef.Plugin.Actions
             }
             var throwable = GameObjectUtils.RequestInterface<IClientThrowable>(item);
             if (throwable == null || !throwable.CanHandleThrow(chef.GetComponent<ClientAttachmentThrower>(), new Vector2(direction.x, direction.z))) return Reject("native_throw_veto");
-            if (!Clear(path, velocity, direction, lastStep)) return Reject("obstructed");
+            if (!Clear(path, velocity, direction, lastStep, stanceUncertainty)) return Reject("obstructed");
             Vector3 calm = origin + new Vector3(ThrowTrajectory.Displacement(launch.x, Physics.gravity.x, drag, time, Time.fixedDeltaTime),
                 ThrowTrajectory.Displacement(launch.y, Physics.gravity.y, drag, time, Time.fixedDeltaTime), ThrowTrajectory.Displacement(launch.z, Physics.gravity.z, drag, time, Time.fixedDeltaTime));
             plan = new ThrowPlan { Stance = stance, Origin = origin, Direction = direction, Arrival = arrival, FlightSeconds = time,
@@ -300,15 +316,19 @@ namespace SousChef.Plugin.Actions
             // its closest-point scan is narrower than AttachmentCatcher's cone.
             return scan.sqrMagnitude > .001f && scan.sqrMagnitude < 4 && Vector3.Dot(facing, scan.normalized) >= Mathf.Cos((45 - margin * 30) * Mathf.Deg2Rad);
         }
-        private bool Clear(FlightPath path, Vector3 receiverVelocity, Vector3 direction, int lastStep)
+        private bool Clear(FlightPath path, Vector3 receiverVelocity, Vector3 direction, int lastStep, float stanceUncertainty)
         {
-            int count = itemBody.Overlap(path.Points[0], direction, overlaps, mask, .01f);
+            int count = itemBody.Overlap(path.Points[0], direction, overlaps, mask, .01f, stanceUncertainty);
             if (count >= overlaps.Length) return false;
             for (int i = 0; i < count; i++) if (Obstruction(overlaps[i], false)) return false;
             for (int step = 1; step <= lastStep; step++)
             {
                 Vector3 previous = path.Points[step - 1], next = path.Points[step], segment = next - previous;
-                int n = itemBody.Cast(previous, direction, segment, hits, mask, .01f);
+                // Navigation can settle anywhere inside its arrival tolerance.
+                // Cover that release-pose uncertainty while choosing a stance;
+                // its effect tapers toward the independently checked receiver.
+                float uncertainty = stanceUncertainty * (1 - path.Times[step - 1] / path.Times[lastStep]);
+                int n = itemBody.Cast(previous, direction, segment, hits, mask, .01f, uncertainty);
                 if (n >= hits.Length) return false;
                 bool receivingEnd = player == null ? step >= lastStep - 3 : PlayerCatchable(path, step, direction, receiverVelocity, 0);
                 for (int i = 0; i < n; i++) if (Obstruction(hits[i].collider, receivingEnd)) return false;

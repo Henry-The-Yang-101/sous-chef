@@ -164,9 +164,12 @@ def run_case(args, case, index):
                         client.release()
                     result['setup'].append(step)
                     continue
-                options = catalog(client, args.timeout)['targets']
-                target = resolve(options, step['target'])
-                receipt = execute(client, step['operation'], target['id'],
+                if step['operation'] == 'throw_to_player':
+                    argument = step['target']
+                else:
+                    options = catalog(client, args.timeout)['targets']
+                    argument = resolve(options, step['target'])['id']
+                receipt = execute(client, step['operation'], argument,
                                   directory / f'setup-{i}.ndjson', args.timeout)
                 result['setup'].append(receipt)
                 ok = receipt['outcome'] in ('arrived', 'positioned_no_action') if step['operation'] == 'navigate_to' else (

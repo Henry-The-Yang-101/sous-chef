@@ -282,6 +282,11 @@ internal static class Program
         Check(planner.Prepare(w.Chef,item,w.Target)==null && planner.From(w.Chef.transform.position,false,out plan),"production planner validates native receiving surface without including the taller player-only Block collider");
         Physics.IgnoreLayers=(a,b)=>false;block.activeInHierarchy=false;
         Check(FindPlan(planner,w.Navigation,out plan)==null && plan.WalkDistance<.1f,"inverse search prefers an already reachable valid release stance");
+        var nearWall=new GameObject("nearby wall").Add(new BoxCollider());
+        var nearbyBefore=Physics.Nearby;
+        Physics.Nearby=(p,r)=>r>.3f ? new Collider[] {nearWall} : nearbyBefore(p,r);
+        Check(!planner.From(w.Chef.transform.position,false,out plan,.22f),"a planned walking stance reserves clearance for native arrival error instead of requiring an exact point");
+        Physics.Nearby=nearbyBefore;
         var catchTrigger=w.Target.Add(new BoxCollider {isTrigger=true,size=Vector3.one*2});
         Physics.Sphere=(p,r,d,length)=>new[] {new RaycastHit {collider=catchTrigger}};
         Check(planner.From(w.Chef.transform.position,false,out plan),"native receiver catch trigger is not an earlier physical obstruction on the landing arc");
@@ -345,6 +350,21 @@ internal static class Program
         Check(server.Calls==calls,"a pending request cannot spend a second planning slice in the same Unity frame");
         w.Skills.Cancel("stopped");
         Check(w.Skills.Run.Reason=="stopped" && w.Carrier.Item==item && !w.Inputs.Contains(2),"stop during planning releases without launching or losing cargo");
+    }
+    private static void ClosePlayerPassPositions()
+    {
+        var w=new World();w.Chef.transform.position=new Vector3(3,0,-3);
+        var item=w.Ingredient("tomato");item.Add(new Throwable());item.Add(new PhysicalAttachment());item.Add(new BoxCollider {size=Vector3.one*.2f});
+        item.transform.position=w.Chef.transform.position+new Vector3(0,1,.4f);w.Hold(item);
+        w.Chef.gameObject.Add(new AttachmentThrower());w.Chef.gameObject.Add(new ClientAttachmentThrower());w.Chef.gameObject.Add(new ServerAttachmentThrower());
+        var human=new GameObject("human");human.Add(new PlayerControls());human.Add(new PlayerIDProvider {Id=0});human.Add(new ServerPlayerAttachmentCarrier());
+        human.Add(new AttachmentCatcher {m_catchDistance=1.8f});human.transform.yaw=Mathf.PI;
+        var floor=w.Colliders[0];
+        Physics.Nearby=(p,r)=>w.Colliders.Where(c=>Vector3.Distance(p,c.bounds.ClosestPoint(p))<=r).ToArray();
+        Physics.Ray=(p,d,length,mask)=>d.y<-.9f && p.y>=0 && p.y<=length && p.z>=-3.2f ? new[] {new RaycastHit {collider=floor,point=new Vector3(p.x,0,p.z),normal=Vector3.up,distance=p.y}} : new RaycastHit[0];
+        var planner=new ThrowPlanner();ThrowPlan plan;
+        Check(planner.Prepare(w.Chef,item,human)==null && FindPlan(planner,w.Navigation,out plan)==null && plan.Stance.z>=-3.2f,
+            "player stance search includes earlier catch-volume rings when the descending foot-height ring lies outside the kitchen");
     }
     private static void GeneratedStances()
     {
@@ -572,6 +592,6 @@ internal static class Program
         Check(!drops.Plan(w.Chef,item,player,out drop),"nearby horizontal position on a different deck is not a valid drop handoff");
         Physics.Sphere=(p,r,d,length)=>new RaycastHit[0];
     }
-    private static void Main() { Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();GeneratedStances();LogisticsJobs();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();WindAndHeight();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
+    private static void Main() { Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();WindAndHeight();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
     private static ClientInteractable GetCurrentlyInteractingForTest(this PlayerControls chef) { return chef.GetComponent<ClientPlayerControlsImpl_Default>().Current; }
 }
