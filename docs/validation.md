@@ -580,8 +580,8 @@ Positive cases arrive from one request; negative cases stop issuing input.
 
 The solver is an independent numerical model, not Unity PhysX. Native interaction
 selection and the complete animated kitchen are not simulated. These latest
-changes have not been revalidated or installed in the running game; no more game
-reopening is required to run `python3 scripts/simulate_navigation.py`.
+changes have not been revalidated in Unity PhysX; no game reopening is required
+to run `python3 scripts/simulate_navigation.py`.
 
 The final suite additionally varies whether native movement consumes the previous
 frame's input before the controller and ground observer run. This exposed and
@@ -590,3 +590,10 @@ It also separated native downward landing-probe range from the step-up height
 limit. With these corrections, the final 12/12 cases pass, including delayed
 20 FPS movement. The headless search disables the wall-clock budget to avoid CPU
 load changing a simulated outcome; production retains its default 12 ms budget.
+
+Final validation for code commit `879f74b`: the installed-assembly build/audit,
+815 core assertions, 104 navigation checks, all 12 headless scenarios, 181 action
+checks, and 66 Python tests pass. The game had been closed; the verified plugin
+was installed for its next launch and its SHA-256 matches the built artifact.
+The game was not reopened. Live execution of this final correction remains
+unverified, as requested; earlier manually assisted arrivals are not counted.
