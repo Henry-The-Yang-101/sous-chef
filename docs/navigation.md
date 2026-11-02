@@ -107,8 +107,13 @@ settled nodes, continuing in approximately 3 ms search slices on later render
 frames. Up to 32 short background slices (or eight full-budget fallback passes)
 continue that work; query again for additional confirmed destinations. Exact
 starting-state, geometry, support-speed and wind checks guard reuse. Changed
-inputs restart the tree; unversioned moving surfaces and portal readiness retain
-fresh searches with paced idle warming. Completed stable trees can serve fresh
+inputs restart the tree. Native travelators also retain search progress after
+exact checks of their speed, direction, border, enabled state, world pose, grid
+and connected neighbours, plus the chef's entering-surface history. Other moving
+surfaces and portal readiness retain fresh searches with paced idle warming.
+Starting an action can reuse a certified idle tree after those same live checks;
+a fresh command does not discard a distant route merely to rebuild it in one slice.
+Completed stable trees can serve fresh
 target/approach observations without another graph expansion. A persistently
 oversized graph reports incomplete coverage and does not cause unlimited background
 retries. Unchanged primitive
@@ -236,12 +241,25 @@ wind is evaluated using current volumes, filters and direction. Travelator corne
 velocity retains the entering surface, including across graph edges and remaining
 route checks. The graph distinguishes arrivals with different prior surfaces while
 sharing their geometry probes. Connectors from the chef use native surface history.
-A directed edge is
-excluded when walking cannot counter its cross-flow or make forward progress.
+Native floor conveyors are routed **with their direction**, even when ordinary
+walking could slowly overpower the belt. Their live world velocity determines
+direction, including rotated tiles, borders and corner history. Stopped belts
+permit both directions; sideways exits remain available when walking can counter
+the cross-flow. Other directed edges are excluded when walking cannot counter
+their cross-flow or make forward progress. Conveyor graph lanes additionally
+check support around the chef's footprint over the union of adjacent belt tops
+and floors. This keeps turns away from unsupported outer lips. Connectors from
+the actual body retain native contact clearance so small drift can recover to a
+padded lane. Steering preserves the next conveyor turn rather than skipping
+several waypoints across a change in surface velocity.
 Execution compensates using the chef's actual wind/surface velocities. Countertop
 conveyors move the destination rather than the chef. Slipperiness affects momentum
 checks and steering; unsupported sliding/override-gravity surfaces are excluded.
-The final approach uses the same flow compensation and next-step checks.
+The final approach uses the same flow compensation and next-step checks. A running
+floor conveyor is not a settled working stance: alignment uses neutral walking,
+and the native axes normalize every nonzero input to full speed. The planner
+chooses another supported, reachable side; if no stable side exists, that target
+is withheld instead of repeatedly drifting and walking upstream during arrival.
 No prediction of an entire moving kitchen or another player's future decisions is
 claimed. Geometry and target eligibility are rechecked during execution.
 

@@ -56,6 +56,7 @@ namespace SousChef.Plugin.Navigation
         public int Queries { get; private set; }
         public bool Changed { get; private set; }
         public float Radius { get { return radius; } }
+        public bool OnConveyor { get { return MovingSurface(chef.GroundCollider) is Travelator; } }
         public float StepHeight { get { return Mathf.Min(.65f, chef.Movement.StepHeightMax); } }
         public Vector3 Position { get { Vector3 p = chef.transform.position; p.y -= pivotToFoot; return p; } }
         public IEnumerable<Collider> Colliders { get { for (int i = 0; i < nearbyCount; i++) yield return nearby[i]; } }
@@ -350,7 +351,7 @@ namespace SousChef.Plugin.Navigation
             // A travelator's rounded side contact is not a controllable lane.
             // The native belt pushes the chef off that lip, so routes must turn
             // on its top rather than shortcut around an overhanging corner.
-            if (MovingSurface(support) is Travelator && !ConveyorSupport(point, hit.normal))
+            if (MovingSurface(support) is Travelator && !ConveyorSupport(point, hit.normal, clearance))
                 return Fail("conveyor_side_support", point, support);
             if (!SlopeInterior(point, support, clearance)) return Fail("slope_side_clearance", point, support);
             // GroundCast supports the rounded capsule across narrow tread seams.

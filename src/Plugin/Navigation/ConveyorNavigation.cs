@@ -26,9 +26,13 @@ namespace SousChef.Plugin.Navigation
         private readonly List<ConveyorProof> searchConveyors = new List<ConveyorProof>();
         private IMovingSurface searchPreviousSurface;
 
-        private bool ConveyorSupport(Vector3 point, Vector3 normal)
+        private bool ConveyorSupport(Vector3 point, Vector3 normal, float clearance)
         {
             if (normal.y < .9f) return false;
+            // Native velocity changes can leave the actual body slightly outside
+            // the graph's padded lane. Checked contact connectors may recover to
+            // that lane; do not demand the extra planning margin at their start.
+            if (clearance < radius - .001f) return true;
             // Unlike a stair seam, a missing outer corner beside a fast belt
             // cannot safely support a turn. Keep the body footprint over the
             // union of belt tops and adjoining floors, including diagonal lips.

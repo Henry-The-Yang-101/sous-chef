@@ -239,9 +239,22 @@ internal static class Program
         belt.enabled=false;physics.Refresh(w.Chef);
         Check(physics.Approach(Vector3.zero,collider,out stance),"station approach on a stopped belt can settle");
         w=new World();floor=w.AddFloor((x,z)=>x<=0 ? 0 : (float?)null);
-        floor.gameObject.Add(new Travelator {Velocity=new Vector3(3,0,0)});physics=w.Ready();Collider support;
+        floor.gameObject.Add(new Travelator {Velocity=new Vector3(-3,0,0)});physics=w.Ready();Collider support;
         Check(!physics.Stand(new Vector3(.2f,0,0),out stance,out support),"rounded conveyor lip cannot become a shortcut lane");
         Check(physics.Stand(new Vector3(-.5f,0,0),out stance,out support),"conveyor top remains supported for checked turns");
+        Check(!physics.Stand(new Vector3(-.1f,0,0),out stance,out support),"padded graph keeps turns away from the conveyor's outside edge");
+        w.Chef.transform.position=new Vector3(-.1f,0,0);physics.Refresh(w.Chef);
+        Check(physics.Segment(w.Chef.transform.position,new Vector3(-.5f,0,0)),"native contact connector can recover to the conveyor lane without the extra planning margin");
+        w=new World();floor=w.AddFloor((x,z)=>Math.Abs(x)<3 && Math.Abs(z)<3 ? 0 : (float?)null);
+        belt=floor.gameObject.Add(new Travelator {Velocity=new Vector3(1,0,0),enabled=false});
+        station=w.AddStation();station.transform.position=new Vector3(1.2f,0,1.2f);var navigation=w.Navigate(station);
+        var flags=System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic;
+        typeof(NavigationActions).GetField("route",flags).SetValue(navigation,new List<Vector3> {
+            new Vector3(.4f,0,0),new Vector3(.4f,0,.4f),new Vector3(.8f,0,.4f)});
+        typeof(NavigationActions).GetField("waypoint",flags).SetValue(navigation,0);belt.enabled=true;
+        object[] arguments={Vector3.zero,Vector3.zero};
+        Check((bool)typeof(NavigationActions).GetMethod("TryWalkingGoal",flags).Invoke(navigation,arguments) &&
+            ((Vector3)arguments[1]).Equals(new Vector3(.4f,0,0)),"conveyor steering preserves the next turn instead of aiming past it");
     }
     private static void MovingBoundary()
     {

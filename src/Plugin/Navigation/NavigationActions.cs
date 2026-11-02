@@ -472,7 +472,11 @@ namespace SousChef.Plugin.Navigation
             }, delegate(int index) { return index <= limit && RouteSegment(position, index); });
             goal = route[waypoint];
             // Shortcut only across freshly checked supported space; no corner cutting.
-            for (int i = Math.Min(limit, waypoint + 3); i > waypoint; i--)
+            // A belt corner changes native drift after crossing its border.
+            // Follow its checked turns before looking ahead: aiming several
+            // nodes past the turn can countersteer against the entering belt
+            // for one native frame after that belt has stopped applying.
+            for (int i = physics.OnConveyor ? waypoint : Math.Min(limit, waypoint + 3); i > waypoint; i--)
                 if (Vector3.Distance(position, route[i]) < (portalSteps.ContainsKey(i) ? 2f : 1.4f) && RouteSegment(position, i))
                 { waypoint = i; goal = route[i]; break; }
             return RouteSegment(position, waypoint);
