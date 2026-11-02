@@ -42,7 +42,7 @@ namespace SousChef.Plugin.Actions
         public const string Pending = "throw_planning";
         public void CancelPlanning() { if (candidates != null) candidates.Dispose(); candidates = null; }
         private IEnumerator<Vector3> candidates;
-        private Stopwatch planningTime;
+        private double planningMilliseconds;
         private ThrowPlan bestPlan;
         private Vector3 lastArrival;
         private string lastObstruction;
@@ -131,19 +131,19 @@ namespace SousChef.Plugin.Actions
             var surface = target.GetComponent<SurfaceMovable>();
             return surface == null ? Vector3.zero : surface.GetVelocity();
         }
-        public string Find(NavigationActions navigation, out ThrowPlan plan)
+        public string Find(NavigationActions navigation, out ThrowPlan plan, float sliceMilliseconds = 25, bool firstFeasible = false, bool prepareNavigation = true)
         {
             plan = null;
             if (candidates == null)
             {
-                navigation.PrepareStances(chef);
+                if (prepareNavigation) navigation.PrepareStances(chef);
                 candidates = CandidatePositions(navigation).GetEnumerator();
-                planningTime = Stopwatch.StartNew(); bestPlan = null;
+                planningMilliseconds = 0; bestPlan = null;
             }
             var frameBudget = Stopwatch.StartNew();
             // Continue finite candidate work on later Updates instead of calling
             // an incomplete/cold search proof that no release position exists.
-            while (frameBudget.Elapsed.TotalMilliseconds < 25)
+            while (frameBudget.Elapsed.TotalMilliseconds < sliceMilliseconds)
             {
                 if (!candidates.MoveNext()) return CompletePlanning(out plan);
                 Vector3 stance; ThrowPlan possible;
@@ -154,9 +154,12 @@ namespace SousChef.Plugin.Actions
                 if (cost == Single.MaxValue) { Reject("unreachable_stance"); continue; }
                 if (bestPlan != null && cost >= bestPlan.WalkDistance) continue;
                 possible.WalkDistance = cost; bestPlan = possible;
-                if (cost < .01f) return CompletePlanning(out plan);
+                if (firstFeasible || cost < .01f) return CompletePlanning(out plan);
             }
-            if (planningTime.Elapsed.TotalSeconds >= 2)
+            // Count work, rather than time between Updates: read-only option
+            // previews use shorter slices and must not expire while waiting.
+            planningMilliseconds += frameBudget.Elapsed.TotalMilliseconds;
+            if (planningMilliseconds >= 2000)
             {
                 string result = CompletePlanning(out plan);
                 return result == null ? null : "throw_planning_budget_exceeded";

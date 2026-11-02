@@ -14,6 +14,7 @@ namespace SousChef.Plugin.Control
         private readonly NavigationActions navigation;
         private readonly InteractionActions interactions;
         private readonly LogisticsActions logistics;
+        private readonly ThrowOptions throwOptions;
         private bool lastWasLogistics;
         private long navigationSequence;
         private readonly ControlLease lease = new ControlLease();
@@ -40,6 +41,7 @@ namespace SousChef.Plugin.Control
             navigation = new NavigationActions(Walk, NeutralNavigation);
             interactions = new InteractionActions(navigation, Buttons, FinishInteraction);
             logistics = new LogisticsActions(navigation, interactions, Buttons, FinishLogistics);
+            throwOptions = new ThrowOptions(navigation);
             server = new ControlServer(port, Json.Object("type", "hello", "controlProtocolVersion", 1,
                 "sessionId", session, "bridgeVersion", "0.6.0", "player", 2, "mode", "direct_logical_input", "maxHoldMs", 1000, "actions", ActionRun.AllNames),
                 delegate(int client) { lease.Release(client, "disconnected"); });
@@ -50,7 +52,7 @@ namespace SousChef.Plugin.Control
         {
             if (disposed) return;
             KitchenGate gate = KitchenGate.Inspect();
-            if (flow != gate.Flow) { Revoke("round_changed"); logistics.Reset("round_changed"); navigation.Reset("round_changed"); flow = gate.Flow; nextScan = 0; }
+            if (flow != gate.Flow) { Revoke("round_changed"); logistics.Reset("round_changed"); throwOptions.Reset(); navigation.Reset("round_changed"); flow = gate.Flow; nextScan = 0; }
             if (Now >= nextScan) { Discover(); nextScan = Now + 0.25; }
             string reason = Check(gate);
             if (reason != null) { navigation.Invalidate(reason); Revoke(reason); }
@@ -60,7 +62,13 @@ namespace SousChef.Plugin.Control
             if (interactions.Run.Running && lease.Owner(Now) != interactions.Run.Owner) interactions.Cancel("control_lost");
             if (logistics.Run.Running && lease.Owner(Now) != logistics.Run.Owner) logistics.Cancel("control_lost");
             server.Pump(Handle);
-            if (reason == null) { navigation.Tick(target); interactions.Tick(); logistics.Tick(); }
+            if (reason == null)
+            {
+                navigation.Tick(target); interactions.Tick(); logistics.Tick();
+                if (lease.Owner(Now) == 0 && navigation.Action.State == "idle" && !interactions.Run.Running && !logistics.Run.Running) throwOptions.Tick(target);
+                else throwOptions.Reset();
+            }
+            else throwOptions.Reset();
         }
 
         private void Discover()
@@ -229,13 +237,21 @@ namespace SousChef.Plugin.Control
         private object Catalog()
         {
             var catalog = (Json.Record)navigation.Available(target);
+            throwOptions.Begin(target);
             var targets = new System.Collections.Generic.List<object>();
             foreach (GameObject go in navigation.Targets())
             {
                 var identity = (Json.Record)navigation.TargetIdentity(go);
                 try
                 {
-                    identity["operations"] = InteractionActions.Offered(target, go);
+                    var offered = new System.Collections.Generic.List<string>(InteractionActions.Offered(target, go));
+                    if (offered.Contains("throw_to"))
+                    {
+                        object preview;
+                        if (!throwOptions.Check(go, out preview)) offered.Remove("throw_to");
+                        identity["throw"] = preview;
+                    }
+                    identity["operations"] = offered.ToArray();
                     identity["workConditions"] = InteractionActions.ConditionsFor(go, true);
                     identity["waitConditions"] = InteractionActions.ConditionsFor(go, false);
                     identity["activationStates"] = ActionObservations.ToggleState(go).HasValue ? new[] { "trigger", "on", "off" } : new[] { "trigger" };
@@ -251,11 +267,11 @@ namespace SousChef.Plugin.Control
                 if (playerId != 1 && playerId != 3 && playerId != 4) continue;
                 var entry = PlayerInputLookup.GetInputConfig().GetInputConfigEntry(player.PlayerIDProvider.GetID());
                 if (entry == null || !entry.IsLocal()) continue;
+                object preview;
+                bool canPass = throwOptions.Check(player.gameObject, out preview);
                 players.Add(Json.Object("id", "p" + playerId, "playerId", playerId, "kind", "player", "label", "Player " + playerId,
                     "objectInstanceId", player.gameObject.GetInstanceID(), "position", Values.Vector(player.transform.position),
-                    "operations", ActionObservations.Held(target) != null &&
-                    ((GameObjectUtils.RequestInterface<IClientThrowable>(ActionObservations.Held(target)) != null && ActionObservations.Held(player) == null && player.GetComponent<AttachmentCatcher>() != null) ||
-                    (ActionObservations.Held(target).GetComponent<PhysicalAttachment>() != null && Vector3.Distance(target.transform.position, player.transform.position) <= 1.6f)) ? new[] { "throw_to_player" } : new string[0]));
+                    "operations", canPass ? new[] { "throw_to_player" } : new string[0], "throw", preview));
             }
             var actions = (System.Collections.Generic.List<object>)catalog["actions"];
             if (!interactions.Run.Running && !logistics.Run.Running && navigation.Action.State == "idle")
@@ -263,9 +279,9 @@ namespace SousChef.Plugin.Control
                 {
                     if (name == "navigate_to" || name == "stop") continue;
                     var eligible = new System.Collections.Generic.List<object>();
-                    foreach (Json.Record identity in targets) if (Array.IndexOf((string[])identity["operations"], name) >= 0) eligible.Add(identity);
-                    if (name != "throw_to_player" && eligible.Count == 0) continue;
-                    object parameters = name == "throw_to_player" ? (object)Json.Object("player_id", Json.Object("type", "enum", "options", players)) :
+                    foreach (Json.Record identity in name == "throw_to_player" ? players : targets) if (Array.IndexOf((string[])identity["operations"], name) >= 0) eligible.Add(identity);
+                    if (eligible.Count == 0) continue;
+                    object parameters = name == "throw_to_player" ? (object)Json.Object("player_id", Json.Object("type", "enum", "options", eligible)) :
                         Json.Object("target_id", Json.Object("type", "enum", "options", eligible));
                     if (name == "work_at" || name == "wait_until")
                     {
@@ -277,6 +293,7 @@ namespace SousChef.Plugin.Control
                 }
             else catalog["actions"] = new[] { Json.Object("name", "stop") };
             catalog["targets"] = targets; catalog["players"] = players; catalog["action"] = lastWasLogistics ? logistics.Describe() : interactions.Describe();
+            catalog["throwOptionsComplete"] = throwOptions.End();
             logistics.Decorate(catalog, target); return catalog;
         }
         private void Install()

@@ -577,6 +577,48 @@ internal static class Program
         w.Chef.transform.position=new Vector3(0,0,w.Chef.transform.position.z);item.transform.position=w.Chef.transform.position+new Vector3(0,1,.4f);planner.Prepare(w.Chef,item,w.Target);
         Check(!planner.From(w.Chef.transform.position,false,out plan),"unreachable target height is rejected instead of projecting a flat throw");
     }
+    private static void HeightOptions()
+    {
+        var w=new World(t=>t.Add(new Catcher()));var item=w.Ingredient("tomato");item.Add(new Throwable());
+        item.Add(new PhysicalAttachment()).m_rigidBodyParams.m_drag=.2f;
+        item.Add(new BoxCollider {size=Vector3.one*.2f});
+        w.Chef.gameObject.Add(new AttachmentThrower());w.Chef.gameObject.Add(new ClientAttachmentThrower());w.Chef.gameObject.Add(new ServerAttachmentThrower());
+        float flight;ThrowTrajectory.FlightTime(.1f,8*Mathf.Tan(15*Mathf.Deg2Rad),-9.81f,.2f,.02f,out flight);
+        float distance=ThrowTrajectory.Displacement(8,0,.2f,flight,.02f);
+        w.Chef.transform.position=new Vector3(0,0,-distance-.4f);item.transform.position=w.Chef.transform.position+new Vector3(0,1,.4f);w.Hold(item);
+        Physics.Nearby=(p,r)=>w.Colliders.Where(c=>Vector3.Distance(p,c.bounds.ClosestPoint(p))<=r).ToArray();
+        w.Navigation.Available(w.Chef);
+        var options=new ThrowOptions(w.Navigation);object info;options.Begin(w.Chef);
+        Check(!options.Check(w.Target,out info) && !options.End(),"unproven throw choices are withheld while preview is pending");
+        for(int i=0;i<300 && !options.Check(w.Target,out info);i++) options.Tick(w.Chef);
+        Check(options.Check(w.Target,out info),"native planner proof enables a reachable counter option");
+        int inputs=w.Inputs.Count,releases=w.Releases;Vector3 original=w.Chef.transform.position;
+        Check(w.Carrier.Item==item && w.Navigation.Action.State=="idle" && inputs==0 && releases==0 && Vector3.Distance(w.Chef.transform.position,original)==0,"option planning does not acquire input, navigate, or mutate cargo");
+        w.Target.transform.position=Vector3.up*2;
+        Check(!options.Check(w.Target,out info),"raising a previously feasible receiver immediately removes its old option");
+        for(int i=0;i<300 && !options.End();i++) options.Tick(w.Chef);
+        Check(!options.Check(w.Target,out info) && (string)((Json.Record)info)["state"]=="unavailable","receiver above native apex without an elevated walking stance remains unavailable");
+        w.Target.transform.position=Vector3.down*2;
+        Check(!options.Check(w.Target,out info),"lowered target is replanned instead of reusing an old flat arc");
+        for(int i=0;i<300 && !options.Check(w.Target,out info);i++) options.Tick(w.Chef);
+        Check(options.Check(w.Target,out info),"lower receiving surfaces can be offered with their longer native arc");
+        var down=(Json.Record)((Json.Record)info)["plan"];
+        Check((float)down["releaseHeight"]>(float)down["arrivalHeight"]+1 && (float)down["flightSeconds"]>flight,"downward preview accounts for vertical separation and increased flight time");
+        var occupied=new GameObject("incompatible occupant");w.Target.GetComponent<ServerAttachStation>().Item=occupied;
+        Check(!options.Check(w.Target,out info),"receiver contents invalidate a positive option without waiting for cache expiry");
+        w.Hold(null);options.Begin(w.Chef);
+        Check(!options.Check(w.Target,out info) && (string)((Json.Record)info)["reason"]=="hands_empty","cargo removal invalidates all throw proofs");
+
+        w.Hold(item);var human=new GameObject("human");human.Add(new PlayerControls());human.Add(new PlayerIDProvider {Id=0});
+        human.Add(new ServerPlayerAttachmentCarrier());human.Add(new AttachmentCatcher {m_catchDistance=1.8f});human.transform.yaw=Mathf.PI;
+        w.Chef.transform.position=new Vector3(0,2,-8);item.transform.position=w.Chef.transform.position+new Vector3(0,1,.4f);
+        var planner=new ThrowPlanner();ThrowPlan pass;
+        Check(planner.Prepare(w.Chef,item,human)==null && planner.From(w.Chef.transform.position,false,out pass),"player pass from a higher release reaches the lower native catch volume");
+        planner.From(w.Chef.transform.position,false,out pass);
+        Check(pass.Origin.y-pass.Arrival.y>1 && Vector3.Distance(pass.Arrival,human.transform.position)<1.8f,"downward pass accounts for three dimensional catch distance and earlier interception");
+        human.transform.position=Vector3.up*6;w.Chef.transform.position=new Vector3(0,0,-4);item.transform.position=w.Chef.transform.position+new Vector3(0,1,.4f);
+        Check(planner.Prepare(w.Chef,item,human)==null && !planner.From(w.Chef.transform.position,false,out pass),"player above the native arc plus catch radius cannot be targeted as a flat pass");
+    }
     private static void NearbyHandoffs()
     {
         var w=new World();var item=w.Ingredient("tomato");item.Add(new PhysicalAttachment {m_motion=new RigidbodyMotion()});item.Add(new BoxCollider {size=Vector3.one*.2f});w.Hold(item);
@@ -602,6 +644,6 @@ internal static class Program
         Check(!drops.Plan(w.Chef,item,player,out drop),"nearby horizontal position on a different deck is not a valid drop handoff");
         Physics.Sphere=(p,r,d,length)=>new RaycastHit[0];
     }
-    private static void Main() { Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();WindAndHeight();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
+    private static void Main() { Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();WindAndHeight();HeightOptions();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
     private static ClientInteractable GetCurrentlyInteractingForTest(this PlayerControls chef) { return chef.GetComponent<ClientPlayerControlsImpl_Default>().Current; }
 }
