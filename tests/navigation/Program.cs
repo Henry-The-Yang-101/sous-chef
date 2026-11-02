@@ -216,6 +216,29 @@ internal static class Program
         w.Chef.GroundCollider=corner; w.Chef.transform.position=new Vector3(.15f,0,0); w.Chef.SurfaceMovable.SetPrevious(entering); physics.Refresh(w.Chef);
         Check(physics.Segment(w.Chef.transform.position,new Vector3(.4f,0,0)),"execution connector retains the chef's native previous belt after crossing a seam");
     }
+    private static void DirectedConveyors()
+    {
+        var w=new World(); var floor=w.AddFloor((x,z)=>0);
+        var belt=floor.gameObject.Add(new Travelator {Velocity=new Vector3(3,0,0)});
+        var physics=w.Ready();var start=new WalkCell(0,0,0);
+        Check(physics.Segment(Vector3.zero,new Vector3(.4f,0,0)),"native belt permits downstream travel");
+        Check(!physics.Segment(new Vector3(.4f,0,0),Vector3.zero),"native belt rejects upstream shortcut even when walking could overpower it");
+        Check(!physics.Neighbours(start).Any(e=>e.Cell.X<0),"cached graph edges respect native conveyor direction");
+        Check(physics.Segment(Vector3.zero,new Vector3(0,0,.4f)),"native belt permits compensated sideways exit");
+        belt.Velocity=new Vector3(-3,0,0);physics.Refresh(w.Chef);
+        Check(!physics.Neighbours(start).Any(e=>e.Cell.X>0) && physics.Neighbours(start).Any(e=>e.Cell.X<0),
+            "live conveyor reversal changes cached directed edges");
+        belt.enabled=false;physics.Refresh(w.Chef);
+        Check(physics.Neighbours(start).Any(e=>e.Cell.X>0) && physics.Neighbours(start).Any(e=>e.Cell.X<0),
+            "disabled conveyor restores both walking directions");
+        belt.enabled=true;belt.Velocity=new Vector3(0,0,3);physics.Refresh(w.Chef);
+        Check(!physics.Segment(Vector3.zero,new Vector3(0,0,-.4f)),"world-space conveyor direction supports rotated belts");
+        var station=w.AddStation();station.transform.position=new Vector3(1.2f,0,0);
+        Vector3 stance;var collider=station.GetComponent<BoxCollider>();
+        Check(!physics.Approach(Vector3.zero,collider,out stance),"station approach on a running belt cannot promise settled arrival");
+        belt.enabled=false;physics.Refresh(w.Chef);
+        Check(physics.Approach(Vector3.zero,collider,out stance),"station approach on a stopped belt can settle");
+    }
     private static void MovingBoundary()
     {
         var w=new World(); w.AddFloor((x,z) => 0); var physics=w.Ready();
@@ -823,7 +846,7 @@ internal static class Program
     }
     private static void Main()
     {
-        SearchContinuity(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
+        SearchContinuity(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); DirectedConveyors(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
         Console.WriteLine("PASS: " + checks + " navigator integration checks (analytical geometry; not PhysX)");
     }
 }

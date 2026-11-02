@@ -705,7 +705,20 @@ namespace SousChef.Plugin.Navigation
         {
             if ((to - from).sqrMagnitude < .0001f) return true;
             float speed = Speed(ground);
-            if (winds.Count == 0 && MovingSurface(ground) == null) return speed > .1f;
+            IMovingSurface surface = MovingSurface(ground);
+            if (surface is Travelator)
+            {
+                // Treat a floor conveyor as directed navigation. Even when the
+                // chef can just overpower it, an upstream distance shortcut can
+                // take most of the action timeout and snag at native corners.
+                // Use native world velocity, including borders and entry history;
+                // sideways exits remain legal when the flow solver can steer them.
+                Vector3 velocity = surface.CalculateVelocityAtPoint(at, previous);
+                Vector3 direction = to - from; direction.y = 0; velocity.y = 0;
+                if (Vector3.Dot(direction.normalized, velocity) < -.01f)
+                    return Fail("conveyor_opposes_walking", at, ground);
+            }
+            if (winds.Count == 0 && surface == null) return speed > .1f;
             Vector3 drift = Flow(at, ground, previous); float x, z;
             return WalkingSteering.Direction(to.x - from.x, to.z - from.z, drift.x, drift.z, speed, out x, out z);
         }
@@ -754,6 +767,13 @@ namespace SousChef.Plugin.Navigation
             Vector3 supported; Collider support;
             if (!Stand(stance, out supported, out support) || Mathf.Abs(supported.y - foot.y) > .22f) return false;
             stance = supported;
+            // Alignment uses neutral walking and requires settled native motion.
+            // A running belt cannot supply that stance: choose another reachable
+            // side instead of repeatedly braking, drifting and walking upstream.
+            IMovingSurface surface = MovingSurface(support), previous;
+            surfaceHistories.TryGetValue(surfaceHistory, out previous);
+            if (surface is Travelator && surface.CalculateVelocityAtPoint(stance, previous).magnitude > .2f)
+                return Fail("conveyor_alignment_drift", stance, support);
             return Sight(stance, target) && Segment(foot, stance, ref surfaceHistory);
         }
         public bool Sight(Vector3 foot, Collider target)

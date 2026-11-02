@@ -228,6 +228,12 @@ public class SurfaceMovable : UnityEngine.MonoBehaviour
 }
 public class RigidbodyMotion { public UnityEngine.Vector3 Velocity; public UnityEngine.Vector3 GetVelocity() { return Velocity; } public UnityEngine.Vector3 GetVelocityXZ() { return new UnityEngine.Vector3(Velocity.x,0,Velocity.z); } }
 public interface IMovingSurface { UnityEngine.Vector3 CalculateVelocityAtPoint(UnityEngine.Vector3 point, IMovingSurface previous); }
+public class Travelator : UnityEngine.MonoBehaviour, IMovingSurface
+{
+    public UnityEngine.Vector3 Velocity;
+    public UnityEngine.Vector3 CalculateVelocityAtPoint(UnityEngine.Vector3 point, IMovingSurface previous)
+    { return enabled ? Velocity : UnityEngine.Vector3.zero; }
+}
 public class PlayerPhysicsSurfaceProperties { public bool UseOverrideGravityNormal; public float Slidiness,Slippiness,SpeedMultiplier=1; }
 public class PlayerPhysicsSurface : UnityEngine.MonoBehaviour { public PlayerPhysicsSurfaceProperties Properties = new PlayerPhysicsSurfaceProperties(); }
 public class Steppable : UnityEngine.MonoBehaviour { }

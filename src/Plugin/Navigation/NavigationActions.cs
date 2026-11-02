@@ -60,6 +60,8 @@ namespace SousChef.Plugin.Navigation
             if (route != null) for (int i = waypoint; i < Math.Min(route.Count, waypoint + 5); i++) points.Add(Values.Vector(route[i]));
             executionTrace.Enqueue(Json.Object("time", Time.realtimeSinceStartup, "frame", Time.frameCount,
                 "phase", phase, "position", Values.Vector(physics.Position), "velocity", Values.Vector(chef.Motion.GetVelocity()),
+                "surfaceVelocity", chef.SurfaceMovable == null ? null : Values.Vector(chef.SurfaceMovable.GetVelocity()),
+                "windVelocity", chef.WindReceiver == null ? null : Values.Vector(chef.WindReceiver.GetVelocity()),
                 "groundId", chef.GroundCollider == null ? 0 : chef.GroundCollider.GetInstanceID(),
                 "groundPoint", ground == null ? null : Values.Vector(ground.GetGroundPoint()),
                 "groundNormal", ground == null ? null : Values.Vector(ground.GetGroundNormal()),
