@@ -1,0 +1,2277 @@
+{
+  "date": "2026-11-02",
+  "sourceCommit": "4fc03511a9a159a3edff059ad501f9b02628c482",
+  "runtime": ".local/throw-height-20261102",
+  "process": {
+    "pid": 65109,
+    "level": "s_wizard_5_5",
+    "portBase": 27212,
+    "bridgeSha256": "66e02fcae8c0b7354e895b77c2a929afd4c3cc259019dd6cfd6a0092660c215e"
+  },
+  "loadedBridgeSha256": "66e02fcae8c0b7354e895b77c2a929afd4c3cc259019dd6cfd6a0092660c215e",
+  "nativeRuntime": {
+    "sessionId": "1a058eced6d743d8aacfd3a62272d3c1",
+    "gameAssemblySha256": "8d548c632f48b07883e4e9861ddb834588f6edca9ff56920316daf5e33647159",
+    "unityVersion": "2017.4.8f1",
+    "graphicsDevice": "Null",
+    "fixedDeltaTime": 0.019999999552965164,
+    "physicsAutoSimulation": true
+  },
+  "summary": {
+    "heightCases": 16,
+    "heightPassed": 16,
+    "heightDeliveries": 12,
+    "withheldRaisedTargets": 4,
+    "requestedFps": [
+      20,
+      60
+    ]
+  },
+  "heightResults": [
+    {
+      "name": "upper-counter-unavailable-60",
+      "level": "s_wizard_5_5",
+      "fps": 60,
+      "operation": "throw_to",
+      "expected": "no_reachable_throw_position",
+      "outcome": "no_reachable_throw_position",
+      "matchesExpectation": true,
+      "cargo": "Cheese_Raw",
+      "cargoRetained": true,
+      "independentlyConfirmed": null,
+      "holdersAfter": [
+        {
+          "name": "Player 2",
+          "instanceId": 541602,
+          "component": "ServerPlayerAttachmentCarrier"
+        }
+      ],
+      "ownedAfter": false,
+      "phases": [
+        "idle"
+      ],
+      "evidence": ".local/throw-height-20261102/verified-heights/01-upper-counter-unavailable-60",
+      "snapshotSequences": [
+        48,
+        51
+      ],
+      "option": {
+        "offered": false,
+        "inParameterEnum": false,
+        "preview": {
+          "state": "unavailable",
+          "reason": "no_reachable_throw_position",
+          "plan": null
+        }
+      },
+      "currentPoseThrow": {
+        "feasible": false,
+        "error": null,
+        "diagnostics": {
+          "rejected": {
+            "receiving_height": 1
+          },
+          "receivingCenter": [
+            31.200000762939453,
+            2.4996821880340576,
+            -7.200000286102295
+          ],
+          "receivingSize": [
+            1.1000045537948608,
+            0.1599999964237213,
+            1.1000036001205444
+          ],
+          "lastArrival": [
+            0,
+            0,
+            0
+          ],
+          "lastObstruction": null
+        },
+        "plan": null
+      }
+    },
+    {
+      "name": "upper-board-unavailable-60",
+      "level": "s_wizard_5_5",
+      "fps": 60,
+      "operation": "throw_to",
+      "expected": "no_reachable_throw_position",
+      "outcome": "no_reachable_throw_position",
+      "matchesExpectation": true,
+      "cargo": "Cheese_Raw",
+      "cargoRetained": true,
+      "independentlyConfirmed": null,
+      "holdersAfter": [
+        {
+          "name": "Player 2",
+          "instanceId": 558012,
+          "component": "ServerPlayerAttachmentCarrier"
+        }
+      ],
+      "ownedAfter": false,
+      "phases": [
+        "idle"
+      ],
+      "evidence": ".local/throw-height-20261102/verified-heights/02-upper-board-unavailable-60",
+      "snapshotSequences": [
+        58,
+        61
+      ],
+      "option": {
+        "offered": false,
+        "inParameterEnum": false,
+        "preview": {
+          "state": "unavailable",
+          "reason": "no_reachable_throw_position",
+          "plan": null
+        }
+      },
+      "currentPoseThrow": {
+        "feasible": false,
+        "error": null,
+        "diagnostics": {
+          "rejected": {
+            "receiving_height": 1
+          },
+          "receivingCenter": [
+            6,
+            2.4996821880340576,
+            -8.399999618530273
+          ],
+          "receivingSize": [
+            1.1000016927719116,
+            0.1599999964237213,
+            1.100002646446228
+          ],
+          "lastArrival": [
+            0,
+            0,
+            0
+          ],
+          "lastObstruction": null
+        },
+        "plan": null
+      }
+    },
+    {
+      "name": "cheese-level-counter-60",
+      "level": "s_wizard_5_5",
+      "fps": 60,
+      "operation": "throw_to",
+      "expected": "throw_received",
+      "outcome": "throw_received",
+      "matchesExpectation": true,
+      "cargo": "Cheese_Raw",
+      "cargoRetained": false,
+      "independentlyConfirmed": true,
+      "holdersAfter": [
+        {
+          "name": "countertop_01_standard_gold (4)",
+          "instanceId": 577922,
+          "component": "ServerAttachStation"
+        }
+      ],
+      "ownedAfter": false,
+      "phases": [
+        "planning_throw",
+        "navigating",
+        "aiming",
+        "throw_hold",
+        "flight",
+        "idle"
+      ],
+      "evidence": ".local/throw-height-20261102/verified-heights/03-cheese-level-counter-60",
+      "snapshotSequences": [
+        68,
+        71
+      ],
+      "option": {
+        "offered": true,
+        "inParameterEnum": true,
+        "preview": {
+          "state": "feasible",
+          "reason": null,
+          "plan": {
+            "releasePosition": [
+              21.600000381469727,
+              0,
+              -2.854444980621338
+            ],
+            "direction": [
+              0,
+              0,
+              -1
+            ],
+            "origin": [
+              21.600000381469727,
+              0.5483920574188232,
+              -3.507934808731079
+            ],
+            "predictedArrival": [
+              21.600000381469727,
+              0.49968233704566956,
+              -9.850007057189941
+            ],
+            "initialVelocity": [
+              0,
+              3.8260183334350586,
+              -18
+            ],
+            "launchSpeed": 18.402130126953125,
+            "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+            "windDisplacement": [
+              0,
+              8.940696716308594e-08,
+              2.86102294921875e-06
+            ],
+            "releaseHeight": 0.5483920574188232,
+            "arrivalHeight": 0.49968233704566956,
+            "peakHeight": 1.0133365392684937,
+            "drag": 2,
+            "flightSeconds": 0.6489651203155518,
+            "walkDistance": 5.843987464904785,
+            "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+          }
+        }
+      },
+      "currentPoseThrow": {
+        "feasible": false,
+        "error": null,
+        "diagnostics": {
+          "rejected": {
+            "receiving_volume": 1
+          },
+          "receivingCenter": [
+            21.600000381469727,
+            0.4996822476387024,
+            -9.600000381469727
+          ],
+          "receivingSize": [
+            1.1000045537948608,
+            0.1599999964237213,
+            1.1000045537948608
+          ],
+          "lastArrival": [
+            24.974428176879883,
+            0.49968230724334717,
+            -13.773638725280762
+          ],
+          "lastObstruction": null
+        },
+        "plan": null
+      },
+      "throw": {
+        "releasePosition": [
+          20.24256134033203,
+          2.384185791015625e-07,
+          -3.0723609924316406
+        ],
+        "direction": [
+          0.2035963237285614,
+          0,
+          -0.9790549278259277
+        ],
+        "origin": [
+          20.3756103515625,
+          0.5483906269073486,
+          -3.7121634483337402
+        ],
+        "predictedArrival": [
+          21.66683006286621,
+          0.49968236684799194,
+          -9.92140007019043
+        ],
+        "initialVelocity": [
+          3.66473388671875,
+          3.8260183334350586,
+          -17.622989654541016
+        ],
+        "launchSpeed": 18.402132034301758,
+        "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+        "windDisplacement": [
+          -1.9073486328125e-06,
+          5.960464477539063e-08,
+          0
+        ],
+        "releaseHeight": 0.5483906269073486,
+        "arrivalHeight": 0.49968236684799194,
+        "peakHeight": 1.013335108757019,
+        "drag": 2,
+        "flightSeconds": 0.648964524269104,
+        "walkDistance": 0,
+        "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+      },
+      "observedLaunchVelocity": [
+        3.66473388671875,
+        3.8260183334350586,
+        -17.622989654541016
+      ]
+    },
+    {
+      "name": "chocolate-counter-down-60",
+      "level": "s_wizard_school_3_4",
+      "fps": 60,
+      "operation": "throw_to",
+      "expected": "throw_received",
+      "outcome": "throw_received",
+      "matchesExpectation": true,
+      "cargo": "Chocolate",
+      "cargoRetained": false,
+      "independentlyConfirmed": true,
+      "holdersAfter": [
+        {
+          "name": "countertop_01_standard_gold (13)",
+          "instanceId": 593640,
+          "component": "ServerAttachStation"
+        }
+      ],
+      "ownedAfter": false,
+      "phases": [
+        "planning_throw",
+        "navigating",
+        "aiming",
+        "throw_hold",
+        "flight",
+        "idle"
+      ],
+      "evidence": ".local/throw-height-20261102/verified-heights/04-chocolate-counter-down-60",
+      "snapshotSequences": [
+        78,
+        81
+      ],
+      "option": {
+        "offered": true,
+        "inParameterEnum": true,
+        "preview": {
+          "state": "feasible",
+          "reason": null,
+          "plan": {
+            "releasePosition": [
+              15.729046821594238,
+              -1.1920928955078125e-07,
+              9.88914680480957
+            ],
+            "direction": [
+              -0.1511964499950409,
+              0,
+              -0.9885036945343018
+            ],
+            "origin": [
+              15.630242347717285,
+              0.548390805721283,
+              9.243169784545898
+            ],
+            "predictedArrival": [
+              14.438143730163574,
+              -1.3350008726119995,
+              1.4493763446807861
+            ],
+            "initialVelocity": [
+              -2.721536159515381,
+              3.8260183334350586,
+              -17.793066024780273
+            ],
+            "launchSpeed": 18.402130126953125,
+            "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+            "windDisplacement": [
+              0,
+              -1.3113021850585938e-06,
+              -2.384185791015625e-07
+            ],
+            "releaseHeight": 0.548390805721283,
+            "arrivalHeight": -1.3350008726119995,
+            "peakHeight": 1.0133352279663086,
+            "drag": 2,
+            "flightSeconds": 1.1939027309417725,
+            "walkDistance": 1.4211307764053345,
+            "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+          }
+        }
+      },
+      "arcChecks": {
+        "minimumDrop": true,
+        "minimumFlightSeconds": true
+      },
+      "currentPoseThrow": {
+        "feasible": false,
+        "error": null,
+        "diagnostics": {
+          "rejected": {
+            "obstructed": 1
+          },
+          "receivingCenter": [
+            14.40000057220459,
+            -1.3350000381469727,
+            1.200000286102295
+          ],
+          "receivingSize": [
+            1.1000045537948608,
+            0.1599999964237213,
+            1.1000038385391235
+          ],
+          "lastArrival": [
+            14.399787902832031,
+            -1.33500075340271,
+            0.8675207495689392
+          ],
+          "lastObstruction": "Col_Walls (4)"
+        },
+        "plan": null
+      },
+      "throw": {
+        "releasePosition": [
+          14.524733543395996,
+          -1.5497207641601562e-06,
+          9.645414352416992
+        ],
+        "direction": [
+          -0.014767639338970184,
+          0,
+          -0.999890923500061
+        ],
+        "origin": [
+          14.515083312988281,
+          0.5483888983726501,
+          8.991994857788086
+        ],
+        "predictedArrival": [
+          14.39864730834961,
+          -1.3350008726119995,
+          1.1084200143814087
+        ],
+        "initialVelocity": [
+          -0.2658175230026245,
+          3.8260183334350586,
+          -17.998037338256836
+        ],
+        "launchSpeed": 18.402130126953125,
+        "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+        "windDisplacement": [
+          -1.9073486328125e-06,
+          -1.3113021850585938e-06,
+          1.1920928955078125e-07
+        ],
+        "releaseHeight": 0.5483888983726501,
+        "arrivalHeight": -1.3350008726119995,
+        "peakHeight": 1.0133333206176758,
+        "drag": 2,
+        "flightSeconds": 1.1939022541046143,
+        "walkDistance": 0,
+        "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+      },
+      "observedLaunchVelocity": [
+        -0.2658175230026245,
+        3.8260183334350586,
+        -17.998037338256836
+      ]
+    },
+    {
+      "name": "flour-counter-down-60",
+      "level": "s_wizard_school_3_4",
+      "fps": 60,
+      "operation": "throw_to",
+      "expected": "throw_received",
+      "outcome": "throw_received",
+      "matchesExpectation": true,
+      "cargo": "Flour",
+      "cargoRetained": false,
+      "independentlyConfirmed": true,
+      "holdersAfter": [
+        {
+          "name": "countertop_01_standard_gold (13)",
+          "instanceId": 614294,
+          "component": "ServerAttachStation"
+        }
+      ],
+      "ownedAfter": false,
+      "phases": [
+        "planning_throw",
+        "navigating",
+        "aiming",
+        "throw_hold",
+        "flight",
+        "idle"
+      ],
+      "evidence": ".local/throw-height-20261102/verified-heights/05-flour-counter-down-60",
+      "snapshotSequences": [
+        88,
+        91
+      ],
+      "option": {
+        "offered": true,
+        "inParameterEnum": true,
+        "preview": {
+          "state": "feasible",
+          "reason": null,
+          "plan": {
+            "releasePosition": [
+              14.59999942779541,
+              0,
+              9.987926483154297
+            ],
+            "direction": [
+              -0.022751912474632263,
+              0,
+              -0.9997410774230957
+            ],
+            "origin": [
+              14.585131645202637,
+              0.5483902096748352,
+              9.33460521697998
+            ],
+            "predictedArrival": [
+              14.405739784240723,
+              -1.3350014686584473,
+              1.4522114992141724
+            ],
+            "initialVelocity": [
+              -0.40953442454338074,
+              3.8260183334350586,
+              -17.995338439941406
+            ],
+            "launchSpeed": 18.402128219604492,
+            "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+            "windDisplacement": [
+              -5.7220458984375e-06,
+              -1.1920928955078125e-06,
+              -3.5762786865234375e-07
+            ],
+            "releaseHeight": 0.5483902096748352,
+            "arrivalHeight": -1.3350014686584473,
+            "peakHeight": 1.0133346319198608,
+            "drag": 2,
+            "flightSeconds": 1.1939027309417725,
+            "walkDistance": 23.51125144958496,
+            "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+          }
+        }
+      },
+      "arcChecks": {
+        "minimumDrop": true,
+        "minimumFlightSeconds": true
+      },
+      "throw": {
+        "releasePosition": [
+          14.629936218261719,
+          -1.5497207641601562e-06,
+          9.880717277526855
+        ],
+        "direction": [
+          -0.026478765532374382,
+          0,
+          -0.9996494054794312
+        ],
+        "origin": [
+          14.612632751464844,
+          0.5483894944190979,
+          9.227456092834473
+        ],
+        "predictedArrival": [
+          14.403860092163086,
+          -1.3350012302398682,
+          1.3457849025726318
+        ],
+        "initialVelocity": [
+          -0.4766177833080292,
+          3.8260183334350586,
+          -17.993688583374023
+        ],
+        "launchSpeed": 18.402130126953125,
+        "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+        "windDisplacement": [
+          -2.86102294921875e-06,
+          -1.1920928955078125e-06,
+          -7.152557373046875e-07
+        ],
+        "releaseHeight": 0.5483894944190979,
+        "arrivalHeight": -1.3350012302398682,
+        "peakHeight": 1.0133339166641235,
+        "drag": 2,
+        "flightSeconds": 1.1939024925231934,
+        "walkDistance": 0,
+        "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+      },
+      "observedLaunchVelocity": [
+        -0.4766177833080292,
+        3.8260183334350586,
+        -17.993688583374023
+      ]
+    },
+    {
+      "name": "egg-climb-then-counter-down-60",
+      "level": "s_wizard_school_3_4",
+      "fps": 60,
+      "operation": "throw_to",
+      "expected": "throw_received",
+      "outcome": "throw_received",
+      "matchesExpectation": true,
+      "cargo": "Egg",
+      "cargoRetained": false,
+      "independentlyConfirmed": true,
+      "holdersAfter": [
+        {
+          "name": "countertop_01_standard_gold (13)",
+          "instanceId": 634948,
+          "component": "ServerAttachStation"
+        }
+      ],
+      "ownedAfter": false,
+      "phases": [
+        "planning_throw",
+        "navigating",
+        "aiming",
+        "throw_hold",
+        "flight",
+        "idle"
+      ],
+      "evidence": ".local/throw-height-20261102/verified-heights/06-egg-climb-then-counter-down-60",
+      "snapshotSequences": [
+        98,
+        101
+      ],
+      "option": {
+        "offered": true,
+        "inParameterEnum": true,
+        "preview": {
+          "state": "feasible",
+          "reason": null,
+          "plan": {
+            "releasePosition": [
+              15.718681335449219,
+              0,
+              9.830363273620605
+            ],
+            "direction": [
+              -0.15104207396507263,
+              0,
+              -0.9885272979736328
+            ],
+            "origin": [
+              15.619977951049805,
+              0.5483910441398621,
+              9.184370040893555
+            ],
+            "predictedArrival": [
+              14.429093360900879,
+              -1.3350015878677368,
+              1.3903920650482178
+            ],
+            "initialVelocity": [
+              -2.718757390975952,
+              3.8260183334350586,
+              -17.79349136352539
+            ],
+            "launchSpeed": 18.402130126953125,
+            "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+            "windDisplacement": [
+              -2.86102294921875e-06,
+              -1.3113021850585938e-06,
+              1.6689300537109375e-06
+            ],
+            "releaseHeight": 0.5483910441398621,
+            "arrivalHeight": -1.3350015878677368,
+            "peakHeight": 1.0133354663848877,
+            "drag": 2,
+            "flightSeconds": 1.1939029693603516,
+            "walkDistance": 10.670892715454102,
+            "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+          }
+        }
+      },
+      "arcChecks": {
+        "minimumClimb": true,
+        "minimumDrop": true,
+        "minimumFlightSeconds": true
+      },
+      "currentPoseThrow": {
+        "feasible": false,
+        "error": null,
+        "diagnostics": {
+          "rejected": {
+            "receiving_volume": 1
+          },
+          "receivingCenter": [
+            14.40000057220459,
+            -1.334999918937683,
+            1.200000286102295
+          ],
+          "receivingSize": [
+            1.1000045537948608,
+            0.1599999964237213,
+            1.1000038385391235
+          ],
+          "lastArrival": [
+            12.533452987670898,
+            -1.3349997997283936,
+            0.7409529089927673
+          ],
+          "lastObstruction": null
+        },
+        "plan": null
+      },
+      "throw": {
+        "releasePosition": [
+          15.709702491760254,
+          -3.337860107421875e-06,
+          9.741585731506348
+        ],
+        "direction": [
+          -0.151560977101326,
+          0,
+          -0.988447904586792
+        ],
+        "origin": [
+          15.610658645629883,
+          0.5483871698379517,
+          9.0956449508667
+        ],
+        "predictedArrival": [
+          14.415690422058105,
+          -1.3350006341934204,
+          1.3022931814193726
+        ],
+        "initialVelocity": [
+          -2.728097677230835,
+          3.8260183334350586,
+          -17.792062759399414
+        ],
+        "launchSpeed": 18.402130126953125,
+        "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+        "windDisplacement": [
+          4.76837158203125e-06,
+          -1.0728836059570312e-06,
+          3.5762786865234375e-07
+        ],
+        "releaseHeight": 0.5483871698379517,
+        "arrivalHeight": -1.3350006341934204,
+        "peakHeight": 1.013331651687622,
+        "drag": 2,
+        "flightSeconds": 1.193901777267456,
+        "walkDistance": 0,
+        "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+      },
+      "observedLaunchVelocity": [
+        -2.728097915649414,
+        3.8260183334350586,
+        -17.792062759399414
+      ]
+    },
+    {
+      "name": "egg-player-upstairs-60",
+      "level": "s_wizard_school_3_4",
+      "fps": 60,
+      "operation": "throw_to_player",
+      "expected": "throw_received",
+      "outcome": "throw_received",
+      "matchesExpectation": true,
+      "cargo": "Egg",
+      "cargoRetained": false,
+      "independentlyConfirmed": true,
+      "holdersAfter": [
+        {
+          "name": "Player 1",
+          "instanceId": 656056,
+          "component": "ServerPlayerAttachmentCarrier"
+        }
+      ],
+      "ownedAfter": false,
+      "phases": [
+        "planning_throw",
+        "navigating",
+        "throw_hold",
+        "flight",
+        "idle"
+      ],
+      "evidence": ".local/throw-height-20261102/verified-heights/07-egg-player-upstairs-60",
+      "snapshotSequences": [
+        108,
+        111
+      ],
+      "option": {
+        "offered": true,
+        "inParameterEnum": true,
+        "preview": {
+          "state": "feasible",
+          "reason": null,
+          "plan": {
+            "releasePosition": [
+              14.764163970947266,
+              -0.314411997795105,
+              6.659738540649414
+            ],
+            "direction": [
+              0.17364798486232758,
+              0,
+              0.9848077893257141
+            ],
+            "origin": [
+              14.877641677856445,
+              0.2339787483215332,
+              7.303300857543945
+            ],
+            "predictedArrival": [
+              15.380500793457031,
+              0.6653031706809998,
+              10.1551513671875
+            ],
+            "initialVelocity": [
+              3.1256637573242188,
+              3.8260183334350586,
+              17.726539611816406
+            ],
+            "launchSpeed": 18.402130126953125,
+            "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+            "windDisplacement": [
+              9.5367431640625e-07,
+              5.960464477539063e-08,
+              0
+            ],
+            "releaseHeight": 0.2339787483215332,
+            "arrivalHeight": 0.6653031706809998,
+            "peakHeight": 0.6989231705665588,
+            "drag": 2,
+            "flightSeconds": 0.19999997317790985,
+            "walkDistance": 7.665490627288818,
+            "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+          }
+        }
+      },
+      "arcChecks": {
+        "minimumClimb": true,
+        "minimumRise": true
+      },
+      "currentPoseThrow": {
+        "feasible": false,
+        "error": null,
+        "diagnostics": {
+          "rejected": {
+            "horizontal_intercept": 1
+          },
+          "receivingCenter": [
+            15.600000381469727,
+            0,
+            11.399999618530273
+          ],
+          "receivingSize": [
+            3.3999998569488525,
+            3.3999998569488525,
+            3.3999998569488525
+          ],
+          "lastArrival": [
+            0,
+            0,
+            0
+          ],
+          "lastObstruction": null
+        },
+        "plan": null
+      },
+      "throw": {
+        "releasePosition": [
+          15.595540046691895,
+          -0.5035045146942139,
+          6.493688583374023
+        ],
+        "direction": [
+          0.0009088587830774486,
+          0,
+          0.9999995827674866
+        ],
+        "origin": [
+          15.596134185791016,
+          0.04488760232925415,
+          7.1471781730651855
+        ],
+        "predictedArrival": [
+          15.598548889160156,
+          0.45690351724624634,
+          9.803683280944824
+        ],
+        "initialVelocity": [
+          0.01635945774614811,
+          3.8260183334350586,
+          17.99999237060547
+        ],
+        "launchSpeed": 18.402130126953125,
+        "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+        "windDisplacement": [
+          0,
+          8.940696716308594e-08,
+          9.5367431640625e-07
+        ],
+        "releaseHeight": 0.04488760232925415,
+        "arrivalHeight": 0.45690351724624634,
+        "peakHeight": 0.5098320245742798,
+        "drag": 2,
+        "flightSeconds": 0.17999997735023499,
+        "walkDistance": 0,
+        "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+      },
+      "observedLaunchVelocity": [
+        0.016359465196728706,
+        3.8260183334350586,
+        17.99999237060547
+      ],
+      "explicitInitialPoses": [
+        {
+          "kind": "explicit_supported_throw_initial_pose",
+          "playerId": 1,
+          "before": [
+            16.096290588378906,
+            -1.8356237411499023,
+            3.0558059215545654
+          ],
+          "after": [
+            15.600000381469727,
+            0,
+            11.399999618530273
+          ],
+          "forward": [
+            -8.742277657347586e-08,
+            0,
+            -1
+          ]
+        }
+      ]
+    },
+    {
+      "name": "upper-counter-unavailable-20",
+      "level": "s_wizard_5_5",
+      "fps": 20,
+      "operation": "throw_to",
+      "expected": "no_reachable_throw_position",
+      "outcome": "no_reachable_throw_position",
+      "matchesExpectation": true,
+      "cargo": "Cheese_Raw",
+      "cargoRetained": true,
+      "independentlyConfirmed": null,
+      "holdersAfter": [
+        {
+          "name": "Player 2",
+          "instanceId": 673746,
+          "component": "ServerPlayerAttachmentCarrier"
+        }
+      ],
+      "ownedAfter": false,
+      "phases": [
+        "idle"
+      ],
+      "evidence": ".local/throw-height-20261102/verified-heights/08-upper-counter-unavailable-20",
+      "snapshotSequences": [
+        119,
+        122
+      ],
+      "option": {
+        "offered": false,
+        "inParameterEnum": false,
+        "preview": {
+          "state": "unavailable",
+          "reason": "no_reachable_throw_position",
+          "plan": null
+        }
+      },
+      "currentPoseThrow": {
+        "feasible": false,
+        "error": null,
+        "diagnostics": {
+          "rejected": {
+            "receiving_height": 1
+          },
+          "receivingCenter": [
+            31.200000762939453,
+            2.4996821880340576,
+            -7.200000286102295
+          ],
+          "receivingSize": [
+            1.1000045537948608,
+            0.1599999964237213,
+            1.1000036001205444
+          ],
+          "lastArrival": [
+            0,
+            0,
+            0
+          ],
+          "lastObstruction": null
+        },
+        "plan": null
+      }
+    },
+    {
+      "name": "upper-board-unavailable-20",
+      "level": "s_wizard_5_5",
+      "fps": 20,
+      "operation": "throw_to",
+      "expected": "no_reachable_throw_position",
+      "outcome": "no_reachable_throw_position",
+      "matchesExpectation": true,
+      "cargo": "Cheese_Raw",
+      "cargoRetained": true,
+      "independentlyConfirmed": null,
+      "holdersAfter": [
+        {
+          "name": "Player 2",
+          "instanceId": 690156,
+          "component": "ServerPlayerAttachmentCarrier"
+        }
+      ],
+      "ownedAfter": false,
+      "phases": [
+        "idle"
+      ],
+      "evidence": ".local/throw-height-20261102/verified-heights/09-upper-board-unavailable-20",
+      "snapshotSequences": [
+        130,
+        133
+      ],
+      "option": {
+        "offered": false,
+        "inParameterEnum": false,
+        "preview": {
+          "state": "unavailable",
+          "reason": "no_reachable_throw_position",
+          "plan": null
+        }
+      },
+      "currentPoseThrow": {
+        "feasible": false,
+        "error": null,
+        "diagnostics": {
+          "rejected": {
+            "receiving_height": 1
+          },
+          "receivingCenter": [
+            6,
+            2.4996821880340576,
+            -8.399999618530273
+          ],
+          "receivingSize": [
+            1.1000016927719116,
+            0.1599999964237213,
+            1.100002646446228
+          ],
+          "lastArrival": [
+            0,
+            0,
+            0
+          ],
+          "lastObstruction": null
+        },
+        "plan": null
+      }
+    },
+    {
+      "name": "cheese-level-counter-20",
+      "level": "s_wizard_5_5",
+      "fps": 20,
+      "operation": "throw_to",
+      "expected": "throw_received",
+      "outcome": "throw_received",
+      "matchesExpectation": true,
+      "cargo": "Cheese_Raw",
+      "cargoRetained": false,
+      "independentlyConfirmed": true,
+      "holdersAfter": [
+        {
+          "name": "countertop_01_standard_gold (4)",
+          "instanceId": 710066,
+          "component": "ServerAttachStation"
+        }
+      ],
+      "ownedAfter": false,
+      "phases": [
+        "planning_throw",
+        "navigating",
+        "aiming",
+        "throw_hold",
+        "flight",
+        "idle"
+      ],
+      "evidence": ".local/throw-height-20261102/verified-heights/10-cheese-level-counter-20",
+      "snapshotSequences": [
+        141,
+        144
+      ],
+      "option": {
+        "offered": true,
+        "inParameterEnum": true,
+        "preview": {
+          "state": "feasible",
+          "reason": null,
+          "plan": {
+            "releasePosition": [
+              21.600000381469727,
+              0,
+              -2.8544416427612305
+            ],
+            "direction": [
+              0,
+              0,
+              -1
+            ],
+            "origin": [
+              21.600000381469727,
+              0.5483900308609009,
+              -3.507931709289551
+            ],
+            "predictedArrival": [
+              21.600000381469727,
+              0.49968236684799194,
+              -9.84999942779541
+            ],
+            "initialVelocity": [
+              0,
+              3.8260183334350586,
+              -18
+            ],
+            "launchSpeed": 18.402130126953125,
+            "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+            "windDisplacement": [
+              0,
+              5.960464477539063e-08,
+              2.86102294921875e-06
+            ],
+            "releaseHeight": 0.5483900308609009,
+            "arrivalHeight": 0.49968236684799194,
+            "peakHeight": 1.0133345127105713,
+            "drag": 2,
+            "flightSeconds": 0.6489642858505249,
+            "walkDistance": 5.92255973815918,
+            "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+          }
+        }
+      },
+      "currentPoseThrow": {
+        "feasible": false,
+        "error": null,
+        "diagnostics": {
+          "rejected": {
+            "receiving_volume": 1
+          },
+          "receivingCenter": [
+            21.600000381469727,
+            0.4996822476387024,
+            -9.600000381469727
+          ],
+          "receivingSize": [
+            1.1000045537948608,
+            0.1599999964237213,
+            1.1000045537948608
+          ],
+          "lastArrival": [
+            25.22287940979004,
+            0.49968236684799194,
+            -13.503297805786133
+          ],
+          "lastObstruction": null
+        },
+        "plan": null
+      },
+      "throw": {
+        "releasePosition": [
+          20.256982803344727,
+          -7.152557373046875e-07,
+          -3.1081106662750244
+        ],
+        "direction": [
+          0.20258645713329315,
+          0,
+          -0.9792643785476685
+        ],
+        "origin": [
+          20.389371871948242,
+          0.5483899116516113,
+          -3.7480502128601074
+        ],
+        "predictedArrival": [
+          21.6741886138916,
+          0.4996822476387024,
+          -9.958613395690918
+        ],
+        "initialVelocity": [
+          3.6465561389923096,
+          3.8260183334350586,
+          -17.626758575439453
+        ],
+        "launchSpeed": 18.402130126953125,
+        "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+        "windDisplacement": [
+          0,
+          5.960464477539063e-08,
+          9.5367431640625e-07
+        ],
+        "releaseHeight": 0.5483899116516113,
+        "arrivalHeight": 0.4996822476387024,
+        "peakHeight": 1.0133343935012817,
+        "drag": 2,
+        "flightSeconds": 0.6489642858505249,
+        "walkDistance": 0,
+        "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+      },
+      "observedLaunchVelocity": [
+        3.6465561389923096,
+        3.8260183334350586,
+        -17.626758575439453
+      ]
+    },
+    {
+      "name": "chocolate-counter-down-20",
+      "level": "s_wizard_school_3_4",
+      "fps": 20,
+      "operation": "throw_to",
+      "expected": "throw_received",
+      "outcome": "throw_received",
+      "matchesExpectation": true,
+      "cargo": "Chocolate",
+      "cargoRetained": false,
+      "independentlyConfirmed": true,
+      "holdersAfter": [
+        {
+          "name": "countertop_01_standard_gold (13)",
+          "instanceId": 725486,
+          "component": "ServerAttachStation"
+        }
+      ],
+      "ownedAfter": false,
+      "phases": [
+        "navigating",
+        "aiming",
+        "throw_hold",
+        "flight",
+        "idle"
+      ],
+      "evidence": ".local/throw-height-20261102/verified-heights/11-chocolate-counter-down-20",
+      "snapshotSequences": [
+        152,
+        155
+      ],
+      "option": {
+        "offered": true,
+        "inParameterEnum": true,
+        "preview": {
+          "state": "feasible",
+          "reason": null,
+          "plan": {
+            "releasePosition": [
+              14.40000057220459,
+              0,
+              9.593344688415527
+            ],
+            "direction": [
+              0,
+              0,
+              -1
+            ],
+            "origin": [
+              14.40000057220459,
+              0.5483905673027039,
+              8.939854621887207
+            ],
+            "predictedArrival": [
+              14.40000057220459,
+              -1.3350011110305786,
+              1.0554183721542358
+            ],
+            "initialVelocity": [
+              0,
+              3.8260183334350586,
+              -18
+            ],
+            "launchSpeed": 18.402130126953125,
+            "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+            "windDisplacement": [
+              0,
+              -1.3113021850585938e-06,
+              -1.0728836059570312e-06
+            ],
+            "releaseHeight": 0.5483905673027039,
+            "arrivalHeight": -1.3350011110305786,
+            "peakHeight": 1.0133349895477295,
+            "drag": 2,
+            "flightSeconds": 1.1939027309417725,
+            "walkDistance": 0,
+            "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+          }
+        }
+      },
+      "arcChecks": {
+        "minimumDrop": true,
+        "minimumFlightSeconds": true
+      },
+      "currentPoseThrow": {
+        "feasible": true,
+        "error": null,
+        "diagnostics": {
+          "rejected": {},
+          "receivingCenter": [
+            14.40000057220459,
+            -1.3350000381469727,
+            1.200000286102295
+          ],
+          "receivingSize": [
+            1.1000045537948608,
+            0.1599999964237213,
+            1.1000038385391235
+          ],
+          "lastArrival": [
+            14.40000057220459,
+            -1.3350011110305786,
+            1.0554187297821045
+          ],
+          "lastObstruction": null
+        },
+        "plan": {
+          "releasePosition": [
+            14.40000057220459,
+            -9.5367431640625e-07,
+            9.593344688415527
+          ],
+          "direction": [
+            0,
+            0,
+            -1
+          ],
+          "origin": [
+            14.40000057220459,
+            0.5483895540237427,
+            8.939854621887207
+          ],
+          "predictedArrival": [
+            14.40000057220459,
+            -1.3350011110305786,
+            1.0554187297821045
+          ],
+          "initialVelocity": [
+            0,
+            3.8260183334350586,
+            -18
+          ],
+          "launchSpeed": 18.402130126953125,
+          "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+          "windDisplacement": [
+            0,
+            -1.1920928955078125e-06,
+            -1.1920928955078125e-06
+          ],
+          "releaseHeight": 0.5483895540237427,
+          "arrivalHeight": -1.3350011110305786,
+          "peakHeight": 1.013334035873413,
+          "drag": 2,
+          "flightSeconds": 1.1939024925231934,
+          "walkDistance": 0,
+          "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+        }
+      },
+      "throw": {
+        "releasePosition": [
+          14.572755813598633,
+          -4.76837158203125e-07,
+          9.593343734741211
+        ],
+        "direction": [
+          -0.02057836391031742,
+          0,
+          -0.9997882843017578
+        ],
+        "origin": [
+          14.559308052062988,
+          0.5483896732330322,
+          8.93999195098877
+        ],
+        "predictedArrival": [
+          14.397053718566895,
+          -1.335000991821289,
+          1.0572268962860107
+        ],
+        "initialVelocity": [
+          -0.3704105615615845,
+          3.8260183334350586,
+          -17.99618911743164
+        ],
+        "launchSpeed": 18.402132034301758,
+        "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+        "windDisplacement": [
+          -5.7220458984375e-06,
+          -1.1920928955078125e-06,
+          7.152557373046875e-07
+        ],
+        "releaseHeight": 0.5483896732330322,
+        "arrivalHeight": -1.335000991821289,
+        "peakHeight": 1.0133341550827026,
+        "drag": 2,
+        "flightSeconds": 1.1939024925231934,
+        "walkDistance": 0,
+        "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+      },
+      "observedLaunchVelocity": [
+        -0.37041035294532776,
+        3.8260183334350586,
+        -17.99618911743164
+      ]
+    },
+    {
+      "name": "flour-counter-down-20",
+      "level": "s_wizard_school_3_4",
+      "fps": 20,
+      "operation": "throw_to",
+      "expected": "throw_received",
+      "outcome": "throw_received",
+      "matchesExpectation": true,
+      "cargo": "Flour",
+      "cargoRetained": false,
+      "independentlyConfirmed": true,
+      "holdersAfter": [
+        {
+          "name": "countertop_01_standard_gold (13)",
+          "instanceId": 746140,
+          "component": "ServerAttachStation"
+        }
+      ],
+      "ownedAfter": false,
+      "phases": [
+        "planning_throw",
+        "navigating",
+        "aiming",
+        "throw_hold",
+        "flight",
+        "idle"
+      ],
+      "evidence": ".local/throw-height-20261102/verified-heights/12-flour-counter-down-20",
+      "snapshotSequences": [
+        163,
+        166
+      ],
+      "option": {
+        "offered": true,
+        "inParameterEnum": true,
+        "preview": {
+          "state": "feasible",
+          "reason": null,
+          "plan": {
+            "releasePosition": [
+              14.600000381469727,
+              0,
+              9.987927436828613
+            ],
+            "direction": [
+              -0.022752011194825172,
+              0,
+              -0.9997410774230957
+            ],
+            "origin": [
+              14.585131645202637,
+              0.5483903288841248,
+              9.334606170654297
+            ],
+            "predictedArrival": [
+              14.405739784240723,
+              -1.3350013494491577,
+              1.4522134065628052
+            ],
+            "initialVelocity": [
+              -0.409536212682724,
+              3.8260183334350586,
+              -17.995338439941406
+            ],
+            "launchSpeed": 18.402128219604492,
+            "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+            "windDisplacement": [
+              -4.76837158203125e-06,
+              -1.3113021850585938e-06,
+              5.960464477539062e-07
+            ],
+            "releaseHeight": 0.5483903288841248,
+            "arrivalHeight": -1.3350013494491577,
+            "peakHeight": 1.0133347511291504,
+            "drag": 2,
+            "flightSeconds": 1.1939027309417725,
+            "walkDistance": 23.745573043823242,
+            "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+          }
+        }
+      },
+      "arcChecks": {
+        "minimumDrop": true,
+        "minimumFlightSeconds": true
+      },
+      "throw": {
+        "releasePosition": [
+          14.624663352966309,
+          0,
+          9.922220230102539
+        ],
+        "direction": [
+          -0.025749215856194496,
+          0,
+          -0.9996684789657593
+        ],
+        "origin": [
+          14.607836723327637,
+          0.5483898520469666,
+          9.268946647644043
+        ],
+        "predictedArrival": [
+          14.404823303222656,
+          -1.3350008726119995,
+          1.3871246576309204
+        ],
+        "initialVelocity": [
+          -0.4634858965873718,
+          3.8260183334350586,
+          -17.99403190612793
+        ],
+        "launchSpeed": 18.402130126953125,
+        "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+        "windDisplacement": [
+          4.76837158203125e-06,
+          -1.3113021850585938e-06,
+          -1.3113021850585938e-06
+        ],
+        "releaseHeight": 0.5483898520469666,
+        "arrivalHeight": -1.3350008726119995,
+        "peakHeight": 1.0133342742919922,
+        "drag": 2,
+        "flightSeconds": 1.1939024925231934,
+        "walkDistance": 0,
+        "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+      },
+      "observedLaunchVelocity": [
+        -0.4634858965873718,
+        3.8260183334350586,
+        -17.99403190612793
+      ]
+    },
+    {
+      "name": "egg-climb-then-counter-down-20",
+      "level": "s_wizard_school_3_4",
+      "fps": 20,
+      "operation": "throw_to",
+      "expected": "throw_received",
+      "outcome": "throw_received",
+      "matchesExpectation": true,
+      "cargo": "Egg",
+      "cargoRetained": false,
+      "independentlyConfirmed": true,
+      "holdersAfter": [
+        {
+          "name": "countertop_01_standard_gold (13)",
+          "instanceId": 766794,
+          "component": "ServerAttachStation"
+        }
+      ],
+      "ownedAfter": false,
+      "phases": [
+        "planning_throw",
+        "navigating",
+        "aiming",
+        "throw_hold",
+        "flight",
+        "idle"
+      ],
+      "evidence": ".local/throw-height-20261102/verified-heights/13-egg-climb-then-counter-down-20",
+      "snapshotSequences": [
+        174,
+        177
+      ],
+      "option": {
+        "offered": true,
+        "inParameterEnum": true,
+        "preview": {
+          "state": "feasible",
+          "reason": null,
+          "plan": {
+            "releasePosition": [
+              15.718681335449219,
+              0,
+              9.830361366271973
+            ],
+            "direction": [
+              -0.15104222297668457,
+              0,
+              -0.9885272979736328
+            ],
+            "origin": [
+              15.619976997375488,
+              0.5483922958374023,
+              9.184368133544922
+            ],
+            "predictedArrival": [
+              14.42909049987793,
+              -1.3350012302398682,
+              1.3903898000717163
+            ],
+            "initialVelocity": [
+              -2.7187600135803223,
+              3.8260183334350586,
+              -17.79349136352539
+            ],
+            "launchSpeed": 18.402130126953125,
+            "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+            "windDisplacement": [
+              -3.814697265625e-06,
+              -1.1920928955078125e-06,
+              1.7881393432617188e-06
+            ],
+            "releaseHeight": 0.5483922958374023,
+            "arrivalHeight": -1.3350012302398682,
+            "peakHeight": 1.0133367776870728,
+            "drag": 2,
+            "flightSeconds": 1.1939032077789307,
+            "walkDistance": 10.580915451049805,
+            "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+          }
+        }
+      },
+      "arcChecks": {
+        "minimumClimb": true,
+        "minimumDrop": true,
+        "minimumFlightSeconds": true
+      },
+      "currentPoseThrow": {
+        "feasible": false,
+        "error": null,
+        "diagnostics": {
+          "rejected": {
+            "receiving_volume": 1
+          },
+          "receivingCenter": [
+            14.40000057220459,
+            -1.3349997997283936,
+            1.200000286102295
+          ],
+          "receivingSize": [
+            1.1000045537948608,
+            0.1599999964237213,
+            1.1000038385391235
+          ],
+          "lastArrival": [
+            12.432425498962402,
+            -1.3349997997283936,
+            0.7111325263977051
+          ],
+          "lastObstruction": null
+        },
+        "plan": null
+      },
+      "throw": {
+        "releasePosition": [
+          15.709080696105957,
+          -8.344650268554688e-06,
+          9.804616928100586
+        ],
+        "direction": [
+          -0.15040655434131622,
+          0,
+          -0.9886242151260376
+        ],
+        "origin": [
+          15.61079216003418,
+          0.5483863949775696,
+          9.158560752868652
+        ],
+        "predictedArrival": [
+          14.424920082092285,
+          -1.3350005149841309,
+          1.3638193607330322
+        ],
+        "initialVelocity": [
+          -2.707318067550659,
+          3.8260183334350586,
+          -17.795236587524414
+        ],
+        "launchSpeed": 18.402130126953125,
+        "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+        "windDisplacement": [
+          -1.9073486328125e-06,
+          -1.1920928955078125e-06,
+          7.152557373046875e-07
+        ],
+        "releaseHeight": 0.5483863949775696,
+        "arrivalHeight": -1.3350005149841309,
+        "peakHeight": 1.0133308172225952,
+        "drag": 2,
+        "flightSeconds": 1.193901538848877,
+        "walkDistance": 0,
+        "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+      },
+      "observedLaunchVelocity": [
+        -2.7073171138763428,
+        3.8260183334350586,
+        -17.795236587524414
+      ]
+    },
+    {
+      "name": "egg-player-upstairs-20",
+      "level": "s_wizard_school_3_4",
+      "fps": 20,
+      "operation": "throw_to_player",
+      "expected": "throw_received",
+      "outcome": "throw_received",
+      "matchesExpectation": true,
+      "cargo": "Egg",
+      "cargoRetained": false,
+      "independentlyConfirmed": true,
+      "holdersAfter": [
+        {
+          "name": "Player 1",
+          "instanceId": 787902,
+          "component": "ServerPlayerAttachmentCarrier"
+        }
+      ],
+      "ownedAfter": false,
+      "phases": [
+        "planning_throw",
+        "navigating",
+        "aiming",
+        "throw_hold",
+        "flight",
+        "idle"
+      ],
+      "evidence": ".local/throw-height-20261102/verified-heights/14-egg-player-upstairs-20",
+      "snapshotSequences": [
+        185,
+        188
+      ],
+      "option": {
+        "offered": true,
+        "inParameterEnum": true,
+        "preview": {
+          "state": "feasible",
+          "reason": null,
+          "plan": {
+            "releasePosition": [
+              14.76416301727295,
+              -0.31441283226013184,
+              6.659738063812256
+            ],
+            "direction": [
+              0.17364835739135742,
+              0,
+              0.9848076701164246
+            ],
+            "origin": [
+              14.877639770507812,
+              0.23397934436798096,
+              7.303299903869629
+            ],
+            "predictedArrival": [
+              15.380498886108398,
+              0.6653037667274475,
+              10.155150413513184
+            ],
+            "initialVelocity": [
+              3.1256704330444336,
+              3.8260183334350586,
+              17.726537704467773
+            ],
+            "launchSpeed": 18.402130126953125,
+            "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+            "windDisplacement": [
+              0,
+              5.960464477539063e-08,
+              0
+            ],
+            "releaseHeight": 0.23397934436798096,
+            "arrivalHeight": 0.6653037667274475,
+            "peakHeight": 0.6989237666130066,
+            "drag": 2,
+            "flightSeconds": 0.19999997317790985,
+            "walkDistance": 7.575624465942383,
+            "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+          }
+        }
+      },
+      "arcChecks": {
+        "minimumClimb": true,
+        "minimumRise": true
+      },
+      "currentPoseThrow": {
+        "feasible": false,
+        "error": null,
+        "diagnostics": {
+          "rejected": {
+            "horizontal_intercept": 1
+          },
+          "receivingCenter": [
+            15.600000381469727,
+            0,
+            11.399999618530273
+          ],
+          "receivingSize": [
+            3.3999998569488525,
+            3.3999998569488525,
+            3.3999998569488525
+          ],
+          "lastArrival": [
+            0,
+            0,
+            0
+          ],
+          "lastObstruction": null
+        },
+        "plan": null
+      },
+      "throw": {
+        "releasePosition": [
+          15.593924522399902,
+          -0.5035064220428467,
+          6.460888862609863
+        ],
+        "direction": [
+          0.0012302470859140158,
+          0,
+          0.9999992847442627
+        ],
+        "origin": [
+          15.594728469848633,
+          0.0448879599571228,
+          7.114378452301025
+        ],
+        "predictedArrival": [
+          15.597997665405273,
+          0.456903874874115,
+          9.770882606506348
+        ],
+        "initialVelocity": [
+          0.02214444801211357,
+          3.8260183334350586,
+          17.99998664855957
+        ],
+        "launchSpeed": 18.402130126953125,
+        "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+        "windDisplacement": [
+          9.5367431640625e-07,
+          8.940696716308594e-08,
+          9.5367431640625e-07
+        ],
+        "releaseHeight": 0.0448879599571228,
+        "arrivalHeight": 0.456903874874115,
+        "peakHeight": 0.5098323822021484,
+        "drag": 2,
+        "flightSeconds": 0.17999997735023499,
+        "walkDistance": 0,
+        "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+      },
+      "observedLaunchVelocity": [
+        0.022144470363855362,
+        3.8260183334350586,
+        17.99998664855957
+      ],
+      "explicitInitialPoses": [
+        {
+          "kind": "explicit_supported_throw_initial_pose",
+          "playerId": 1,
+          "before": [
+            16.096290588378906,
+            -1.8356237411499023,
+            3.0558059215545654
+          ],
+          "after": [
+            15.600000381469727,
+            0,
+            11.399999618530273
+          ],
+          "forward": [
+            -8.742277657347586e-08,
+            0,
+            -1
+          ]
+        }
+      ]
+    },
+    {
+      "name": "lettuce-descend-for-safe-player-catch-60",
+      "level": "s_wizard_5_5",
+      "fps": 60,
+      "operation": "throw_to_player",
+      "expected": "throw_received",
+      "outcome": "throw_received",
+      "matchesExpectation": true,
+      "cargo": "Lettuce",
+      "cargoRetained": false,
+      "independentlyConfirmed": true,
+      "holdersAfter": [
+        {
+          "name": "Player 1",
+          "instanceId": 809016,
+          "component": "ServerPlayerAttachmentCarrier"
+        }
+      ],
+      "ownedAfter": false,
+      "phases": [
+        "planning_throw",
+        "navigating",
+        "throw_hold",
+        "flight",
+        "idle"
+      ],
+      "evidence": ".local/throw-height-20261102/verified-heights/15-lettuce-descend-for-safe-player-catch-60",
+      "snapshotSequences": [
+        195,
+        198
+      ],
+      "option": {
+        "offered": true,
+        "inParameterEnum": true,
+        "preview": {
+          "state": "feasible",
+          "reason": null,
+          "plan": {
+            "releasePosition": [
+              13.464715957641602,
+              0.37897396087646484,
+              -4.786055564880371
+            ],
+            "direction": [
+              0.9396926164627075,
+              0,
+              -0.342020183801651
+            ],
+            "origin": [
+              14.078795433044434,
+              0.9273648262023926,
+              -5.0095624923706055
+            ],
+            "predictedArrival": [
+              16.57509422302246,
+              1.3393807411193848,
+              -5.9181413650512695
+            ],
+            "initialVelocity": [
+              16.914466857910156,
+              3.8260183334350586,
+              -6.156363487243652
+            ],
+            "launchSpeed": 18.402130126953125,
+            "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+            "windDisplacement": [
+              0,
+              1.1920928955078125e-07,
+              -4.76837158203125e-07
+            ],
+            "releaseHeight": 0.9273648262023926,
+            "arrivalHeight": 1.3393807411193848,
+            "peakHeight": 1.3586891889572144,
+            "drag": 2,
+            "flightSeconds": 0.17999997735023499,
+            "walkDistance": 5.917019844055176,
+            "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+          }
+        }
+      },
+      "arcChecks": {
+        "minimumDescent": true
+      },
+      "currentPoseThrow": {
+        "feasible": false,
+        "error": null,
+        "diagnostics": {
+          "rejected": {
+            "obstructed": 1
+          },
+          "receivingCenter": [
+            16.799999237060547,
+            -1.1920928955078125e-07,
+            -6
+          ],
+          "receivingSize": [
+            3.3999998569488525,
+            3.3999998569488525,
+            3.3999998569488525
+          ],
+          "lastArrival": [
+            16.799999237060547,
+            0.9863494634628296,
+            -6
+          ],
+          "lastObstruction": "Player 1"
+        },
+        "plan": null
+      },
+      "throw": {
+        "releasePosition": [
+          13.348604202270508,
+          0.37549471855163574,
+          -6.000001430511475
+        ],
+        "direction": [
+          1,
+          0,
+          5.960462701182223e-08
+        ],
+        "origin": [
+          14.002094268798828,
+          0.923887312412262,
+          -6.000001430511475
+        ],
+        "predictedArrival": [
+          16.149587631225586,
+          1.2829036712646484,
+          -6.000001430511475
+        ],
+        "initialVelocity": [
+          18,
+          3.8260183334350586,
+          1.072883264896518e-06
+        ],
+        "launchSpeed": 18.402130126953125,
+        "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+        "windDisplacement": [
+          0,
+          1.1920928955078125e-07,
+          0
+        ],
+        "releaseHeight": 0.923887312412262,
+        "arrivalHeight": 1.2829036712646484,
+        "peakHeight": 1.3473105430603027,
+        "drag": 2,
+        "flightSeconds": 0.13999998569488525,
+        "walkDistance": 0,
+        "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+      },
+      "observedLaunchVelocity": [
+        18,
+        3.8260183334350586,
+        1.072883264896518e-06
+      ],
+      "explicitInitialPoses": [
+        {
+          "kind": "explicit_supported_throw_initial_pose",
+          "playerId": 2,
+          "before": [
+            7.390533447265625,
+            1.9999979734420776,
+            -4.8018598556518555
+          ],
+          "after": [
+            8.399999618530273,
+            2.0000009536743164,
+            -6
+          ],
+          "forward": [
+            1.0000001192092896,
+            0,
+            -1.1920928955078125e-07
+          ]
+        },
+        {
+          "kind": "explicit_supported_throw_initial_pose",
+          "playerId": 1,
+          "before": [
+            16.15999984741211,
+            -5.960464477539063e-08,
+            -3.2100000381469727
+          ],
+          "after": [
+            16.799999237060547,
+            -5.960464477539063e-08,
+            -6
+          ],
+          "forward": [
+            -1.0000001192092896,
+            0,
+            -1.1920928955078125e-07
+          ]
+        }
+      ]
+    },
+    {
+      "name": "lettuce-descend-for-safe-player-catch-20",
+      "level": "s_wizard_5_5",
+      "fps": 20,
+      "operation": "throw_to_player",
+      "expected": "throw_received",
+      "outcome": "throw_received",
+      "matchesExpectation": true,
+      "cargo": "Lettuce",
+      "cargoRetained": false,
+      "independentlyConfirmed": true,
+      "holdersAfter": [
+        {
+          "name": "Player 1",
+          "instanceId": 825426,
+          "component": "ServerPlayerAttachmentCarrier"
+        }
+      ],
+      "ownedAfter": false,
+      "phases": [
+        "planning_throw",
+        "navigating",
+        "aiming",
+        "throw_hold",
+        "flight",
+        "idle"
+      ],
+      "evidence": ".local/throw-height-20261102/verified-heights/16-lettuce-descend-for-safe-player-catch-20",
+      "snapshotSequences": [
+        206,
+        209
+      ],
+      "option": {
+        "offered": true,
+        "inParameterEnum": true,
+        "preview": {
+          "state": "feasible",
+          "reason": null,
+          "plan": {
+            "releasePosition": [
+              13.464715957641602,
+              0.37897396087646484,
+              -4.786055564880371
+            ],
+            "direction": [
+              0.9396926164627075,
+              0,
+              -0.342020183801651
+            ],
+            "origin": [
+              14.078795433044434,
+              0.9273676872253418,
+              -5.0095624923706055
+            ],
+            "predictedArrival": [
+              16.57509422302246,
+              1.339383602142334,
+              -5.9181413650512695
+            ],
+            "initialVelocity": [
+              16.914466857910156,
+              3.8260183334350586,
+              -6.156363487243652
+            ],
+            "launchSpeed": 18.402130126953125,
+            "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+            "windDisplacement": [
+              0,
+              1.1920928955078125e-07,
+              -4.76837158203125e-07
+            ],
+            "releaseHeight": 0.9273676872253418,
+            "arrivalHeight": 1.339383602142334,
+            "peakHeight": 1.3586920499801636,
+            "drag": 2,
+            "flightSeconds": 0.17999997735023499,
+            "walkDistance": 5.917019844055176,
+            "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+          }
+        }
+      },
+      "arcChecks": {
+        "minimumDescent": true
+      },
+      "currentPoseThrow": {
+        "feasible": false,
+        "error": null,
+        "diagnostics": {
+          "rejected": {
+            "obstructed": 1
+          },
+          "receivingCenter": [
+            16.799999237060547,
+            -1.1920928955078125e-07,
+            -6
+          ],
+          "receivingSize": [
+            3.3999998569488525,
+            3.3999998569488525,
+            3.3999998569488525
+          ],
+          "lastArrival": [
+            16.799999237060547,
+            0.9863499402999878,
+            -6
+          ],
+          "lastObstruction": "Player 1"
+        },
+        "plan": null
+      },
+      "throw": {
+        "releasePosition": [
+          13.395123481750488,
+          0.37549376487731934,
+          -6.000000953674316
+        ],
+        "direction": [
+          1,
+          0,
+          5.9604616353681195e-08
+        ],
+        "origin": [
+          14.048613548278809,
+          0.9238876104354858,
+          -6.000000953674316
+        ],
+        "predictedArrival": [
+          16.196107864379883,
+          1.2829039096832275,
+          -6.000000953674316
+        ],
+        "initialVelocity": [
+          18,
+          3.8260183334350586,
+          1.0728831512096804e-06
+        ],
+        "launchSpeed": 18.402130126953125,
+        "launchVelocitySource": "ServerAttachmentThrower.CalculateThrowVelocity",
+        "windDisplacement": [
+          1.9073486328125e-06,
+          0,
+          0
+        ],
+        "releaseHeight": 0.9238876104354858,
+        "arrivalHeight": 1.2829039096832275,
+        "peakHeight": 1.3435577154159546,
+        "drag": 2,
+        "flightSeconds": 0.13999998569488525,
+        "walkDistance": 0,
+        "model": "native_launch_fixed_step_gravity_drag_wind_exit_velocity"
+      },
+      "observedLaunchVelocity": [
+        18,
+        3.8260183334350586,
+        1.072882923836005e-06
+      ],
+      "explicitInitialPoses": [
+        {
+          "kind": "explicit_supported_throw_initial_pose",
+          "playerId": 2,
+          "before": [
+            7.381340026855469,
+            1.999997615814209,
+            -4.7999982833862305
+          ],
+          "after": [
+            8.399999618530273,
+            2.000004291534424,
+            -6
+          ],
+          "forward": [
+            1.0000001192092896,
+            0,
+            -1.1920928955078125e-07
+          ]
+        },
+        {
+          "kind": "explicit_supported_throw_initial_pose",
+          "playerId": 1,
+          "before": [
+            16.15999984741211,
+            0,
+            -3.2100000381469727
+          ],
+          "after": [
+            16.799999237060547,
+            0,
+            -6
+          ],
+          "forward": [
+            -1.0000001192092896,
+            0,
+            -1.1920928955078125e-07
+          ]
+        }
+      ]
+    }
+  ]
+}

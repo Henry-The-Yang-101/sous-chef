@@ -1,5 +1,8 @@
 # Native throw corrections — 2026-11-02
 
+The follow-up [height tests and option filtering](throw-heights.md) cover raised
+receivers, downward flight and finding a different release elevation.
+
 The geometry rejection identified by the [baseline audit](throw-audit.md) is
 fixed. Throws now use the actual native item collider and physical receiving
 surface. Player passes also check the game's forward catch scan, which was

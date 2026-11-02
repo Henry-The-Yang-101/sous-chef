@@ -36,6 +36,7 @@ native arc and a reachable release stance, including height differences. A
 target above the current arc can remain available if P2 can walk to a higher
 release stance. Downward throws use their actual longer flight time and range;
 player catches use three-dimensional distance and the native forward scan.
+See the [native height results](throw-heights.md) for upward/downward scenarios.
 
 Each compatible target/player has a `throw` preview with `state` (`pending`,
 `feasible`, or `unavailable`), `reason` and, when feasible, `plan`. Planning runs
