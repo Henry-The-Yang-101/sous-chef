@@ -13,8 +13,8 @@ namespace UnityEngine
         private static int next;
         internal static readonly List<Object> All = new List<Object>();
         public Object() { All.Add(this); }
-        public static int PlayerSearches;
-        public static T[] FindObjectsOfType<T>() { if (typeof(T) == typeof(global::PlayerControls)) PlayerSearches++; return All.OfType<T>().ToArray(); }
+        public static int PlayerSearches, WindSearches;
+        public static T[] FindObjectsOfType<T>() { if (typeof(T) == typeof(global::PlayerControls)) PlayerSearches++; if (typeof(T) == typeof(global::WindVolume)) WindSearches++; return All.OfType<T>().ToArray(); }
         private readonly int id = ++next;
         public bool Destroyed;
         public static bool operator ==(Object a,Object b)

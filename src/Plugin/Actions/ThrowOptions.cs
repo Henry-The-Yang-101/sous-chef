@@ -29,12 +29,21 @@ namespace SousChef.Plugin.Actions
         private Vector3 position, forward, mount;
         private float requestedAt;
         private long slices;
+        private bool observing, observeWinds;
+        private WindVolume[] observedWinds;
+        private WindVolume[] Winds()
+        {
+            if (!observing || !observeWinds) return null;
+            if (observedWinds == null) observedWinds = UnityEngine.Object.FindObjectsOfType<WindVolume>();
+            return observedWinds;
+        }
+        public void EndObservation() { observing = false; observedWinds = null; }
 
         public ThrowOptions(NavigationActions navigation) { this.navigation = navigation; }
         public void Reset()
         {
             foreach (Option option in options.Values) option.Planner.CancelPlanning();
-            options.Clear(); chef = null; item = null;
+            options.Clear(); chef = null; item = null; EndObservation();
         }
         private bool SameActor(PlayerControls actor)
         {
@@ -50,6 +59,8 @@ namespace SousChef.Plugin.Actions
                 if (actor != null) { position = actor.transform.position; forward = actor.transform.forward; }
                 if (item != null) mount = actor.transform.InverseTransformPoint(item.transform.position);
             }
+            observing = true; observedWinds = null;
+            observeWinds = item != null && item.GetComponent<AttachmentWindReceiver>() != null && item.GetComponent<ServerAttachmentWindReceiver>() != null;
             requestedAt = Time.realtimeSinceStartup;
             foreach (Option option in options.Values) option.Seen = false;
         }
@@ -69,7 +80,7 @@ namespace SousChef.Plugin.Actions
             { option.Reason = "target_unavailable"; option.RetryAt = Time.realtimeSinceStartup + 2; return; }
             option.Position = option.Target.transform.position; option.Forward = option.Target.transform.forward;
             option.Occupant = Occupant(option.Target);
-            option.Reason = option.Planner.Prepare(chef, item, option.Target) ?? ThrowPlanner.Pending;
+            option.Reason = option.Planner.Prepare(chef, item, option.Target, Winds()) ?? ThrowPlanner.Pending;
             option.RetryAt = Time.realtimeSinceStartup + 2;
         }
         public bool Check(GameObject target, out object description)
@@ -91,7 +102,7 @@ namespace SousChef.Plugin.Actions
                 ThrowPlan checkedPlan = null; Vector3 stance; float routeCost = Single.MaxValue;
                 Vector3 foot = chef.transform.position; foot.y = chef.GetComponent<CapsuleCollider>().bounds.min.y;
                 float uncertainty = Vector3.Distance(option.Plan.Stance, foot) < .02f ? 0 : ArrivalCheck.PositionTolerance + .02f;
-                if (option.Planner.Prepare(chef, item, target) != null ||
+                if (option.Planner.Prepare(chef, item, target, Winds()) != null ||
                     !navigation.TryStance(option.Plan.Stance, out stance) || Vector3.Distance(stance, option.Plan.Stance) > .02f ||
                     !option.Planner.From(stance, false, out checkedPlan, uncertainty) || (routeCost = navigation.RouteCost(stance)) == Single.MaxValue)
                     Prepare(option);
@@ -108,7 +119,7 @@ namespace SousChef.Plugin.Actions
                 if (!pair.Value.Seen) { pair.Value.Planner.CancelPlanning(); removed.Add(pair.Key); }
                 else if (pair.Value.Reason == ThrowPlanner.Pending) complete = false;
             foreach (int key in removed) options.Remove(key);
-            return complete;
+            EndObservation(); return complete;
         }
         public void Tick(PlayerControls actor)
         {

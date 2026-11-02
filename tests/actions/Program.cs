@@ -636,7 +636,17 @@ internal static class Program
         w.Chef.transform.position=new Vector3(0,0,-distance-.4f);item.transform.position=w.Chef.transform.position+new Vector3(0,1,.4f);w.Hold(item);
         Physics.Nearby=(p,r)=>w.Colliders.Where(c=>Vector3.Distance(p,c.bounds.ClosestPoint(p))<=r).ToArray();
         w.Navigation.Available(w.Chef);
-        var options=new ThrowOptions(w.Navigation);object info;options.Begin(w.Chef);
+        var options=new ThrowOptions(w.Navigation);object info;
+        var second=new GameObject("second counter");second.Add(new Catcher());second.Add(new ServerAttachStation());second.Add(new BoxCollider {size=Vector3.one});
+        item.Add(new AttachmentWindReceiver());item.Add(new ServerAttachmentWindReceiver());
+        int scans=UnityEngine.Object.WindSearches;
+        options.Begin(w.Chef);options.Check(w.Target,out info);options.Check(second,out info);
+        Check(UnityEngine.Object.WindSearches==scans+1,"one synchronous catalogue shares wind discovery across receiver planners");
+        options.EndObservation();options.Begin(w.Chef);options.Reset();options.Begin(w.Chef);options.Check(w.Target,out info);
+        Check(UnityEngine.Object.WindSearches==scans+2,"a new catalogue discovers wind volumes afresh instead of carrying a stale frame cache");
+        options.EndObservation();second.transform.position+=Vector3.right;options.Check(second,out info);
+        Check(UnityEngine.Object.WindSearches==scans+3,"planning outside a catalogue uses fresh native discovery");
+        options.Reset();options.Begin(w.Chef);
         Check(!options.Check(w.Target,out info) && !options.End(),"unproven throw choices are withheld while preview is pending");
         for(int i=0;i<300 && !options.Check(w.Target,out info);i++) options.Tick(w.Chef);
         Check(options.Check(w.Target,out info),"native planner proof enables a reachable counter option");

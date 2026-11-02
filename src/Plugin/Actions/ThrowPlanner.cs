@@ -52,7 +52,7 @@ namespace SousChef.Plugin.Actions
         public object Diagnostics { get { return Json.Object("rejected", rejected, "receivingCenter", Values.Vector(receiving.center), "receivingSize", Values.Vector(receiving.size), "lastArrival", Values.Vector(lastArrival), "lastObstruction", lastObstruction); } }
         private bool Reject(string reason) { object count; rejected.TryGetValue(reason, out count); rejected[reason] = (count == null ? 0 : (int)count) + 1; return false; }
 
-        public string Prepare(PlayerControls actor, GameObject held, GameObject destination)
+        public string Prepare(PlayerControls actor, GameObject held, GameObject destination, WindVolume[] discoveredWinds = null)
         {
             CancelPlanning(); bestPlan = null;
             rejected.Clear(); lastObstruction = null;
@@ -79,7 +79,7 @@ namespace SousChef.Plugin.Actions
             if (!NativeThrow.Velocity(chef, Vector3.forward, out nativeVelocity)) return "native_launch_velocity_unavailable";
             speed = new Vector2(nativeVelocity.x, nativeVelocity.z).magnitude; vertical = nativeVelocity.y;
             if (!ThrowTrajectory.Finite(speed) || speed <= 0 || !ThrowTrajectory.Finite(vertical)) return "unsupported_throw_physics";
-            string windError = wind.Prepare(chef, item); if (windError != null) return windError;
+            string windError = wind.Prepare(chef, item, discoveredWinds); if (windError != null) return windError;
             var shape = item.GetComponent<Collider>();
             var capsule = chef.GetComponent<CapsuleCollider>();
             if (shape == null || capsule == null) return "unsupported_throw_geometry";

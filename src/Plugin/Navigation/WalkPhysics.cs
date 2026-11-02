@@ -417,7 +417,7 @@ namespace SousChef.Plugin.Navigation
                 }
                 else if (failures != null) failures.Add(Json.Object("node", Values.Vector(probe.Point), "standable", probe.Valid, "failure", probe.Valid ? Failure : null));
             }
-            StartFailures = failures;
+            StartFailures = failures; currentStarts = result;
             return result;
         }
         public IEnumerable<WalkEdge> Neighbours(WalkCell cell)

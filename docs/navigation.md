@@ -422,3 +422,11 @@ returned zero despite a nonzero navigation command. Each event includes the read
 frame, command frame, command age, checked duration, and whether expiry or a native
 gate suppressed it. These diagnostics distinguish command expiry from native
 contact resolution; tracing does not prolong a command.
+
+Standing-height fluctuations can now retain search progress when a fresh native
+start-connector proof has exactly the same ordered nodes and floating-point
+costs. This applies only to vertical start/pivot changes with unchanged horizontal
+position, shape and movement rules, geometry, support/wind proofs, and cached
+neighbour range decisions. Moving-surface starts keep strict invalidation. This
+is an equivalence check, not a positional tolerance: changed costs or native
+connector vetoes restart the search. Diagnostics count `startProofRevalidations`.

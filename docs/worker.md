@@ -117,3 +117,10 @@ Private evidence: `.local/worker-native-final-search.json`,
 `.local/worker-native-comparison.json`, `.local/worker-native-throw-audit/report.json`
 and `.local/worker-check.log`. The failed earlier held-item handoff was corrected
 before installation and covered by a changing-start integration regression.
+
+Bridge 0.7.1 additionally handles stationary vertical numerical fluctuations by
+revalidating native starting connectors and requiring identical ordered nodes and
+costs before retaining work. It also shares wind-volume discovery across targets
+within one synchronous catalogue pass. See the on-screen results and follow-up
+limits in [validation.md](validation.md); the first worker build alone did not
+noticeably remove the user's Mine-kitchen stutter.

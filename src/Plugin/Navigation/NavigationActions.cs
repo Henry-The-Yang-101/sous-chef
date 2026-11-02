@@ -180,7 +180,7 @@ namespace SousChef.Plugin.Navigation
                 "diagnostics", Json.Object("planMilliseconds", planMilliseconds, "prepareMilliseconds", prepareMilliseconds,
                     "searchMilliseconds", searchMilliseconds, "matchMilliseconds", matchMilliseconds, "searchNodes", nodeCount,
                     "searchGeneration", searchGeneration, "searchSlices", searchSlices, "searchReused", searchReused,
-                    "searchReuseFailure", physics.ContinuityFailure,
+                    "searchReuseFailure", physics.ContinuityFailure, "startProofRevalidations", physics.StartProofRevalidations,
                     "searchBackend", remoteSearch != null ? "worker_process" : "in_process",
                     "workerPid", WorkerHost.Current == null ? 0 : WorkerHost.Current.ProcessId,
                     "searchComplete", search != null && search.Complete,

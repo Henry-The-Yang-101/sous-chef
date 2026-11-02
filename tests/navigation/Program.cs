@@ -863,6 +863,32 @@ internal static class Program
         Check(!physics.CanContinueSearch(),"a newly discovered moving surface invalidates the old static proof");physics.Starts().ToArray();
         Check(!physics.RememberSearch(),"unversioned moving-surface predicates retain fresh-search fallback");
     }
+    private static void EquivalentVerticalStarts()
+    {
+        var w=new World();w.AddFloor((x,z)=>Math.Abs(x)<3 && Math.Abs(z)<3 ? 0 : (float?)null);
+        w.Chef.transform.position=new Vector3(.13f,0,.27f);var physics=w.Ready();
+        physics.Starts().ToArray();Check(physics.RememberSearch(),"off-lattice start retains exact native seed proof");
+        foreach(float y in new[] {-2.4e-6f,-1.9e-6f,-2.7e-6f,1e-6f})
+        {
+            w.Chef.transform.position=new Vector3(.13f,y,.27f);physics.Refresh(w.Chef);
+            Check(physics.CanContinueSearch(),"vertical standing jitter reuses only bit-identical native start nodes and costs");
+            Check(physics.RememberSearch(true),"revalidated starts retain all previous support dependencies");
+        }
+        Check(physics.StartProofRevalidations>0,"vertical continuity actually reruns the native start kernel");
+        w.Chef.transform.position+=new Vector3(.0001f,0,0);physics.Refresh(w.Chef);
+        Check(!physics.CanContinueSearch(),"horizontal movement keeps its existing strict invalidation");
+        w.Chef.transform.position=new Vector3(.13f,0,.27f);physics.Refresh(w.Chef);physics.Starts().ToArray();physics.RememberSearch();
+        w.Chef.transform.position+=Vector3.up*.02f;physics.Refresh(w.Chef);
+        Check(!physics.CanContinueSearch(),"different exact connector costs reject even vertical-only movement");
+        w.Chef.transform.position=Vector3.zero;physics.Refresh(w.Chef);physics.Starts().ToArray();physics.RememberSearch();
+        w.Chef.transform.position=Vector3.up*1e-6f;physics.Refresh(w.Chef);
+        Check(!physics.CanContinueSearch(),"an exact zero-cost seed becoming nonzero is not rounded into equivalence");
+        w.Chef.transform.position=new Vector3(.13f,0,.27f);physics.Refresh(w.Chef);physics.Starts().ToArray();physics.RememberSearch();
+        var block=new GameObject("fresh connector obstruction").Add(new Collider());
+        Physics.Cast=(a,b,r,d,l)=>new[] {new RaycastHit {collider=block}};
+        w.Chef.transform.position+=Vector3.up*1e-6f;physics.Refresh(w.Chef);
+        Check(!physics.CanContinueSearch(),"fresh native start collision veto cannot reuse an old connector proof");
+    }
     private static void ConveyorSearchContinuity()
     {
         var w=new World();var floor=w.AddFloor((x,z)=>Math.Abs(x)<3 && Math.Abs(z)<3 ? 0 : (float?)null);
@@ -933,7 +959,7 @@ internal static class Program
     }
     private static void Main()
     {
-        SearchContinuity(); ConveyorSearchContinuity(); CertifiedStart(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); DirectedConveyors(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
+        SearchContinuity(); EquivalentVerticalStarts(); ConveyorSearchContinuity(); CertifiedStart(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); DirectedConveyors(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
         WorkerStartingStateChanges();
         Console.WriteLine("PASS: " + checks + " navigator integration checks (analytical geometry; not PhysX)");
     }

@@ -818,3 +818,50 @@ The [worker report](worker.md) records the process-boundary tests, native
 catalogue/held-item/throw checks, deliberate worker-loss fallback and performance
 measurement limits. No on-screen FPS improvement is claimed from Null-graphics
 simulator measurements.
+
+### First on-screen worker check and standing-height follow-up
+
+The user's Mine 4-6 run (`s_mine_4_6`) with Player 2 holding Tortilla showed no
+noticeable subjective improvement; stutter remained, particularly at round start.
+The 18-second observer sample averaged 123.21 render frames/s and 4.994 full
+snapshots/s, with capture median/p95/max 19.956/26.615/27.947 ms, zero skipped
+sequences and no read errors. Only 16 of 86 harness observations were focused,
+so this is not a continuous foreground benchmark. The worker stayed healthy,
+encoded 159 additional messages and completed 181 additional calm seed batches.
+Walking catalogue completion was observed in 71/86 samples; throw preview
+completion in 16/86. Walking searches used the native fallback throughout because
+starting-state or geometry changes invalidated their continuity.
+
+A separate stationary sample held horizontal position constant while chef Y
+varied between approximately -1.97e-6 and -2.68e-6. It advanced from search
+generation 914 to 952 across fifty samples. Median planning cost was 14.166 ms;
+median full capture remained 20.439 ms. The window was unfocused. Evidence:
+`.local/worker-live-mine.json`, `.local/worker-live-continuity-probe.json` and
+`.local/worker-live-stationary.json`. These findings do not establish that every
+source of stutter belongs to the plugin or that the worker removed the remaining
+native capture/planning cost.
+
+Bridge 0.7.1 allows vertical-only start changes to reuse a tree only when all
+existing geometry, actor, cargo, dimension, speed, surface, wind and query proofs
+still hold, cached neighbour range decisions are unchanged, and fresh native
+starting connectors reproduce exactly the same ordered node identities and
+floating-point costs. Horizontal movement still invalidates. Moving-surface start
+changes retain strict invalidation. Target approaches and action execution remain
+freshly checked. No positional tolerance or cost rounding was introduced.
+
+Throw preview preparation also shares wind-volume discovery within a synchronous
+catalogue pass. Flags, collider geometry, velocity, item filtering and native
+receiver predicates are still read afresh. Discovery is discarded at the end of
+the pass, including on exceptions; work outside that pass performs its normal
+fresh discovery. Items without wind-receiver components avoid the shared scan.
+
+The follow-up passes 2,840 core assertions, 308 navigator integration checks,
+274 action checks, 98 Python tests and the 151-type installed-assembly audit.
+Tests include exact connector/cost equivalence under vertical jitter, strict
+rejection of horizontal/meaningful vertical movement and fresh collision vetoes,
+and one wind discovery per pass with fresh discovery on subsequent/outside passes.
+A native Mine simulator run completed and reused its catalogue, but did not
+reproduce the persistent held-item height fluctuation; on-screen benefit of this
+follow-up remains to be verified after installation. Check log:
+`.local/standing-start-check.log`. Native general-catalogue evidence:
+`.local/standing-native-results.json`.

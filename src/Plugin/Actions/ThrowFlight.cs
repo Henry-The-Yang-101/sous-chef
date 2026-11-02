@@ -150,7 +150,7 @@ namespace SousChef.Plugin.Actions
         private float timeScale = 1;
         public bool AffectsItem { get; private set; }
         public bool HasWind { get { return AffectsItem && areas.Count > 0; } }
-        public string Prepare(PlayerControls chef, GameObject item)
+        public string Prepare(PlayerControls chef, GameObject item, WindVolume[] discovered = null)
         {
             areas.Clear(); itemShape = item.GetComponent<Collider>();
             AffectsItem = item.GetComponent<AttachmentWindReceiver>() != null && item.GetComponent<ServerAttachmentWindReceiver>() != null;
@@ -163,7 +163,7 @@ namespace SousChef.Plugin.Actions
             Quaternion inverse = Quaternion.Inverse(chef.transform.rotation);
             shapeOffset = inverse * (itemShape.transform.position - item.transform.position);
             shapeRotation = inverse * itemShape.transform.rotation;
-            foreach (WindVolume volume in UnityEngine.Object.FindObjectsOfType<WindVolume>())
+            foreach (WindVolume volume in discovered ?? UnityEngine.Object.FindObjectsOfType<WindVolume>())
             {
                 if (!volume.isActiveAndEnabled || (ActionObservations.Read<LayerMask>(volume, "m_windFilter").value & (1 << ItemBody.DetachedLayer(item))) == 0) continue;
                 var colliders = new List<Collider>();

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using SousChef.Core;
 
 namespace SousChef.Plugin.Navigation
 {
@@ -12,6 +13,8 @@ namespace SousChef.Plugin.Navigation
         private long geometryVersion, savedGeometryVersion;
         private bool searchRemembered, searchBackfaces;
         private Vector3 searchPosition;
+        private List<WalkEdge> currentStarts, savedStarts;
+        public long StartProofRevalidations { get; private set; }
         private PlayerControls searchChef;
         private GameObject searchHeld;
         private Collider searchGround;
@@ -20,7 +23,7 @@ namespace SousChef.Plugin.Navigation
         private bool CannotContinue(string reason) { ContinuityFailure = reason; return false; }
 
         private void ForgetSearch()
-        { searchRemembered = false; searchGrounds.Clear(); searchWinds.Clear(); searchConveyors.Clear(); searchPreviousSurface = null; geometryVersion++; }
+        { searchRemembered = false; searchGrounds.Clear(); searchWinds.Clear(); searchConveyors.Clear(); searchPreviousSurface = null; currentStarts = savedStarts = null; geometryVersion++; }
 
         // Search progress is main-thread state, separate from the geometry cache.
         // Keep exact values, not a lossy hash or a time-based freshness guess.
@@ -53,7 +56,7 @@ namespace SousChef.Plugin.Navigation
                     Filter = ((LayerMask)windFilter.GetValue(wind)).value, Active = wind.isActiveAndEnabled });
             }
             searchChef = chef; searchHeld = held; searchGround = chef.GroundCollider;
-            searchPosition = Position; savedGeometryVersion = geometryVersion;
+            searchPosition = Position; savedGeometryVersion = geometryVersion; savedStarts = currentStarts;
             searchSpeed = walkingSpeed; searchRadius = radius; searchNativeRadius = nativeRadius;
             searchHeight = height; searchPivot = pivotToFoot; searchStep = StepHeight;
             searchBackfaces = Physics.queriesHitBackfaces;
@@ -69,8 +72,8 @@ namespace SousChef.Plugin.Navigation
             if (geometryVersion != savedGeometryVersion) return CannotContinue("geometry_changed");
             if (Overflow || chef != searchChef || held != searchHeld ||
                 chef.GroundCollider != searchGround ||
-                !Position.Equals(searchPosition) || walkingSpeed != searchSpeed || radius != searchRadius ||
-                nativeRadius != searchNativeRadius || height != searchHeight || pivotToFoot != searchPivot ||
+                walkingSpeed != searchSpeed || radius != searchRadius ||
+                nativeRadius != searchNativeRadius || height != searchHeight ||
                 StepHeight != searchStep || Physics.queriesHitBackfaces != searchBackfaces ||
                 portals.Count > 0 || winds.Count != searchWinds.Count) return CannotContinue("starting_state_or_movement_rules_changed");
             foreach (GroundProof proof in searchGrounds)
@@ -86,6 +89,29 @@ namespace SousChef.Plugin.Navigation
                 if (proof.Wind == null || !winds.TryGetValue(proof.Key, out wind) || wind != proof.Wind ||
                     wind.isActiveAndEnabled != proof.Active || !wind.GetVelocity().Equals(proof.Velocity) ||
                     ((LayerMask)windFilter.GetValue(wind)).value != proof.Filter) return CannotContinue("wind_changed");
+            }
+            if (!Position.Equals(searchPosition) || pivotToFoot != searchPivot)
+            {
+                // Standing chefs can oscillate vertically by float ULPs. Prove
+                // equivalence through fresh native connectors and EXACT graph
+                // costs, rather than accepting a positional tolerance.
+                Vector3 now = Position;
+                if (now.x != searchPosition.x || now.z != searchPosition.z || savedStarts == null)
+                    return CannotContinue("starting_position_changed");
+                foreach (GroundProof proof in searchGrounds)
+                    if (proof.Surface != null) return CannotContinue("moving_surface_start_changed");
+                float rangeSquared = (Range - 2) * (Range - 2);
+                // Both admitted and rejected cached neighbours matter: admitting
+                // an old out-of-range edge could improve an already settled cost.
+                foreach (Probe probe in probes.Values)
+                    if (((probe.Point - now).sqrMagnitude > rangeSquared) != ((probe.Point - searchPosition).sqrMagnitude > rangeSquared))
+                        return CannotContinue("search_range_changed");
+                List<WalkEdge> previous = savedStarts;
+                Starts(); StartProofRevalidations++;
+                if (Overflow || currentStarts.Count != previous.Count) return CannotContinue("starting_connectors_changed");
+                for (int i = 0; i < previous.Count; i++)
+                    if (!currentStarts[i].Cell.Equals(previous[i].Cell) || currentStarts[i].Distance != previous[i].Distance)
+                        return CannotContinue("starting_connectors_changed");
             }
             ContinuityFailure = null; return true;
         }
