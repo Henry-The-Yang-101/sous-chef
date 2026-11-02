@@ -8,9 +8,10 @@ using UnityEngine;
 // Independent geometric replay of the recorded floor/tread/wedge boxes.
 // Conservative advancement checks continuous capsule motion against solid boxes;
 // this is deliberately separate from the planner's support sampling algorithm.
-internal sealed class RecordedBox : Collider
+internal sealed class RecordedBox : BoxCollider
 {
     public Vector3 Centre, Half;
+    public override Bounds bounds { get { return testBounds; } }
     public bool Ground = true;
     public Vector3[] Axes;
     private static float Axis(Vector3 v, int i) { return i == 0 ? v.x : i == 1 ? v.y : v.z; }
@@ -92,12 +93,14 @@ internal sealed class RecordedBox : Collider
                 var bounds = record.GetProperty("bounds");
                 var go = new GameObject(record.GetProperty("name").GetString());
                 go.layer = record.TryGetProperty("layer", out var layer) ? layer.GetInt32() : 9;
-                boxes.Add(go.Add(new RecordedBox {
+                var box = go.Add(new RecordedBox {
                     Ground = !record.TryGetProperty("ground", out var ground) || ground.GetBoolean(),
                     Centre = origin + axes[0] * centre.x + axes[1] * centre.y + axes[2] * centre.z,
                     Half = new Vector3(size.x * axes[0].magnitude, size.y * axes[1].magnitude, size.z * axes[2].magnitude) * .5f,
                     Axes = axes.Select(a => a.normalized).ToArray(),
-                    testBounds = new Bounds(Read(bounds.GetProperty("center")), Read(bounds.GetProperty("size"))) }));
+                    testBounds = new Bounds(Read(bounds.GetProperty("center")), Read(bounds.GetProperty("size"))) });
+                go.transform.position = box.Centre; go.transform.Basis = box.Axes;
+                box.size = box.Half * 2; boxes.Add(box);
             }
         Physics.Nearby = (p, r) => boxes.Cast<Collider>().ToArray();
         Physics.GroundSphere = (p, r, d, length) => boxes.Where(b => b.Ground).Select(b => b.Sphere(p, r, d, length)).Where(h => h.HasValue).Select(h => h.Value).ToArray();

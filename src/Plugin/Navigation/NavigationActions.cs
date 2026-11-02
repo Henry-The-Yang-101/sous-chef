@@ -366,7 +366,25 @@ namespace SousChef.Plugin.Navigation
                 // Require the actual next step; optional lookahead is not a reason
                 // to cancel an otherwise supported route before its corner.
                 projectedStep = position + (input * speed + drift) * stepTime;
-                if (!physics.Segment(position, projectedStep)) { Stop("next_step_unsafe"); return; }
+                if (!physics.Segment(position, projectedStep))
+                {
+                    // A safe polyline does not guarantee that its current heading
+                    // clears a moving ramp edge over the entire input window.
+                    // Choose the smallest checked inward turn that still advances
+                    // toward this waypoint; never emit an unchecked escape input.
+                    bool found = false;
+                    float[] turns = { .258819f, -.258819f, .5f, -.5f, .707107f, -.707107f, .866025f, -.866025f, 1f, -1f };
+                    foreach (float sine in turns)
+                    {
+                        float cosine = (float)Math.Sqrt(Mathf.Max(0, 1 - sine * sine));
+                        Vector3 alternative = new Vector3(input.x * cosine - input.z * sine, 0, input.x * sine + input.z * cosine);
+                        Vector3 movement = alternative * speed + drift;
+                        if (Vector3.Dot(movement, goal - position) <= 0) continue;
+                        if (!physics.Segment(position, position + movement * horizon)) continue;
+                        input = alternative; found = true; Trace("steer_adjusted", goal, input); break;
+                    }
+                    if (!found) { Stop("next_step_unsafe"); return; }
+                }
             }
             move(input, commandMilliseconds);
         }

@@ -38,6 +38,9 @@ exact ingredient name or target label. A failed attempt is recorded, not retried
 in place. The command exits 2 if any attempt fails. Each attempt's native action
 trace and initial runtime state are written under `.local/native-player/runs-*`,
 with a `report.json`. Use `--trace-dir PATH` to choose an output directory.
+Each leg also reports a `motion` summary with neutral ground-recovery episode
+count/duration, checked steering adjustments, and first/last native positions.
+Use the raw trace to distinguish commanded neutral input from a physical stall.
 
 For teleporter validation, require confirmed native transitions so an alternative
 walking route cannot pass the test. `--then TARGET` adds a return leg in the same
@@ -140,6 +143,10 @@ the simulator preserves the production lease and grounding checks. See
 verified in the same process.
 
 ## Chocolate stair round trips — 2026-11-02
+
+The baseline below precedes the fixes described in the
+[stair investigation](stair-investigation.md), which records the native causes,
+implementation, iteration results, and remaining acceptance work.
 
 The current source at `60bb718` was rebuilt and run in the native headless
 `s_wizard_school_3_4` kitchen. **Stair traversal fails this validation.**

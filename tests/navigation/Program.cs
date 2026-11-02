@@ -325,8 +325,22 @@ internal static class Program
         var wall=new GameObject("wall beyond final stance").Add(new Collider());
         Physics.Cast=(a,b,r,d,length) => Math.Max(a.z,a.z+d.z*length) > -.95f ? new[] { new RaycastHit { collider=wall } } : new RaycastHit[0];
         Time.deltaTime=Time.unscaledDeltaTime=.1f; Time.realtimeSinceStartup += .1f; navigation.Tick(w.Chef);
-        Check(navigation.Action.Reason == "next_step_unsafe","slow-frame projection catches overshoot missed by a sixty-millisecond check");
-        Check(w.LastMilliseconds == 0,"unsafe slow-frame command is never emitted");
+        Check(navigation.Action.State == "navigating" && Math.Abs(w.LastInput.x) > .1f,
+            "unsafe direct heading is replaced by a checked local turn");
+        Check(w.LastMilliseconds == 100 && w.Chef.transform.position.z + w.LastInput.z * 4 * .1f <= -.95f,
+            "the replacement heading clears the wall for the full slow-frame input window");
+
+        w=new World(); w.AddFloor((x,z) => Math.Abs(x)<2 && Math.Abs(z)<2 ? 0 : (float?)null);
+        w.Chef.transform.position=new Vector3(0,0,-1.3f); station=w.AddStation(); navigation=w.Navigate(station);
+        wall=new GameObject("all next steps blocked").Add(new Collider());
+        Physics.Cast=(a,b,r,d,length) =>
+        {
+            Vector3 end=a+d*length-new Vector3(0,0,-1.3f); end.y=0;
+            return end.magnitude > .35f ? new[] {new RaycastHit {collider=wall}} : new RaycastHit[0];
+        };
+        Time.deltaTime=Time.unscaledDeltaTime=.1f; Time.realtimeSinceStartup += .02f; navigation.Tick(w.Chef);
+        Check(navigation.Action.Reason == "next_step_unsafe" && w.LastMilliseconds == 0,
+            "local direction search still stops when every full movement window is obstructed");
 
         w=new World(); w.AddFloor((x,z) => Math.Abs(x)<2 && Math.Abs(z)<2 ? 0 : (float?)null);
         w.Chef.transform.position=new Vector3(0,0,-1.3f); station=w.AddStation(); navigation=w.Navigate(station);
@@ -340,7 +354,7 @@ internal static class Program
         var boxes = RecordedBox.Install(); w.Chef.GroundCollider = boxes[0];
         w.Chef.transform.position = new Vector3(16.765953f, -1.837692f, 4.441718f);
         var physics = w.Ready(); Vector3 point; Collider ground;
-        Check(physics.Stand(new Vector3(16.4f,-1.74191f,4.4f), out point, out ground), "recorded stair corner endpoint is standable");
+        Check(!physics.Stand(new Vector3(16.4f,-1.74191f,4.4f), out point, out ground), "recorded sphere-supported side contact is excluded from the ramp interior");
         Check(!physics.Stand(new Vector3(16.426f,-1.8356f,4.4f), out point, out ground), "recorded corner contains a body-blocked strip below the native slope cutoff");
         Check(!physics.Segment(w.Chef.transform.position,new Vector3(16.4f,-1.74191f,4.4f)), "planner rejects captured corner shortcut instead of bridging its blocked strip");
         Check(physics.Segment(new Vector3(15,-1.835624f,3.9f),new Vector3(15,-1.505f,4.9f)), "same captured wedge remains traversable through its front");
@@ -376,10 +390,15 @@ internal static class Program
         navigation.Available(w.Chef);
         Check(navigation.Action.State == "navigating" && navigation.Action.Revision == revision,
             "a concurrent harness catalogue read cannot cancel a recovering stair hop");
+        w.Chef.GroundCollider = floor;
+        Time.realtimeSinceStartup += .02f; navigation.Tick(w.Chef);
+        Check(navigation.Action.State == "navigating" && w.LastInput.magnitude == 0,
+            "stale native ground contact cannot resume walking above the independent contact range");
+        w.Chef.transform.position -= Vector3.up * .15f;
         w.Chef.GroundCollider = floor; w.Chef.GetComponent<GroundCast>().Distance = .24f;
         Time.realtimeSinceStartup += .02f; navigation.Tick(w.Chef);
         Check(navigation.Action.State == "navigating" && w.LastInput.magnitude > .9f, "valid native proximity contact permits a checked route instead of repeatedly braking off the stair");
-        w.Chef.GetComponent<GroundCast>().Distance = 0; w.Chef.transform.position -= Vector3.up * .35f;
+        w.Chef.GetComponent<GroundCast>().Distance = 0; w.Chef.transform.position -= Vector3.up * .2f;
         Time.realtimeSinceStartup += .1f; navigation.Tick(w.Chef);
         Check(navigation.Action.State == "navigating" && navigation.Action.Revision == revision && w.LastInput.magnitude > .9f, "landing resumes the same request without requiring another Run click");
         w.Chef.GroundCollider = null; w.Chef.transform.position += Vector3.up * .9f;
@@ -398,6 +417,28 @@ internal static class Program
         w.Chef.GroundCollider = null; w.Chef.transform.position += Vector3.up * 2;
         Time.realtimeSinceStartup += .02f; navigation.Tick(w.Chef);
         Check(navigation.Action.Reason == "not_grounded", "a fall beyond native ground-probe range is not retained as stair settling");
+    }
+    private static void ShallowLandingContact()
+    {
+        var w = new World(); var floor = w.AddFloor((x,z) => 0);
+        w.Chef.transform.position = new Vector3(0,-.03f,0);
+        var physics = w.Ready();
+        w.Chef.GroundCollider = null;
+        Check(physics.NeedsGroundSettling(), "clear landing within the capsule skin waits for a stale null GroundCast to refresh");
+        w.Chef.GroundCollider = floor;
+        w.Chef.transform.position = new Vector3(0,-.07f,0);
+        physics = w.Ready();
+        Physics.Overlap = (a,b,r) => a.y-r < 0 ? new Collider[] {floor} : new Collider[0];
+        Physics.Penetration = (a,p,ar,b,q,br) =>
+        { Physics.PenetrationDirection = Vector3.forward; Physics.PenetrationDistance = .03f; return true; };
+        Check(physics.NeedsGroundSettling(), "shallow lateral tread contact retains neutral recovery above a clear landing");
+        var wall = new GameObject("wall along native resolution").Add(new Collider());
+        Physics.Cast = (a,b,r,d,length) => a.z+d.z*length > .02f ? new[] {new RaycastHit {collider=wall}} : new RaycastHit[0];
+        Check(!physics.NeedsGroundSettling(), "lateral depenetration toward an obstructed landing is rejected");
+        Physics.Cast = (a,b,r,d,length) => new RaycastHit[0];
+        Physics.Penetration = (a,p,ar,b,q,br) =>
+        { Physics.PenetrationDirection = Vector3.forward; Physics.PenetrationDistance = .12f; return true; };
+        Check(!physics.NeedsGroundSettling(), "deep sideways ground penetration is not treated as a harmless tread lip");
     }
     private static Teleportal AddPortal(World w, Vector3 position)
     {
@@ -585,7 +626,7 @@ internal static class Program
     }
     private static void Main()
     {
-        NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedStairContact(); GroundSettling(); StepsAndRamps(); InteriorFlow(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
+        NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); StepsAndRamps(); InteriorFlow(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
         Console.WriteLine("PASS: " + checks + " navigator integration checks (analytical geometry; not PhysX)");
     }
 }
