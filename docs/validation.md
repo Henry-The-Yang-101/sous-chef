@@ -597,3 +597,44 @@ checks, and 66 Python tests pass. The game had been closed; the verified plugin
 was installed for its next launch and its SHA-256 matches the built artifact.
 The game was not reopened. Live execution of this final correction remains
 unverified, as requested; earlier manually assisted arrivals are not counted.
+
+### 2026-11-02: actual Unity headless kitchens
+
+Added `scripts/native_simulator.py` and an opt-in native bootstrap. The installed
+Unity 2017.4.8f1 player loads the exact `s_wizard_school_3_4` kitchen, creates two
+local native chefs through keyboard splitting, and resets/reloads through the
+game's own level messages. Rendering reports `Null`; audio is paused with volume
+zero. The simulator uses isolated BepInEx configuration and a redirected save
+directory, and retains native physics, level scripts, and production navigation
+budgets/leases. Normal installed bridge files are not replaced by its launch.
+
+One process completed ten successive named loads/resets and also loaded
+`s_wizard_3_1`. The 52-entry base-game catalogue comes from the native two-player
+scene directory. A full headless snapshot contained two chefs and 180 colliders,
+with zero coverage errors. The CLI waits for the new scene generation and actual
+round, then waits for complete action discovery before issuing a single request.
+
+Native Chocolate climbs at requested 60 FPS produced two arrivals and one
+`no_safe_start` in `.local/native-verified-60b/`; three at requested 20 FPS arrived
+in `.local/native-verified-20/`. Final-build smoke traces additionally captured
+`not_grounded` and `control_lost` (313 ms frame gap) in `.local/native-final-runs/`.
+The native interaction was selected on successful arrivals. The failed 60 FPS
+trace rejects a Wedge at the lower stair edge while cached ground still describes
+the prior flat-floor pose. These results prove that the approximate suite's
+12/12 success did not cover every native failure. **Stair navigation remains
+unresolved.** Failures are retained and exit nonzero, with no retries or manual
+assistance hidden in a successful result.
+
+The simulator itself has verified startup, same-process reset, named kitchen
+switching, silent/null graphics state, full observation, action execution, invalid
+level rejection, and graceful shutdown. Its native runner is opt-in; ordinary
+`scripts/check.py` uses deterministic tests and does not launch the game.
+
+Validation for implementation commit `182fba1`: the real plugin builds and the
+151-type installed-assembly audit passes; 815 core assertions, 104 navigation
+checks, 12 approximate simulation scenarios, 181 action checks, and 74 Python
+tests pass. The eight new lifecycle tests cover reset generations, stale/dead
+processes, command acknowledgements/rejection, PID reuse, startup cleanup,
+pending-command preservation, and single-request navigation after discovery.
+The final native process was shut down through the simulator CLI and no
+Overcooked2 process remained. No normal-game reinstall or push was performed.
