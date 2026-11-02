@@ -149,6 +149,41 @@ Successful runs still include short neutral recovery episodes. Reliability and
 smoothness require further native checks at multiple Update rates; the earlier
 successful arrivals are not evidence that the full objective is finished.
 
+## Cross-rate native results for `6269635`
+
+The final implementation batch completed **50/50 round trips (100/100 legs)**.
+Every leg ended with native selection, settled speed, and `readyForAction`; no
+teleports, retries, or scene resets occurred between the legs of an attempt.
+The private runtime used the original game assembly, Null graphics, automatic
+native physics, and a 0.02-second fixed timestep. Requested Update rates do not
+promise a constant measured frame rate under concurrent CPU load.
+
+| Requested FPS | Round trips | Longest horizontal pause | Longest neutral recovery |
+| --- | ---: | ---: | ---: |
+| 20 | 10/10 | 102 ms | 94 ms |
+| 30 | 5/5 | 61 ms | 72 ms |
+| 60 | 15/15 | 81 ms | 54 ms |
+| 120 | 5/5 | 65 ms | 81 ms |
+| 60 — three round trips per load | 15/15 | 125 ms | 68 ms |
+
+Reports and raw traces are in `.local/stair-final-{20,30,60,120,repeated}/`.
+`.local/stair-final-validation.json` checks native runtime identity, per-leg
+readiness, deck heights, unchanged station identities within each attempt, and
+the runtime plugin against the built DLL (SHA-256
+`ce0f1d63d2210f9cca44afaf65d04096699b30f1fdc943c7fe6d8077f7549223`).
+`.local/stair-final-analysis.json` retains per-leg motion analysis. Maximum
+backward excursion along the staircase was 0.170 units, without a stuck edge.
+
+Automated validation passed 820 core assertions, 182 navigator integration
+checks, 181 executor checks, and 79 Python tests. These fixtures remain separate
+from the native game evidence.
+
+The reliability criterion now passes in these samples. The strict smoothness
+criterion still deserves investigation: the longest pause (125 ms) was a shallow
+descending tread penetration followed by a 60 ms decision gap and a temporarily
+zero native horizontal velocity. This is not evidence of perfectly continuous
+motion; further input-timing diagnostics are needed before calling it flawless.
+
 A concurrent teleporter investigation uses its own runtime under
 `/private/tmp/sous-chef-teleporter-runtime` and ports 25712–25714. Later stair runs
 use the existing private stair runtime on ports 24702–24704, through the same

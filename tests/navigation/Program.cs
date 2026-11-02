@@ -457,6 +457,18 @@ internal static class Program
         contact.Normal = new Vector3(0,.8f,-.6f);
         Check(physics.TryLandingWalk(Vector3.zero,.05f,out input),
             "a stale walkable slope normal permits the checked native movement envelope");
+        var nativeObstacle = new GameObject("obstacle reached only by native slope motion").Add(new Collider());
+        Physics.Overlap = (a,b,r) => b.y+r > 1.6f ? new Collider[] {nativeObstacle} : new Collider[0];
+        Check(!physics.TryLandingWalk(Vector3.zero,.05f,out input),
+            "the native slope's upward velocity expands overhead clearance even from zero body velocity");
+        Physics.Overlap = (a,b,r) => new Collider[0];
+        contact.Normal = new Vector3(.6f,.8f,0);
+        w.Chef.Motion.Velocity = Vector3.up * 3;
+        Physics.Cast = (a,b,r,d,length) => a.x+d.x*length > .08f ? new[] {new RaycastHit {collider=nativeObstacle}} : new RaycastHit[0];
+        Check(!physics.TryLandingWalk(Vector3.zero,.05f,out input),
+            "retained native normal velocity cannot move sideways into an obstruction missed by flat input");
+        Physics.Cast = (a,b,r,d,length) => new RaycastHit[0];
+        w.Chef.Motion.Velocity = Vector3.zero;
         contact.Normal = new Vector3(0,.5f,-.8660254f);
         Check(!physics.TryLandingWalk(Vector3.zero,.05f,out input),
             "an unsupported native ground normal forbids landing steering");
