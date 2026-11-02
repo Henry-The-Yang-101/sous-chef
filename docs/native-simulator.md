@@ -9,6 +9,10 @@ The former approximate CPU simulator has been removed. Navigation unit tests
 remain for isolated regressions; this native runtime is the simulator for
 complete level traversal.
 
+The [teleporter coverage report](teleporter-audit.md) records all 28 entrances
+across the nine installed two-player portal kitchens, including explicit setup
+fixtures and the remaining spawn-access limitation.
+
 ## Start and repeat
 
 Steam and the installed game/bridge launcher must be available. The default

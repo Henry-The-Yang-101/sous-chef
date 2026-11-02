@@ -73,6 +73,7 @@ def audit_level(runtime, level, output, cannon_setup=False, cannon_aim_down=Fals
     initial = sim.read_status(runtime)
     result['initial'] = initial
     result['runtimeProcess'] = json.loads((runtime / 'process.json').read_text())
+    discovered = {p['id'] for p in initial.get('portals', []) if p['playerSender']}
     dormant = [p for p in initial.get('portals', []) if p['playerSender'] and not p['enabled']]
     if dormant and boss_portal_setup:
         result['phaseSetups'] = []
@@ -101,6 +102,8 @@ def audit_level(runtime, level, output, cannon_setup=False, cannon_aim_down=Fals
             time.sleep(.25)
         result['activationWait']['after'] = initial
         if not initial.get('inRound'): return dict(result, reason='round_ended_before_portal_activation')
+    missing = discovered - {p['id'] for p in initial.get('portals', []) if p['playerSender']}
+    if missing: return dict(result, reason='discovered_portals_disappeared', missingPortals=sorted(missing))
     result['inactivePortals'] = dormant
     portals = [p for p in initial.get('portals', []) if p['enabled'] and p['playerSender'] and p['exitObjectId']]
     result['portals'] = portals
