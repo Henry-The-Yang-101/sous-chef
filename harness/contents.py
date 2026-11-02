@@ -5,6 +5,7 @@ import threading
 import time
 
 from clients.bridge import BridgeClient
+from harness.observation import ObservationViews
 
 
 class Unobserved(ValueError):
@@ -172,14 +173,17 @@ class ContentsObserver:
         self.thread = None
         self.index = None
         self.observed = None
+        self.views = ObservationViews(clock)
 
-    def publish(self, sample):
+    def publish(self, sample, assets=None):
         index = ContentsIndex(sample) if sample.get('type') == 'snapshot' and sample.get('inRound') else None
+        self.views.publish(sample, assets)
         with self.lock:
             self.index = index
             self.observed = self.clock() if index else None
 
     def decorate(self, state):
+        self.views.decorate(state)
         with self.lock:
             index, observed = self.index, self.observed
         fresh = (index is not None and observed is not None and
@@ -204,7 +208,7 @@ class ContentsObserver:
                         if self.halt.is_set():
                             break
                         if sample.get('type') in {'snapshot', 'status', 'hello'}:
-                            self.publish(sample)
+                            self.publish(sample, client.assets)
             except (OSError, EOFError, ValueError, KeyError, TypeError):
                 self.publish({})
             if not self.halt.is_set():
