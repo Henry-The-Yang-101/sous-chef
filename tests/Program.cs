@@ -250,6 +250,13 @@ internal static class Program
         walking.Sequence++;
         Assert(lease.Set(4, walking, 3.13, 151) == "invalid_input_window", "movement cannot exceed the ownership lease");
         Assert(lease.Read(3.176).X == 0 && lease.Owner(3.176) == 0, "long stall still revokes navigation ownership");
+        Assert(lease.Claim(5, 4), "new navigation action claims after a stalled owner");
+        walking = new ControlCommand { Sequence=1,Milliseconds=WalkingCommand.OwnershipMilliseconds(17),X=1 };
+        Assert(lease.Set(5, walking, 4, 17) == null, "production walking ownership uses the separate jitter allowance");
+        Assert(lease.Read(4.166).X == 0 && lease.Owner(4.166) == 5, "captured 166 ms frame gap neutralizes input without cancelling the action");
+        walking.Sequence++;
+        Assert(lease.Set(5, walking, 4.166, 17) == null, "navigation can resume after the captured frame gap");
+        Assert(lease.Read(4.667).X == 0 && lease.Owner(4.667) == 0, "half-second absence still expires navigation ownership");
 
         int disconnected = 0;
         using (var server = new ControlServer(0, Json.Object("type", "hello"), id => Interlocked.Increment(ref disconnected)))
