@@ -64,9 +64,12 @@ namespace SousChef.Plugin.Actions
         { var player = target.GetComponent<PlayerControls>(); return player == null ? ActionObservations.Occupant(target) : ActionObservations.Held(player); }
         private void Prepare(Option option)
         {
+            option.Planner.CancelPlanning(); option.Plan = null;
+            if (option.Target == null || !option.Target.activeInHierarchy)
+            { option.Reason = "target_unavailable"; option.RetryAt = Time.realtimeSinceStartup + 2; return; }
             option.Position = option.Target.transform.position; option.Forward = option.Target.transform.forward;
             option.Occupant = Occupant(option.Target);
-            option.Plan = null; option.Reason = option.Planner.Prepare(chef, item, option.Target) ?? ThrowPlanner.Pending;
+            option.Reason = option.Planner.Prepare(chef, item, option.Target) ?? ThrowPlanner.Pending;
             option.RetryAt = Time.realtimeSinceStartup + 2;
         }
         public bool Check(GameObject target, out object description)

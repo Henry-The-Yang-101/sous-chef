@@ -596,6 +596,9 @@ internal static class Program
         Check(w.Carrier.Item==item && w.Navigation.Action.State=="idle" && inputs==0 && releases==0 && Vector3.Distance(w.Chef.transform.position,original)==0,"option planning does not acquire input, navigate, or mutate cargo");
         w.Target.transform.position=Vector3.up*2;
         Check(!options.Check(w.Target,out info),"raising a previously feasible receiver immediately removes its old option");
+        w.Target.activeInHierarchy=false;options.Tick(w.Chef);options.Check(w.Target,out info);
+        Check((string)((Json.Record)info)["reason"]=="target_unavailable","target disappearing during preview cancels pending work without touching its geometry");
+        w.Target.activeInHierarchy=true;options.Reset();options.Begin(w.Chef);options.Check(w.Target,out info);
         for(int i=0;i<300 && !options.End();i++) options.Tick(w.Chef);
         Check(!options.Check(w.Target,out info) && (string)((Json.Record)info)["state"]=="unavailable","receiver above native apex without an elevated walking stance remains unavailable");
         w.Target.transform.position=Vector3.down*2;
