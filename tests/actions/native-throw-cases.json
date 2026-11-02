@@ -1,0 +1,310 @@
+[
+  {
+    "name": "cheese-counter-60",
+    "level": "s_wizard_5_5",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Cheese_Raw"
+      }
+    ],
+    "operation": "throw_to",
+    "target": "countertop_01_standard_gold (4)",
+    "expected": "throw_received"
+  },
+  {
+    "name": "cheese-player-60",
+    "level": "s_wizard_5_5",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Cheese_Raw"
+      }
+    ],
+    "operation": "throw_to_player",
+    "target": 1,
+    "expected": "throw_received"
+  },
+  {
+    "name": "cheese-counter-20",
+    "level": "s_wizard_5_5",
+    "fps": 20,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Cheese_Raw"
+      }
+    ],
+    "operation": "throw_to",
+    "target": "countertop_01_standard_gold (4)",
+    "expected": "throw_received"
+  },
+  {
+    "name": "cheese-player-20",
+    "level": "s_wizard_5_5",
+    "fps": 20,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Cheese_Raw"
+      }
+    ],
+    "operation": "throw_to_player",
+    "target": 1,
+    "expected": "throw_received"
+  },
+  {
+    "name": "meat-player",
+    "level": "s_wizard_5_5",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Meat"
+      }
+    ],
+    "operation": "throw_to_player",
+    "target": 1,
+    "expected": "throw_received"
+  },
+  {
+    "name": "lettuce-player",
+    "level": "s_wizard_5_5",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Lettuce"
+      }
+    ],
+    "operation": "throw_to_player",
+    "target": 1,
+    "expected": "throw_received"
+  },
+  {
+    "name": "choppedbun-player",
+    "level": "s_wizard_5_5",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "ChoppedBun"
+      }
+    ],
+    "operation": "throw_to_player",
+    "target": 1,
+    "expected": "throw_received"
+  },
+  {
+    "name": "chopped-cheese-player",
+    "level": "s_wizard_5_5",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Cheese_Raw"
+      },
+      {
+        "operation": "place_at",
+        "target": "countertop_01_chopping_board_gold (2)"
+      },
+      {
+        "operation": "work_at",
+        "target": "countertop_01_chopping_board_gold (2)"
+      },
+      {
+        "operation": "pick_up",
+        "target": "countertop_01_chopping_board_gold (2)"
+      }
+    ],
+    "operation": "throw_to_player",
+    "target": 1,
+    "expected": "throw_received"
+  },
+  {
+    "name": "chopped-cheese-counter",
+    "level": "s_wizard_5_5",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Cheese_Raw"
+      },
+      {
+        "operation": "place_at",
+        "target": "countertop_01_chopping_board_gold (2)"
+      },
+      {
+        "operation": "work_at",
+        "target": "countertop_01_chopping_board_gold (2)"
+      },
+      {
+        "operation": "pick_up",
+        "target": "countertop_01_chopping_board_gold (2)"
+      }
+    ],
+    "operation": "throw_to",
+    "target": "countertop_01_standard_gold (4)",
+    "expected": "throw_received"
+  },
+  {
+    "name": "chocolate-player",
+    "level": "s_wizard_school_3_4",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Chocolate"
+      }
+    ],
+    "operation": "throw_to_player",
+    "target": 1,
+    "expected": "throw_received"
+  },
+  {
+    "name": "egg-player",
+    "level": "s_wizard_school_3_4",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Egg"
+      }
+    ],
+    "operation": "throw_to_player",
+    "target": 1,
+    "expected": "throw_received"
+  },
+  {
+    "name": "flour-player",
+    "level": "s_wizard_school_3_4",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Flour"
+      }
+    ],
+    "operation": "throw_to_player",
+    "target": 1,
+    "expected": "throw_received"
+  },
+  {
+    "name": "egg-counter",
+    "level": "s_wizard_school_3_4",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Egg"
+      }
+    ],
+    "operation": "throw_to",
+    "target": "countertop_01_standard_gold (13)",
+    "expected": "throw_received"
+  },
+  {
+    "name": "empty-hands-counter",
+    "level": "s_wizard_5_5",
+    "fps": 60,
+    "setup": [],
+    "operation": "throw_to",
+    "target": "countertop_01_standard_gold (4)",
+    "expected": "hands_empty"
+  },
+  {
+    "name": "empty-hands-player",
+    "level": "s_wizard_5_5",
+    "fps": 60,
+    "setup": [],
+    "operation": "throw_to_player",
+    "target": 1,
+    "expected": "hands_empty"
+  },
+  {
+    "name": "pan-counter",
+    "level": "s_wizard_5_5",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "utensil_frying_pan_01"
+      }
+    ],
+    "operation": "throw_to",
+    "target": "countertop_01_standard_gold (4)",
+    "expected": "item_not_throwable"
+  },
+  {
+    "name": "pan-player",
+    "level": "s_wizard_5_5",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "utensil_frying_pan_01"
+      }
+    ],
+    "operation": "throw_to_player",
+    "target": 1,
+    "expected": "item_not_throwable"
+  },
+  {
+    "name": "plate-counter",
+    "level": "s_wizard_5_5",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "equipment_plate_01"
+      }
+    ],
+    "operation": "throw_to",
+    "target": "countertop_01_standard_gold (4)",
+    "expected": "item_not_throwable"
+  },
+  {
+    "name": "plate-player",
+    "level": "s_wizard_5_5",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "equipment_plate_01"
+      }
+    ],
+    "operation": "throw_to_player",
+    "target": 1,
+    "expected": "item_not_throwable"
+  },
+  {
+    "name": "missing-player-3",
+    "level": "s_wizard_5_5",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Cheese_Raw"
+      }
+    ],
+    "operation": "throw_to_player",
+    "target": 3,
+    "expected": "target_unavailable"
+  },
+  {
+    "name": "missing-player-4",
+    "level": "s_wizard_5_5",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Cheese_Raw"
+      }
+    ],
+    "operation": "throw_to_player",
+    "target": 4,
+    "expected": "target_unavailable"
+  }
+]
