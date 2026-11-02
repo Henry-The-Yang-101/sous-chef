@@ -93,6 +93,12 @@ public static class TimeManager { public static float Scale=1;public static floa
 public class AttachmentCatcher : MonoBehaviour { public float m_catchDistance=.8f,m_catchAngleMax=60; }
 public interface ICatchable { }
 public interface IHandleCatch { bool CanHandleCatch(ICatchable item,Vector2 direction); }
+public class ServerIngredientCatcher : MonoBehaviour, IHandleCatch
+{
+    public bool Allowed=true;
+    public bool CanHandleCatch(ICatchable item,Vector2 direction) { return Allowed; }
+}
+public class ServerAttachmentCatchingProxy : MonoBehaviour { }
 public class ClientPlayerControlsImpl_Default : MonoBehaviour
 {
     public ClientInteractable Current;

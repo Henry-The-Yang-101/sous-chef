@@ -701,6 +701,47 @@ internal static class Program
         for(int i=0;i<300 && !options.Check(w.Target,out info);i++)options.Tick(w.Chef);
         Check(options.Check(w.Target,out info),"raised receiver remains an option when a higher certified release stance is reachable");
     }
+    private static void CookerThrows()
+    {
+        var w=new World();var pot=new GameObject("pot");pot.transform.position=new Vector3(0,.6f,0);
+        var catcher=pot.Add(new ServerIngredientCatcher());var proxy=pot.Add(new ServerAttachmentCatchingProxy());
+        pot.Add(new ServerIngredientContainer());
+        pot.Add(new BoxCollider {center=new Vector3(0,.25f,0),size=new Vector3(.7f,.5f,.7f)});
+        var trigger=pot.Add(new SphereCollider {center=new Vector3(0,.25f,0),radius=.7f,isTrigger=true,
+            testBounds=new Bounds(new Vector3(0,.85f,0),Vector3.one*1.4f)});
+        w.Target.GetComponent<ServerAttachStation>().Item=pot;
+        var item=w.Ingredient("rice");item.Add(new Throwable());item.Add(new PhysicalAttachment());
+        item.Add(new BoxCollider {center=new Vector3(0,.14f,0),size=new Vector3(.5f,.26f,.5f)});
+        w.Chef.gameObject.Add(new AttachmentThrower());w.Chef.gameObject.Add(new ClientAttachmentThrower());w.Chef.gameObject.Add(new ServerAttachmentThrower());
+        float flight;ThrowTrajectory.FlightTime(.71f-.55f,8*Mathf.Tan(15*Mathf.Deg2Rad),-9.81f,0,.02f,out flight);
+        w.Chef.transform.position=new Vector3(0,0,-8*flight-.4f);item.transform.position=w.Chef.transform.position+new Vector3(0,.55f,.4f);w.Hold(item);
+        Physics.Nearby=(p,r)=>w.Colliders.Where(c=>Vector3.Distance(p,c.bounds.ClosestPoint(p))<=r).ToArray();
+        int queries=0;
+        Physics.Penetration=(a,p,q,b,r,s)=>{
+            queries++;var sphere=b as SphereCollider;if(sphere==null)return false;
+            var body=new Bounds(p+new Vector3(0,.14f,0),new Vector3(.5f,.26f,.5f));
+            Vector3 center=r+sphere.center;float depth=sphere.radius-Vector3.Distance(center,body.ClosestPoint(center));
+            Physics.PenetrationDistance=depth;return depth>0;
+        };
+        var planner=new ThrowPlanner();ThrowPlan plan=null;
+        Check(InteractionActions.Offered(w.Chef,w.Target).Contains("throw_to"),"occupied cooker offers its pot's native ingredient catcher");
+        string prepared=planner.Prepare(w.Chef,item,w.Target);bool feasible=prepared==null && planner.From(w.Chef.transform.position,false,out plan);
+        Check(feasible,"rice can enter the pot catch trigger even when the solid top exceeds its apex");
+        Check(plan.PeakHeight<1.09f && plan.Arrival.y<1.09f && queries>0,"pot proof uses native overlap below the unreachable solid top");
+        Check(planner.Prepare(w.Chef,item,pot)==null && planner.From(w.Chef.transform.position,false,out plan),"direct pot targets share the cooker catch proof");
+        catcher.Allowed=false;
+        Check(!planner.From(w.Chef.transform.position,false,out plan),"incompatible or full pot still obeys the native catch veto");catcher.Allowed=true;
+        trigger.enabled=false;
+        Check(!planner.From(w.Chef.transform.position,false,out plan),"disabled catch trigger cannot enable a pot throw");trigger.enabled=true;
+        trigger.gameObject.layer=18;Physics.IgnoreLayers=(a,b)=>a==18 || b==18;
+        Check(planner.Prepare(w.Chef,item,w.Target)=="unsupported_receiver_geometry","noncolliding receiver and catch trigger cannot enable a pot throw");
+        Physics.IgnoreLayers=(a,b)=>false;trigger.gameObject.layer=0;
+        proxy.enabled=false;Check(planner.Prepare(w.Chef,item,w.Target)=="target_cannot_catch","inactive native catching proxy is rejected");proxy.enabled=true;
+        w.Target.GetComponent<ServerAttachStation>().Item=null;w.Target.Add(new Catcher());int before=queries;
+        Check(planner.Prepare(w.Chef,item,w.Target)==null && !planner.From(w.Chef.transform.position,false,out plan),"ordinary counter retains its physical top height guard");
+        Check(queries==before,"ordinary counters add no trigger overlap queries");
+        Physics.Penetration=(a,p,q,b,r,s)=>false;Physics.PenetrationDistance=.01f;
+    }
     private static void NearbyHandoffs()
     {
         var w=new World();var item=w.Ingredient("tomato");item.Add(new PhysicalAttachment {m_motion=new RigidbodyMotion()});item.Add(new BoxCollider {size=Vector3.one*.2f});w.Hold(item);
@@ -728,6 +769,6 @@ internal static class Program
         Check(!drops.Plan(w.Chef,item,player,out drop),"nearby horizontal position on a different deck is not a valid drop handoff");
         Physics.Sphere=(p,r,d,length)=>new RaycastHit[0];
     }
-    private static void Main() { Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
+    private static void Main() { Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
     private static ClientInteractable GetCurrentlyInteractingForTest(this PlayerControls chef) { return chef.GetComponent<ClientPlayerControlsImpl_Default>().Current; }
 }

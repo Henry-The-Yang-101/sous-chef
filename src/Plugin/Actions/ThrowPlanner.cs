@@ -31,6 +31,7 @@ namespace SousChef.Plugin.Actions
         private float speed, vertical, pivot, drag;
         private readonly ItemBody itemBody = new ItemBody();
         private Bounds receiverBounds;
+        private Collider[] ingredientTriggers;
         private Vector3 localRelease;
         private PlayerControls chef;
         private GameObject item, target, receiver;
@@ -55,6 +56,7 @@ namespace SousChef.Plugin.Actions
         public string Prepare(PlayerControls actor, GameObject held, GameObject destination, WindVolume[] discoveredWinds = null)
         {
             CancelPlanning(); bestPlan = null;
+            ingredientTriggers = null;
             rejected.Clear(); lastObstruction = null;
             chef = actor; item = held; target = destination;
             if (item == null) return "hands_empty";
@@ -108,6 +110,16 @@ namespace SousChef.Plugin.Actions
                 var catcher = GameObjectUtils.RequestInterface<IHandleCatch>(receiver);
                 var catchable = GameObjectUtils.RequestInterface<ICatchable>(item);
                 if (catcher == null || catchable == null) return "target_cannot_catch";
+                var ingredientCatcher = receiver.GetComponent<ServerIngredientCatcher>();
+                if (ingredientCatcher != null)
+                {
+                    var proxy = receiver.GetComponent<ServerAttachmentCatchingProxy>();
+                    if (!ingredientCatcher.enabled || proxy == null || !proxy.enabled) return "target_cannot_catch";
+                    // TriggerRecorder belongs to this receiver, not to arbitrary
+                    // children or the cooker beneath it. Keep triggers separate:
+                    // their enclosing union would invent catchable empty space.
+                    ingredientTriggers = receiver.GetComponents<Collider>();
+                }
                 var colliders = receiver.GetComponentsInChildren<Collider>(); bool found = false;
                 receiving = new Bounds(receiver.transform.position, Vector3.zero);
                 foreach (Collider c in colliders)
@@ -115,12 +127,35 @@ namespace SousChef.Plugin.Actions
                     if (!c.enabled || !c.gameObject.activeInHierarchy || c.isTrigger || (mask & (1 << c.gameObject.layer)) == 0) continue;
                     if (!found) { receiving = c.bounds; found = true; } else receiving.Encapsulate(c.bounds);
                 }
+                if (!found && ingredientTriggers != null)
+                    foreach (Collider c in ingredientTriggers)
+                        if (CatchTrigger(c)) { receiving = c.bounds; found = true; break; }
                 if (!found) return "unsupported_receiver_geometry";
                 receiverBounds = receiving;
                 Vector3 toward = receiver.transform.position - chef.transform.position; toward.y = 0;
-                receiving = itemBody.Receiving(receiverBounds, toward.sqrMagnitude > .001f ? toward.normalized : chef.transform.forward);
+                receiving = Receiving(toward.sqrMagnitude > .001f ? toward.normalized : chef.transform.forward);
             }
             return null;
+        }
+        private Bounds Receiving(Vector3 direction)
+        {
+            Bounds result = itemBody.Receiving(receiverBounds, direction);
+            // IngredientCatcher consumes food on trigger overlap, including a
+            // side entry below the solid pot's top. Aim through the body center;
+            // the exact native trigger overlap below is the receiving proof.
+            if (ingredientTriggers != null) result.center = receiverBounds.center - itemBody.BoundsAt(Vector3.zero, direction).center;
+            return result;
+        }
+        private bool CatchTrigger(Collider c)
+        {
+            return c != null && c.enabled && c.isTrigger && c.gameObject.activeInHierarchy &&
+                (mask & (1 << c.gameObject.layer)) != 0 && (c is BoxCollider || c is SphereCollider || c is CapsuleCollider);
+        }
+        private bool IngredientCatchable(Vector3 point, Vector3 direction, Vector3 shift, float uncertainty)
+        {
+            foreach (Collider c in ingredientTriggers)
+                if (CatchTrigger(c) && itemBody.OverlapsTrigger(c, point, direction, shift, .02f + uncertainty * 1.414214f)) return true;
+            return false;
         }
         private Vector3 ReceiverVelocity()
         {
@@ -308,7 +343,7 @@ namespace SousChef.Plugin.Actions
             for (int i = 0; i < 8; i++)
             {
                 Vector3 previousDirection = direction, previousCorrection = correction;
-                if (player == null) { receiving = itemBody.Receiving(receiverBounds, direction); destination = receiving.center; }
+                if (player == null) { receiving = Receiving(direction); destination = receiving.center; }
                 origin = actualRelease ? item.transform.position : stance + Vector3.up * pivot + Quaternion.LookRotation(direction) * localRelease;
                 if (player != null)
                 {
@@ -354,11 +389,22 @@ namespace SousChef.Plugin.Actions
             }
             else
             {
-                Bounds shifted = receiving; shifted.center = predicted;
-                if (!shifted.Contains(arrival)) return Reject("receiving_volume");
-                Vector3 rangeError = PoseUncertainty(direction, 1, stanceUncertainty);
-                if (!shifted.Contains(arrival + rangeError) || !shifted.Contains(arrival - rangeError)) return Reject("receiving_range_uncertainty");
-                if (path.Points[path.Points.Count - 1].y >= path.Points[path.Points.Count - 2].y) return Reject("ascending_arrival");
+                if (ingredientTriggers != null)
+                {
+                    lastStep = -1;
+                    for (int i = 1; i < path.Points.Count; i++)
+                        if (IngredientCatchable(path.Points[i], direction, velocity * path.Times[i], stanceUncertainty)) { lastStep = i; break; }
+                    if (lastStep < 0) return Reject("ingredient_catch_window");
+                    time = path.Times[lastStep]; arrival = path.Points[lastStep];
+                }
+                else
+                {
+                    Bounds shifted = receiving; shifted.center = predicted;
+                    if (!shifted.Contains(arrival)) return Reject("receiving_volume");
+                    Vector3 rangeError = PoseUncertainty(direction, 1, stanceUncertainty);
+                    if (!shifted.Contains(arrival + rangeError) || !shifted.Contains(arrival - rangeError)) return Reject("receiving_range_uncertainty");
+                    if (path.Points[path.Points.Count - 1].y >= path.Points[path.Points.Count - 2].y) return Reject("ascending_arrival");
+                }
                 var catcher = GameObjectUtils.RequestInterface<IHandleCatch>(receiver);
                 var catchable = GameObjectUtils.RequestInterface<ICatchable>(item);
                 if (catcher == null || catchable == null || !catcher.CanHandleCatch(catchable, new Vector2(direction.x, direction.z))) return Reject("native_catch_veto");

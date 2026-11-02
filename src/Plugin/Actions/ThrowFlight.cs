@@ -15,6 +15,7 @@ namespace SousChef.Plugin.Actions
         private Quaternion relativeRotation;
         private float radius, segment, nativeRadius, nativeHeight;
         private Vector3 nativeCenter, signedScale, pivotOffset;
+        private Collider collider;
         public static int DetachedLayer(GameObject item)
         {
             var swapper = item.GetComponent<PlacementLayerSwapper>();
@@ -52,6 +53,7 @@ namespace SousChef.Plugin.Actions
                 if (!ThrowTrajectory.Finite(radius) || radius <= 0 || !ThrowTrajectory.Finite(segment)) return false;
             }
             else return false;
+            collider = shape;
             if (!Finite(center)) return false;
             nativeCenter = center; signedScale = shape.transform.lossyScale;
             nativeRadius = sphere != null ? sphere.radius : capsule != null ? capsule.radius : 0;
@@ -93,6 +95,18 @@ namespace SousChef.Plugin.Actions
             // food need not fit wholly inside its footprint. The exact body
             // sweeps still reject collisions with neighbouring stations/walls.
             return new Bounds(center, new Vector3(Mathf.Max(.02f, receiver.size.x - .1f), .16f, Mathf.Max(.02f, receiver.size.z - .1f)));
+        }
+        public bool OverlapsTrigger(Collider trigger, Vector3 origin, Vector3 direction, Vector3 receiverShift, float margin)
+        {
+            Bounds body = BoundsAt(origin, direction), bounds = trigger.bounds;
+            // Most flight samples are far away. Avoid a native narrow-phase
+            // query until the item's enclosing sphere reaches this trigger.
+            Vector3 center = body.center - receiverShift;
+            if ((bounds.ClosestPoint(center) - center).sqrMagnitude > body.extents.sqrMagnitude) return false;
+            Quaternion facing = Quaternion.LookRotation(direction);
+            Vector3 separation; float depth;
+            return Physics.ComputePenetration(collider, origin + facing * pivotOffset, facing * relativeRotation,
+                trigger, trigger.transform.position + receiverShift, trigger.transform.rotation, out separation, out depth) && depth > margin;
         }
         public int Overlap(Vector3 origin, Vector3 direction, Collider[] output, int mask, float margin, float horizontalUncertainty = 0)
         {
