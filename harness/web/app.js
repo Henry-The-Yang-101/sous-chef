@@ -46,6 +46,39 @@ const actionNames = {navigate_to: 'Navigate', pick_up: 'Pick up', place_at: 'Pla
   work_at: 'Work', activate: 'Activate', discard: 'Discard held item', wait_until: 'Wait', throw_to: 'Throw held item', throw_to_player: 'Pass held item',
   move_item: 'Move item', fetch_ingredient: 'Fetch ingredient', get_plate: 'Get clean plate', get_utensil: 'Get empty utensil', stage_item: 'Stage item', return_utensil: 'Return utensil', clear_station: 'Clear station'};
 const phaseNames = {picking_up: 'collecting', drop_press: 'placing nearby', dropping: 'checking nearby handoff', throw_hold: 'aiming', flight: 'checking arrival'};
+const throwIdentity = target => JSON.stringify([state?.sessionId, target.id, target.objectInstanceId]);
+function throwTargets(catalog, operation) {
+  return (operation === 'throw_to_player' ? catalog.players || [] : catalog.targets || [])
+    .filter(target => target.operations?.includes(operation));
+}
+function renderThrows(catalog, busy, live) {
+  const control = state?.control || {};
+  const operation = el('throw-kind').value;
+  const toPlayer = operation === 'throw_to_player';
+  const targets = throwTargets(catalog, operation);
+  const inputBlocked = !control.available && control.reason !== 'game_unfocused';
+  const blocked = !live || pending || busy || inputBlocked;
+  el('throw-target-name').textContent = toPlayer ? 'Player' : 'Place';
+  el('throw-run').textContent = toPlayer ? 'Throw to player' : 'Throw to place';
+  setJobOptions(el('throw-target'), targets.map(target => ({value: throwIdentity(target),
+    label: toPlayer ? nameOf(target) : `${nameOf(target)} · x ${number(target.position?.[0])}, z ${number(target.position?.[2])}, height ${number(target.position?.[1])}`})));
+  el('throw-kind').disabled = blocked;
+  el('throw-target').disabled = blocked || !targets.length;
+  el('throw-run').disabled = blocked || !targets.some(target => throwIdentity(target) === el('throw-target').value);
+  const previews = [...(catalog.targets || []), ...(catalog.players || [])].map(target => target.throw);
+  let message = '';
+  if (!live) message = 'Waiting for fresh game state before throwing.';
+  else if (pending) message = 'Sending the selected action…';
+  else if (busy) message = 'Player 2 is running an action. Wait for it to finish or press Stop.';
+  else if (inputBlocked) message = explain(control.reason) || 'The game is not accepting Player 2 actions.';
+  else if (previews.some(preview => preview?.reason === 'hands_empty')) message = 'Pick up an ingredient with Player 2 to see throw targets.';
+  else if (catalog.throwOptionsComplete === false) message = 'Checking throw paths. Safe targets appear as they are verified.';
+  else if (!targets.length) message = toPlayer ? 'No player can receive this item from a reachable release position. Try a place or change position.'
+    : 'No place can receive this item from a reachable release position. Pick up a throwable ingredient or change position.';
+  else if (!el('throw-target').value) message = toPlayer ? 'Choose a player to receive the held item.' : 'Choose a place to receive the held item.';
+  el('throw-status').textContent = message;
+  el('throw-status').hidden = !message;
+}
 function setJobOptions(select, choices) {
   const signature = JSON.stringify(choices);
   if (select.dataset.choices === signature) return;
@@ -130,6 +163,7 @@ function render() {
   const acting = live && receipt.state === 'running';
   const busy = moving || acting;
   const catalog = live ? state.catalog || {} : {};
+  renderThrows(catalog, busy, live);
   renderJobs(catalog, busy, live);
   const byId = new Map((catalog.destinations || []).map(d => [d.id, {...d, walkReachable: true}]));
   for (const d of [...(catalog.targets || []), ...(catalog.players || [])]) byId.set(d.id, {...byId.get(d.id), ...d});
@@ -242,6 +276,13 @@ async function perform(d, choice) {
   } catch (error) { lastError = error.message; }
   finally { pending = false; render(); }
 }
+async function runThrow(event) {
+  event.preventDefault();
+  if (pending || !fresh() || el('throw-run').disabled) return;
+  const operation = el('throw-kind').value;
+  const target = throwTargets(state.catalog || {}, operation).find(target => throwIdentity(target) === el('throw-target').value);
+  if (target) await perform(target, operation);
+}
 async function runJob(event) {
   event.preventDefault();
   if (pending || !fresh() || el('job-run').disabled) return;
@@ -339,6 +380,9 @@ el('job-kind').addEventListener('change', render);
 el('job-source').addEventListener('change', render);
 el('job-destination').addEventListener('change', render);
 el('job-form').addEventListener('submit', runJob);
+el('throw-kind').addEventListener('change', render);
+el('throw-target').addEventListener('change', render);
+el('throw-form').addEventListener('submit', runThrow);
 el('stop').addEventListener('click', stop);
 document.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); stop(); } });
 window.addEventListener('pagehide', () => {

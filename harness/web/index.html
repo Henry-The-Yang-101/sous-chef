@@ -32,6 +32,16 @@
         </div>
       </div>
     </details>
+    <section class="throwing" aria-labelledby="throwing-title">
+      <h2 id="throwing-title">Throw held item</h2>
+      <p>Send the item Player 2 is holding to a player or a place. Player 2 moves to a safe release position when needed.</p>
+      <form id="throw-form" aria-describedby="throw-status">
+        <label>Throw to<select id="throw-kind"><option value="throw_to_player">Player</option><option value="throw_to">Place</option></select></label>
+        <label><span id="throw-target-name">Player</span><select id="throw-target"></select></label>
+        <button id="throw-run" type="submit" disabled>Throw to player</button>
+      </form>
+      <p id="throw-status" role="status" aria-live="polite"></p>
+    </section>
     <section class="logistics" aria-labelledby="logistics-title">
       <h2 id="logistics-title">Move supplies</h2>
       <p>Choose a job. Player 2 collects and delivers the item, then checks that it reached the destination.</p>

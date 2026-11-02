@@ -71,6 +71,11 @@ class FakeBridge:
         self.control.update(ownedByYou=True, action={'state': 'running', 'operation': 'throw_to_player'})
         return copy.deepcopy(self.control)
 
+    def throw_to(self, target):
+        self.calls.append(('throw_to', target))
+        self.control.update(ownedByYou=True, action={'state': 'running', 'operation': 'throw_to'})
+        return copy.deepcopy(self.control)
+
     def navigate_to(self, destination):
         self.calls.append(('navigate_to', destination))
         if self.reject:
@@ -195,6 +200,27 @@ class HarnessTests(unittest.TestCase):
             self.bridge.act('tab-a', 'test-session', 'p1', 999, 'throw_to_player')
         self.bridge.act('tab-a', 'test-session', 'p1', 123, 'throw_to_player')
         self.assertEqual(self.native.calls, [('throw_to_player', 1)])
+
+    def test_throw_uses_exact_nonwalking_place_and_no_source_item_argument(self):
+        self.native.targets = [dict(self.native.destinations[0], operations=['throw_to'])]
+        self.native.destinations = []
+        self.bridge.act('tab-a', 'test-session', 'd7', 77, 'throw_to')
+        self.assertEqual(self.native.calls, [('throw_to', 'd7')])
+
+    def test_throw_removed_by_live_planner_is_not_dispatched_from_old_catalog(self):
+        for operation in ('throw_to', 'throw_to_player'):
+            with self.subTest(operation=operation):
+                target = dict(id='p1' if operation == 'throw_to_player' else 'd9',
+                              objectInstanceId=123, playerId=1, operations=[operation])
+                if operation == 'throw_to_player':
+                    self.native.players = [target]
+                else:
+                    self.native.targets = [target]
+                self.bridge.poll()
+                target['operations'] = []
+                with self.assertRaisesRegex(HarnessError, 'no longer available'):
+                    self.bridge.act('tab-a', 'test-session', target['id'], 123, operation)
+        self.assertEqual(self.native.calls, [])
 
     def test_logistics_dispatch_validates_both_item_and_destination_identity(self):
         self.native.jobs = ['move_item']
