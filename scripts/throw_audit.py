@@ -20,6 +20,7 @@ import native_simulator as sim
 sys.path.insert(0, str(sim.ROOT))
 from clients.actions import ActionClient, ControlError
 from clients.bridge import BridgeClient
+from harness.contents import ingredient_names
 
 
 def write(path, value):
@@ -70,6 +71,31 @@ def item_holders(snap, item):
                 result.append({'name': obj['name'], 'instanceId': obj['unityInstanceId'],
                                'component': component})
     return result
+
+
+def container_transfer(before, after, cargo, target_instance, ingredient):
+    """A native catch consumes the exact cargo and adds to the same server pot."""
+    def receiver(snap):
+        target = next((o for o in snap['objects'] if o['unityInstanceId'] == target_instance), None)
+        if target is None:
+            return None
+        occupant = fields(target, 'ServerAttachStation').get('m_item')
+        return next((o for o in snap['objects'] if o['id'] == occupant.get('objectId')), None) if occupant else target
+
+    initial, final = receiver(before), receiver(after)
+    source = fields(cargo, 'IngredientPropertiesComponent').get('m_ingredientOrderNode') if cargo else None
+    if not initial or not final or initial['id'] != final['id'] or not source or source.get('name') != ingredient:
+        return False
+
+    def count(obj):
+        contents = fields(obj, 'ServerIngredientContainer').get('m_contents')
+        if not isinstance(contents, list):
+            raise RuntimeError('Server container contents unavailable')
+        return sum(ingredient_names(node).count(ingredient) for node in contents)
+
+    remaining = next((o for o in after['objects'] if o['id'] == cargo['id']), None)
+    return ((remaining is None or not remaining.get('activeInHierarchy', True)) and
+            not item_holders(after, cargo) and count(final) == count(initial) + 1)
 
 
 def catalog(client, timeout):
@@ -313,6 +339,10 @@ def run_case(args, case, index):
                     (p['objectInstanceId'] for p in available['players'] if p['playerId'] == argument), None)
                 result['receiptIndependentlyConfirmed'] = bool(cargo and any(
                     holder['instanceId'] in (destination, counter) for holder in result['holdersAfter']))
+                if case.get('expectContainerIngredient'):
+                    result['containerTransferConfirmed'] = container_transfer(
+                        before, after, cargo, destination, case['expectContainerIngredient'])
+                    result['receiptIndependentlyConfirmed'] = result['containerTransferConfirmed']
                 result['matchesExpectation'] &= result['receiptIndependentlyConfirmed']
             elif case.get('expectRetained', True):
                 result['matchesExpectation'] &= result['cargoRetained']

@@ -75,6 +75,29 @@ class ThrowAuditTests(unittest.TestCase):
         self.assertEqual([holder['name'] for holder in holders], ['wrong station'])
         self.assertEqual(audit.item_holders(snapshot, None), [])
 
+    def test_container_transfer_requires_same_pot_added_rice_and_consumed_exact_cargo(self):
+        def component(name, **fields):
+            return {'type': name, 'adapters': {name: {'fields': fields}}}
+
+        def snap(contents, pot='pot', cargo_present=False, ingredient='SushiRice'):
+            nodes = [{'type': 'IngredientAssembledNode', 'fields': {
+                'IngredientAssembledNode.m_ingriedientOrderNode': {'name': ingredient}}}] * contents
+            objects = [{'id': 'stove', 'unityInstanceId': 1, 'components': [
+                component('ServerAttachStation', m_item={'objectId': pot})]},
+                {'id': pot, 'unityInstanceId': 2, 'components': [component('ServerIngredientContainer', m_contents=nodes)]}]
+            if cargo_present:
+                objects.append({'id': 'rice', 'unityInstanceId': 3, 'activeInHierarchy': True})
+            return {'objects': objects}
+
+        cargo = {'id': 'rice', 'components': [component('IngredientPropertiesComponent',
+                 m_ingredientOrderNode={'name': 'SushiRice'})]}
+        self.assertTrue(audit.container_transfer(snap(0), snap(1), cargo, 1, 'SushiRice'))
+        self.assertFalse(audit.container_transfer(snap(0), snap(1, pot='different'), cargo, 1, 'SushiRice'))
+        self.assertFalse(audit.container_transfer(snap(1), snap(1), cargo, 1, 'SushiRice'))
+        self.assertFalse(audit.container_transfer(snap(0), snap(1, cargo_present=True), cargo, 1, 'SushiRice'))
+        self.assertFalse(audit.container_transfer(snap(0), snap(1, ingredient='Meat'), cargo, 1, 'SushiRice'))
+        self.assertFalse(audit.container_transfer(snap(0), snap(1), cargo, 1, 'Meat'))
+
     def test_fixture_names_are_unique_and_keep_functional_success_expectations(self):
         cases = json.loads((Path(__file__).parent / 'actions/native-throw-cases.json').read_text())
         self.assertEqual(len({case['name'] for case in cases}), len(cases))

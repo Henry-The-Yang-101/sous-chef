@@ -110,6 +110,7 @@ namespace SousChef.Plugin.Actions
                 var catcher = GameObjectUtils.RequestInterface<IHandleCatch>(receiver);
                 var catchable = GameObjectUtils.RequestInterface<ICatchable>(item);
                 if (catcher == null || catchable == null) return "target_cannot_catch";
+                var colliders = receiver.GetComponentsInChildren<Collider>(); bool found = false;
                 var ingredientCatcher = receiver.GetComponent<ServerIngredientCatcher>();
                 if (ingredientCatcher != null)
                 {
@@ -118,9 +119,8 @@ namespace SousChef.Plugin.Actions
                     // TriggerRecorder belongs to this receiver, not to arbitrary
                     // children or the cooker beneath it. Keep triggers separate:
                     // their enclosing union would invent catchable empty space.
-                    ingredientTriggers = receiver.GetComponents<Collider>();
+                    ingredientTriggers = colliders;
                 }
-                var colliders = receiver.GetComponentsInChildren<Collider>(); bool found = false;
                 receiving = new Bounds(receiver.transform.position, Vector3.zero);
                 foreach (Collider c in colliders)
                 {
@@ -148,7 +148,7 @@ namespace SousChef.Plugin.Actions
         }
         private bool CatchTrigger(Collider c)
         {
-            return c != null && c.enabled && c.isTrigger && c.gameObject.activeInHierarchy &&
+            return c != null && c.gameObject == receiver && c.enabled && c.isTrigger && c.gameObject.activeInHierarchy &&
                 (mask & (1 << c.gameObject.layer)) != 0 && (c is BoxCollider || c is SphereCollider || c is CapsuleCollider);
         }
         private bool IngredientCatchable(Vector3 point, Vector3 direction, Vector3 shift, float uncertainty)

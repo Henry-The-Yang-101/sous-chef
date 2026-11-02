@@ -50,6 +50,11 @@ listed. Execution plans again and revalidates at release because other chefs,
 obstacles and wind can change. Nearby native counter/ground handoffs remain
 available when their own checked handoff plan succeeds.
 
+Ingredient containers use their native catch triggers, including rice entering
+a pot below its solid top. Both a cooker and its current pot can be throw targets;
+capacity, compatibility and clear-flight checks still apply. See the
+[cooker regression checks](throw-cookers.md).
+
 ```python
 from clients.actions import ActionClient
 

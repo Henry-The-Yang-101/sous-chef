@@ -43,7 +43,7 @@ namespace SousChef.Plugin.Control
             logistics = new LogisticsActions(navigation, interactions, Buttons, FinishLogistics);
             throwOptions = new ThrowOptions(navigation);
             server = new ControlServer(port, Json.Object("type", "hello", "controlProtocolVersion", 1,
-                "sessionId", session, "bridgeVersion", "0.7.2", "player", 2, "mode", "direct_logical_input", "maxHoldMs", 1000, "actions", ActionRun.AllNames),
+                "sessionId", session, "bridgeVersion", "0.7.3", "player", 2, "mode", "direct_logical_input", "maxHoldMs", 1000, "actions", ActionRun.AllNames),
                 delegate(int client) { lease.Release(client, "disconnected"); });
             server.Start();
         }

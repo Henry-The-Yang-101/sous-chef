@@ -1,0 +1,188 @@
+[
+  {
+    "name": "s_sushi_1_2-rice-cooker-60",
+    "level": "s_sushi_1_2",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "SushiRice"
+      }
+    ],
+    "operation": "throw_to",
+    "target": "workstation_cooker_01 (1)",
+    "expected": "throw_received",
+    "expectOffered": true,
+    "expectContainerIngredient": "SushiRice"
+  },
+  {
+    "name": "s_sushi_1_2-rice-cooker-20",
+    "level": "s_sushi_1_2",
+    "fps": 20,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "SushiRice"
+      }
+    ],
+    "operation": "throw_to",
+    "target": "workstation_cooker_01 (1)",
+    "expected": "throw_received",
+    "expectOffered": true,
+    "expectContainerIngredient": "SushiRice"
+  },
+  {
+    "name": "s_sushi_1_3-rice-cooker-60",
+    "level": "s_sushi_1_3",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "SushiRice"
+      }
+    ],
+    "operation": "throw_to",
+    "target": "workstation_cooker_01 (4)",
+    "expected": "throw_received",
+    "expectOffered": true,
+    "expectContainerIngredient": "SushiRice"
+  },
+  {
+    "name": "s_sushi_1_3-rice-cooker-20",
+    "level": "s_sushi_1_3",
+    "fps": 20,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "SushiRice"
+      }
+    ],
+    "operation": "throw_to",
+    "target": "workstation_cooker_01 (4)",
+    "expected": "throw_received",
+    "expectOffered": true,
+    "expectContainerIngredient": "SushiRice"
+  },
+  {
+    "name": "rice-direct-pot-60",
+    "level": "s_sushi_1_3",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "SushiRice"
+      }
+    ],
+    "operation": "throw_to",
+    "target": "utensil_pot_01 (2)",
+    "expected": "throw_received",
+    "expectOffered": true,
+    "expectContainerIngredient": "SushiRice"
+  },
+  {
+    "name": "rice-direct-pot-20",
+    "level": "s_sushi_1_3",
+    "fps": 20,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "SushiRice"
+      }
+    ],
+    "operation": "throw_to",
+    "target": "utensil_pot_01 (2)",
+    "expected": "throw_received",
+    "expectOffered": true,
+    "expectContainerIngredient": "SushiRice"
+  },
+  {
+    "name": "rice-full-pot-withheld",
+    "level": "s_sushi_1_3",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "SushiRice"
+      },
+      {
+        "operation": "add_ingredient",
+        "target": "workstation_cooker_01 (4)"
+      },
+      {
+        "operation": "pick_up",
+        "target": "SushiRice"
+      }
+    ],
+    "operation": "throw_to",
+    "target": "workstation_cooker_01 (4)",
+    "expected": "no_reachable_throw_position",
+    "expectOffered": false
+  },
+  {
+    "name": "incompatible-pot-withheld",
+    "level": "s_sushi_1_3",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Cucumber"
+      }
+    ],
+    "operation": "throw_to",
+    "target": "workstation_cooker_01 (4)",
+    "expected": "no_reachable_throw_position",
+    "expectOffered": false
+  },
+  {
+    "name": "s_sushi_1_4-rice-cooker-staged-60",
+    "level": "s_sushi_1_4",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "SushiRice"
+      },
+      {
+        "operation": "stage_player",
+        "playerId": 2,
+        "position": [
+          17.38346,
+          0,
+          -1.67276
+        ],
+        "yaw": 120
+      }
+    ],
+    "operation": "throw_to",
+    "target": "workstation_cooker_01 (2)",
+    "expected": "throw_received",
+    "expectOffered": true,
+    "expectContainerIngredient": "SushiRice"
+  },
+  {
+    "name": "s_sushi_1_4-rice-cooker-staged-20",
+    "level": "s_sushi_1_4",
+    "fps": 20,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "SushiRice"
+      },
+      {
+        "operation": "stage_player",
+        "playerId": 2,
+        "position": [
+          17.38346,
+          0,
+          -1.67276
+        ],
+        "yaw": 120
+      }
+    ],
+    "operation": "throw_to",
+    "target": "workstation_cooker_01 (2)",
+    "expected": "throw_received",
+    "expectOffered": true,
+    "expectContainerIngredient": "SushiRice"
+  }
+]
