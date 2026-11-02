@@ -97,6 +97,46 @@ and other supported actions. Re-query live destination IDs after a reset.
 The CLI's `navigate` runner is a convenient stair regression; it does not restrict
 what the existing action API can execute.
 
+### Ingredient/job options — 2026-11-02
+
+The production build at `eed535a` was checked in native story **3-2**
+(`s_wizard_5_5`, the session's `Text.Menu.Level14` entry; internal scene suffixes
+do not match story level numbers). Six normal `fetch_ingredient` jobs passed at
+requested 60 FPS, with a fresh native reset before each: Bun three times, then
+Cheese_Raw, Meat and Lettuce. Every run observed one completed delivery and the
+exact cargo object in the destination's authoritative `ServerAttachStation`.
+No position writes, teammate input or test-only geometry were used.
+
+The original build listed Cheese_Raw, Meat and Lettuce but omitted Bun, although
+the reachable dispenser's prefab was `ChoppedBun`. Its native
+`PreparationContainer.m_ingredientOrderNode` is `Bun`, ID 16088; neither the
+ordinary ingredient-component check nor the chopping-output fallback covered it.
+Native pickup also succeeded physically but failed its original outcome check,
+because the prefab lacks the spawned object's runtime order composition. The
+shared preparation identity fixes both discovery and pickup verification.
+
+Each final catalogue withheld the observed counters without a certified walking
+route and excluded the counter after delivery occupied it. An additional native
+`MovingPlatform4` check found SushiFish, Meat and Cucumber reachable, while
+SushiRice, Seaweed and ChoppedBun were observed on the other platform without a
+current walking route. Those inaccessible sources were absent from selectable
+items and ingredient jobs. A job describes current reachability; it does not
+promise a moving kitchen will remain unchanged during execution.
+
+Local evidence: `.local/jobs-3-2/verification-report.json`, six `run-*-catalog.json`,
+`run-*-trace.json`, `run-*-snapshot.json` and `run-*-after.json` files, plus
+`inaccessible-ingredients-catalog.json`. The verified runtime DLL SHA-256 is
+`4729c59cf74c86aa4b05372685c6768b6e480a93d2d8d066aeefe5e81d1c35fc`.
+The complete check passed 823 core/assembly assertions, 207 navigation checks,
+205 action checks and 86 Python tests. Browser inspection of the live simulator
+harness confirmed Bun in the ingredient selector, source-dependent destinations,
+and removal of job kinds without valid pairs. After an ordinary Cheese_Raw pickup
+in 3-2, the browser offered only that held ingredient and the move/fetch/stage
+jobs; Bun, Meat, Lettuce and clean-plate retrieval disappeared. The full-hands
+catalogue is saved as `full-hands-catalog.json`.
+A fetch job submitted through the browser then delivered that held cheese to
+the selected counter and displayed `succeeded: item delivered`.
+
 ## Isolation and implementation
 
 The simulator has its own BepInEx core/config/plugin copy and save directory under

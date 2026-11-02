@@ -75,17 +75,40 @@ normal native control gates cancel the complete job.
 | `clear_station(station, destination)` | Move the current occupant and verify the source station is free. Clean plate stacks are handled as a finite batch of original plate identities, up to 64. New arrivals or changed contents block further collection rather than extending the job indefinitely. |
 
 Items and stations use current `d...` IDs. `available_actions()` now also returns
-`items`, `ingredients`, `utensilTypes` and `deliveryDestinations`, plus explicit
+`items`, `ingredients`, `utensilTypes`, `deliveryDestinations` and `jobOptions`, plus explicit
 `logisticsObservationErrors` where a definition/contents read is unavailable.
 Item records include source identity, definition, empty/clean/in-use state and
-route distance where known. Empty counters receive stable target IDs even when
-P2 has empty hands; the walking destination list keeps its existing eligibility.
+route distance where known. Empty counters are included in walking discovery
+even when P2 has empty hands, so deliveries can be checked before pickup.
+
+`jobOptions` maps each logistics operation to rows of
+`{"sourceId": "...", "destinationIds": ["d..."]}`. The source is an item ID,
+ingredient ID, utensil type, or station ID, according to the job; `get_plate`
+uses an empty source string. `return_utensil` includes its automatically chosen
+destination. Only operations with at least one valid pair appear in `actions`.
+The parameter enums contain that job's available sources/destinations; use the
+pair rows to check their relationship rather than taking their Cartesian product.
+
+Pairs require certified current walking routes, available pickup, compatible
+native placement, and either free hands or the exact intended cargo already held.
+In-use items, occupied/incompatible destinations and no-op station clear/returns
+are withheld. An incomplete search withholds unconfirmed routes. Observation
+previews use a read-only prospective carrier; they never move cargo or change
+the actual chef carrier. Dispenser prefabs lack runtime attachment interfaces,
+so empty-holder previews check their physical attachment definition and native
+placement callbacks. Actual spawned cargo is checked again before delivery.
+Request acceptance and arrival both revalidate; changing geometry or contents
+can still block an already-started job safely.
 
 Use a catalogue ingredient ID such as `i42` for an exact definition, or its
 observed name. A raw name such as `tomato` also matches `Tomato_Raw`; it does not
 silently substitute chopped/cooked states. Ambiguous names require the catalogue
 ID. Utensil types come from native item definitions, not guessed object names.
 Home locations are observed holder relationships, retained only within the round.
+Ingredient identity includes `PreparationContainer.m_ingredientOrderNode` for
+assembly bases such as buns. A bun with fillings cannot substitute for an empty
+bun. Dispenser pickup verification uses this same identity when the prefab has
+no runtime order composition, while the spawned base has one.
 
 ```python
 chef.move_item(item_id, counter_id)

@@ -21,12 +21,20 @@ the menus.
 
 The **Move supplies** form exposes the seven finite logistics jobs. Choose the
 job, an observed item/ingredient/type/station where required, and its delivery
-surface. Return utensil chooses an observed home or compatible empty station.
-Source and destination object identities are both rechecked before dispatch;
+surface. The job selector contains only jobs with a currently usable source and
+compatible reachable delivery. Ingredient/item/type choices depend on the job;
+delivery choices then depend on the selected source. Full hands, items in use,
+native pickup/placement restrictions, occupied surfaces and unconfirmed walking
+routes all affect the options. Empty delivery counters are checked before pickup.
+Return utensil chooses an observed reachable home or compatible empty station.
+Source/destination compatibility and object identities are rechecked before dispatch;
 removed selections clear rather than silently switching to another item.
 Raw choppable foods such as Chocolate are included even when the game gives them
 no ingredient-order definition. Their native chopping-output prefab identifies
 the raw supply and its spawned items; processed ingredients retain separate IDs.
+Assembly bases such as burger buns use their native `PreparationContainer`
+ingredient definition, even when they have no ordinary ingredient component or
+chopping output. Filled buns are distinct from empty supplies.
 Parent and child phases remain visible through pickup and delivery. Stop and
 browser-disconnect cleanup cancel the entire job.
 
