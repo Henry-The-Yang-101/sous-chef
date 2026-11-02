@@ -102,8 +102,14 @@ physics refresh, identical ground checks are shared across an edge, and calm
 stationary floors bypass the flow solver. Wind and moving-surface velocities
 remain live. Dynamic non-player collider poses invalidate their affected regions.
 The first catalogue query can return a partial or empty `planning_in_progress`
-catalogue while a cold graph warms. Up to eight bounded background updates continue
-that work; query again for additional confirmed destinations. A persistently
+catalogue while a cold graph warms. Stable graphs retain their frontier and
+settled nodes, continuing in approximately 3 ms search slices on later render
+frames. Up to 32 short background slices (or eight full-budget fallback passes)
+continue that work; query again for additional confirmed destinations. Exact
+starting-state, geometry, support-speed and wind checks guard reuse. Changed
+inputs restart the tree; unversioned moving surfaces and portal readiness retain
+fresh searches with paced idle warming. Completed stable trees can serve fresh
+target/approach observations without another graph expansion. A persistently
 oversized graph reports incomplete coverage and does not cause unlimited background
 retries. Unchanged primitive
 colliders retain probes. Readable collision meshes compare their vertices and
@@ -112,7 +118,10 @@ using the same mesh. Unchanged meshes retain probes; in-place geometry edits
 invalidate them even when the bounds stay the same. Terrain, unreadable meshes,
 and meshes beyond the comparison limits (65,536 vertices / 524,288 indices)
 remain conservatively invalidated on reconciliation.
-The 12 ms budget applies to graph search, after geometry preparation and discovery.
+The 3 ms initial/continued idle and 12 ms fallback/active budgets apply to graph search,
+after geometry preparation and discovery. `searchGeneration`, `searchSlices`,
+`searchReused`, `searchReuseFailure` and `searchComplete` distinguish continued
+work from restarts and explain why a continuity check failed.
 It is not a hard bound on the entire request: Unity queries, discovery, runtime
 initialization and destination matching also take time. `planMilliseconds`
 reports the complete measured refresh duration. Heavy geometry changes can still

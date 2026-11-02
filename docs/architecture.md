@@ -185,9 +185,24 @@ Inventory refreshes discover other chefs' held items once per synchronous pass,
 then discard that observation on the next refresh. Positive throw previews reuse
 the route cost already calculated during their current validation.
 
-An incomplete idle navigation catalogue warms at most once per 100 ms after
-the last refresh, rather than restarting a budget-limited search on every
-render frame. Explicit catalogue requests still refresh immediately, and active
-navigation follows its existing update and revalidation rules. This reduces
-background load at the cost of more gradual initial catalogue completion on
-difficult geometry; it does not loosen reachability or collision checks.
+Stable idle navigation searches retain their Dijkstra frontier and settled nodes
+between updates. Each continuation targets 3 ms of search work and may run on
+the next render frame, without repeating the already explored prefix or waiting
+100 ms. Completed trees can also serve a new catalogue observation after the
+same validity checks. Targets and approach predicates are refreshed each time.
+
+Before reuse, `SearchContinuity` checks exact chef/starting-state values, observed
+geometry revision, support speeds, wind identity/velocity/filter/enabled state,
+and physics query settings. Changes restart the search. Arbitrary moving-surface
+functions and portal readiness currently retain fresh searches with the previous
+12 ms search budget and paced idle warming. Active movement still follows its
+existing revalidation path. These budgets exclude setup/matching and cannot
+preempt an individual native physics query; they are not hard frame-time limits.
+Browser focus may preserve and warm this read-only catalogue under the existing
+observation gates. Focus loss still revokes input and cancels active actions;
+the observation-only warming entry point cannot tick an input-owning action.
+
+Throw shooting iterations terminate early only at an exact direction/correction
+fixed point. The final full trajectory, collision sweeps, receiving-volume checks
+and native catch/throw predicates still run. No approximate aim tolerance is
+introduced by this optimization.

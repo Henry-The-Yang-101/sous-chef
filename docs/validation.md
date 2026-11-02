@@ -766,3 +766,45 @@ or certify all destinations. No navigation observation error was reported.
 The installed DLL matches the checked build, and no capture/serialization/control
 failures appeared in the loader log. Final evidence:
 `.local/fps-nov2-final-profile.json` and `.local/fps-nov2-final-cadence.json`.
+
+
+## Continuing catalogue searches — 2026-11-02
+
+`242cf9f` retains Dijkstra frontier/settled work between idle updates when exact
+continuity checks pass. Initial and continued idle searches target 3 ms of graph
+work per slice. Geometry and starting-state changes invalidate progress; support
+speeds and wind values are re-read before reuse. Arbitrary moving-surface rules
+and portal readiness keep the conservative fresh-search fallback. Active
+navigation and sampled-destination certification remain unchanged. These are
+search budgets, not bounds on setup, matching, native queries or total frame time.
+
+Tests compare sliced and uninterrupted shortest paths, frontier certification,
+node limits and repeated continuation after completion. A 100-node chain finishes
+in twenty five-node slices with exactly 100 expansions; restarting would repeatedly
+visit only the first five nodes. Production-physics tests cover geometry additions,
+movement/removal, chef pose/speed/step changes, surface mode/speed changes, wind
+changes and moving-surface fallback. Stable progress resumes on the next render
+frame, and a catalogue request cannot duplicate a background slice in that frame.
+
+`dfa1a6f` ends throw shooting iterations at an exact direction/correction fixed
+point, keeping full final flight and native/collision validation. Tests verify
+that calm aiming converges before eight iterations and still rejects a native
+catch veto. Existing height, wind, release uncertainty and arrival tests pass.
+
+The first live install observed Player 2 holding Pasta in `MovingPlatform2`.
+The catalogue was complete in 47 of 51 status samples; four samples were
+invalidated on focus loss. No search reuse was observed in this dynamic kitchen,
+so this run does not establish a native static-kitchen completion speedup.
+Full capture sustained 5.004 Hz; median/p95/max capture time was
+33.372/35.081/89.445 ms, with average rendering FPS 96.96. There was no controlled
+same-scene before/after measurement. Evidence:
+`.local/progressive-live-status.json` and `.local/progressive-live-profile.json`.
+
+That live run exposed browser focus invalidating the catalogue despite permitting
+throw previews. `1a51d56` preserves and warms the read-only catalogue under the
+same observation gates while still revoking input ownership and active actions.
+Its warming entry point explicitly refuses to tick an input-owning action.
+Search diagnostics now expose generations, continuation counts and failure reasons.
+The final build passes 840 core assertions, 239 navigator integration checks,
+267 action checks, 93 Python tests and the 151-type installed-assembly audit.
+Check log: `.local/progressive-search-final-check.log`.
