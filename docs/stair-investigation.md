@@ -5,6 +5,43 @@ the lower deck, navigates to Chocolate upstairs, then to Egg on the lower deck
 without a reset between legs. The original `60bb718` build completed zero of ten
 round trips at requested 60/20 FPS. See the baseline in `native-simulator.md`.
 
+## Final native validation — `f2daac6`
+
+The completed build passed **50/50 round trips: 100/100 traversal legs** from the
+lower spawn floor to Chocolate upstairs and back to Egg downstairs. Every leg
+confirmed its native interaction target and settled, actionable stance. There
+were no retries, teleports, stuck edges, or action failures. Five attempts each
+performed three consecutive round trips without reloading the kitchen.
+
+| Requested FPS | Round trips | Longest horizontal pause | Longest neutral recovery |
+| --- | ---: | ---: | ---: |
+| 20 | 10/10 | 63 ms | 81 ms |
+| 30 | 5/5 | 64 ms | 68 ms |
+| 60 | 15/15 | 59 ms | 67 ms |
+| 120 | 5/5 | 74 ms | 52 ms |
+| 60 — three round trips per load | 15/15 | 75 ms | 92 ms |
+
+The longest measured horizontal pause was 75 ms;
+maximum backward stair excursion was 0.072 units. Brief native contact
+corrections remain, so these results do not claim mathematically uninterrupted
+motion or a universal guarantee. The earlier sustained controller-induced pauses
+and edge failures did not recur. Requested FPS differs from measured Update
+spacing under concurrent CPU load; native physics retained its 0.02-second timestep.
+
+The final runtime used Null graphics and the unmodified game assembly identified
+below. Its plugin SHA-256 matched the checked build:
+`cfd5a9932abc5768386d053fb818bb9d1c4db97508bc8b8eed82c5145b2e520b`.
+Validation passed 823 core assertions, 188 navigator integration checks, 181
+executor checks, and 79 Python tests. Only the private headless runtime was updated;
+the normal game's installed plugin was not replaced. The test runtime was stopped
+after completion; other isolated native test processes were left running.
+
+Reproducible evidence is in `.local/stair-checked-{20,30,60,120,repeated}/`,
+including `report.json` and the raw per-attempt traces. The independently checked
+manifest is `.local/stair-checked-validation.json`; motion analysis is
+`.local/stair-checked-analysis.json`. These ignored artifacts retain native
+positions, velocities, contact details, and actual input-expiry events.
+
 ## Findings from the installed game and traces
 
 The installed `Assembly-CSharp.dll` was inspected locally, including
@@ -116,7 +153,7 @@ Neutral input duration is not itself a physical stall measurement; the raw
 positions and velocities remain in each trace. Alignment now has explicit trace
 records so dispenser-facing time is separate from stair motion.
 
-## Evidence and remaining acceptance work
+## Intermediate evidence
 
 Local artifacts are ignored by Git because they contain game geometry:
 
@@ -145,9 +182,67 @@ Local artifacts are ignored by Git because they contain game geometry:
   recovery command lasted 0.083 seconds. Cross-rate acceptance runs follow below.
 - `.local/stair-*-check.log` and `.local/stair-*-navigation.log`: automated checks.
 
-Successful runs still include short neutral recovery episodes. Reliability and
-smoothness require further native checks at multiple Update rates; the earlier
-successful arrivals are not evidence that the full objective is finished.
+At this stage successful arrivals still included significant recovery pauses.
+The later cross-rate and input-timing investigations below supplied the remaining
+reliability and smoothness evidence.
+
+## Cross-rate native results for `6269635`
+
+The final implementation batch completed **50/50 round trips (100/100 legs)**.
+Every leg ended with native selection, settled speed, and `readyForAction`; no
+teleports, retries, or scene resets occurred between the legs of an attempt.
+The private runtime used the original game assembly, Null graphics, automatic
+native physics, and a 0.02-second fixed timestep. Requested Update rates do not
+promise a constant measured frame rate under concurrent CPU load.
+
+| Requested FPS | Round trips | Longest horizontal pause | Longest neutral recovery |
+| --- | ---: | ---: | ---: |
+| 20 | 10/10 | 102 ms | 94 ms |
+| 30 | 5/5 | 61 ms | 72 ms |
+| 60 | 15/15 | 81 ms | 54 ms |
+| 120 | 5/5 | 65 ms | 81 ms |
+| 60 — three round trips per load | 15/15 | 125 ms | 68 ms |
+
+Reports and raw traces are in `.local/stair-final-{20,30,60,120,repeated}/`.
+`.local/stair-final-validation.json` checks native runtime identity, per-leg
+readiness, deck heights, unchanged station identities within each attempt, and
+the runtime plugin against the built DLL (SHA-256
+`ce0f1d63d2210f9cca44afaf65d04096699b30f1fdc943c7fe6d8077f7549223`).
+`.local/stair-final-analysis.json` retains per-leg motion analysis. Maximum
+backward excursion along the staircase was 0.170 units, without a stuck edge.
+
+Automated validation passed 820 core assertions, 182 navigator integration
+checks, 181 executor checks, and 79 Python tests. These fixtures remain separate
+from the native game evidence.
+
+This intermediate batch passed the reliability criterion. Its strict smoothness
+criterion needed further investigation: the longest pause (125 ms) was a shallow
+descending tread penetration followed by a 60 ms decision gap and a temporarily
+zero native horizontal velocity. This is not evidence of perfectly continuous
+motion; the input-timing diagnostics below investigated that remaining pause.
+
+## Remaining input-timing pause
+
+Actual native-read diagnostics confirmed another cause: about one in ten decision
+frames in `.local/stair-input-trace-60` returned zero because a 17–23 ms command
+had expired before a 26–38 ms Update arrived. Navigation was still issuing nonzero
+steering. Keeping ownership alive alone could not prevent this brief braking.
+
+The controller now offers a separately checked continuation window away from the
+final stance: twice the preceding frame window plus 20 ms, capped at 100 ms.
+Already slower frame windows are unchanged. The extra travel and one following
+fixed physics step must pass full support and capsule checks; otherwise the
+shorter certified command remains usable. Landing continuation uses its enlarged
+body envelope for the longer window too. Arrival and portal braking retain the
+original frame window, preventing a longer lease from causing premature arrival
+braking or entry overshoot. Input expiry and disconnect still neutralize control.
+
+The first window experiment, `.local/stair-window-60`, completed ten of ten round
+trips. Its longest horizontal pauses were 53 ms climbing and 41 ms descending,
+with maximum backward stair motion of 0.028 units. The final version additionally
+checks the fixed-step tail and passed the cross-rate matrix under
+`.local/stair-checked-*`, summarized at the start of this document. Automated checks pass 823 core assertions, 188 navigator
+checks, 181 action checks, and 79 Python tests.
 
 A concurrent teleporter investigation uses its own runtime under
 `/private/tmp/sous-chef-teleporter-runtime` and ports 25712–25714. Later stair runs

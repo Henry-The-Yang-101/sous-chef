@@ -257,6 +257,10 @@ internal static class Program
         walking.Sequence++;
         Assert(lease.Set(5, walking, 4.166, 17) == null, "navigation can resume after the captured frame gap");
         Assert(lease.Read(4.667).X == 0 && lease.Owner(4.667) == 0, "half-second absence still expires navigation ownership");
+        Assert(WalkingCommand.ContinuationMilliseconds(17) == 54, "checked continuation covers a delayed ordinary update and physics tick");
+        Assert(WalkingCommand.ContinuationMilliseconds(50) == 100, "ordinary continuation is capped at one hundred milliseconds");
+        Assert(WalkingCommand.ContinuationMilliseconds(200) == 200 && WalkingCommand.ContinuationMilliseconds(0) == 0,
+            "continuation does not shorten slow-frame checks or enable an invalid update");
 
         int disconnected = 0;
         using (var server = new ControlServer(0, Json.Object("type", "hello"), id => Interlocked.Increment(ref disconnected)))

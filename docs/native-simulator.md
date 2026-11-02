@@ -210,10 +210,12 @@ verified in the same process.
 
 The baseline below precedes the fixes described in the
 [stair investigation](stair-investigation.md), which records the native causes,
-implementation, iteration results, and remaining acceptance work.
+implementation and final results: 50/50 round trips (100/100 legs) at requested
+20, 30, 60 and 120 FPS, including consecutive trips in one round. The longest
+measured horizontal pause in that final matrix was 75 ms.
 
-The current source at `60bb718` was rebuilt and run in the native headless
-`s_wizard_school_3_4` kitchen. **Stair traversal fails this validation.**
+The baseline source at `60bb718` was rebuilt and run in the native headless
+`s_wizard_school_3_4` kitchen. **That baseline failed this validation.**
 Player 2 spawned at `[21.8963, -1.8356, 2.9158]`; Chocolate's approach is on
 the upper floor at `[14.4, 0, 9.6]`. Egg's approach is on the spawn floor at
 `[19.2, -1.8356, 2.4]`, so the return request requires descending the stairs.

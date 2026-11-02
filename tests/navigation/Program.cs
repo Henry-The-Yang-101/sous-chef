@@ -314,6 +314,18 @@ internal static class Program
     }
     private static void SlowFrames()
     {
+        var cruise = new World(); cruise.AddFloor((x,z) => Math.Abs(x)<4 && Math.Abs(z)<4 ? 0 : (float?)null);
+        cruise.Chef.transform.position = new Vector3(0,0,-2.3f);
+        var cruiseNavigation = cruise.Navigate(cruise.AddStation());
+        Time.realtimeSinceStartup += .02f; cruiseNavigation.Tick(cruise.Chef);
+        Check(cruise.LastMilliseconds == 54 && cruise.LastInput.magnitude > .9f,
+            "open supported travel certifies a longer window through ordinary native read jitter");
+        cruise = new World(); cruise.AddFloor((x,z) => Math.Abs(x)<4 && Math.Abs(z)<4 ? 0 : (float?)null);
+        cruise.Chef.transform.position = new Vector3(0,0,-1.3f);
+        cruiseNavigation = cruise.Navigate(cruise.AddStation());
+        Time.realtimeSinceStartup += .02f; cruiseNavigation.Tick(cruise.Chef);
+        Check(cruise.LastMilliseconds == 17 && cruise.LastInput.magnitude > .9f,
+            "final approach keeps the original movement and braking window");
         var w=new World(); w.AddFloor((x,z) => Math.Abs(x)<2 && Math.Abs(z)<2 ? 0 : (float?)null);
         w.Chef.transform.position=new Vector3(0,0,-1.3f); var station=w.AddStation(); var navigation=w.Navigate(station);
         Time.deltaTime=Time.unscaledDeltaTime=.1f; Time.realtimeSinceStartup += .1f; navigation.Tick(w.Chef);
@@ -457,6 +469,18 @@ internal static class Program
         contact.Normal = new Vector3(0,.8f,-.6f);
         Check(physics.TryLandingWalk(Vector3.zero,.05f,out input),
             "a stale walkable slope normal permits the checked native movement envelope");
+        var nativeObstacle = new GameObject("obstacle reached only by native slope motion").Add(new Collider());
+        Physics.Overlap = (a,b,r) => b.y+r > 1.6f ? new Collider[] {nativeObstacle} : new Collider[0];
+        Check(!physics.TryLandingWalk(Vector3.zero,.05f,out input),
+            "the native slope's upward velocity expands overhead clearance even from zero body velocity");
+        Physics.Overlap = (a,b,r) => new Collider[0];
+        contact.Normal = new Vector3(.6f,.8f,0);
+        w.Chef.Motion.Velocity = Vector3.up * 3;
+        Physics.Cast = (a,b,r,d,length) => a.x+d.x*length > .08f ? new[] {new RaycastHit {collider=nativeObstacle}} : new RaycastHit[0];
+        Check(!physics.TryLandingWalk(Vector3.zero,.05f,out input),
+            "retained native normal velocity cannot move sideways into an obstruction missed by flat input");
+        Physics.Cast = (a,b,r,d,length) => new RaycastHit[0];
+        w.Chef.Motion.Velocity = Vector3.zero;
         contact.Normal = new Vector3(0,.5f,-.8660254f);
         Check(!physics.TryLandingWalk(Vector3.zero,.05f,out input),
             "an unsupported native ground normal forbids landing steering");

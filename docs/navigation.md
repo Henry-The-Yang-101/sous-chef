@@ -251,7 +251,14 @@ with a minimum native-step window of 17 ms. The safety projection also covers th
 scaled game delta when it is larger. There is no 60 ms cap that truncates a slow
 frame. Native input reads neutralize the command when its checked motion window
 expires; a separate 500 ms ownership lease permits renewal after frame jitter.
-That ownership grace does not extend the checked movement window.
+That ownership grace does not extend the checked movement window. Away from the
+final stance, the controller may separately certify a short continuation window
+(two preceding frame windows plus 20 ms, capped at 100 ms; already slower commands
+are unchanged). It checks the entire extra travel plus one fixed physics step.
+If the extended corridor is blocked, the shorter certified command remains usable.
+Near arrival and during portal entry, the original frame window and braking horizon
+remain in force. This prevents normal Update jitter from zeroing a command just
+before the native controller reads it.
 An update interval above 0.9 seconds or an invalid interval stops with
 `unsafe_update_interval`. Ownership expiry after a stall still stops the action.
 
@@ -382,3 +389,9 @@ The [native headless simulator](native-simulator.md) runs this production
 controller with the installed game’s actual physics and named kitchens. Use it
 for repeatable traversal tests; the navigation unit fixtures remain available
 for isolated geometry regressions.
+
+When `SOUS_CHEF_NAV_TRACE=1`, `control.inputTrace` records actual native reads that
+returned zero despite a nonzero navigation command. Each event includes the read
+frame, command frame, command age, checked duration, and whether expiry or a native
+gate suppressed it. These diagnostics distinguish command expiry from native
+contact resolution; tracing does not prolong a command.

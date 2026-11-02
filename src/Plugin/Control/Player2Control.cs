@@ -28,6 +28,11 @@ namespace SousChef.Plugin.Control
         private double nextScan;
         private string unavailable = "player2_absent";
         private bool disposed;
+        private readonly bool traceInput = Environment.GetEnvironmentVariable("SOUS_CHEF_NAV_TRACE") == "1";
+        private readonly System.Collections.Generic.Queue<object> inputTrace = new System.Collections.Generic.Queue<object>();
+        private Vector3 lastWalk;
+        private double lastWalkTime, lastWalkDeadline;
+        private int lastExpiryFrame = -1, lastWalkFrame;
         private double Now { get { return clock.Elapsed.TotalSeconds; } }
 
         public Player2Control(int port, string session)
@@ -110,7 +115,22 @@ namespace SousChef.Plugin.Control
                 serverFlow != null && serverFlow.InRound && !TimeManager.IsPaused(TimeManager.PauseLayer.Main) &&
                 !target.m_bRespawning && target.CanButtonBePressed();
         }
-        private ControlInput Input() { return CanRead() ? lease.Read(Now) : new ControlInput(); }
+        private ControlInput Input()
+        {
+            bool allowed = CanRead(); double now = Now;
+            ControlInput value = allowed ? lease.Read(now) : new ControlInput();
+            if (traceInput && navigation.Action.State == "navigating" && lastWalk.sqrMagnitude > .001f &&
+                value.X == 0 && value.Y == 0 && Time.frameCount != lastExpiryFrame)
+            {
+                lastExpiryFrame = Time.frameCount;
+                inputTrace.Enqueue(Json.Object("time", Time.realtimeSinceStartup, "frame", Time.frameCount,
+                    "reason", allowed && now >= lastWalkDeadline ? "movement_expired" : "read_suppressed",
+                    "commandFrame", lastWalkFrame, "commandAgeSeconds", now - lastWalkTime,
+                    "checkedSeconds", lastWalkDeadline - lastWalkTime, "input", Values.Vector(lastWalk)));
+                while (inputTrace.Count > 64) inputTrace.Dequeue();
+            }
+            return value;
+        }
 
         private object Handle(int client, ControlCommand command)
         {
@@ -174,7 +194,8 @@ namespace SousChef.Plugin.Control
             int owner = lease.Owner(Now);
             return Json.Object("player", 2, "navigation", navigation.Describe(), "action", lastWasLogistics ? logistics.Describe() : interactions.Describe(), "available", unavailable == null, "reason", unavailable,
                 "claimed", owner != 0, "ownedByYou", client != 0 && owner == client,
-                "lastRelease", lease.LastRelease, "chefInstanceId", target == null ? null : (object)target.GetInstanceID(),
+                "lastRelease", lease.LastRelease, "inputTrace", traceInput ? inputTrace.ToArray() : null,
+                "chefInstanceId", target == null ? null : (object)target.GetInstanceID(),
                 "chefObjectInstanceId", target == null ? null : (object)target.gameObject.GetInstanceID(),
                 "pad", config == null ? null : config.Pad.ToString(), "side", config == null ? null : config.Side.ToString());
         }
@@ -184,8 +205,11 @@ namespace SousChef.Plugin.Control
             if (owner == 0 || lease.Owner(Now) != owner) { navigation.Stop("control_lost"); return; }
             float x = direction.x * (target.Movement.XAxisAllignment == PlayerControls.InversionType.Normal ? 1 : -1);
             float y = -direction.z * (target.Movement.YAxisAllignment == PlayerControls.InversionType.Normal ? 1 : -1);
+            double now = Now;
             string error = lease.Set(owner, new ControlCommand { Sequence = ++navigationSequence, Milliseconds = WalkingCommand.OwnershipMilliseconds(inputMilliseconds),
-                X = x, Y = y, Buttons = 0 }, Now, inputMilliseconds);
+                X = x, Y = y, Buttons = 0 }, now, inputMilliseconds);
+            if (traceInput && error == null)
+            { lastWalk = direction; lastWalkTime = now; lastWalkDeadline = now + inputMilliseconds / 1000.0; lastWalkFrame = Time.frameCount; }
             if (error != null) navigation.Stop(error);
         }
         private void NeutralNavigation()
