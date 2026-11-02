@@ -192,6 +192,9 @@ again and uses ordinary walking input to enter. Native cooldowns, occupancy and
 per-player teleport predicates govern entry. A busy portal gets neutral input
 while waiting. Waiting and transport share a timeout derived from native delays
 and animations, bounded to 5–30 seconds. Disabled or broken links stop the action.
+Graph connectors line up on open floor before the portal frame. Execution can
+start that approach slightly early and brakes for two updates before entering,
+allowing the game's preceding lateral movement command to settle at low FPS.
 
 During native transport, the action retains its lease with neutral commands.
 The temporary disabled chef/collider state is accepted only for an active portal
@@ -340,6 +343,11 @@ clearance is not a height-discontinuity allowance: mixing the two made a small
 jump pass or fail depending on where a segment's samples started. If native
 motion displaces the chef from a previously valid connector, execution now
 replans from the actual position before declaring the destination blocked.
+Native sphere casts at internal flat-mesh seams can also report a slightly
+tilted contact and a sub-2-mm foot depression. A separate centre ray corrects
+that contact only when it hits the same collider's flat plane at the original
+contact height. Missing support, slopes, other colliders and ledge heights do
+not qualify; the ordinary continuity bound remains unchanged.
 
 The [native headless simulator](native-simulator.md) runs this production
 controller with the installed game’s actual physics and named kitchens. Use it

@@ -163,9 +163,26 @@ namespace SousChef.Plugin.Navigation
         {
             return InPortalArc(from, link) && PortalSegment(from, link.Entry, link.Trigger, history);
         }
+        private bool PortalApproachAligned(Vector3 from, PortalLink link)
+        {
+            Vector3 delta = from - link.Entry; delta.y = 0;
+            Vector3 outward = link.Source.transform.right; outward.y = 0; outward = outward.normalized;
+            float along = Vector3.Dot(delta, outward);
+            // Begin turning on the open floor, before native movement's update
+            // lag can carry a lateral approach into the narrow portal frame.
+            return along >= 1.25f && (delta - outward * along).magnitude <= .2f;
+        }
+        public bool PortalApproach(Vector3 from, PortalLink link)
+        {
+            if (!link.Connected) return false;
+            Vector3 delta = from - link.Entry; delta.y = 0;
+            Vector3 outward = link.Source.transform.right; outward.y = 0; outward = outward.normalized;
+            float along = Vector3.Dot(delta, outward);
+            return along >= 1f && (delta - outward * along).magnitude <= .5f && PortalEntry(from, link);
+        }
         private bool InPortalArc(Vector3 from, PortalLink link)
         {
-            if (!link.Valid || !link.Connected || Vector3.Distance(from, link.Entry) > 1.6f) return false;
+            if (!link.Valid || !link.Connected || Vector3.Distance(from, link.Entry) > 2f) return false;
             Vector3 delta = from - link.Trigger.bounds.center; delta.y = 0;
             // Stay strictly inside the activation cone, including at first contact.
             if (Vector3.Dot(delta.normalized, link.Source.transform.right) <= Mathf.Cos(link.Source.m_teleportArc * Mathf.Deg2Rad) + .02f) return false;
@@ -208,7 +225,7 @@ namespace SousChef.Plugin.Navigation
             foreach (PortalLink link in portals.Values)
             {
                 int history;
-                if (!InPortalArc(from, link) || !PortalConnectorClear(link, cell, true, out history)) continue;
+                if (!InPortalArc(from, link) || !PortalApproachAligned(from, link) || !PortalConnectorClear(link, cell, true, out history)) continue;
                 // Teleport displacement adds no walking distance. Entry and exit
                 // connectors retain their full distances and fresh physics checks.
                 yield return new WalkEdge(new WalkCell(

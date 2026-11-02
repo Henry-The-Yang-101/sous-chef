@@ -11,6 +11,7 @@ namespace SousChef.Plugin.Navigation
         private float portalStarted;
         private bool sawTeleport;
         private int teleportsCompleted;
+        private int portalBrakeFrames;
         private string portalPhase;
         public bool NativeTeleportInProgress(PlayerControls player)
         { return player == chef && activePortal != null && Action.State == "navigating" && PortalLink.Travelling(player); }
@@ -22,7 +23,7 @@ namespace SousChef.Plugin.Navigation
         private bool RouteSegment(Vector3 from, int index)
         {
             PortalLink portal;
-            return portalSteps.TryGetValue(index, out portal) ? physics.PortalEntry(from, portal) : physics.Segment(from, route[index]);
+            return portalSteps.TryGetValue(index, out portal) ? physics.PortalApproach(from, portal) : physics.Segment(from, route[index]);
         }
         private void TickPortal(int commandMilliseconds)
         {
@@ -68,6 +69,14 @@ namespace SousChef.Plugin.Navigation
                 move(Vector3.zero, commandMilliseconds); return;
             }
             portalPhase = "entering_portal";
+            // Neutralize the preceding lateral command before the narrow entry.
+            // Native motion can integrate that command for another physics frame
+            // even after this Update changes the logical input, especially at 20 FPS.
+            if (portalBrakeFrames > 0)
+            {
+                portalBrakeFrames--; Trace("portal_braking", activePortal.Entry, Vector3.zero);
+                move(Vector3.zero, commandMilliseconds); return;
+            }
             Vector3 position = physics.Position, direction = activePortal.Entry - position; direction.y = 0;
             if (direction.magnitude < .06f)
             { move(Vector3.zero, commandMilliseconds); return; }

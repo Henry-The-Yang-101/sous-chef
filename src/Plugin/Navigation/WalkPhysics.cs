@@ -292,7 +292,7 @@ namespace SousChef.Plugin.Navigation
             int count = Physics.SphereCastNonAlloc(origin, r, Vector3.down, hits, reach + drop, groundMask, QueryTriggerInteraction.Ignore);
             Queries++;
             if (count == hits.Length) { Overflow = true; return false; }
-            float distance = Single.MaxValue;
+            float distance = Single.MaxValue, contactHeight = 0;
             for (int i = 0; i < count; i++)
             {
                 var hit = hits[i];
@@ -302,7 +302,21 @@ namespace SousChef.Plugin.Navigation
                 // Index and sweep the supported body pose; retain the native normal.
                 Vector3 foot = origin + Vector3.down * (hit.distance + r);
                 if (foot.y - point.y > reach - .08f || point.y - foot.y > drop - .08f) continue;
-                best = hit; best.point = foot; distance = hit.distance;
+                best = hit; best.point = foot; distance = hit.distance; contactHeight = hit.point.y;
+            }
+            // PhysX can report a slightly tilted sphere contact at an internal
+            // triangle seam on a flat mesh, lowering the reconstructed foot by
+            // radius*(1-normal.y). Confirm the actual plane under the centre;
+            // a hole, different collider, slope or real ledge is not corrected.
+            if (distance != Single.MaxValue && best.normal.y > .99f && best.normal.y < .99999f &&
+                contactHeight - best.point.y > 0 && contactHeight - best.point.y <= .002f)
+            {
+                int rays = Physics.RaycastNonAlloc(best.point + Vector3.up * .1f, Vector3.down, hits, .2f, groundMask, QueryTriggerInteraction.Ignore); Queries++;
+                if (rays == hits.Length) { Overflow = true; return false; }
+                float closest = Single.MaxValue; RaycastHit plane = new RaycastHit();
+                for (int i = 0; i < rays; i++) if (hits[i].distance < closest) { closest = hits[i].distance; plane = hits[i]; }
+                if (plane.collider == best.collider && plane.normal.y > .99999f && Mathf.Abs(plane.point.y - contactHeight) < .0001f)
+                { Vector3 foot = best.point; foot.y = plane.point.y; best.point = foot; best.normal = plane.normal; }
             }
             return distance != Single.MaxValue;
         }

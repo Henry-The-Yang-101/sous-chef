@@ -415,7 +415,7 @@ internal static class Program
         a.m_exitPortal = b.gameObject; // Deliberately one-way.
         w.Chef.gameObject.Add(new ServerTeleportablePlayer());
         w.Chef.gameObject.Add(new ClientTeleportablePlayer());
-        w.Chef.transform.position = new Vector3(1.1f,0,0);
+        w.Chef.transform.position = new Vector3(1.7f,0,0);
         Physics.Overlap = (low,high,r) => w.Colliders.Where(c => c is BoxCollider && c.enabled &&
             low.x >= c.bounds.min.x-r && low.x <= c.bounds.max.x+r &&
             low.z >= c.bounds.min.z-r && low.z <= c.bounds.max.z+r &&
@@ -437,7 +437,9 @@ internal static class Program
         WalkCell far = search.Settled.First(c=>c.Portal==0 && c.X==30 && c.Z==0);
         Check(search.Complete && search.Route(far).Count(c=>c.Portal!=0)==1,"Dijkstra crosses a disconnected island with an explicit portal edge");
         Check(search.Distances[far]<4,"transport displacement is not charged as walking distance");
-        var portalStart=new WalkCell(4,0,0);
+        var portalStart=new WalkCell(5,0,0);
+        Check(!physics.Neighbours(new WalkCell(5,0,2)).Any(e=>e.Cell.Portal!=0),
+            "graph does not postpone a lateral turn until the narrow portal frame");
         Check(physics.Neighbours(portalStart).Any(e=>e.Cell.Portal==a.GetInstanceID()),"portal connector is cached after a valid first search");
         int queries=physics.Queries;
         Check(physics.Neighbours(portalStart).Any(e=>e.Cell.Portal==a.GetInstanceID()) && physics.Queries==queries,
@@ -459,7 +461,7 @@ internal static class Program
         w.Chef.transform.position = new Vector3(12,0,0); physics.Refresh(w.Chef);
         search = new WalkSearch(physics.Starts(),physics.Neighbours,16000,()=>true);
         Check(!search.Settled.Any(c=>c.X<10),"one-way portal does not invent a reverse edge");
-        w.Chef.transform.position = new Vector3(1.1f,0,0);
+        w.Chef.transform.position = new Vector3(1.7f,0,0);
         b.GetComponent<ServerTeleportalPlayerReceiver>().enabled = false; physics.Refresh(w.Chef);
         Check(!physics.Portal(a.GetInstanceID()).Valid,"disabled receiver invalidates link");
         b.GetComponent<ServerTeleportalPlayerReceiver>().enabled = true;
@@ -488,7 +490,10 @@ internal static class Program
             "cooldown keeps the action neutral before portal entry");
         a.GetComponent<ServerTeleportal>().Ready = true;
         Time.realtimeSinceStartup += .02f; navigation.Tick(w.Chef);
-        Check(w.LastInput.x<-.9f,"ready portal is entered using ordinary movement");
+        Check(w.LastInput.sqrMagnitude==0,"portal entry first neutralizes the preceding walking command");
+        Time.realtimeSinceStartup+=.02f; navigation.Tick(w.Chef);
+        Time.realtimeSinceStartup+=.02f; navigation.Tick(w.Chef);
+        Check(w.LastInput.x<-.9f,"ready portal is entered using ordinary movement after braking");
         var traveller=w.Chef.GetComponent<ServerTeleportablePlayer>(); traveller.Travelling=true;
         w.Chef.enabled=false; w.Chef.GetComponent<CapsuleCollider>().enabled=false;
         Time.realtimeSinceStartup+=.02f; navigation.Tick(w.Chef);
@@ -528,9 +533,31 @@ internal static class Program
         Time.realtimeSinceStartup+=.02f; navigation.Tick(w.Chef);
         Check(navigation.Action.Reason=="teleport_unavailable","disabling sender interrupts an active portal entry");
     }
+    private static void NativeFlatMeshSeam()
+    {
+        var w=new World(); var floor=w.AddFloor((x,z)=>0);
+        var cast=Physics.GroundSphere;
+        Physics.GroundSphere=(p,r,d,length)=>
+        {
+            var hits=cast(p,r,d,length);
+            if(p.x>.5f && p.x<.6f)
+                for(int i=0;i<hits.Length;i++)
+                {
+                    hits[i].normal=new Vector3(.036618646f,.998241961f,-.046605986f);
+                    hits[i].distance+=r*(1-hits[i].normal.y);
+                }
+            return hits;
+        };
+        var physics=w.Ready();
+        Check(physics.Segment(Vector3.zero,new Vector3(1,0,0)),"native flat mesh sphere-contact seam is resolved by an independent plane ray");
+        Physics.Ray=(p,d,length,mask)=>new RaycastHit[0];
+        Check(!physics.Segment(Vector3.zero,new Vector3(1,0,0)),"missing centre support does not receive flat seam correction");
+        Physics.Ray=(p,d,length,mask)=>new[]{new RaycastHit {collider=floor,point=new Vector3(p.x,.01f,p.z),normal=Vector3.up,distance=p.y-.01f}};
+        Check(!physics.Segment(Vector3.zero,new Vector3(1,0,0)),"a ray at a different ledge height cannot explain a sphere-contact seam");
+    }
     private static void Main()
     {
-        Portals(); CapturedStairCorner(); CapturedStairContact(); GroundSettling(); StepsAndRamps(); InteriorFlow(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
+        NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedStairContact(); GroundSettling(); StepsAndRamps(); InteriorFlow(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
         Console.WriteLine("PASS: " + checks + " navigator integration checks (analytical geometry; not PhysX)");
     }
 }
