@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Control a silent, windowless instance of the installed game's Unity player."""
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -110,7 +111,8 @@ def start(args):
             '--doorstop-target-assembly', str(bep / 'core/BepInEx.Preloader.dll'),
             '-batchmode', '-nographics', '-logFile', str(runtime / 'player.log'),
         ], cwd=ROOT, env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True)
-    (runtime / 'process.json').write_text(json.dumps({'pid': process.pid, 'level': args.level, 'portBase': base}))
+    (runtime / 'process.json').write_text(json.dumps({'pid': process.pid, 'level': args.level, 'portBase': base,
+        'bridgeSha256': hashlib.sha256((output / 'SousChef.Bridge.dll').read_bytes()).hexdigest()}))
     try:
         return wait_ready(runtime, timeout=args.timeout)
     except (Exception, KeyboardInterrupt):

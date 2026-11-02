@@ -122,7 +122,7 @@ namespace SousChef.Plugin.Navigation
             float front = Mathf.Abs(facing.x) * extent.x + Mathf.Abs(facing.z) * extent.z;
             // Native trigger contact happens at the front of the capsule. The
             // trigger centre can sit behind the portal's solid frame/wall.
-            Vector3 entry = link.Trigger.bounds.center + facing.normalized * (front + nativeRadius - .12f);
+            Vector3 entry = link.Trigger.bounds.center + facing.normalized * (front + nativeRadius - .06f);
             entry.y = link.Source.transform.position.y;
             Collider ground; Vector3 point;
             link.GeometryReason = "entry_clearance";

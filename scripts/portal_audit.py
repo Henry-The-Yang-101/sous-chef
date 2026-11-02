@@ -32,6 +32,7 @@ def audit_level(runtime, level, output):
     time.sleep(1)
     initial = sim.read_status(runtime)
     result['initial'] = initial
+    result['runtimeProcess'] = json.loads((runtime / 'process.json').read_text())
     result['inactivePortals'] = [p for p in initial.get('portals', []) if p['playerSender'] and not p['enabled']]
     portals = [p for p in initial.get('portals', []) if p['enabled'] and p['playerSender'] and p['exitObjectId']]
     result['portals'] = portals
@@ -110,10 +111,15 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--port-base', type=int, required=True)
     parser.add_argument('--resume', action='store_true')
+    parser.add_argument('--level', action='append', help='Audit only these scene names (repeatable)')
+    parser.add_argument('--dlc', type=int, help='Restrict the audit to one native session')
     args = parser.parse_args(); args.runtime=args.runtime.resolve(); args.output.mkdir(parents=True,exist_ok=True)
     if args.port_base == 24702: parser.error('Use isolated ports')
     levels = json.loads((args.runtime/'all-levels.json').read_text())
     levels = list({(x['dlc'],x['name']):x for x in levels}.values())
+    if args.level: levels = [x for x in levels if x['name'] in args.level]
+    if args.dlc is not None: levels = [x for x in levels if x['dlc'] == args.dlc]
+    if not levels: parser.error('No matching installed scenes')
     report_path=args.output/'report.json'
     results=json.loads(report_path.read_text())['results'] if args.resume and report_path.exists() else []
     done={(x['dlc'],x['name']) for x in results}

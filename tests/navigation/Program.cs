@@ -476,6 +476,11 @@ internal static class Program
         Teleportal a,b; var w = PortalWorld(out a,out b); var physics = w.Ready();
         PortalLink link = physics.Portal(a.GetInstanceID());
         Check(link != null && link.Valid && Math.Abs(link.Exit.x-10.9f)<.001f,"portal landing follows receiver animation and grounded attach point");
+        var flushWall = new GameObject("wall behind native portal lip");
+        var flushShape = flushWall.Add(new BoxCollider { center = new Vector3(.05f,.5f,0), size = new Vector3(.3f,1,1) });
+        w.Colliders.Add(flushShape); physics.Refresh(w.Chef);
+        Check(link.Valid,"portal contact remains outside a flush wall with the planning body margin");
+        flushShape.enabled=false; physics.Refresh(w.Chef);
         Check(!physics.Segment(w.Chef.transform.position,link.Entry),"ordinary walking still blocks portal trigger");
         Check(physics.PortalEntry(w.Chef.transform.position,link),"selected portal permits its supported entry connector");
         Check(!physics.PortalEntry(new Vector3(-.8f,0,0),link),"entry from outside native activation cone is rejected");
