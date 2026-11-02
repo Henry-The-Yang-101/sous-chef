@@ -173,3 +173,21 @@ and the exit-velocity addition. Launch vectors come from the native calculator,
 with a throw-event observer recording the actual post-setter velocity.
 `DropHandoff` checks nearby placement or supported ground drops before asking a
 nearby human to catch a throw. All outcome verification still uses native state.
+
+To reduce managed allocation during capture, each transform stores its seven
+numeric arrays in one detached 36-float buffer with a shared immutable layout.
+Encoding restores the same JSON fields, array order and floating-point precision;
+no Unity object is retained by this record and buffers are not reused after
+publication. Each throw planner separately owns two reusable trajectory buffers
+for seed solving and aiming. Every physics step and sample remains present;
+only temporary storage is reused, and exported throw plans copy their results.
+Inventory refreshes discover other chefs' held items once per synchronous pass,
+then discard that observation on the next refresh. Positive throw previews reuse
+the route cost already calculated during their current validation.
+
+An incomplete idle navigation catalogue warms at most once per 100 ms after
+the last refresh, rather than restarting a budget-limited search on every
+render frame. Explicit catalogue requests still refresh immediately, and active
+navigation follows its existing update and revalidation rules. This reduces
+background load at the cost of more gradual initial catalogue completion on
+difficult geometry; it does not loosen reachability or collision checks.

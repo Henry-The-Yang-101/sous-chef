@@ -711,3 +711,58 @@ and no commits were pushed. These runs cover two base-game kitchens, including
 both directions through four portals in the multi-hop kitchen. They do not
 establish every kitchen or DLC works, nor resolve the separately recorded
 Chocolate stair failures.
+
+
+## FPS follow-up — 2026-11-02
+
+The earlier demand-driven streaming and serialization optimizations remain in
+place. With the usual harness connected, the new investigation measured
+`MovingPlatform4` at 5.00 full snapshots/s: median/p95/max capture time
+31.312/39.084/39.350 ms and approximately 4.16 MB per snapshot. Average render
+FPS was 122.72; this average conceals individual capture stalls.
+
+The first follow-up (`65c89cb`) packs transform values into one detached buffer
+while preserving their exact JSON layout, reuses planner-local seed/aim
+trajectory buffers, scans other carriers once per inventory observation, and
+avoids calculating an already validated throw route cost twice. Regression
+checks compare exact JSON and every trajectory position/time/velocity; changing
+cargo ownership is re-observed on the next inventory refresh. The .NET 8
+allocation checks measured 1,000 transform records at 496,000 → 200,000 bytes
+and 100 warmed flight simulations at 402,400 → 0 bytes. These are allocation
+measurements, not Mono rendering benchmarks.
+
+The first updated live run was a different kitchen, `s_mine_5_3`: 5.00 full
+snapshots/s, median/p95/max capture time 14.776/20.543/21.006 ms, approximately
+1.89 MB per snapshot, and average rendering FPS 69.38. The different scene
+prevents interpreting this as a before/after speedup. Twelve snapshots passed
+the reference/geometry validator with 1,205–1,206 objects, 123 colliders, zero
+read errors and no unsupported values.
+
+That run exposed a second source of overhead: idle catalogue warming repeatedly
+restarted incomplete searches between harness polls. Four read-only catalogue
+samples showed 14.069–15.923 ms per rebuild, and catalogue revisions advanced
+16–18 times between requests about 0.4 seconds apart. The follow-up `b59bab0`
+spaces speculative idle warm passes at least 100 ms after the last refresh.
+Explicit requests still refresh immediately; active navigation and all safety
+checks are unchanged. Initially incomplete catalogues may finish more gradually.
+
+The complete check passes 830 core assertions, 210 navigator integration checks,
+265 action checks, 93 Python tests and the 151-type installed-assembly audit.
+Analytical physics tests do not substitute for native-game validation. Both
+changes were locally committed and installed through the owned installer; no
+push was performed. Evidence is in `.local/fps-nov2-before-active.json`,
+`.local/fps-nov2-after.json`, `.local/fps-nov2-catalog-after.json`,
+`.local/fps-nov2-validation.ndjson` and `.local/fps-nov2-final-check.log`.
+
+
+After the final install, `s_mine_2_4` sustained 4.998 full snapshots/s with no
+skipped sequences; capture median/p95/max was 26.375/28.128/29.409 ms and average
+rendering FPS was 149.69. This is another different scene, so the FPS numbers
+must not be presented as a controlled speedup. Non-replanning status polling
+measured 8.22 catalogue rebuilds/s with the harness connected, confirming that
+idle warming no longer runs at render cadence. The sampled catalogue was still
+`planning_in_progress`; this fix does not claim to solve every incomplete search
+or certify all destinations. No navigation observation error was reported.
+The installed DLL matches the checked build, and no capture/serialization/control
+failures appeared in the loader log. Final evidence:
+`.local/fps-nov2-final-profile.json` and `.local/fps-nov2-final-cadence.json`.
