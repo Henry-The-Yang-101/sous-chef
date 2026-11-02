@@ -347,6 +347,11 @@ namespace SousChef.Plugin.Navigation
             point = guess; support = null;
             if (!Ground(guess, out hit, dropDistance)) return Fail("ground_probe", guess);
             point.y = hit.point.y; support = hit.collider;
+            // A travelator's rounded side contact is not a controllable lane.
+            // The native belt pushes the chef off that lip, so routes must turn
+            // on its top rather than shortcut around an overhanging corner.
+            if (MovingSurface(support) is Travelator && !ConveyorSupport(point, hit.normal))
+                return Fail("conveyor_side_support", point, support);
             if (!SlopeInterior(point, support, clearance)) return Fail("slope_side_clearance", point, support);
             // GroundCast supports the rounded capsule across narrow tread seams.
             // Requiring a ray under every footprint edge rejects real stairs even
@@ -716,7 +721,11 @@ namespace SousChef.Plugin.Navigation
                 Vector3 velocity = surface.CalculateVelocityAtPoint(at, previous);
                 Vector3 direction = to - from; direction.y = 0; velocity.y = 0;
                 if (Vector3.Dot(direction.normalized, velocity) < -.01f)
-                    return Fail("conveyor_opposes_walking", at, ground);
+                {
+                    Fail("conveyor_opposes_walking", at, ground);
+                    if (TraceEnabled) failureSupport = Json.Object("surfaceVelocity", Values.Vector(velocity), "direction", Values.Vector(direction));
+                    return false;
+                }
             }
             if (winds.Count == 0 && surface == null) return speed > .1f;
             Vector3 drift = Flow(at, ground, previous); float x, z;

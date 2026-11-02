@@ -230,7 +230,18 @@ public class RigidbodyMotion { public UnityEngine.Vector3 Velocity; public Unity
 public interface IMovingSurface { UnityEngine.Vector3 CalculateVelocityAtPoint(UnityEngine.Vector3 point, IMovingSurface previous); }
 public class Travelator : UnityEngine.MonoBehaviour, IMovingSurface
 {
-    public UnityEngine.Vector3 Velocity;
+    public float m_speed, m_border=.4f;
+    public int m_directionXZ;
+    public GridManager m_gridManager=new GridManager();
+    public GridIndex m_gridIndex;
+    public readonly Travelator[] Neighbours=new Travelator[4];
+    public UnityEngine.Vector3 Velocity
+    {
+        get { return transform.right*(m_directionXZ==0 ? m_speed : -m_speed); }
+        set { m_speed=value.magnitude;m_directionXZ=value.x<0 ? 1 : 0; }
+    }
+    public Travelator GetAdjacentTravelator(UnityEngine.Vector3 side)
+    { return Neighbours[side.x>.5f ? 0 : side.x<-.5f ? 1 : side.z>.5f ? 2 : 3]; }
     public UnityEngine.Vector3 CalculateVelocityAtPoint(UnityEngine.Vector3 point, IMovingSurface previous)
     { return enabled ? Velocity : UnityEngine.Vector3.zero; }
 }

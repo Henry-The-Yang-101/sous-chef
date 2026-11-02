@@ -5,7 +5,7 @@ namespace SousChef.Plugin.Navigation
 {
     internal sealed partial class WalkPhysics
     {
-        private struct GroundProof { public Collider Ground; public float Speed; }
+        private struct GroundProof { public Collider Ground; public float Speed; public IMovingSurface Surface; }
         private struct WindProof { public WindVolume Wind; public Vector3 Velocity; public int Key, Filter; public bool Active; }
         private readonly List<GroundProof> searchGrounds = new List<GroundProof>();
         private readonly List<WindProof> searchWinds = new List<WindProof>();
@@ -20,16 +20,15 @@ namespace SousChef.Plugin.Navigation
         private bool CannotContinue(string reason) { ContinuityFailure = reason; return false; }
 
         private void ForgetSearch()
-        { searchRemembered = false; searchGrounds.Clear(); searchWinds.Clear(); geometryVersion++; }
+        { searchRemembered = false; searchGrounds.Clear(); searchWinds.Clear(); searchConveyors.Clear(); searchPreviousSurface = null; geometryVersion++; }
 
         // Search progress is main-thread state, separate from the geometry cache.
         // Keep exact values, not a lossy hash or a time-based freshness guess.
         public bool RememberSearch()
         {
             searchRemembered = false; searchGrounds.Clear(); searchWinds.Clear();
-            // Arbitrary IMovingSurface implementations depend on location and
-            // entry history; portals also have live readiness predicates. Retain
-            // the existing fresh-search path until those can be versioned safely.
+            // Native conveyors have an explicit continuity proof. Arbitrary
+            // moving surfaces and portal readiness retain fresh searches.
             if (portals.Count > 0 || Overflow) return CannotContinue(portals.Count > 0 ? "portal_predicates" : "physics_query_overflow");
             foreach (var pair in speeds)
             {
@@ -38,10 +37,12 @@ namespace SousChef.Plugin.Navigation
                 {
                     if (!stamps.TryGetValue(pair.Key, out stamp)) return CannotContinue("untracked_support");
                     ground = stamp.Collider;
-                    if (ground == null || MovingSurface(ground) != null) return CannotContinue("moving_or_missing_support");
+                    IMovingSurface moving = MovingSurface(ground);
+                    if (ground == null || (moving != null && !(moving is Travelator))) return CannotContinue("moving_or_missing_support");
                 }
-                searchGrounds.Add(new GroundProof { Ground = ground, Speed = pair.Value });
+                searchGrounds.Add(new GroundProof { Ground = ground, Speed = pair.Value, Surface = MovingSurface(ground) });
             }
+            if (!RememberConveyors()) return CannotContinue("untracked_conveyor_rules");
             foreach (var pair in winds)
             {
                 WindVolume wind = pair.Value;
@@ -73,8 +74,10 @@ namespace SousChef.Plugin.Navigation
             foreach (GroundProof proof in searchGrounds)
             {
                 if (!System.Object.ReferenceEquals(proof.Ground, null) && proof.Ground == null) return CannotContinue("support_removed");
-                if (MovingSurface(proof.Ground) != null || Speed(proof.Ground) != proof.Speed) return CannotContinue("surface_rules_changed");
+                IMovingSurface moving = MovingSurface(proof.Ground);
+                if (!System.Object.ReferenceEquals(moving, proof.Surface) || Speed(proof.Ground) != proof.Speed) return CannotContinue("surface_rules_changed");
             }
+            if (!ConveyorsUnchanged()) return CannotContinue("conveyor_rules_changed");
             foreach (WindProof proof in searchWinds)
             {
                 WindVolume wind;

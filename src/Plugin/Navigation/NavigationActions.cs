@@ -227,7 +227,10 @@ namespace SousChef.Plugin.Navigation
         public string Start(PlayerControls player, int owner, string destination)
         {
             if (Action.State != "idle") return "action_in_progress";
-            Refresh(player, true);
+            // Revalidate and reuse the idle tree when its exact continuity proof
+            // still holds. Restarting here can lose a distant conveyor route
+            // solely because one active search slice cannot rebuild the loop.
+            Refresh(player, true, false, true);
             Destination chosen;
             if (!available.TryGetValue(destination, out chosen)) return unavailable ?? "destination_unavailable";
             if (!Action.Start(owner, destination, true)) return "action_in_progress";

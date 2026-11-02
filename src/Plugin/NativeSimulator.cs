@@ -269,7 +269,10 @@ namespace SousChef.Plugin
             bool end = physics.Stand(new Vector3(v[3],v[4],v[5]), out to, out b);
             bool clear = start && end && physics.Segment(from, to);
             Write("probe.json", Json.Object("error", error, "start", start, "end", end,
-                "from", Values.Vector(from), "to", Values.Vector(to), "clear", clear, "failure", physics.Failure));
+                "from", Values.Vector(from), "to", Values.Vector(to),
+                "fromFlow", start ? Values.Vector(physics.Flow(from, a)) : null,
+                "toFlow", end ? Values.Vector(physics.Flow(to, b)) : null,
+                "clear", clear, "failure", physics.Failure));
         }
         private void AdvancePhase()
         {

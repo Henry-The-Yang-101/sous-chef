@@ -231,13 +231,17 @@ internal static class Program
         belt.enabled=false;physics.Refresh(w.Chef);
         Check(physics.Neighbours(start).Any(e=>e.Cell.X>0) && physics.Neighbours(start).Any(e=>e.Cell.X<0),
             "disabled conveyor restores both walking directions");
-        belt.enabled=true;belt.Velocity=new Vector3(0,0,3);physics.Refresh(w.Chef);
+        belt.enabled=true;belt.Velocity=new Vector3(3,0,0);belt.transform.yaw=-(float)Math.PI/2;physics.Refresh(w.Chef);
         Check(!physics.Segment(Vector3.zero,new Vector3(0,0,-.4f)),"world-space conveyor direction supports rotated belts");
         var station=w.AddStation();station.transform.position=new Vector3(1.2f,0,0);
         Vector3 stance;var collider=station.GetComponent<BoxCollider>();
         Check(!physics.Approach(Vector3.zero,collider,out stance),"station approach on a running belt cannot promise settled arrival");
         belt.enabled=false;physics.Refresh(w.Chef);
         Check(physics.Approach(Vector3.zero,collider,out stance),"station approach on a stopped belt can settle");
+        w=new World();floor=w.AddFloor((x,z)=>x<=0 ? 0 : (float?)null);
+        floor.gameObject.Add(new Travelator {Velocity=new Vector3(3,0,0)});physics=w.Ready();Collider support;
+        Check(!physics.Stand(new Vector3(.2f,0,0),out stance,out support),"rounded conveyor lip cannot become a shortcut lane");
+        Check(physics.Stand(new Vector3(-.5f,0,0),out stance,out support),"conveyor top remains supported for checked turns");
     }
     private static void MovingBoundary()
     {
@@ -844,9 +848,52 @@ internal static class Program
         Check(!physics.CanContinueSearch(),"a newly discovered moving surface invalidates the old static proof");physics.Starts().ToArray();
         Check(!physics.RememberSearch(),"unversioned moving-surface predicates retain fresh-search fallback");
     }
+    private static void ConveyorSearchContinuity()
+    {
+        var w=new World();var floor=w.AddFloor((x,z)=>Math.Abs(x)<3 && Math.Abs(z)<3 ? 0 : (float?)null);
+        var belt=floor.gameObject.Add(new Travelator {Velocity=new Vector3(2,0,0)});
+        var neighbour=new GameObject("adjacent belt").Add(new Travelator {Velocity=new Vector3(2,0,0)});
+        belt.Neighbours[0]=neighbour;neighbour.Neighbours[1]=belt;
+        var physics=w.Ready();
+        Action remember=()=>{physics.Refresh(w.Chef);physics.Starts().ToArray();Check(physics.RememberSearch(),"native conveyor graph can retain search progress");};
+        Action changed=()=>{physics.Refresh(w.Chef);Check(!physics.CanContinueSearch(),"changed native conveyor rules invalidate settled reachability");};
+        remember();physics.Refresh(w.Chef);Check(physics.CanContinueSearch(),"unchanged native belts permit bounded search continuation");
+        belt.m_speed=3;changed();remember();
+        belt.m_directionXZ=1;changed();remember();
+        belt.m_border=.2f;changed();remember();
+        belt.enabled=false;changed();remember();
+        neighbour.m_speed=1;changed();remember();
+        neighbour.m_directionXZ=1;changed();remember();
+        neighbour.transform.position+=Vector3.right;changed();remember();
+        neighbour.gameObject.activeInHierarchy=false;changed();remember();
+        belt.m_gridManager=new GridManager();changed();remember();
+        belt.m_gridIndex=new GridIndex {X=1};changed();remember();
+        belt.Neighbours[0]=null;changed();remember();
+        belt.Neighbours[0]=neighbour;changed();remember();
+        w.Chef.SurfaceMovable.SetPrevious(neighbour);changed();remember();
+        neighbour.Destroyed=true;changed();
+    }
+    private static void CertifiedStart()
+    {
+        var w=new World();w.AddFloor((x,z)=>Math.Abs(x)<2 && Math.Abs(z)<2 ? 0 : (float?)null);
+        var station=w.AddStation();var navigation=new NavigationActions((v,ms)=>{},()=>{});
+        Json.Record catalog=null;
+        for(int i=0;i<20;i++) {catalog=(Json.Record)navigation.Available(w.Chef);if((bool)catalog["complete"])break;}
+        var destination=((List<object>)catalog["destinations"]).Cast<Json.Record>().First(d=>(int)d["objectInstanceId"]==station.GetInstanceID());
+        long generation=(long)((Json.Record)((Json.Record)navigation.Describe())["diagnostics"])["searchGeneration"];
+        Check(navigation.Start(w.Chef,1,(string)destination["id"])==null,"a certified destination starts normally");
+        var diagnostics=(Json.Record)((Json.Record)navigation.Describe())["diagnostics"];
+        Check((bool)diagnostics["searchReused"] && (long)diagnostics["searchGeneration"]==generation,
+            "starting navigation revalidates and retains the certified idle tree");
+        navigation.Stop("test");w.Chef.Movement.RunSpeed=2;
+        navigation.Start(w.Chef,1,(string)destination["id"]);
+        diagnostics=(Json.Record)((Json.Record)navigation.Describe())["diagnostics"];
+        Check(!(bool)diagnostics["searchReused"] && (long)diagnostics["searchGeneration"]>generation,
+            "starting after movement rules change rebuilds the old tree");
+    }
     private static void Main()
     {
-        SearchContinuity(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); DirectedConveyors(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
+        SearchContinuity(); ConveyorSearchContinuity(); CertifiedStart(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); DirectedConveyors(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
         Console.WriteLine("PASS: " + checks + " navigator integration checks (analytical geometry; not PhysX)");
     }
 }
