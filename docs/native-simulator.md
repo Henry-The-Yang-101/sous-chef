@@ -52,6 +52,10 @@ python3 scripts/native_simulator.py navigate utensil_frying_pan_01 --then Meat -
 Reports include each leg's target, arrival checks and `teleportsCompleted`, plus
 the attempt's total. An arrival with too few transitions fails as
 `insufficient_teleports`. A failed later leg fails the entire attempt.
+The default expected outcome is `arrived`. For an empty station, explicitly use
+`--arrival positioned_no_action`; this still requires native positioning and the
+requested number of transitions, while acknowledging there is no current pickup,
+placement or use action at that station.
 
 For timing-dependent failures:
 

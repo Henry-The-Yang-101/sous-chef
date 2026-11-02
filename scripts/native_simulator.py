@@ -142,7 +142,7 @@ def navigate_leg(client, target, args, trace):
         trace.flush()
         nav = status['navigation']
         if nav['state'] != 'navigating':
-            result['success'] = nav['reason'] == 'arrived'
+            result['success'] = nav['reason'] == getattr(args, 'arrival', 'arrived')
             result['reason'] = nav['reason']
             result['arrival'] = nav.get('arrival')
             result['teleportsCompleted'] = nav.get('teleportsCompleted', 0)
@@ -221,6 +221,8 @@ def main():
     run.add_argument('--repeat', type=int, choices=range(1, 101), metavar='1..100', default=1)
     run.add_argument('--fps', type=int, choices=range(10, 241), metavar='10..240')
     run.add_argument('--trace-dir', type=Path)
+    run.add_argument('--arrival', choices=('arrived', 'positioned_no_action'), default='arrived',
+                     help='Expected navigation outcome; empty stations can be positioned without a native action')
     run.add_argument('--min-teleports', type=int, choices=range(0, 101), default=0,
                      help='Require this many completed native portal transitions on every leg as well as arrival')
     fps = sub.add_parser('fps')

@@ -655,3 +655,59 @@ Historical validation records above are preserved as evidence of earlier results
 After removal, `python3 scripts/check.py` passes the real plugin build, 151-type
 API audit, 815 core assertions, 104 navigation checks, 181 action checks, and 74
 Python tests. No game process was launched for this cleanup.
+
+### 2026-11-02: native teleporter pathfinding and execution
+
+Navigation now models directed native player portals, including receiver animation
+endpoints, activation cones, supported entry/exit connectors, cooldown/occupancy
+waits, native disabled-control phases, multiple hops and different deck heights.
+Walking shortcuts cannot cross a transport edge. Completed transport consumes that
+edge before replanning, and a budget-limited search can retain the checked route
+tail. Connector geometry is cached with live flow checks and geometry invalidation.
+
+Validation used the actual headless Unity kitchen `s_wizard_3_3`, with the production
+12 ms search budget and ordinary action requests. Each attempt reset once, walked
+to `utensil_frying_pan_01` through two portals, then returned to `Meat` through two
+more portals without resetting. Every leg required `--min-teleports 2`, native
+selection, actual arrival pose and settled speed. There were no in-place retries,
+manual movement, synthetic physics or direct teleport calls.
+
+| Requested FPS | Successful round trips | Successful navigation legs | Confirmed native transports |
+| --- | ---: | ---: | ---: |
+| 20 | 3 / 3 | 6 / 6 | 12 |
+| 60 | 3 / 3 | 6 / 6 | 12 |
+
+Final code: `264c69d`. Reports and full native traces are in
+`.local/portal-verified-20/` and `.local/portal-verified-60/`. The final build also
+passes `python3 scripts/check.py`: installed-game build/API audit, 815 core
+assertions, 159 navigation checks, 181 action checks and 76 Python tests.
+The subsequent runner outcome regression also passes; the full Python suite now
+contains 77 passing tests.
+The runner now records individual legs and completed native transports, and fails
+an ordinary walking-only arrival when portal traversal is required.
+
+Earlier runs exposed the solid frame behind the trigger centre, missed route-tail
+consumption, repeated connector probe cost, delayed lateral movement at portal
+turns, flat-mesh sphere-contact seams and late counter braking. Their failures
+remain in `.local/portal-native-*` and `.local/portal-final-20/`; they were not
+counted as successful validation. The final implementation stages and brakes
+before entering, checks flat seams with an independent same-collider ray, and
+starts neutral arrival braking before the preceding native movement integrates.
+None of these predictions waive actual arrival or collision checks.
+
+A second kitchen, `s_wizard_5_5`, completed one native transition to
+`workstation_plate_return`, with native selection, 0.10-unit stance error and zero
+relative speed. The empty station correctly completed as `positioned_no_action`.
+The first strict `arrived` expectation therefore failed; the explicit
+`--arrival positioned_no_action --min-teleports 1` regression passed after a fresh
+reset. Its report is in `.local/portal-verified-second-kitchen/`. A supplementary
+Meat pickup followed by a two-portal frying-pan approach also positioned correctly
+without a currently available native action; its strict arrival report remains
+in `.local/portal-carry-report.json` and is not counted in the matrix above.
+
+The final headless process was shut down, and the tested source was built and
+installed into the normal game's owned bridge installation. No game was relaunched
+and no commits were pushed. These runs cover two base-game kitchens, including
+both directions through four portals in the multi-hop kitchen. They do not
+establish every kitchen or DLC works, nor resolve the separately recorded
+Chocolate stair failures.

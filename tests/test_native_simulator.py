@@ -114,6 +114,21 @@ class NativeSimulatorTests(unittest.TestCase):
                 self.assertEqual(report['results'][0]['teleportsCompleted'], completed)
                 self.assertEqual(report['results'][0]['reason'], 'arrived' if passed else 'insufficient_teleports')
 
+    def test_empty_station_arrival_must_be_expected_explicitly(self):
+        import io
+        for expected, passed in (('arrived', False), ('positioned_no_action', True)):
+            args = SimpleNamespace(timeout=2, min_teleports=1, arrival=expected)
+            with patch('clients.actions.ActionClient', autospec=True) as factory:
+                client = factory.return_value
+                client.available_actions.return_value = {'complete': True, 'actions': [
+                    {'name': 'navigate_to', 'parameters': {'destination_id': {
+                        'options': [{'id': 'd42', 'label': 'Empty Station'}]}}}]}
+                client.status.return_value = {'navigation': {'state': 'idle', 'reason': 'positioned_no_action',
+                    'teleportsCompleted': 1, 'arrival': {'positioned': True, 'nativeSelected': True}}}
+                result = sim.navigate_leg(client, 'Empty Station', args, io.StringIO())
+            self.assertEqual(result['success'], passed)
+            self.assertEqual(result['reason'], 'positioned_no_action')
+
     def test_return_leg_uses_same_round_and_failure_is_not_hidden(self):
         for fail_second in (False, True):
             with self.subTest(fail_second=fail_second), tempfile.TemporaryDirectory() as temp:
