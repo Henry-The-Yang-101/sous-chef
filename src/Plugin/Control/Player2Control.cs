@@ -55,7 +55,14 @@ namespace SousChef.Plugin.Control
             if (flow != gate.Flow) { Revoke("round_changed"); logistics.Reset("round_changed"); throwOptions.Reset(); navigation.Reset("round_changed"); flow = gate.Flow; nextScan = 0; }
             if (Now >= nextScan) { Discover(); nextScan = Now + 0.25; }
             string reason = Check(gate);
-            if (reason != null) { navigation.Invalidate(reason); Revoke(reason); }
+            bool observationAllowed = reason == null || (reason == "game_unfocused" && Check(gate, true) == null);
+            if (reason != null)
+            {
+                // Focus loss revokes all input, but must not erase the read-only
+                // catalogue frontier that the focused browser is asking to see.
+                if (!observationAllowed) navigation.Invalidate(reason);
+                Revoke(reason);
+            }
             else if (lease.Owner(Now) == 0) Restore();
             unavailable = reason;
             if (navigation.Action.State == "navigating" && lease.Owner(Now) != navigation.Action.Owner) navigation.Stop("control_lost");
@@ -63,10 +70,11 @@ namespace SousChef.Plugin.Control
             if (logistics.Run.Running && lease.Owner(Now) != logistics.Run.Owner) logistics.Cancel("control_lost");
             server.Pump(Handle);
             if (reason == null) { navigation.Tick(target); interactions.Tick(); logistics.Tick(); }
+            else if (observationAllowed) navigation.WarmCatalogue(target);
             // The browser may be in front while the catalogue is observed.
             // Advance read-only previews under the observation gates; never
             // advance input-owning actions without the normal input gates.
-            if ((reason == null || (reason == "game_unfocused" && Check(gate, true) == null)) &&
+            if (observationAllowed &&
                 lease.Owner(Now) == 0 && navigation.Action.State == "idle" && !interactions.Run.Running && !logistics.Run.Running)
                 throwOptions.Tick(target);
             else throwOptions.Reset();

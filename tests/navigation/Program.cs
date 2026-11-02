@@ -784,6 +784,11 @@ internal static class Program
         w.Chef.transform.position+=new Vector3(.2f,0,0);navigation.Available(w.Chef);
         diagnostics=(Json.Record)((Json.Record)navigation.Describe())["diagnostics"];
         Check(!(bool)diagnostics["searchReused"] && (long)diagnostics["searchGeneration"]==generation+1,"moving the chef discards old starting costs");
+        long currentRevision=(long)((Json.Record)navigation.Describe())["catalogRevision"];
+        navigation.Action.Start(99,"observation_only_test",true);
+        Time.frameCount++;Time.realtimeSinceStartup+=.2f;navigation.WarmCatalogue(w.Chef);
+        Check(navigation.Action.State=="navigating" && (long)((Json.Record)navigation.Describe())["catalogRevision"]==currentRevision,
+            "observation-only warming cannot tick, cancel, or replan an input-owning action");
     }
     private static void SearchContinuity()
     {

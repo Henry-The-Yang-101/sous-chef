@@ -16,6 +16,8 @@ namespace SousChef.Plugin.Navigation
         private GameObject searchHeld;
         private Collider searchGround;
         private float searchSpeed, searchRadius, searchNativeRadius, searchHeight, searchPivot, searchStep;
+        public string ContinuityFailure { get; private set; }
+        private bool CannotContinue(string reason) { ContinuityFailure = reason; return false; }
 
         private void ForgetSearch()
         { searchRemembered = false; searchGrounds.Clear(); searchWinds.Clear(); geometryVersion++; }
@@ -28,22 +30,22 @@ namespace SousChef.Plugin.Navigation
             // Arbitrary IMovingSurface implementations depend on location and
             // entry history; portals also have live readiness predicates. Retain
             // the existing fresh-search path until those can be versioned safely.
-            if (portals.Count > 0 || Overflow) return false;
+            if (portals.Count > 0 || Overflow) return CannotContinue(portals.Count > 0 ? "portal_predicates" : "physics_query_overflow");
             foreach (var pair in speeds)
             {
                 GeometryStamp stamp; Collider ground = null;
                 if (pair.Key != 0)
                 {
-                    if (!stamps.TryGetValue(pair.Key, out stamp)) return false;
+                    if (!stamps.TryGetValue(pair.Key, out stamp)) return CannotContinue("untracked_support");
                     ground = stamp.Collider;
-                    if (ground == null || MovingSurface(ground) != null) return false;
+                    if (ground == null || MovingSurface(ground) != null) return CannotContinue("moving_or_missing_support");
                 }
                 searchGrounds.Add(new GroundProof { Ground = ground, Speed = pair.Value });
             }
             foreach (var pair in winds)
             {
                 WindVolume wind = pair.Value;
-                if (wind == null) return false;
+                if (wind == null) return CannotContinue("missing_wind");
                 searchWinds.Add(new WindProof { Key = pair.Key, Wind = wind, Velocity = wind.GetVelocity(),
                     Filter = ((LayerMask)windFilter.GetValue(wind)).value, Active = wind.isActiveAndEnabled });
             }
@@ -60,25 +62,27 @@ namespace SousChef.Plugin.Navigation
         // ones used by every settled edge before Dijkstra may continue.
         public bool CanContinueSearch()
         {
-            if (!searchRemembered || Overflow || chef != searchChef || held != searchHeld ||
-                chef.GroundCollider != searchGround || geometryVersion != savedGeometryVersion ||
+            if (!searchRemembered) return CannotContinue(ContinuityFailure ?? "no_saved_search");
+            if (geometryVersion != savedGeometryVersion) return CannotContinue("geometry_changed");
+            if (Overflow || chef != searchChef || held != searchHeld ||
+                chef.GroundCollider != searchGround ||
                 !Position.Equals(searchPosition) || walkingSpeed != searchSpeed || radius != searchRadius ||
                 nativeRadius != searchNativeRadius || height != searchHeight || pivotToFoot != searchPivot ||
                 StepHeight != searchStep || Physics.queriesHitBackfaces != searchBackfaces ||
-                portals.Count > 0 || winds.Count != searchWinds.Count) return false;
+                portals.Count > 0 || winds.Count != searchWinds.Count) return CannotContinue("starting_state_or_movement_rules_changed");
             foreach (GroundProof proof in searchGrounds)
             {
-                if (!System.Object.ReferenceEquals(proof.Ground, null) && proof.Ground == null) return false;
-                if (MovingSurface(proof.Ground) != null || Speed(proof.Ground) != proof.Speed) return false;
+                if (!System.Object.ReferenceEquals(proof.Ground, null) && proof.Ground == null) return CannotContinue("support_removed");
+                if (MovingSurface(proof.Ground) != null || Speed(proof.Ground) != proof.Speed) return CannotContinue("surface_rules_changed");
             }
             foreach (WindProof proof in searchWinds)
             {
                 WindVolume wind;
                 if (proof.Wind == null || !winds.TryGetValue(proof.Key, out wind) || wind != proof.Wind ||
                     wind.isActiveAndEnabled != proof.Active || !wind.GetVelocity().Equals(proof.Velocity) ||
-                    ((LayerMask)windFilter.GetValue(wind)).value != proof.Filter) return false;
+                    ((LayerMask)windFilter.GetValue(wind)).value != proof.Filter) return CannotContinue("wind_changed");
             }
-            return true;
+            ContinuityFailure = null; return true;
         }
     }
 }

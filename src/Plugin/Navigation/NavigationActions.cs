@@ -175,6 +175,7 @@ namespace SousChef.Plugin.Navigation
                 "diagnostics", Json.Object("planMilliseconds", planMilliseconds, "prepareMilliseconds", prepareMilliseconds,
                     "searchMilliseconds", searchMilliseconds, "matchMilliseconds", matchMilliseconds, "searchNodes", nodeCount,
                     "searchGeneration", searchGeneration, "searchSlices", searchSlices, "searchReused", searchReused,
+                    "searchReuseFailure", physics.ContinuityFailure,
                     "searchComplete", search != null && search.Complete,
                     "physicsQueries", physics.Queries, "candidateCount", candidateCount, "startCount", startCount, "observationError", observationError,
                     "portals", physics.PortalDiagnostics()));
@@ -300,6 +301,14 @@ namespace SousChef.Plugin.Navigation
             if (route.Count == 0 || Vector3.Distance(route[route.Count - 1], chosen.Approach) > .001f) route.Add(chosen.Approach);
             waypoint = 0;
         }
+        public void WarmCatalogue(PlayerControls player)
+        {
+            // This observation-only entry point cannot execute an active action.
+            if (Action.State != "idle") return;
+            if (chef == player && (unavailable == "planning_budget_exceeded" || unavailable == "planning_in_progress") &&
+                warmTicks > 0 && lastPlanFrame != Time.frameCount && (fastWarm || Time.realtimeSinceStartup - lastPlan >= .1f))
+            { Refresh(player, true, false, true); warmTicks -= fastWarm ? 1 : 4; }
+        }
         public void Tick(PlayerControls player)
         {
             followingSupport = false;
@@ -308,9 +317,7 @@ namespace SousChef.Plugin.Navigation
                 // Stable graphs continue their frontier once per render frame
                 // in a short slice. Unversioned/dynamic graphs keep paced fresh
                 // searches; a catalogue request never duplicates work in Tick.
-                if (chef == player && (unavailable == "planning_budget_exceeded" || unavailable == "planning_in_progress") &&
-                    warmTicks > 0 && lastPlanFrame != Time.frameCount && (fastWarm || Time.realtimeSinceStartup - lastPlan >= .1f))
-                { Refresh(player, true, false, true); warmTicks -= fastWarm ? 1 : 4; }
+                WarmCatalogue(player);
                 return;
             }
             if (player != chef || target == null || target.Object == null ||
