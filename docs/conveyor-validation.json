@@ -1,0 +1,1172 @@
+{
+  "date": "2026-11-02",
+  "navigationCommit": "1e2b118",
+  "runtime": {
+    "pid": 30086,
+    "level": "s_mine_4_3",
+    "portBase": 26712,
+    "bridgeSha256": "071d96e4f36e1ee48c83b7cfdf43dff463b332d08a3aec960ec7ef90d892da30"
+  },
+  "setup": "Native spawn after each reset; normal navigate_to only; no staging or modified belts.",
+  "checks": {
+    "coreAssertions": 840,
+    "navigationChecks": 290,
+    "actionChecks": 267,
+    "pythonTests": 98
+  },
+  "directionProbes": [
+    {
+      "level": "s_mine_4_3",
+      "success": true,
+      "pairs": [
+        {
+          "forward": {
+            "error": null,
+            "start": true,
+            "end": true,
+            "from": [
+              12,
+              0.009999871253967285,
+              9.600000381469727
+            ],
+            "to": [
+              12.399999618530273,
+              0.009999990463256836,
+              9.600000381469727
+            ],
+            "fromFlow": [
+              5,
+              0,
+              0
+            ],
+            "toFlow": [
+              5,
+              0,
+              0
+            ],
+            "clear": true,
+            "failure": {
+              "reason": null,
+              "point": [
+                0,
+                0,
+                0
+              ],
+              "collider": null,
+              "colliderId": 0,
+              "support": null
+            }
+          },
+          "reverse": {
+            "error": null,
+            "start": true,
+            "end": true,
+            "from": [
+              12.399999618530273,
+              0.009999990463256836,
+              9.600000381469727
+            ],
+            "to": [
+              12,
+              0.009999871253967285,
+              9.600000381469727
+            ],
+            "fromFlow": [
+              5,
+              0,
+              0
+            ],
+            "toFlow": [
+              5,
+              0,
+              0
+            ],
+            "clear": false,
+            "failure": {
+              "reason": "conveyor_opposes_walking",
+              "point": [
+                12.399999618530273,
+                0.009999990463256836,
+                9.600000381469727
+              ],
+              "collider": "mine_travelator_01 (24)",
+              "colliderId": 724484,
+              "support": {
+                "surfaceVelocity": [
+                  5,
+                  0,
+                  0
+                ],
+                "direction": [
+                  -0.39999961853027344,
+                  0,
+                  0
+                ]
+              }
+            }
+          },
+          "success": true
+        },
+        {
+          "forward": {
+            "error": null,
+            "start": true,
+            "end": true,
+            "from": [
+              12,
+              0.009999990463256836,
+              1.2000000476837158
+            ],
+            "to": [
+              11.600000381469727,
+              0.009999990463256836,
+              1.2000000476837158
+            ],
+            "fromFlow": [
+              -5,
+              0,
+              0
+            ],
+            "toFlow": [
+              -5,
+              0,
+              0
+            ],
+            "clear": true,
+            "failure": {
+              "reason": null,
+              "point": [
+                0,
+                0,
+                0
+              ],
+              "collider": null,
+              "colliderId": 0,
+              "support": null
+            }
+          },
+          "reverse": {
+            "error": null,
+            "start": true,
+            "end": true,
+            "from": [
+              11.600000381469727,
+              0.009999990463256836,
+              1.2000000476837158
+            ],
+            "to": [
+              12,
+              0.009999990463256836,
+              1.2000000476837158
+            ],
+            "fromFlow": [
+              -5,
+              0,
+              0
+            ],
+            "toFlow": [
+              -5,
+              0,
+              0
+            ],
+            "clear": false,
+            "failure": {
+              "reason": "conveyor_opposes_walking",
+              "point": [
+                11.600000381469727,
+                0.009999990463256836,
+                1.2000000476837158
+              ],
+              "collider": "mine_travelator_01 (5)",
+              "colliderId": 724398,
+              "support": {
+                "surfaceVelocity": [
+                  -5,
+                  0,
+                  0
+                ],
+                "direction": [
+                  0.39999961853027344,
+                  0,
+                  0
+                ]
+              }
+            }
+          },
+          "success": true
+        },
+        {
+          "forward": {
+            "error": null,
+            "start": true,
+            "end": true,
+            "from": [
+              16.799999237060547,
+              0.009999752044677734,
+              10.800000190734863
+            ],
+            "to": [
+              16.799999237060547,
+              0.009999752044677734,
+              11.199999809265137
+            ],
+            "fromFlow": [
+              4.470348358154297e-05,
+              0,
+              5.000000476837158
+            ],
+            "toFlow": [
+              4.470348358154297e-05,
+              0,
+              5.000000476837158
+            ],
+            "clear": true,
+            "failure": {
+              "reason": null,
+              "point": [
+                0,
+                0,
+                0
+              ],
+              "collider": null,
+              "colliderId": 0,
+              "support": null
+            }
+          },
+          "reverse": {
+            "error": null,
+            "start": true,
+            "end": true,
+            "from": [
+              16.799999237060547,
+              0.009999752044677734,
+              11.199999809265137
+            ],
+            "to": [
+              16.799999237060547,
+              0.009999752044677734,
+              10.800000190734863
+            ],
+            "fromFlow": [
+              4.470348358154297e-05,
+              0,
+              5.000000476837158
+            ],
+            "toFlow": [
+              4.470348358154297e-05,
+              0,
+              5.000000476837158
+            ],
+            "clear": false,
+            "failure": {
+              "reason": "conveyor_opposes_walking",
+              "point": [
+                16.799999237060547,
+                0.009999752044677734,
+                11.199999809265137
+              ],
+              "collider": "mine_travelator_01 (29)",
+              "colliderId": 724382,
+              "support": {
+                "surfaceVelocity": [
+                  4.470348358154297e-05,
+                  0,
+                  5.000000476837158
+                ],
+                "direction": [
+                  0,
+                  0,
+                  -0.39999961853027344
+                ]
+              }
+            }
+          },
+          "success": true
+        },
+        {
+          "forward": {
+            "error": null,
+            "start": true,
+            "end": true,
+            "from": [
+              21.600000381469727,
+              0.009999871253967285,
+              3.5999999046325684
+            ],
+            "to": [
+              21.600000381469727,
+              0.009999871253967285,
+              3.200000047683716
+            ],
+            "fromFlow": [
+              -1.4603137969970703e-05,
+              0,
+              -5
+            ],
+            "toFlow": [
+              -1.4603137969970703e-05,
+              0,
+              -5
+            ],
+            "clear": true,
+            "failure": {
+              "reason": null,
+              "point": [
+                0,
+                0,
+                0
+              ],
+              "collider": null,
+              "colliderId": 0,
+              "support": null
+            }
+          },
+          "reverse": {
+            "error": null,
+            "start": true,
+            "end": true,
+            "from": [
+              21.600000381469727,
+              0.009999871253967285,
+              3.200000047683716
+            ],
+            "to": [
+              21.600000381469727,
+              0.009999871253967285,
+              3.5999999046325684
+            ],
+            "fromFlow": [
+              -1.4603137969970703e-05,
+              0,
+              -5
+            ],
+            "toFlow": [
+              -1.4603137969970703e-05,
+              0,
+              -5
+            ],
+            "clear": false,
+            "failure": {
+              "reason": "conveyor_opposes_walking",
+              "point": [
+                21.600000381469727,
+                0.009999990463256836,
+                3.200000047683716
+              ],
+              "collider": "mine_travelator_01 (15)",
+              "colliderId": 724414,
+              "support": {
+                "surfaceVelocity": [
+                  -1.4603137969970703e-05,
+                  0,
+                  -5
+                ],
+                "direction": [
+                  0,
+                  0,
+                  0.39999985694885254
+                ]
+              }
+            }
+          },
+          "success": true
+        }
+      ]
+    },
+    {
+      "level": "s_sushi_1_4",
+      "success": true,
+      "pairs": [
+        {
+          "forward": {
+            "error": null,
+            "start": true,
+            "end": true,
+            "from": [
+              14.399999618530273,
+              0.009999871253967285,
+              -3.5999999046325684
+            ],
+            "to": [
+              14.800000190734863,
+              0.009999990463256836,
+              -3.5999999046325684
+            ],
+            "fromFlow": [
+              2.5,
+              0,
+              0
+            ],
+            "toFlow": [
+              2.5,
+              0,
+              0
+            ],
+            "clear": true,
+            "failure": {
+              "reason": null,
+              "point": [
+                0,
+                0,
+                0
+              ],
+              "collider": null,
+              "colliderId": 0,
+              "support": null
+            }
+          },
+          "reverse": {
+            "error": null,
+            "start": true,
+            "end": true,
+            "from": [
+              14.800000190734863,
+              0.009999990463256836,
+              -3.5999999046325684
+            ],
+            "to": [
+              14.399999618530273,
+              0.009999871253967285,
+              -3.5999999046325684
+            ],
+            "fromFlow": [
+              2.5,
+              0,
+              0
+            ],
+            "toFlow": [
+              2.5,
+              0,
+              0
+            ],
+            "clear": false,
+            "failure": {
+              "reason": "conveyor_opposes_walking",
+              "point": [
+                14.800000190734863,
+                0.009999990463256836,
+                -3.5999999046325684
+              ],
+              "collider": "Travelator_Test (7)",
+              "colliderId": 742412,
+              "support": {
+                "surfaceVelocity": [
+                  2.5,
+                  0,
+                  0
+                ],
+                "direction": [
+                  -0.40000057220458984,
+                  0,
+                  0
+                ]
+              }
+            }
+          },
+          "success": true
+        },
+        {
+          "forward": {
+            "error": null,
+            "start": true,
+            "end": true,
+            "from": [
+              14.399999618530273,
+              0.009999871253967285,
+              -9.600000381469727
+            ],
+            "to": [
+              14,
+              0.009999990463256836,
+              -9.600000381469727
+            ],
+            "fromFlow": [
+              -2.5,
+              0,
+              0
+            ],
+            "toFlow": [
+              -2.5,
+              0,
+              0
+            ],
+            "clear": true,
+            "failure": {
+              "reason": null,
+              "point": [
+                0,
+                0,
+                0
+              ],
+              "collider": null,
+              "colliderId": 0,
+              "support": null
+            }
+          },
+          "reverse": {
+            "error": null,
+            "start": true,
+            "end": true,
+            "from": [
+              14,
+              0.009999990463256836,
+              -9.600000381469727
+            ],
+            "to": [
+              14.399999618530273,
+              0.009999871253967285,
+              -9.600000381469727
+            ],
+            "fromFlow": [
+              -2.5,
+              0,
+              0
+            ],
+            "toFlow": [
+              -2.5,
+              0,
+              0
+            ],
+            "clear": false,
+            "failure": {
+              "reason": "conveyor_opposes_walking",
+              "point": [
+                14,
+                0.009999990463256836,
+                -9.600000381469727
+              ],
+              "collider": "Travelator_Test (16)",
+              "colliderId": 742452,
+              "support": {
+                "surfaceVelocity": [
+                  -2.5,
+                  0,
+                  0
+                ],
+                "direction": [
+                  0.39999961853027344,
+                  0,
+                  0
+                ]
+              }
+            }
+          },
+          "success": true
+        }
+      ]
+    }
+  ],
+  "nativeTraversal": [
+    {
+      "level": "s_mine_4_3",
+      "requestedFps": 60,
+      "passedRoundTrips": 5,
+      "attemptedRoundTrips": 5,
+      "attempts": [
+        {
+          "attempt": 1,
+          "success": true,
+          "reason": "arrived",
+          "legs": [
+            {
+              "target": "utensil_frying_pan_01",
+              "foodName": null,
+              "success": true,
+              "reason": "arrived",
+              "seconds": 5.556287750019692,
+              "approach": [
+                14.430000305175781,
+                0,
+                3.630000114440918
+              ],
+              "arrival": {
+                "stanceError": 0.134141743183136,
+                "facingErrorDegrees": 0,
+                "relativeSpeed": 0,
+                "nativeSelected": true,
+                "positioned": true,
+                "canPickup": true,
+                "canPlace": false,
+                "canUse": false,
+                "readyForAction": true
+              }
+            },
+            {
+              "target": "DispenserCrate 3 (2)",
+              "foodName": "Meat",
+              "success": true,
+              "reason": "arrived",
+              "seconds": 1.9977572499774396,
+              "approach": [
+                5.999999046325684,
+                0,
+                4.800000190734863
+              ],
+              "arrival": {
+                "stanceError": 0.19834381341934204,
+                "facingErrorDegrees": 0,
+                "relativeSpeed": 0,
+                "nativeSelected": true,
+                "positioned": true,
+                "canPickup": true,
+                "canPlace": false,
+                "canUse": false,
+                "readyForAction": true
+              }
+            }
+          ],
+          "conveyorDecisionFrames": 172,
+          "distinctConveyorGrounds": 25,
+          "conveyorDirections": [
+            "+X",
+            "+Z",
+            "-X"
+          ],
+          "longestUpstreamHeadingSeconds": 0
+        },
+        {
+          "attempt": 2,
+          "success": true,
+          "reason": "arrived",
+          "legs": [
+            {
+              "target": "utensil_frying_pan_01",
+              "foodName": null,
+              "success": true,
+              "reason": "arrived",
+              "seconds": 5.391343250055797,
+              "approach": [
+                14.430000305175781,
+                0,
+                3.630000114440918
+              ],
+              "arrival": {
+                "stanceError": 0.08205681294202805,
+                "facingErrorDegrees": 0,
+                "relativeSpeed": 0,
+                "nativeSelected": true,
+                "positioned": true,
+                "canPickup": true,
+                "canPlace": false,
+                "canUse": false,
+                "readyForAction": true
+              }
+            },
+            {
+              "target": "DispenserCrate 3 (2)",
+              "foodName": "Meat",
+              "success": true,
+              "reason": "arrived",
+              "seconds": 1.9569522090023383,
+              "approach": [
+                5.999999046325684,
+                0,
+                4.800000190734863
+              ],
+              "arrival": {
+                "stanceError": 0.1687825322151184,
+                "facingErrorDegrees": 0,
+                "relativeSpeed": 0,
+                "nativeSelected": true,
+                "positioned": true,
+                "canPickup": true,
+                "canPlace": false,
+                "canUse": false,
+                "readyForAction": true
+              }
+            }
+          ],
+          "conveyorDecisionFrames": 170,
+          "distinctConveyorGrounds": 26,
+          "conveyorDirections": [
+            "+X",
+            "+Z",
+            "-X"
+          ],
+          "longestUpstreamHeadingSeconds": 0.03253173828125
+        },
+        {
+          "attempt": 3,
+          "success": true,
+          "reason": "arrived",
+          "legs": [
+            {
+              "target": "utensil_frying_pan_01",
+              "foodName": null,
+              "success": true,
+              "reason": "arrived",
+              "seconds": 5.292984959087335,
+              "approach": [
+                14.430000305175781,
+                0,
+                3.630000114440918
+              ],
+              "arrival": {
+                "stanceError": 0.12943041324615479,
+                "facingErrorDegrees": 0,
+                "relativeSpeed": 0,
+                "nativeSelected": true,
+                "positioned": true,
+                "canPickup": true,
+                "canPlace": false,
+                "canUse": false,
+                "readyForAction": true
+              }
+            },
+            {
+              "target": "DispenserCrate 3 (2)",
+              "foodName": "Meat",
+              "success": true,
+              "reason": "arrived",
+              "seconds": 1.8935287500498816,
+              "approach": [
+                5.999999046325684,
+                0,
+                4.800000190734863
+              ],
+              "arrival": {
+                "stanceError": 0.1455717831850052,
+                "facingErrorDegrees": 0,
+                "relativeSpeed": 0,
+                "nativeSelected": true,
+                "positioned": true,
+                "canPickup": true,
+                "canPlace": false,
+                "canUse": false,
+                "readyForAction": true
+              }
+            }
+          ],
+          "conveyorDecisionFrames": 163,
+          "distinctConveyorGrounds": 25,
+          "conveyorDirections": [
+            "+X",
+            "+Z",
+            "-X"
+          ],
+          "longestUpstreamHeadingSeconds": 0.02581024169921875
+        },
+        {
+          "attempt": 4,
+          "success": true,
+          "reason": "arrived",
+          "legs": [
+            {
+              "target": "utensil_frying_pan_01",
+              "foodName": null,
+              "success": true,
+              "reason": "arrived",
+              "seconds": 5.41014091600664,
+              "approach": [
+                14.430000305175781,
+                0,
+                3.630000114440918
+              ],
+              "arrival": {
+                "stanceError": 0.12994210422039032,
+                "facingErrorDegrees": 0,
+                "relativeSpeed": 0,
+                "nativeSelected": true,
+                "positioned": true,
+                "canPickup": true,
+                "canPlace": false,
+                "canUse": false,
+                "readyForAction": true
+              }
+            },
+            {
+              "target": "DispenserCrate 3 (2)",
+              "foodName": "Meat",
+              "success": true,
+              "reason": "arrived",
+              "seconds": 1.9899687920697033,
+              "approach": [
+                5.999999046325684,
+                0,
+                4.800000190734863
+              ],
+              "arrival": {
+                "stanceError": 0.19381992518901825,
+                "facingErrorDegrees": 0,
+                "relativeSpeed": 0,
+                "nativeSelected": true,
+                "positioned": true,
+                "canPickup": true,
+                "canPlace": false,
+                "canUse": false,
+                "readyForAction": true
+              }
+            }
+          ],
+          "conveyorDecisionFrames": 166,
+          "distinctConveyorGrounds": 25,
+          "conveyorDirections": [
+            "+X",
+            "+Z",
+            "-X"
+          ],
+          "longestUpstreamHeadingSeconds": 0.03537750244140625
+        },
+        {
+          "attempt": 5,
+          "success": true,
+          "reason": "arrived",
+          "legs": [
+            {
+              "target": "utensil_frying_pan_01",
+              "foodName": null,
+              "success": true,
+              "reason": "arrived",
+              "seconds": 5.5836451249197125,
+              "approach": [
+                14.430000305175781,
+                0,
+                3.630000114440918
+              ],
+              "arrival": {
+                "stanceError": 0.12468359619379044,
+                "facingErrorDegrees": 0,
+                "relativeSpeed": 0,
+                "nativeSelected": true,
+                "positioned": true,
+                "canPickup": true,
+                "canPlace": false,
+                "canUse": false,
+                "readyForAction": true
+              }
+            },
+            {
+              "target": "DispenserCrate 3 (2)",
+              "foodName": "Meat",
+              "success": true,
+              "reason": "arrived",
+              "seconds": 1.9301919160643592,
+              "approach": [
+                5.999999046325684,
+                0,
+                4.800000190734863
+              ],
+              "arrival": {
+                "stanceError": 0.16296501457691193,
+                "facingErrorDegrees": 0,
+                "relativeSpeed": 0,
+                "nativeSelected": true,
+                "positioned": true,
+                "canPickup": true,
+                "canPlace": false,
+                "canUse": false,
+                "readyForAction": true
+              }
+            }
+          ],
+          "conveyorDecisionFrames": 169,
+          "distinctConveyorGrounds": 25,
+          "conveyorDirections": [
+            "+X",
+            "+Z",
+            "-X"
+          ],
+          "longestUpstreamHeadingSeconds": 0.00917816162109375
+        }
+      ]
+    },
+    {
+      "level": "s_sushi_1_4",
+      "requestedFps": 60,
+      "passedRoundTrips": 4,
+      "attemptedRoundTrips": 5,
+      "attempts": [
+        {
+          "attempt": 1,
+          "success": true,
+          "reason": "arrived",
+          "legs": [
+            {
+              "target": "DispenserCrate 3 (6)",
+              "foodName": "Cucumber",
+              "success": true,
+              "reason": "arrived",
+              "seconds": 4.5276602080557495,
+              "approach": [
+                12,
+                0,
+                -2.3999998569488525
+              ],
+              "arrival": {
+                "stanceError": 0.10183720290660858,
+                "facingErrorDegrees": 0,
+                "relativeSpeed": 0,
+                "nativeSelected": true,
+                "positioned": true,
+                "canPickup": true,
+                "canPlace": false,
+                "canUse": false,
+                "readyForAction": true
+              }
+            },
+            {
+              "target": "DispenserCrate 3 (3)",
+              "foodName": "SushiRice",
+              "success": true,
+              "reason": "arrived",
+              "seconds": 0.5904047500807792,
+              "approach": [
+                9.600000381469727,
+                0,
+                -2.3999998569488525
+              ],
+              "arrival": {
+                "stanceError": 0.14154839515686035,
+                "facingErrorDegrees": 0,
+                "relativeSpeed": 0,
+                "nativeSelected": true,
+                "positioned": true,
+                "canPickup": true,
+                "canPlace": false,
+                "canUse": false,
+                "readyForAction": true
+              }
+            }
+          ],
+          "conveyorDecisionFrames": 96,
+          "distinctConveyorGrounds": 12,
+          "conveyorDirections": [
+            "+X",
+            "-X"
+          ],
+          "longestUpstreamHeadingSeconds": 0
+        },
+        {
+          "attempt": 2,
+          "success": true,
+          "reason": "arrived",
+          "legs": [
+            {
+              "target": "DispenserCrate 3 (6)",
+              "foodName": "Cucumber",
+              "success": true,
+              "reason": "arrived",
+              "seconds": 4.510935749975033,
+              "approach": [
+                12,
+                0,
+                -2.3999998569488525
+              ],
+              "arrival": {
+                "stanceError": 0.09853989630937576,
+                "facingErrorDegrees": 0,
+                "relativeSpeed": 0,
+                "nativeSelected": true,
+                "positioned": true,
+                "canPickup": true,
+                "canPlace": false,
+                "canUse": false,
+                "readyForAction": true
+              }
+            },
+            {
+              "target": "DispenserCrate 3 (3)",
+              "foodName": "SushiRice",
+              "success": true,
+              "reason": "arrived",
+              "seconds": 0.5770984579576179,
+              "approach": [
+                9.600000381469727,
+                0,
+                -2.3999998569488525
+              ],
+              "arrival": {
+                "stanceError": 0.148285374045372,
+                "facingErrorDegrees": 0,
+                "relativeSpeed": 0,
+                "nativeSelected": true,
+                "positioned": true,
+                "canPickup": true,
+                "canPlace": false,
+                "canUse": false,
+                "readyForAction": true
+              }
+            }
+          ],
+          "conveyorDecisionFrames": 102,
+          "distinctConveyorGrounds": 13,
+          "conveyorDirections": [
+            "+X",
+            "-X"
+          ],
+          "longestUpstreamHeadingSeconds": 0
+        },
+        {
+          "attempt": 3,
+          "success": false,
+          "reason": "no_safe_start",
+          "legs": [
+            {
+              "target": "DispenserCrate 3 (6)",
+              "foodName": "Cucumber",
+              "success": false,
+              "reason": "no_safe_start",
+              "seconds": 0.6006595829967409,
+              "approach": [
+                12,
+                0,
+                -2.3999998569488525
+              ],
+              "arrival": null
+            }
+          ],
+          "conveyorDecisionFrames": 10,
+          "distinctConveyorGrounds": 2,
+          "conveyorDirections": [
+            "+X"
+          ],
+          "longestUpstreamHeadingSeconds": 0
+        },
+        {
+          "attempt": 4,
+          "success": true,
+          "reason": "arrived",
+          "legs": [
+            {
+              "target": "DispenserCrate 3 (6)",
+              "foodName": "Cucumber",
+              "success": true,
+              "reason": "arrived",
+              "seconds": 4.606871041934937,
+              "approach": [
+                12,
+                0,
+                -2.3999998569488525
+              ],
+              "arrival": {
+                "stanceError": 0.1067901998758316,
+                "facingErrorDegrees": 0,
+                "relativeSpeed": 0,
+                "nativeSelected": true,
+                "positioned": true,
+                "canPickup": true,
+                "canPlace": false,
+                "canUse": false,
+                "readyForAction": true
+              }
+            },
+            {
+              "target": "DispenserCrate 3 (3)",
+              "foodName": "SushiRice",
+              "success": true,
+              "reason": "arrived",
+              "seconds": 0.5879582910565659,
+              "approach": [
+                9.600000381469727,
+                0,
+                -2.3999998569488525
+              ],
+              "arrival": {
+                "stanceError": 0.01941765658557415,
+                "facingErrorDegrees": 0,
+                "relativeSpeed": 0,
+                "nativeSelected": true,
+                "positioned": true,
+                "canPickup": true,
+                "canPlace": false,
+                "canUse": false,
+                "readyForAction": true
+              }
+            }
+          ],
+          "conveyorDecisionFrames": 98,
+          "distinctConveyorGrounds": 13,
+          "conveyorDirections": [
+            "+X",
+            "-X"
+          ],
+          "longestUpstreamHeadingSeconds": 0
+        },
+        {
+          "attempt": 5,
+          "success": true,
+          "reason": "arrived",
+          "legs": [
+            {
+              "target": "DispenserCrate 3 (6)",
+              "foodName": "Cucumber",
+              "success": true,
+              "reason": "arrived",
+              "seconds": 4.6025583340087906,
+              "approach": [
+                12,
+                0,
+                -2.3999998569488525
+              ],
+              "arrival": {
+                "stanceError": 0.11364912241697311,
+                "facingErrorDegrees": 0,
+                "relativeSpeed": 0,
+                "nativeSelected": true,
+                "positioned": true,
+                "canPickup": true,
+                "canPlace": false,
+                "canUse": false,
+                "readyForAction": true
+              }
+            },
+            {
+              "target": "DispenserCrate 3 (3)",
+              "foodName": "SushiRice",
+              "success": true,
+              "reason": "arrived",
+              "seconds": 0.5680070840753615,
+              "approach": [
+                9.600000381469727,
+                0,
+                -2.3999998569488525
+              ],
+              "arrival": {
+                "stanceError": 0.12998513877391815,
+                "facingErrorDegrees": 0,
+                "relativeSpeed": 0,
+                "nativeSelected": true,
+                "positioned": true,
+                "canPickup": true,
+                "canPlace": false,
+                "canUse": false,
+                "readyForAction": true
+              }
+            }
+          ],
+          "conveyorDecisionFrames": 98,
+          "distinctConveyorGrounds": 12,
+          "conveyorDirections": [
+            "+X",
+            "-X"
+          ],
+          "longestUpstreamHeadingSeconds": 0
+        }
+      ]
+    }
+  ],
+  "lowFpsExploration": [
+    {
+      "level": "s_mine_4_3",
+      "requestedFps": 20,
+      "arrivedRoundTrips": 0,
+      "attemptedRoundTrips": 3,
+      "reasons": [
+        "no_safe_start",
+        "no_safe_start",
+        "no_safe_start"
+      ]
+    },
+    {
+      "level": "s_sushi_1_4",
+      "requestedFps": 20,
+      "arrivedRoundTrips": 1,
+      "attemptedRoundTrips": 3,
+      "reasons": [
+        "arrived",
+        "no_safe_start",
+        "no_safe_start"
+      ]
+    }
+  ]
+}

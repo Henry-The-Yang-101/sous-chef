@@ -33,6 +33,13 @@ These doubles do not emulate PhysX, native step projection, friction or Unity
 update ordering. Building against the installed assemblies checks API compatibility;
 real level traversal and low-FPS/native-input behavior still need live validation.
 
+Native conveyor regressions also cover upstream edge rejection on weaker belts,
+live reversals, stopped belts, rotated directions, checked lateral exits,
+non-drifting arrival stances, padded turn support, contact recovery and preserved
+turn waypoints. Exact conveyor-field, neighbour and native-entry-history changes
+invalidate saved searches. See [the native conveyor report](../../docs/conveyor-navigation.md)
+for the repeatable simulator audit and its remaining traversal failures.
+
 `fixtures/wizard-stair-corner.json` contains eight measured floor/tread/wedge box
 transforms from the live Chocolate stair failure in `s_wizard_school_3_4`.
 `StairGeometry.cs` independently replays solid oriented-box contacts and continuous

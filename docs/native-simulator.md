@@ -9,6 +9,11 @@ The former approximate CPU simulator has been removed. Navigation unit tests
 remain for isolated regressions; this native runtime is the simulator for
 complete level traversal.
 
+The [conveyor investigation](conveyor-navigation.md) records directional segment
+checks in all four world directions, repeated native mine/sushi traversal, the
+drifting-arrival regression, and remaining contact failures, including at 20 FPS.
+Run `scripts/conveyor_audit.py` against an isolated runtime to repeat those checks.
+
 The [teleporter coverage report](teleporter-audit.md) records all 28 entrances
 across the nine installed two-player portal kitchens, including explicit setup
 fixtures and the remaining spawn-access limitation.
@@ -194,7 +199,7 @@ Additional explicitly selected fixtures:
   coverage; arriving on the same island without teleporting cannot cover an edge.
 
 `probe-walk Ax Ay Az Bx By Bz` is a read-only mailbox diagnostic that writes
-production standability/segment results to `probe.json`.
+production standability/segment results and endpoint flow velocities to `probe.json`.
 
 Throw height fixtures use `stage-player N X Y Z YAW` through the same isolated
 mailbox. It requires an existing stationary, enabled chef and a checked supported
