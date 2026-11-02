@@ -199,6 +199,9 @@ and animations, bounded to 5–30 seconds. Disabled or broken links stop the act
 Graph connectors line up on open floor before the portal frame. Execution can
 start that approach slightly early and brakes for two updates before entering,
 allowing the game's preceding lateral movement command to settle at low FPS.
+A shallow platform uses a shorter checked approach and three braking updates.
+Exit connectors may turn sideways only when a normal sweep clears the trigger;
+the trigger exemption remains restricted to outward departure.
 
 During native transport, the action retains its lease with neutral commands.
 The temporary disabled chef/collider state is accepted only for an active portal
@@ -214,6 +217,10 @@ budget expires, the checked route tail can be retained without trying to walk
 across the completed teleport. Lookahead never skips a pending portal.
 Stop/disconnect cancels further navigation; an already-started native animation
 may finish.
+Moving receivers with temporarily blocked landings hold entry neutrally. If their
+motion temporarily disconnects the planned onward route, navigation waits and
+replans for at most 15 seconds per interruption, within the overall 45-second
+action timeout. It never follows an obsolete cross-island walking segment.
 
 Floor conveyors and supported moving surfaces contribute native surface velocity;
 wind is evaluated using current volumes, filters and direction. Travelator corner
@@ -307,7 +314,7 @@ raw label, kind, Unity instance ID and position. It survives completion/cancella
 until another action or round reset, so an interruption cannot look like arrival
 at a different object. `destinationId` remains null when idle. While navigating,
 `phase` distinguishes `walking`, `aligning`, `settling_ground`, `following_support`, `entering_portal`,
-`waiting_portal` and `teleporting`; all are interrupted by Stop.
+`waiting_portal`, `waiting_portal_geometry`, `waiting_portal_route` and `teleporting`; all are interrupted by Stop.
 
 Read-only catalogues can be queried while the game is unfocused, provided the
 other native round, pause, menu and player gates pass. Movement still requires

@@ -137,8 +137,12 @@ namespace SousChef.Plugin.Control
                     Restore(); Install(); navigationSequence = 0;
                     bool requestedLogistics = LogisticsActions.Handles(command.Operation);
                     long priorRevision = requestedLogistics ? logistics.Run.Revision : interactions.Run.Revision;
-                    error = command.Operation == "navigate_to" ? navigation.Start(target, client, command.Destination) :
-                        requestedLogistics ? logistics.Start(target, client, command) : interactions.Start(target, client, command);
+                    if (command.Operation == "navigate_to")
+                    {
+                        if (!NativeSimulator.StartPortalPoint(navigation, target, client, command.Destination, out error))
+                            error = navigation.Start(target, client, command.Destination);
+                    }
+                    else error = requestedLogistics ? logistics.Start(target, client, command) : interactions.Start(target, client, command);
                     if (error == null || (requestedLogistics ? logistics.Run.Revision : interactions.Run.Revision) != priorRevision) lastWasLogistics = requestedLogistics;
                     if (error != null) Revoke(error);
                 }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
@@ -25,6 +26,7 @@ namespace SousChef.Plugin
         private int generation, loadedGeneration;
         private int dlc = -1;
         private Harmony patches;
+        private static ServerDynamicFlowController advanceFlow;
         private const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
         private static object Call(object obj, string method, params object[] args) { return obj.GetType().GetMethod(method, Flags).Invoke(obj, args); }
         private void Awake()
@@ -41,6 +43,9 @@ namespace SousChef.Plugin
             patches = new Harmony("dev.souschef.native-simulator");
             patches.Patch(typeof(SteamSaveManager).GetMethod("GetSaveDirectory", Flags), new HarmonyMethod(typeof(NativeSimulator).GetMethod("SaveDirectory", Flags)));
             patches.Patch(typeof(PlayerControls).GetMethod("CanButtonBePressed"), new HarmonyMethod(typeof(NativeSimulator).GetMethod("InputAllowed", Flags)));
+            var phaseWrapper = new HarmonyMethod(typeof(NativeSimulator).GetMethod("PhaseRoutine", Flags));
+            patches.Patch(typeof(ServerDynamicFlowController).GetMethod("BuildPhaseRoutine", Flags), postfix: phaseWrapper);
+            patches.Patch(typeof(ServerBossFlowController).GetMethod("BuildPhaseRoutine", Flags), postfix: phaseWrapper);
             requested = Environment.GetEnvironmentVariable("SOUS_CHEF_NATIVE_LEVEL");
             SceneManager.sceneLoaded += OnSceneLoaded;
         }
@@ -48,6 +53,21 @@ namespace SousChef.Plugin
         {
             __result = Path.Combine(Environment.GetEnvironmentVariable("SOUS_CHEF_NATIVE_SIM"), "saves") + Path.DirectorySeparatorChar;
             return false;
+        }
+        private static void PhaseRoutine(ServerDynamicFlowController __instance, ref IEnumerator __result)
+        { __result = RunPhase(__instance, __result); }
+        private static IEnumerator RunPhase(ServerDynamicFlowController flow, IEnumerator native)
+        {
+            try
+            {
+                while (true)
+                {
+                    if (System.Object.ReferenceEquals(flow, advanceFlow)) { advanceFlow = null; yield break; }
+                    if (!native.MoveNext()) yield break;
+                    yield return native.Current;
+                }
+            }
+            finally { var disposable = native as IDisposable; if (disposable != null) disposable.Dispose(); }
         }
         private static bool InputAllowed(PlayerControls __instance, ref bool __result)
         {
@@ -90,6 +110,9 @@ namespace SousChef.Plugin
                         else if (value == "reset") Load(requested);
                         else if (value == "launch-cannon") LaunchLoadedCannon();
                         else if (value == "aim-cannon-down") AimLoadedCannon();
+                        else if (value == "advance-phase") AdvancePhase();
+                        else if (value.StartsWith("stage-portal ", StringComparison.Ordinal)) StagePortal(Int32.Parse(value.Substring(13)));
+                        else if (value.StartsWith("probe-walk ", StringComparison.Ordinal)) ProbeWalk(value.Substring(11));
                         else if (value.StartsWith("load ", StringComparison.Ordinal)) Load(value.Substring(5));
                         else if (value.StartsWith("fps ", StringComparison.Ordinal)) SetFrameRate(Int32.Parse(value.Substring(4)));
                         else throw new ArgumentException("Unknown simulator command");
@@ -125,7 +148,14 @@ namespace SousChef.Plugin
                         "playerSender", portal.GetComponent<TeleportalPlayerSender>() != null,
                         "enabled", portal.isActiveAndEnabled));
                 }
-                Write("status.json", Json.Object("dlc", dlc, "cannons", cannons, "portals", portals,"phase", error != null ? "error" : inRound ? "ready" : phase, "error", error,
+                var dynamic = UnityEngine.Object.FindObjectOfType<ServerDynamicFlowController>();
+                var phaseData = dynamic == null ? null : (DynamicLevelMessage)typeof(ServerDynamicFlowController).GetField("m_data", Flags).GetValue(dynamic);
+                var clientDynamic = UnityEngine.Object.FindObjectOfType<ClientDynamicFlowController>();
+                var transitions = clientDynamic == null ? null : (Queue<IEnumerator>)typeof(ClientDynamicFlowController).GetField("m_phaseQueue", Flags).GetValue(clientDynamic);
+                var phaseOrders = dynamic == null || !inRound ? null : (ServerDynamicOrderController)Call(dynamic, "GetOrderController");
+                Write("status.json", Json.Object("dynamicPhase", phaseData == null ? -1 : phaseData.m_phase, "boss", dynamic is ServerBossFlowController,
+                    "phaseTransitionsPending", transitions == null ? 0 : transitions.Count, "phaseCanAdvance", phaseOrders != null && phaseOrders.HasMorePhases(),
+                    "dlc", dlc, "cannons", cannons, "portals", portals,"phase", error != null ? "error" : inRound ? "ready" : phase, "error", error,
                     "scene", SceneManager.GetActiveScene().name, "requestedLevel", requested, "generation", generation,
                     "inRound", inRound, "players", players, "serverUsers", ServerUserSystem.m_Users.Count,
                     "clientUsers", ClientUserSystem.m_Users.Count, "realtime", Time.realtimeSinceStartup,
@@ -134,6 +164,77 @@ namespace SousChef.Plugin
                     "unityVersion", Application.unityVersion, "gameAssemblySha256", GameAssemblyHash, "audioPaused", AudioListener.pause, "audioVolume", AudioListener.volume,
                     "graphicsDevice", SystemInfo.graphicsDeviceType.ToString(), "frame", Time.frameCount, "physicsAutoSimulation", Physics.autoSimulation, "fixedDeltaTime", Time.fixedDeltaTime));
             }
+        }
+        internal static bool StartPortalPoint(Navigation.NavigationActions navigation, PlayerControls chef, int owner, string destination, out string reason)
+        {
+            reason = null;
+            if (!Enabled || destination == null || !destination.StartsWith("d000", StringComparison.Ordinal)) return false;
+            // Ordinary identities never have leading zeroes. Reserve this form
+            // only in the opt-in simulator; the wire protocol stays unchanged.
+            uint encoded;
+            if (!UInt32.TryParse(destination.Substring(4), out encoded)) { reason = "invalid_fixture_portal"; return true; }
+            var physics = new Navigation.WalkPhysics();
+            reason = physics.Refresh(chef);
+            if (reason != null) return true;
+            var portal = physics.Portal(unchecked((int)encoded));
+            if (portal == null || !portal.Valid) { reason = "fixture_portal_unavailable"; return true; }
+            reason = navigation.StartPosition(chef, owner, portal.Receiver.gameObject, portal.Exit);
+            return true;
+        }
+        private void StagePortal(int id)
+        {
+            // Explicit test initial condition, never invoked by navigation. This
+            // isolates portal traversal from unrelated access mechanisms.
+            PlayerControls chef = null;
+            foreach (var p in UnityEngine.Object.FindObjectsOfType<PlayerControls>())
+                if (p.PlayerIDProvider != null && p.PlayerIDProvider.GetID() == PlayerInputLookup.Player.Two) chef = p;
+            if (chef == null || !chef.enabled || chef.Motion.GetVelocity().magnitude > .05f ||
+                Navigation.PortalLink.Travelling(chef) || !KitchenGate.Inspect().InRound)
+                throw new InvalidOperationException("Staging requires a stationary, enabled Player 2 in a kitchen");
+            var physics = new Navigation.WalkPhysics();
+            if (physics.Refresh(chef) != null) throw new InvalidOperationException("Staging requires grounded Player 2");
+            var portal = physics.Portal(id);
+            if (portal == null || !portal.Valid) throw new InvalidOperationException("No valid selected portal");
+            Vector3 stance; Collider ground;
+            Vector3 guess = portal.Entry + portal.Source.transform.right * portal.StagingDistance;
+            if (!physics.Stand(guess, out stance, out ground) || Mathf.Abs(stance.y - portal.Entry.y) > .03f ||
+                !physics.PortalSegment(stance, portal.Entry, portal.Trigger))
+                throw new InvalidOperationException("No checked portal staging stance");
+            Vector3 before = chef.transform.position;
+            chef.transform.position += stance - physics.Position;
+            Physics.SyncTransforms();
+            Write("staging.json", Json.Object("kind", "explicit_supported_portal_initial_pose", "entranceId", id,
+                "before", Values.Vector(before), "after", Values.Vector(chef.transform.position)));
+        }
+        private void ProbeWalk(string arguments)
+        {
+            string[] values = arguments.Split(' ');
+            if (values.Length != 6) throw new ArgumentException("probe-walk requires two XYZ positions");
+            var v = new float[6];
+            for (int i = 0; i < 6; i++) v[i] = Single.Parse(values[i], System.Globalization.CultureInfo.InvariantCulture);
+            PlayerControls chef = null;
+            foreach (var p in UnityEngine.Object.FindObjectsOfType<PlayerControls>())
+                if (p.PlayerIDProvider != null && p.PlayerIDProvider.GetID() == PlayerInputLookup.Player.Two) chef = p;
+            if (chef == null) throw new InvalidOperationException("No Player 2");
+            var physics = new Navigation.WalkPhysics { TraceEnabled = true };
+            string error = physics.Refresh(chef);
+            Vector3 from, to; Collider a, b;
+            bool start = physics.Stand(new Vector3(v[0],v[1],v[2]), out from, out a);
+            bool end = physics.Stand(new Vector3(v[3],v[4],v[5]), out to, out b);
+            bool clear = start && end && physics.Segment(from, to);
+            Write("probe.json", Json.Object("error", error, "start", start, "end", end,
+                "from", Values.Vector(from), "to", Values.Vector(to), "clear", clear, "failure", physics.Failure));
+        }
+        private void AdvancePhase()
+        {
+            if (advanceFlow != null) throw new InvalidOperationException("A phase request is pending");
+            var flow = UnityEngine.Object.FindObjectOfType<ServerDynamicFlowController>();
+            if (flow == null || !KitchenGate.Inspect().InRound) throw new InvalidOperationException("No active native dynamic kitchen");
+            var orders = (ServerDynamicOrderController)Call(flow, "GetOrderController");
+            if (!orders.HasMorePhases()) throw new InvalidOperationException("Already in the final native phase");
+            // Fixture skips only the phase prerequisite once. The game's own
+            // coroutine sends phase events, changes orders and runs transitions.
+            advanceFlow = flow;
         }
         private ServerCannon LoadedCannon()
         {
@@ -238,6 +339,7 @@ namespace SousChef.Plugin
                 if (variant != null && variant.SceneName == level) { match = variant; break; }
             }
             if (match == null) throw new ArgumentException("Unknown two-player kitchen: " + level);
+            advanceFlow = null;
             requested = level; generation++; phase = "loading"; introReady = false; nextIntroSkip = Time.realtimeSinceStartup + 1f;
             session.LevelSettings = new GameSession.GameLevelSettings { SceneDirectoryVarientEntry = match };
             var persist = session.GetComponent<PersistentObject>();
@@ -276,6 +378,7 @@ namespace SousChef.Plugin
         {
             if (aimingCannon != null) aimingCannon.AssignPlayer(savedCannonControls);
             SceneManager.sceneLoaded -= OnSceneLoaded;
+            advanceFlow = null;
             if (patches != null) patches.UnpatchSelf();
         }
     }

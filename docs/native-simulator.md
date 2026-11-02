@@ -129,6 +129,29 @@ route. It never writes positions or controls Player 1. The setup is recorded
 separately and does **not** establish autonomous cannon pathfinding. A stale
 cannon occupant reference after landing cannot authorize another launch. Story-only throne rooms are identified
 separately. An inactive player portal is not silently counted as tested.
+Additional explicitly selected fixtures:
+
+- `--portal-phase-setup` advances each native phase prerequisite until dormant
+  portals activate. It preserves native phase events, order transitions and
+  animations; it does not prove recipe completion. Initial cutscenes use their
+  native skip event in every simulator run.
+- Carnival `s_Day_3_4`: use `--cannon-setup --cannon-aim-down --portal-index 0`
+  for the left island. Add `--cannon-transit --portal-index 1` for the right.
+  Aiming supplies native pilot input for one second and retains the game's limits.
+- `--stage-portal-index N` explicitly places the stationary Player 2 at a checked
+  supported entrance approach **before** measured navigation. The before/after
+  pose is recorded as `explicit_supported_portal_initial_pose`; this is not a
+  successful route from spawn. It is needed to isolate the portals in
+  `s_dynamic_stage_03` from its currently rejected stair connection.
+- `--portal-points` uses the production point navigator and normal control lease
+  to reach the selected portal's supported exit. This is useful for platforms
+  without reachable stations. Simulator-only IDs start with `d000`; ordinary
+  interactive launches reject them. Actual native transitions still determine
+  coverage; arriving on the same island without teleporting cannot cover an edge.
+
+`probe-walk Ax Ay Az Bx By Bz` is a read-only mailbox diagnostic that writes
+production standability/segment results to `probe.json`.
+
 Files are private local runtime artifacts, not distributable game assets.
 
 The opt-in runtime requires `SOUS_CHEF_NATIVE_SIM`, `-batchmode`, and `-nographics`.
@@ -152,7 +175,8 @@ Startup engages the native keyboard profile, splits its local user into two
 chefs, creates an unsaved cooperative Party session, selects its native scene
 entry, and invokes the same kitchen-loading message used by the game. Reset uses
 that loader again. No replacement colliders, synthetic chefs, custom gravity,
-position teleportation, or alternate contact solver are used.
+or alternate contact solver are used. The optional staged initial-pose fixture
+is the sole test-only position write; measured navigation never writes positions.
 
 Lifecycle commands use a local file mailbox, with request acknowledgements and
 explicit errors. `status.json`, `player.log`, and `BepInEx/LogOutput.log` provide

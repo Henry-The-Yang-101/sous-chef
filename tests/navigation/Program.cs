@@ -547,6 +547,11 @@ internal static class Program
         w.Chef.transform.position=link.Exit; physics.LeavePortal(link); physics.Refresh(w.Chef);
         Check(!physics.Segment(link.Exit,new Vector3(9.1f,0,0)),"exit exemption cannot cross back through the portal to an equal or greater radius");
         Check(physics.Segment(link.Exit,new Vector3(11.5f,0,0)),"exit exemption permits walking outward");
+        int departureHistory=0;
+        Check(physics.PortalDeparture(link.Exit,new Vector3(10.8f,0,.4f),link,ref departureHistory),
+            "an exit can join a nearer lattice cell when the ordinary body sweep stays clear of its trigger");
+        Check(!physics.PortalDeparture(link.Exit,new Vector3(9.1f,0,0),link,ref departureHistory),
+            "a non-outward portal departure never exempts crossing the trigger");
         w.Chef.transform.position = new Vector3(12,0,0); physics.Refresh(w.Chef);
         search = new WalkSearch(physics.Starts(),physics.Neighbours,16000,()=>true);
         Check(!search.Settled.Any(c=>c.X<10),"one-way portal does not invent a reverse edge");
@@ -568,6 +573,13 @@ internal static class Program
         Check(search.Complete && search.Route(upper).Count(c=>c.Portal!=0)==2,"multi-hop routes cross different heights and terminate despite a portal cycle");
         b.m_exitPortal=null; third.m_exitPortal=null;
         a.m_exitPortal=null; physics.Refresh(w.Chef); Check(physics.Portal(a.GetInstanceID())==null,"unlinking portal removes cached transport edge");
+
+        w = PortalWorld(out a,out b);
+        w.Colliders.OfType<Floor>().First().Elevation=(x,z)=>Math.Abs(z)<2 && ((x>-.5f && x<1.1f) || (x>9 && x<14)) ? 0 : (float?)null;
+        w.Chef.transform.position=new Vector3(.85f,0,0); physics=w.Ready(); link=physics.Portal(a.GetInstanceID());
+        search=new WalkSearch(physics.Starts(),physics.Neighbours,16000,()=>true);
+        Check(link.StagingDistance<1 && search.Settled.Any(c=>c.Portal==0 && c.X==30),
+            "shallow native portal platforms use a shorter supported staging approach");
 
         w = PortalWorld(out a,out b);
         var receiverOnly = new GameObject("moving receiver only");
@@ -613,6 +625,18 @@ internal static class Program
         Time.realtimeSinceStartup+=.02f; navigation.Tick(w.Chef);
         Time.realtimeSinceStartup+=.02f; navigation.Tick(w.Chef);
         Check(w.LastInput.x<-.9f,"ready portal is entered using ordinary movement after braking");
+        var clearPortalOverlap = Physics.Overlap;
+        var movingBlocker = new GameObject("temporary receiver obstruction").Add(new BoxCollider());
+        b.GetComponent<TeleportalPlayerReceiver>().m_attachPoint.position += new Vector3(.1f,0,0);
+        Physics.Overlap = (low,high,r) => low.x > 9 ? new[] { movingBlocker } : clearPortalOverlap(low,high,r);
+        Time.realtimeSinceStartup += .02f; navigation.Tick(w.Chef);
+        Check(navigation.Action.State == "navigating" && w.LastInput.sqrMagnitude == 0 &&
+            (string)((Json.Record)navigation.Describe())["phase"] == "waiting_portal_geometry",
+            "a moving receiver's temporarily obstructed landing holds entry with neutral input");
+        Physics.Overlap = clearPortalOverlap;
+        b.GetComponent<TeleportalPlayerReceiver>().m_attachPoint.position -= new Vector3(.1f,0,0);
+        Time.realtimeSinceStartup += .02f; navigation.Tick(w.Chef);
+        Check(w.LastInput.x < -.9f, "entry resumes when the moving receiver landing is checked clear again");
         var traveller=w.Chef.GetComponent<ServerTeleportablePlayer>(); traveller.Travelling=true;
         b.GetComponent<ServerTeleportalPlayerReceiver>().Receiving=true;
         w.Chef.enabled=false; w.Chef.GetComponent<CapsuleCollider>().enabled=false;
@@ -623,7 +647,18 @@ internal static class Program
         // the receiver keeps moving during the native animation.
         b.GetComponent<TeleportalPlayerReceiver>().m_attachPoint.position += new Vector3(1,0,0);
         traveller.Travelling=false; w.Chef.enabled=true; w.Chef.GetComponent<CapsuleCollider>().enabled=true;
-        w.Chef.transform.position=new Vector3(10.9f,0,0);
+        var landingFloor=w.Chef.GroundCollider;
+        var ordinaryOverlap=Physics.Overlap;
+        Physics.Overlap=(low,high,r)=>low.y-r<-.01f ? new[] { landingFloor } : ordinaryOverlap(low,high,r);
+        Physics.Penetration=(ca,pa,ra,cb,pb,rb)=>cb==landingFloor;
+        Physics.PenetrationDirection=Vector3.up; Physics.PenetrationDistance=.11f;
+        w.Chef.transform.position=new Vector3(10.9f,-.105f,0); w.Chef.GroundCollider=null;
+        Time.realtimeSinceStartup+=.02f; navigation.Tick(w.Chef);
+        Check(navigation.Action.State=="navigating" && w.LastInput.sqrMagnitude==0 &&
+            (int)((Json.Record)navigation.Describe())["teleportsCompleted"]==0,
+            "native exit floor penetration waits for checked PhysX recovery before counting the teleport");
+        Physics.Overlap=ordinaryOverlap; Physics.Penetration=(ca,pa,ra,cb,pb,rb)=>false;
+        w.Chef.GroundCollider=landingFloor; w.Chef.transform.position=new Vector3(10.9f,0,0);
         Time.realtimeSinceStartup+=.02f; navigation.Tick(w.Chef);
         Check((int)((Json.Record)navigation.Describe())["teleportsCompleted"]==1,"linked native arrival records exactly one completed transport");
         var flags=System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic;
@@ -631,8 +666,15 @@ internal static class Program
         typeof(NavigationActions).GetField("unavailable",flags).SetValue(navigation,"planning_in_progress");
         Check((bool)typeof(NavigationActions).GetMethod("ApplyPlan",flags).Invoke(navigation,null),
             "budget exhaustion after native arrival retains the checked tail instead of walking back across the portal");
-        Time.realtimeSinceStartup+=.02f; navigation.Tick(w.Chef);
-        Check(navigation.Action.State=="navigating" && (string)((Json.Record)navigation.Describe())["phase"]!="teleporting","walking resumes from actual exit without another request");
+        ((System.Collections.IDictionary)typeof(NavigationActions).GetField("available",flags).GetValue(navigation)).Clear();
+        typeof(NavigationActions).GetField("unavailable",flags).SetValue(navigation,null);
+        Check(!(bool)typeof(NavigationActions).GetMethod("ApplyPlan",flags).Invoke(navigation,null) &&
+            navigation.Action.State == "navigating" && w.LastInput.sqrMagnitude == 0 &&
+            (string)((Json.Record)navigation.Describe())["phase"] == "waiting_portal_route",
+            "moving receiver arrival waits neutrally when the onward route is temporarily disconnected");
+        Time.realtimeSinceStartup += 16;
+        Check(!(bool)typeof(NavigationActions).GetMethod("ApplyPlan",flags).Invoke(navigation,null) &&
+            navigation.Action.Reason == "destination_unreachable", "moving receiver replan wait is bounded");
         navigation.Stop("stopped"); Check(!navigation.NativeTeleportInProgress(w.Chef),"stop clears portal control exception");
 
         w=PortalWorld(out a,out b); station=w.AddStation(); station.transform.position=new Vector3(12,0,0);

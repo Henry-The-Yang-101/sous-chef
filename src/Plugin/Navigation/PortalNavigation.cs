@@ -17,7 +17,9 @@ namespace SousChef.Plugin.Navigation
         public ServerTeleportalPlayerReceiver ServerReceiver;
         public Collider Trigger, ExitTrigger;
         public Vector3 Entry, Exit, RawExit;
-        public bool Valid;
+        public float StagingDistance = 1.25f;
+        public bool Valid, HasMoved, GeometryObserved, TransformObserved;
+        public Vector3 LastAttachPosition;
         public string GeometryReason;
         public object GeometryFailure;
         public int Id { get { return Source.GetInstanceID(); } }
@@ -94,7 +96,8 @@ namespace SousChef.Plugin.Navigation
                 if (sender == null || !sender.isActiveAndEnabled || receiver == null || serverReceiver == null || server == null) continue;
                 int id = source.GetInstanceID(); present.Add(id);
                 PortalLink link;
-                if (!portals.TryGetValue(id, out link)) portals[id] = link = new PortalLink();
+                bool known = portals.TryGetValue(id, out link);
+                if (!known) portals[id] = link = new PortalLink();
                 Vector3 oldEntry = link.Entry, oldExit = link.Exit;
                 Collider oldTrigger = link.Trigger, oldExitTrigger = link.ExitTrigger;
                 link.Source = source; link.Server = server; link.Sender = sender; link.Trigger = trigger;
@@ -102,6 +105,7 @@ namespace SousChef.Plugin.Navigation
                 link.Receiver = receiver; link.ServerReceiver = serverReceiver;
                 link.ExitTrigger = source.m_exitPortal.GetComponent<Collider>();
                 link.Valid = PortalGeometry(link);
+                if (known && ((oldEntry - link.Entry).sqrMagnitude > .0025f || (oldExit - link.Exit).sqrMagnitude > .0025f)) link.HasMoved = true;
                 link.GeometryFailure = link.Valid || !TraceEnabled ? null : Failure;
                 if (!oldEntry.Equals(link.Entry) || !oldExit.Equals(link.Exit) || oldTrigger != link.Trigger || oldExitTrigger != link.ExitTrigger)
                 { portalEntries.Remove(id); portalExits.Remove(id); }
@@ -115,6 +119,9 @@ namespace SousChef.Plugin.Navigation
         {
             link.GeometryReason = "configuration";
             if (!link.Connected || link.Source.m_teleportArc <= 0 || link.Receiver.m_ReceiverAnimation == null) return false;
+            Vector3 attachPosition = link.Receiver.m_attachPoint.position;
+            if (link.TransformObserved && (attachPosition - link.LastAttachPosition).sqrMagnitude > .000001f) link.HasMoved = true;
+            link.TransformObserved = true; link.LastAttachPosition = attachPosition;
             // The native activation cone points along the portal's local +X.
             Vector3 facing = link.Source.transform.right; facing.y = 0;
             if (facing.sqrMagnitude < .99f) return false;
@@ -127,7 +134,20 @@ namespace SousChef.Plugin.Navigation
             Collider ground; Vector3 point;
             link.GeometryReason = "entry_clearance";
             if (!PortalStand(entry, link.Trigger, out point, out ground)) return false;
+            if (link.GeometryObserved && (link.Entry - point).sqrMagnitude > .0025f) link.HasMoved = true;
             link.Entry = point;
+            // Some native portals sit on a shallow raised platform. Keep the
+            // long turning approach where it fits, otherwise brake on the
+            // furthest checked, level stance available in front of the lip.
+            link.StagingDistance = 1.25f;
+            Vector3 stance; Collider stanceGround;
+            while (link.StagingDistance > .4f)
+            {
+                Vector3 guess = link.Entry + facing.normalized * link.StagingDistance;
+                if (PortalStand(guess, link.Trigger, out stance, out stanceGround) && Mathf.Abs(stance.y - link.Entry.y) < .03f &&
+                    PortalSegment(stance, link.Entry, link.Trigger)) break;
+                link.StagingDistance = link.StagingDistance > .8f ? .8f : .4f;
+            }
             // Match ClientTeleportalPlayerReceiver: grounded attach-point offset
             // plus the native animation's final position (not the portal centre).
             link.GeometryReason = "receiver_ground";
@@ -145,7 +165,8 @@ namespace SousChef.Plugin.Navigation
             if ((exit - Position).sqrMagnitude > (Range - 2) * (Range - 2) ||
                 !PortalStand(exit, link.ExitTrigger, out point, out ground, 4.1f) ||
                 !PortalLandingClear(exit, point, link.ExitTrigger)) return false;
-            link.Exit = point; link.GeometryReason = "ready";
+            if (link.GeometryObserved && (link.Exit - point).sqrMagnitude > .0025f) link.HasMoved = true;
+            link.Exit = point; link.GeometryObserved = true; link.GeometryReason = "ready";
             return true;
         }
         private bool PortalStand(Vector3 guess, Collider trigger, out Vector3 point, out Collider ground, float drop = -1)
@@ -220,7 +241,7 @@ namespace SousChef.Plugin.Navigation
             float along = Vector3.Dot(delta, outward);
             // Begin turning on the open floor, before native movement's update
             // lag can carry a lateral approach into the narrow portal frame.
-            return along >= 1.25f && (delta - outward * along).magnitude <= .2f;
+            return along >= link.StagingDistance - .05f && (delta - outward * along).magnitude <= .2f;
         }
         public bool PortalApproach(Vector3 from, PortalLink link)
         {
@@ -228,7 +249,8 @@ namespace SousChef.Plugin.Navigation
             Vector3 delta = from - link.Entry; delta.y = 0;
             Vector3 outward = link.Source.transform.right; outward.y = 0; outward = outward.normalized;
             float along = Vector3.Dot(delta, outward);
-            return along >= 1f && (delta - outward * along).magnitude <= .5f && PortalEntry(from, link);
+            return along >= Mathf.Max(.2f, link.StagingDistance - .25f) &&
+                (delta - outward * along).magnitude <= (link.StagingDistance < 1 ? .2f : .5f) && PortalEntry(from, link);
         }
         private bool InPortalArc(Vector3 from, PortalLink link)
         {
@@ -248,7 +270,8 @@ namespace SousChef.Plugin.Navigation
             if (!connectors.TryGetValue(key, out connector))
             {
                 var samples = new List<GroundSample>();
-                Collider saved = permittedPortalTrigger; permittedPortalTrigger = entering ? link.Trigger : link.ExitTrigger;
+                Collider saved = permittedPortalTrigger;
+                permittedPortalTrigger = entering ? link.Trigger : PortalOutward(link.ExitTrigger, from, to) ? link.ExitTrigger : null;
                 bool valid;
                 try { valid = Segment(from, to, radius, false, samples); }
                 finally { permittedPortalTrigger = saved; }
@@ -292,7 +315,7 @@ namespace SousChef.Plugin.Navigation
                 var key = new WalkCell(x + dx, y, z + dz); Probe probe = Sample(key);
                 if (!probe.Valid || Vector3.Distance(probe.Point, link.Exit) > 1.6f ||
                     (probe.Point - Position).sqrMagnitude > (Range - 2) * (Range - 2) ||
-                    !PortalOutward(link.ExitTrigger, link.Exit, probe.Point)) continue;
+                    (!PortalOutward(link.ExitTrigger, link.Exit, probe.Point) && !Segment(link.Exit, probe.Point))) continue;
                 int history;
                 if (PortalConnectorClear(link, key, false, out history))
                 {
@@ -317,7 +340,7 @@ namespace SousChef.Plugin.Navigation
             return Vector3.Dot(to - from, away) >= -.0001f;
         }
         public bool PortalDeparture(Vector3 from, Vector3 to, PortalLink link, ref int history)
-        { return PortalOutward(link.ExitTrigger, from, to) && PortalSegment(from, to, link.ExitTrigger, ref history); }
+        { return PortalSegment(from, to, PortalOutward(link.ExitTrigger, from, to) ? link.ExitTrigger : null, ref history); }
         private bool StartSegment(Vector3 from, Vector3 to, Action<int> history)
         {
             Collider saved = permittedPortalTrigger;

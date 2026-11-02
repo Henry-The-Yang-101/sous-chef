@@ -8,7 +8,8 @@ namespace SousChef.Plugin.Navigation
     {
         private readonly Dictionary<int, PortalLink> portalSteps = new Dictionary<int, PortalLink>();
         private PortalLink activePortal;
-        private float portalStarted;
+        private float portalStarted, portalReplanUntil;
+        private bool waitingPortalRoute;
         private bool sawTeleport, sawReceive;
         private Vector3 expectedPortalExit;
         private int teleportsCompleted;
@@ -47,13 +48,15 @@ namespace SousChef.Plugin.Navigation
                 // Accept only the linked exit, then build a fresh walking tree.
                 string error = physics.Refresh(chef);
                 if ((error == "not_grounded" || (error == null && physics.Position.y - expectedPortalExit.y > .15f)) &&
-                    sawReceive && physics.PortalLandingClear(physics.Position, expectedPortalExit, activePortal.ExitTrigger))
+                    sawReceive && (physics.PortalLandingClear(physics.Position, expectedPortalExit, activePortal.ExitTrigger) ||
+                        (Vector3.Distance(physics.Position, expectedPortalExit) <= .6f && physics.NeedsGroundSettling())))
                 { move(Vector3.zero, commandMilliseconds); return; }
                 if (error != null) { Stop(error); return; }
                 if (!sawReceive) expectedPortalExit = activePortal.Exit;
                 if (Vector3.Distance(physics.Position, expectedPortalExit) > .6f)
                 { Stop("teleport_exit_mismatch"); return; }
                 physics.LeavePortal(activePortal); teleportsCompleted++;
+                if (activePortal.HasMoved) portalReplanUntil = Time.realtimeSinceStartup + 15f;
                 Trace("teleport_complete", activePortal.Exit, Vector3.zero);
                 // Consume the entry and arrival together. If the fresh search
                 // hits its budget, retention must validate the remaining walk,
@@ -66,7 +69,20 @@ namespace SousChef.Plugin.Navigation
             }
             string refreshError = physics.Refresh(chef);
             if (refreshError != null) { Stop(refreshError); return; }
-            if (!physics.PortalGeometry(activePortal) || !physics.PortalEntry(physics.Position, activePortal))
+            if (!physics.PortalGeometry(activePortal))
+            {
+                // A moving receiver may pass through a temporarily blocked
+                // landing while we are still approaching the entrance. Hold
+                // before native transport starts; the shared timeout bounds it.
+                if (activePortal.HasMoved && activePortal.GeometryReason == "exit_clearance")
+                {
+                    portalPhase = "waiting_portal_geometry";
+                    Trace(portalPhase, activePortal.Entry, Vector3.zero);
+                    move(Vector3.zero, commandMilliseconds); return;
+                }
+                Stop("teleport_entry_blocked"); return;
+            }
+            if (!physics.PortalEntry(physics.Position, activePortal))
             { Stop("teleport_entry_blocked"); return; }
             if (!activePortal.Ready(chef))
             {

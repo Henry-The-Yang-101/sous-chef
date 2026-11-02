@@ -148,7 +148,7 @@ namespace SousChef.Plugin.Navigation
             // Neutral first; callers must not observe idle with stale movement input.
             neutral();
             if (target != null && target.Object != null) lastDestination = Identity(target);
-            Action.Stop(reason); activePortal = null; portalSteps.Clear(); settlingSince = -1; target = null; route = null; facingSince = -1; arrival.Reset(); haveMotion = motionSampleValid = false;
+            Action.Stop(reason); portalReplanUntil = 0; waitingPortalRoute = false; activePortal = null; portalSteps.Clear(); settlingSince = -1; target = null; route = null; facingSince = -1; arrival.Reset(); haveMotion = motionSampleValid = false;
         }
         public void Invalidate(string reason)
         {
@@ -159,7 +159,7 @@ namespace SousChef.Plugin.Navigation
         {
             return Json.Object("state", Action.State, "destinationId", Action.Destination, "reason", Action.Reason,
                 "destination", target == null ? lastDestination : Identity(target),
-                "phase", Action.State == "idle" ? "idle" : activePortal != null ? portalPhase : settlingSince >= 0 ? (followingSupport ? "following_support" : "settling_ground") : facingSince < 0 ? "walking" : "aligning", "arrival", arrivalDetails,
+                "phase", Action.State == "idle" ? "idle" : activePortal != null ? portalPhase : waitingPortalRoute ? "waiting_portal_route" : settlingSince >= 0 ? (followingSupport ? "following_support" : "settling_ground") : facingSince < 0 ? "walking" : "aligning", "arrival", arrivalDetails,
                 "teleportsCompleted", teleportsCompleted, "portal", DescribePortal(),
                 "executionTrace", physics.TraceEnabled ? executionTrace.ToArray() : null,
                 "revision", Action.Revision, "catalogRevision", revision, "catalogReason", unavailable,
@@ -231,10 +231,25 @@ namespace SousChef.Plugin.Navigation
                 // Budget exhaustion is not evidence of a blocked route. Retain only
                 // a fully rechecked remaining route; actual obstruction still stops
                 // in this update. Never retain a route after observation failures.
-                if (unavailable == "planning_in_progress" && RemainingRouteClear()) return true;
+                if (unavailable == "planning_in_progress" && RemainingRouteClear()) { waitingPortalRoute = false; return true; }
+                // A moving native receiver freezes its destination when receiving,
+                // after the route was planned. Its arrival can be on another
+                // island until the receiver cycles back. Wait on checked support
+                // and rebuild reachability; never walk the obsolete exit chord.
+                if (portalReplanUntil == 0)
+                    foreach (PortalLink portal in portalSteps.Values)
+                        if (portal.HasMoved) { portalReplanUntil = Time.realtimeSinceStartup + 15f; break; }
+                if ((unavailable == null || unavailable == "planning_in_progress") &&
+                    Time.realtimeSinceStartup < portalReplanUntil && Time.realtimeSinceStartup - started < 45f)
+                {
+                    waitingPortalRoute = true; lastProgress = Time.realtimeSinceStartup;
+                    Trace("waiting_portal_route", Vector3.zero, Vector3.zero);
+                    move(Vector3.zero, WalkingCommand.Milliseconds(Time.unscaledDeltaTime));
+                    return false;
+                }
                 Stop(unavailable ?? "destination_unreachable"); return false;
             }
-            target = current; SetRoute(current); return true;
+            waitingPortalRoute = false; portalReplanUntil = 0; target = current; SetRoute(current); return true;
         }
         private bool RemainingRouteClear()
         {
@@ -336,7 +351,7 @@ namespace SousChef.Plugin.Navigation
             PortalLink nextPortal;
             if (portalSteps.TryGetValue(waypoint, out nextPortal))
             {
-                activePortal = nextPortal; portalStarted = Time.realtimeSinceStartup; sawTeleport = sawReceive = false; portalBrakeFrames = 2;
+                activePortal = nextPortal; portalStarted = Time.realtimeSinceStartup; sawTeleport = sawReceive = false; portalBrakeFrames = nextPortal.StagingDistance < 1f ? 3 : 2;
                 TickPortal(commandMilliseconds); return;
             }
             // Use the same drift compensation and actual next-step safety check
