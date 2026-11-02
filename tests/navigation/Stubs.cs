@@ -141,7 +141,7 @@ namespace UnityEngine
         public static bool ComputePenetration(Collider a,Vector3 p,Quaternion q,Collider b,Vector3 r,Quaternion s,out Vector3 direction,out float distance) { bool hit=Penetration(a,p,q,b,r,s);direction=PenetrationDirection;distance=PenetrationDistance;return hit; }
         public static Func<Vector3,float,Vector3,float,RaycastHit[]> Sphere = (p,r,d,length) => new RaycastHit[0];
         public static Func<Vector3,float,Vector3,float,RaycastHit[]> GroundSphere = (p,r,d,length) => new RaycastHit[0];
-        public static int SphereCastNonAlloc(Vector3 p,float r,Vector3 d,RaycastHit[] output,float length,int mask,QueryTriggerInteraction q) { return Copy((mask==1 ? GroundSphere : Sphere)(p,r,d,length),output); }
+        public static int SphereCastNonAlloc(Vector3 p,float r,Vector3 d,RaycastHit[] output,float length,int mask,QueryTriggerInteraction q) { return Copy((mask==1 || mask==((1<<9)|(1<<28)) ? GroundSphere : Sphere)(p,r,d,length),output); }
         public static Func<Vector3,Vector3,float,int,RaycastHit[]> Ray;
         public static Func<Vector3,Vector3,float,Collider[]> Overlap;
         public static Func<Vector3,Vector3,float,Vector3,float,RaycastHit[]> Cast;
@@ -175,9 +175,11 @@ namespace UnityEngine
 
 #pragma warning disable CS0414 // Reflection fields must match the installed game.
 public class GroundCast : UnityEngine.MonoBehaviour {
-    private UnityEngine.LayerMask m_landscapeMask = 1;
-    public UnityEngine.Vector3 GetGroundPoint() { return transform.position; }
-    public UnityEngine.Vector3 GetGroundNormal() { return UnityEngine.Vector3.up; }
+    private UnityEngine.LayerMask m_landscapeMask = (1 << 9) | (1 << 28);
+    public bool Simulated;
+    public UnityEngine.Vector3 Point, Normal = UnityEngine.Vector3.up;
+    public UnityEngine.Vector3 GetGroundPoint() { return Simulated ? Point : transform.position; }
+    public UnityEngine.Vector3 GetGroundNormal() { return Normal; }
     public float Distance;
     public float GetGroundDistance() { return Distance; }
 }
@@ -216,7 +218,7 @@ public class SurfaceMovable : UnityEngine.MonoBehaviour
     public void SetPrevious(IMovingSurface value) { m_prevSurface=value; }
     public UnityEngine.Vector3 Velocity; public UnityEngine.Vector3 GetVelocity() { return Velocity; }
 }
-public class RigidbodyMotion { public UnityEngine.Vector3 Velocity; public UnityEngine.Vector3 GetVelocity() { return Velocity; } public UnityEngine.Vector3 GetVelocityXZ() { return Velocity; } }
+public class RigidbodyMotion { public UnityEngine.Vector3 Velocity; public UnityEngine.Vector3 GetVelocity() { return Velocity; } public UnityEngine.Vector3 GetVelocityXZ() { return new UnityEngine.Vector3(Velocity.x,0,Velocity.z); } }
 public interface IMovingSurface { UnityEngine.Vector3 CalculateVelocityAtPoint(UnityEngine.Vector3 point, IMovingSurface previous); }
 public class PlayerPhysicsSurfaceProperties { public bool UseOverrideGravityNormal; public float Slidiness,Slippiness,SpeedMultiplier=1; }
 public class PlayerPhysicsSurface : UnityEngine.MonoBehaviour { public PlayerPhysicsSurfaceProperties Properties = new PlayerPhysicsSurfaceProperties(); }

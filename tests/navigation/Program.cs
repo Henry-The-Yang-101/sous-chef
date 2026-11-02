@@ -73,14 +73,24 @@ internal static class Program
                     {
                         // Rounded contact at an analytical surface's boundary.
                         // Sampling is fixture-only; production uses PhysX SphereCast.
-                        for (int axis=0;axis<2;axis++) for(int i=-32;i<=32;i++)
+                        for (int axis=0;axis<2;axis++)
                         {
-                            float offset=r*i/32f;
-                            Vector3 q=p+(axis==0 ? Vector3.right : Vector3.forward)*offset;
-                            float? edgeY=floor.Elevation(q.x,q.z); if(!edgeY.HasValue) continue;
-                            q.y=edgeY.Value;float rise=(float)Math.Sqrt(Math.Max(0,r*r-offset*offset));
-                            if(q.y+rise<=centreY) continue;
-                            centreY=q.y+rise;contact=q;normal=(new Vector3(p.x,centreY,p.z)-q).normalized;
+                            float bestOffset=0, axisBest=float.NegativeInfinity;
+                            Action<float> consider = offset =>
+                            {
+                                if (Math.Abs(offset)>r) return;
+                                Vector3 q=p+(axis==0 ? Vector3.right : Vector3.forward)*offset;
+                                float? edgeY=floor.Elevation(q.x,q.z); if(!edgeY.HasValue) return;
+                                q.y=edgeY.Value;float rise=(float)Math.Sqrt(Math.Max(0,r*r-offset*offset));
+                                if(q.y+rise>axisBest) {axisBest=q.y+rise;bestOffset=offset;}
+                                if(q.y+rise<=centreY) return;
+                                centreY=q.y+rise;contact=q;normal=(new Vector3(p.x,centreY,p.z)-q).normalized;
+                            };
+                            for(int i=-32;i<=32;i++) consider(r*i/32f);
+                            // Converge the rounded edge contact instead of introducing
+                            // discrete height jumps from the fixture's coarse samples.
+                            float step=r/32;
+                            for(int i=0;i<18;i++) {consider(bestOffset-step);consider(bestOffset+step);step*=.5f;}
                         }
                     }
                     float distance=p.y-centreY;
@@ -91,7 +101,7 @@ internal static class Program
         }
         public Floor AddFloor(Func<float,float,float?> elevation, Vector3? normal = null)
         {
-            var go = new GameObject("floor");
+            var go = new GameObject("floor"); go.layer = 9;
             var floor = go.Add(new Floor { Elevation=elevation, testBounds=new Bounds(Vector3.zero,new Vector3(200,2,200)) });
             if (normal.HasValue) floor.Normal=normal.Value;
             Colliders.Add(floor); if (Chef.GroundCollider == null) Chef.GroundCollider=floor;
@@ -343,6 +353,8 @@ internal static class Program
         Check(physics.Stand(w.Chef.transform.position, out support, out ground), "mid-stair capture has a clear supported body pose");
         Check(!physics.Starts().Any(), "native initial penetration makes every ordinary start sweep fail");
         Check(physics.NeedsGroundSettling(), "current capsule penetration identifies native upward contact recovery despite stale ground data");
+        w.Chef.transform.position = new Vector3(15.26166f, -1.058443f, 5.796684f);
+        Check(physics.NeedsGroundSettling(), "simultaneous tread and wedge penetrations resolve together under neutral input");
         w.Chef.transform.position = support;
         Check(!physics.NeedsGroundSettling() && physics.Starts().Any(), "native contact resolution makes the same route start usable again");
         w.Chef.transform.position = new Vector3(15.3860645f, -.993433f, 5.7824163f);
@@ -361,12 +373,13 @@ internal static class Program
         Check(navigation.Action.State == "navigating" && w.LastInput.magnitude == 0 && w.LastMilliseconds > 0, "native stair hop keeps the action with neutral input above a checked landing");
         w.Chef.GroundCollider = floor; w.Chef.GetComponent<GroundCast>().Distance = .24f;
         Time.realtimeSinceStartup += .02f; navigation.Tick(w.Chef);
-        Check(navigation.Action.State == "navigating" && w.LastInput.magnitude == 0, "native proximity contact above the tread does not prematurely resume movement");
+        Check(navigation.Action.State == "navigating" && w.LastInput.magnitude > .9f, "valid native proximity contact permits a checked route instead of repeatedly braking off the stair");
         w.Chef.GetComponent<GroundCast>().Distance = 0; w.Chef.transform.position -= Vector3.up * .35f;
         Time.realtimeSinceStartup += .1f; navigation.Tick(w.Chef);
         Check(navigation.Action.State == "navigating" && navigation.Action.Revision == revision && w.LastInput.magnitude > .9f, "landing resumes the same request without requiring another Run click");
-        w.Chef.GroundCollider = null; w.Chef.transform.position += Vector3.up * .35f;
+        w.Chef.GroundCollider = null; w.Chef.transform.position += Vector3.up * .9f;
         Time.realtimeSinceStartup += .02f; navigation.Tick(w.Chef);
+        Check(navigation.Action.State == "navigating" && w.LastInput.magnitude == 0, "native landing probe covers an airborne gap larger than the step-up limit");
         Time.realtimeSinceStartup += 2.01f; navigation.Tick(w.Chef);
         Check(navigation.Action.Reason == "ground_contact_timeout", "a landing that never regains native ground contact terminates within the stall deadline");
 
@@ -375,6 +388,11 @@ internal static class Program
         floor.enabled = false; w.Chef.GroundCollider = null; w.Chef.transform.position += Vector3.up * .35f;
         Time.realtimeSinceStartup += .02f; navigation.Tick(w.Chef);
         Check(navigation.Action.Reason == "not_grounded", "missing floor is not treated as a harmless stair hop");
+        w = new World(); w.AddFloor((x,z) => Math.Abs(x)<2 && Math.Abs(z)<2 ? 0 : (float?)null);
+        w.Chef.transform.position = new Vector3(0,0,-1.3f); station = w.AddStation(); navigation = w.Navigate(station);
+        w.Chef.GroundCollider = null; w.Chef.transform.position += Vector3.up * 2;
+        Time.realtimeSinceStartup += .02f; navigation.Tick(w.Chef);
+        Check(navigation.Action.Reason == "not_grounded", "a fall beyond native ground-probe range is not retained as stair settling");
     }
     private static void Main()
     {

@@ -272,17 +272,20 @@ namespace SousChef.Plugin.Navigation
             float b = -Vector3.Dot(to.normal, delta) / to.normal.y;
             // Continuous slopes (including a ramp joining a flat floor) do not
             // need a step component. A discontinuity between flat treads does.
-            return rise >= Mathf.Min(0, Mathf.Min(a, b)) - .025f && rise <= Mathf.Max(0, Mathf.Max(a, b)) + .025f;
+            // Only roundoff belongs in this bound: adding the body skin here
+            // masks real height jumps and makes certification depend on sampling phase.
+            return rise >= Mathf.Min(0, Mathf.Min(a, b)) - .0001f && rise <= Mathf.Max(0, Mathf.Max(a, b)) + .0001f;
         }
-        private bool Ground(Vector3 point, out RaycastHit best)
+        private bool Ground(Vector3 point, out RaycastHit best, float dropDistance = -1)
         {
             best = new RaycastHit(); float step = StepHeight;
             // Match GroundCast's spherical contact for the chef centre. Rays miss
             // the rounded contact at the lips of native stair wedges.
             float r = nativeRadius;
             float reach = step + .12f;
+            float drop = dropDistance < 0 ? reach : dropDistance;
             Vector3 origin = point + Vector3.up * (reach + r);
-            int count = Physics.SphereCastNonAlloc(origin, r, Vector3.down, hits, 2 * reach, groundMask, QueryTriggerInteraction.Ignore);
+            int count = Physics.SphereCastNonAlloc(origin, r, Vector3.down, hits, reach + drop, groundMask, QueryTriggerInteraction.Ignore);
             Queries++;
             if (count == hits.Length) { Overflow = true; return false; }
             float distance = Single.MaxValue;
@@ -294,7 +297,7 @@ namespace SousChef.Plugin.Navigation
                 // SphereCast returns the contact point, not the capsule's foot.
                 // Index and sweep the supported body pose; retain the native normal.
                 Vector3 foot = origin + Vector3.down * (hit.distance + r);
-                if (Mathf.Abs(foot.y - point.y) > reach - .08f) continue;
+                if (foot.y - point.y > reach - .08f || point.y - foot.y > drop - .08f) continue;
                 best = hit; best.point = foot; distance = hit.distance;
             }
             return distance != Single.MaxValue;
@@ -315,10 +318,10 @@ namespace SousChef.Plugin.Navigation
             RaycastHit centre;
             return Stand(guess, out point, out support, clearance, out centre);
         }
-        private bool Stand(Vector3 guess, out Vector3 point, out Collider support, float clearance, out RaycastHit hit)
+        private bool Stand(Vector3 guess, out Vector3 point, out Collider support, float clearance, out RaycastHit hit, float dropDistance = -1)
         {
             point = guess; support = null;
-            if (!Ground(guess, out hit)) return Fail("ground_probe", guess);
+            if (!Ground(guess, out hit, dropDistance)) return Fail("ground_probe", guess);
             point.y = hit.point.y; support = hit.collider;
             // GroundCast supports the rounded capsule across narrow tread seams.
             // Requiring a ray under every footprint edge rejects real stairs even
@@ -496,11 +499,16 @@ namespace SousChef.Plugin.Navigation
             Settlement = null;
             if (chef == null) return false;
             Vector3 position = Position, support; Collider ground; RaycastHit hit;
-            if (!Stand(position, out support, out ground, ContactRadius, out hit)) return false;
+            // GroundCast casts from pivot + 1 down for 2 units. Its search
+            // range below a capsule foot is 1 + radius; this differs from the
+            // maximum step UP. Route probes retain their normal step bounds.
+            float landingDrop = 1f + nativeRadius;
+            if (!Stand(position, out support, out ground, ContactRadius, out hit,
+                chef.GroundCollider == null ? landingDrop : -1)) return false;
             float gap = position.y - support.y;
             // Use the current body and live geometry. GroundCast's cached point
             // may still describe the preceding physics pose in this Update.
-            if (gap >= -.025f && gap <= StepHeight && (gap > Skin || chef.GroundCollider == null))
+            if (gap >= -.025f && gap <= landingDrop && chef.GroundCollider == null)
             {
                 if (!Sweep(position, support, ContactRadius)) return false;
                 if (TraceEnabled) Settlement = Json.Object("reason", "landing", "gap", gap, "support", ground.GetInstanceID());
@@ -508,28 +516,30 @@ namespace SousChef.Plugin.Navigation
             }
             // A moving native capsule can temporarily penetrate a stair wedge.
             // A cast starting in that contact rejects every direction, including
-            // escape. Prove that only the standable ground overlaps our inset body
-            // and that PhysX resolves the real capsule upward. Let native physics
-            // perform that resolution under neutral input; never move/teleport it.
+            // escape. Prove that every inset-body overlap is walkable ground and
+            // that PhysX resolves each real capsule contact upward. Treads and
+            // wedges can overlap simultaneously. Let native physics perform that
+            // resolution under neutral input; never move/teleport the chef.
             Vector3 low, high; Capsule(position, out low, out high, ContactRadius);
             int count = Physics.OverlapCapsuleNonAlloc(low, high, ContactRadius, overlaps, ~0, QueryTriggerInteraction.Collide); Queries++;
             if (count == overlaps.Length) { Overflow = true; return false; }
             bool contact = false;
+            var contacts = TraceEnabled ? new List<object>() : null;
             for (int i = 0; i < count; i++)
             {
-                if (!Blocks(overlaps[i])) continue;
-                if (overlaps[i] != ground) return false;
+                Collider collider = overlaps[i];
+                if (!Blocks(collider)) continue;
+                if (Dangerous(collider) || (groundMask & (1 << collider.gameObject.layer)) == 0) return false;
+                Vector3 direction; float distance;
+                Queries++;
+                if (!Physics.ComputePenetration(capsule, capsule.transform.position, capsule.transform.rotation,
+                    collider, collider.transform.position, collider.transform.rotation, out direction, out distance) ||
+                    distance <= 0 || distance > StepHeight || direction.y < .52992f) return false;
                 contact = true;
+                if (contacts != null) contacts.Add(Json.Object("collider", collider.GetInstanceID(), "depth", distance, "direction", Values.Vector(direction)));
             }
-            if (!contact) return false;
-            Vector3 direction; float distance;
-            Queries++;
-            bool resolves = Physics.ComputePenetration(capsule, capsule.transform.position, capsule.transform.rotation,
-                ground, ground.transform.position, ground.transform.rotation, out direction, out distance) &&
-                distance > 0 && distance <= StepHeight && direction.y >= .52992f;
-            if (resolves && TraceEnabled) Settlement = Json.Object("reason", "native_penetration", "depth", distance,
-                "direction", Values.Vector(direction), "support", ground.GetInstanceID());
-            return resolves;
+            if (contact && TraceEnabled) Settlement = Json.Object("reason", "native_penetration", "contacts", contacts);
+            return contact;
         }
         private bool StepSweep(Vector3 from, Vector3 to, float clearance)
         {

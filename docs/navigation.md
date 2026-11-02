@@ -282,12 +282,25 @@ endpoints can otherwise incorrectly certify that approach.
 
 A running action can enter `settling_ground` when native stair momentum lifts the
 chef beyond GroundCast's contact distance. It issues neutral input while checking
-a clear, collision-free landing below the body, within the native step-height
-range. Current capsule geometry, rather than the cached GroundCast distance, determines
-when the body has settled. A temporary overlap is recoverable only when it is
-with the independently probed supporting collider, the supported pose is clear,
-and native `ComputePenetration` proves an upward resolution within step height.
+a clear, collision-free landing below the body, within GroundCast's native downward
+search range. This is distinct from the maximum step-up height; route probes keep
+their original step bounds. A valid native proximity contact can continue a checked
+route rather than braking off the stair merely because the body is above a tread.
+Current capsule geometry detects temporary penetrations independently of the cached
+ground point. An overlap is recoverable only when it is
+with ground-layer colliders, the independently probed supported pose is clear,
+and native `ComputePenetration` proves an upward resolution within step height
+for every contact. Treads and wedges can overlap the capsule simultaneously.
 The game resolves that contact under neutral input; the bridge never adjusts the
 chef's position. Other blocking overlaps still stop the action. Settling forces
 replanning and must finish within the existing two-second stall interval. This
 does not allow airborne steering across holes.
+
+The continuous-support height bound allows floating-point roundoff only. Body
+clearance is not a height-discontinuity allowance: mixing the two made a small
+jump pass or fail depending on where a segment's samples started. If native
+motion displaces the chef from a previously valid connector, execution now
+replans from the actual position before declaring the destination blocked.
+
+The [headless motion suite](../tests/simulation/README.md) drives this production
+controller through recorded geometry without launching or contacting the game.

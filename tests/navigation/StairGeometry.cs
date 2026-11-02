@@ -11,6 +11,7 @@ using UnityEngine;
 internal sealed class RecordedBox : Collider
 {
     public Vector3 Centre, Half;
+    public bool Ground = true;
     public Vector3[] Axes;
     private static float Axis(Vector3 v, int i) { return i == 0 ? v.x : i == 1 ? v.y : v.z; }
     public Vector3 Closest(Vector3 p)
@@ -19,8 +20,15 @@ internal sealed class RecordedBox : Collider
         for (int i = 0; i < 3; i++) q += Axes[i] * Math.Clamp(Vector3.Dot(p - Centre, Axes[i]), -Axis(Half, i), Axis(Half, i));
         return q;
     }
+    private bool Near(Vector3 a, Vector3 b, float radius)
+    {
+        Vector3 min = bounds.min, max = bounds.max;
+        for (int i = 0; i < 3; i++)
+            if (Math.Min(Axis(a,i),Axis(b,i)) - radius > Axis(max,i) || Math.Max(Axis(a,i),Axis(b,i)) + radius < Axis(min,i)) return false;
+        return true;
+    }
     private float Distance(Vector3 p) { return Vector3.Distance(p, Closest(p)); }
-    private Vector3 CapsuleClosest(Vector3 a, Vector3 b)
+    public Vector3 CapsuleClosest(Vector3 a, Vector3 b)
     {
         float lo = 0, hi = 1;
         for (int i = 0; i < 24; i++)
@@ -34,8 +42,10 @@ internal sealed class RecordedBox : Collider
         return result;
     }
     public float CapsuleDistance(Vector3 a, Vector3 b) { return Distance(CapsuleClosest(a, b)); }
+    public bool CapsuleOverlap(Vector3 a, Vector3 b, float radius) { return Near(a,b,radius) && CapsuleDistance(a,b) < radius - .00001f; }
     public RaycastHit? Sphere(Vector3 p, float radius, Vector3 direction, float length)
     {
+        if (!Near(p, p + direction * length, radius)) return null;
         float t = 0;
         for (int i = 0; i < 100 && t <= length; i++)
         {
@@ -52,6 +62,10 @@ internal sealed class RecordedBox : Collider
     }
     public bool Cast(Vector3 a, Vector3 b, float radius, Vector3 direction, float length)
     {
+        Vector3 endA = a + direction * length, endB = b + direction * length;
+        Vector3 min = new Vector3(Math.Min(a.x,endA.x),Math.Min(a.y,endA.y),Math.Min(a.z,endA.z));
+        Vector3 max = new Vector3(Math.Max(b.x,endB.x),Math.Max(b.y,endB.y),Math.Max(b.z,endB.z));
+        if (!Near(min,max,radius)) return false;
         float t = 0;
         for (int i = 0; i < 100 && t <= length; i++)
         {
@@ -76,15 +90,18 @@ internal sealed class RecordedBox : Collider
                 Vector3 origin = new Vector3(m[12].GetSingle(), m[13].GetSingle(), m[14].GetSingle());
                 Vector3 centre = Read(record.GetProperty("center")), size = Read(record.GetProperty("size"));
                 var bounds = record.GetProperty("bounds");
-                boxes.Add(new GameObject(record.GetProperty("name").GetString()).Add(new RecordedBox {
+                var go = new GameObject(record.GetProperty("name").GetString());
+                go.layer = record.TryGetProperty("layer", out var layer) ? layer.GetInt32() : 9;
+                boxes.Add(go.Add(new RecordedBox {
+                    Ground = !record.TryGetProperty("ground", out var ground) || ground.GetBoolean(),
                     Centre = origin + axes[0] * centre.x + axes[1] * centre.y + axes[2] * centre.z,
                     Half = new Vector3(size.x * axes[0].magnitude, size.y * axes[1].magnitude, size.z * axes[2].magnitude) * .5f,
                     Axes = axes.Select(a => a.normalized).ToArray(),
                     testBounds = new Bounds(Read(bounds.GetProperty("center")), Read(bounds.GetProperty("size"))) }));
             }
         Physics.Nearby = (p, r) => boxes.Cast<Collider>().ToArray();
-        Physics.GroundSphere = (p, r, d, length) => boxes.Select(b => b.Sphere(p, r, d, length)).Where(h => h.HasValue).Select(h => h.Value).ToArray();
-        Physics.Overlap = (a, b, r) => boxes.Where(c => c.CapsuleDistance(a, b) < r - .00001f).Cast<Collider>().ToArray();
+        Physics.GroundSphere = (p, r, d, length) => boxes.Where(b => b.Ground).Select(b => b.Sphere(p, r, d, length)).Where(h => h.HasValue).Select(h => h.Value).ToArray();
+        Physics.Overlap = (a, b, r) => boxes.Where(c => c.CapsuleOverlap(a,b,r)).Cast<Collider>().ToArray();
         Physics.Cast = (a, b, r, d, length) => boxes.Where(c => c.Cast(a, b, r, d, length)).Select(c => new RaycastHit { collider = c }).ToArray();
         Physics.Penetration = (a, ap, ar, b, bp, br) =>
         {

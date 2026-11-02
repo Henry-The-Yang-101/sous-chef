@@ -35,7 +35,7 @@ internal static class Program
             actor.Add(new ClientPlayerAttachmentCarrier());Carrier=actor.Add(new ServerPlayerAttachmentCarrier());
             actor.Add(new ClientPlayerControlsImpl_Default()); Chef.transform.position=new Vector3(0,0,-1);
             var floor=new GameObject("floor").Add(new BoxCollider {size=new Vector3(20,.1f,20),center=new Vector3(0,-.05f,0)});
-            Chef.GroundCollider=floor;
+            floor.gameObject.layer=9; Chef.GroundCollider=floor;
             Target=new GameObject("station");Target.Add(new ServerWorkstation());Target.Add(new ServerAttachStation());
             var box=Target.Add(new BoxCollider {size=new Vector3(.8f,1,.8f),center=new Vector3(0,.5f,0)});
             var use=Target.Add(new ClientInteractable());Target.Add(new ServerInteractable());Target.Add(new Pickup());Target.Add(new Placement());

@@ -43,6 +43,7 @@ namespace SousChef.Plugin.Navigation
         private int nodeCount, candidateCount, startCount;
         private string observationError;
         private bool planning;
+        private readonly double planningBudgetMilliseconds;
         private float settlingSince = -1;
         private readonly Queue<object> executionTrace = new Queue<object>();
         private void Trace(string phase, Vector3 goal, Vector3 input)
@@ -61,7 +62,11 @@ namespace SousChef.Plugin.Navigation
                 "settlement", physics.Settlement, "failure", physics.Failure, "startFailures", phase == "no_safe_start" ? physics.StartFailures : null));
             while (executionTrace.Count > 96) executionTrace.Dequeue();
         }
-        public NavigationActions(Action<Vector3, int> walk, Action halt) { move = walk; neutral = halt; physics.TraceEnabled = Environment.GetEnvironmentVariable("SOUS_CHEF_NAV_TRACE") == "1"; }
+        public NavigationActions(Action<Vector3, int> walk, Action halt, double planningBudget = 12)
+        {
+            move = walk; neutral = halt; planningBudgetMilliseconds = planningBudget;
+            physics.TraceEnabled = Environment.GetEnvironmentVariable("SOUS_CHEF_NAV_TRACE") == "1";
+        }
         public GameObject Resolve(string id)
         {
             foreach (Destination d in identities.Values) if (d.Id == id && d.Object != null && d.Object.activeInHierarchy) return d.Object;
@@ -280,16 +285,16 @@ namespace SousChef.Plugin.Navigation
             { Align(position, commandMilliseconds); return; }
             if (Time.realtimeSinceStartup - lastProgress > 2f) { Stop("no_progress"); return; }
             facingSince = -1; arrival.Reset(); arrivalDetails = null;
-            waypoint = WalkSegments.Advance(waypoint, route.Count, delegate(int index)
+            Vector3 goal;
+            if (!TryWalkingGoal(position, out goal))
             {
-                Vector3 offset = route[index] - position;
-                return WalkHeight.WaypointReached(offset.x, offset.y, offset.z, physics.StepHeight);
-            }, delegate(int index) { return physics.Segment(position, route[index]); });
-            Vector3 goal = route[waypoint];
-            // Shortcut only across freshly checked supported space; no corner cutting.
-            for (int i = Math.Min(route.Count - 1, waypoint + 3); i > waypoint; i--)
-                if (Vector3.Distance(position, route[i]) < 1.4f && physics.Segment(position, route[i])) { waypoint = i; goal = route[i]; break; }
-            if (!physics.Segment(position, goal)) { Stop("route_blocked"); return; }
+                // Native contact and slope motion can displace the body from the
+                // previously checked connector without changing static geometry.
+                // Replan from the actual pose before declaring the target blocked.
+                Refresh(player, true, true);
+                if (!ApplyPlan()) return;
+                if (!TryWalkingGoal(position, out goal)) { Stop("route_blocked"); return; }
+            }
             // Use the same drift compensation and actual next-step safety check
             // during the final approach, including when facing a counter.
             Vector3 direction = goal - position; direction.y = 0;
@@ -323,6 +328,19 @@ namespace SousChef.Plugin.Navigation
                 if (!physics.Segment(position, projectedStep)) { Stop("next_step_unsafe"); return; }
             }
             move(input, commandMilliseconds);
+        }
+        private bool TryWalkingGoal(Vector3 position, out Vector3 goal)
+        {
+            waypoint = WalkSegments.Advance(waypoint, route.Count, delegate(int index)
+            {
+                Vector3 offset = route[index] - position;
+                return WalkHeight.WaypointReached(offset.x, offset.y, offset.z, physics.StepHeight);
+            }, delegate(int index) { return physics.Segment(position, route[index]); });
+            goal = route[waypoint];
+            // Shortcut only across freshly checked supported space; no corner cutting.
+            for (int i = Math.Min(route.Count - 1, waypoint + 3); i > waypoint; i--)
+                if (Vector3.Distance(position, route[i]) < 1.4f && physics.Segment(position, route[i])) { waypoint = i; goal = route[i]; break; }
+            return physics.Segment(position, goal);
         }
         private bool TargetMoved()
         {
@@ -501,7 +519,7 @@ namespace SousChef.Plugin.Navigation
                 prepareMilliseconds = watch.Elapsed.TotalMilliseconds;
                 var searchWatch = Stopwatch.StartNew();
                 search = new WalkSearch(starts, physics.Neighbours, 16000,
-                    delegate { return searchWatch.Elapsed.TotalMilliseconds < 12 && !physics.Overflow; });
+                    delegate { return searchWatch.Elapsed.TotalMilliseconds < planningBudgetMilliseconds && !physics.Overflow; });
                 searchMilliseconds = searchWatch.Elapsed.TotalMilliseconds;
                 nodeCount = search.Distances.Count;
                 if (physics.Overflow) { unavailable = "physics_query_overflow"; return; }

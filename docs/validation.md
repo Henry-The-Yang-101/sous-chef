@@ -561,3 +561,32 @@ Settling now uses current geometry and native `ComputePenetration`; it permits
 neutral waiting only for a clear landing or a verified upward supporting-ground
 contact, rejects other overlaps, and remains bounded. All 99 navigation checks
 pass; another single-request live climb is required before declaring completion.
+
+### 2026-11-02: closed-loop headless stair validation
+
+At the user's request, further game restarts and live attempts stopped. The last
+live build (`be20fde`) still stopped on simultaneous tread/wedge contact; none of
+its attempted climbs is counted as successful autonomous validation.
+
+The new CPU motion harness reproduces a complete controller failure, rather than
+only probing standable points. It compiles production navigation code and drives
+a capsule through 69 recorded colliders with native-style ground projection,
+gravity, fixed-step motion, input expiration, and stale/current ground ordering.
+The pre-correction closed-loop run stopped `route_blocked` at frame 58. After
+strict continuity bounds, multi-contact settling, and replanning displaced
+connectors, all 12 scenarios pass: eight jittered 20/30/60/120 FPS climbs, captured
+contact recovery, slow contact resolution, missing stairs, and retracting stairs.
+Positive cases arrive from one request; negative cases stop issuing input.
+
+The solver is an independent numerical model, not Unity PhysX. Native interaction
+selection and the complete animated kitchen are not simulated. These latest
+changes have not been revalidated or installed in the running game; no more game
+reopening is required to run `python3 scripts/simulate_navigation.py`.
+
+The final suite additionally varies whether native movement consumes the previous
+frame's input before the controller and ground observer run. This exposed and
+removed the overbroad proximity-distance settling rule from the earlier attempts.
+It also separated native downward landing-probe range from the step-up height
+limit. With these corrections, the final 12/12 cases pass, including delayed
+20 FPS movement. The headless search disables the wall-clock budget to avoid CPU
+load changing a simulated outcome; production retains its default 12 ms budget.
