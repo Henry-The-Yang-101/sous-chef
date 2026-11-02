@@ -618,6 +618,9 @@ internal static class Program
         Check(pass.Origin.y-pass.Arrival.y>1 && Vector3.Distance(pass.Arrival,human.transform.position)<1.8f,"downward pass accounts for three dimensional catch distance and earlier interception");
         human.transform.position=Vector3.up*6;w.Chef.transform.position=new Vector3(0,0,-4);item.transform.position=w.Chef.transform.position+new Vector3(0,1,.4f);
         Check(planner.Prepare(w.Chef,item,human)==null && !planner.From(w.Chef.transform.position,false,out pass),"player above the native arc plus catch radius cannot be targeted as a flat pass");
+        options.Begin(w.Chef);options.Check(human,out info);
+        for(int i=0;i<300 && !options.End();i++)options.Tick(w.Chef);
+        Check(!options.Check(human,out info) && (string)((Json.Record)info)["state"]=="unavailable","player above all reachable release arcs is withheld from pass options");
 
         w=new World(t=>t.Add(new Catcher()));item=w.Ingredient("tomato");item.Add(new Throwable());
         item.Add(new PhysicalAttachment()).m_rigidBodyParams.m_drag=.2f;item.Add(new BoxCollider {size=Vector3.one*.2f});
@@ -641,6 +644,8 @@ internal static class Program
     {
         var w=new World();var item=w.Ingredient("tomato");item.Add(new PhysicalAttachment {m_motion=new RigidbodyMotion()});item.Add(new BoxCollider {size=Vector3.one*.2f});w.Hold(item);
         var human=new GameObject("human");var player=human.Add(new PlayerControls());human.Add(new PlayerIDProvider {Id=0});human.Add(new CapsuleCollider());human.Add(new ServerPlayerAttachmentCarrier {Item=new GameObject("already holding food")});human.transform.position=new Vector3(.5f,0,0);
+        var options=new ThrowOptions(w.Navigation);object preview;options.Begin(w.Chef);
+        Check(options.Check(human,out preview),"native nearby counter handoff remains an option for nonthrowable cargo and occupied receiver hands");
         Check(w.Skills.Start(w.Chef,1,new ControlCommand {Operation="throw_to_player",Destination="1"})==null && w.Skills.Run.Phase=="drop_press","nearby handoff prefers a usable counter even when the player cannot catch");
         w.Tick();w.Target.GetComponent<ServerAttachStation>().Item=item;w.Hold(null);w.Verify();
         Check(w.Skills.Run.State=="succeeded" && w.Skills.Run.Reason=="item_handed_off_nearby" && !w.Inputs.Contains(2),"nearby counter delivery uses pickup placement, not a charged throw");

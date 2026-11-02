@@ -24,7 +24,7 @@ missing from the original prediction.
   mirrors the installed game's collider-specific helper. Stance search includes
   earlier catches, not just the descending ring at the receiver's foot height.
 - Candidate work continues across Updates with a 25 ms slice and a two-second
-  overall planning bound. One Update cannot run two slices for the same action.
+  accumulated planning-work bound. One Update cannot run two slices for the same action.
   An unfinished cold search no longer becomes `no_reachable_throw_position`.
   Planning owns the normal control lease, keeps input neutral, and is cancellable.
 - Walking stances reserve horizontal clearance for the navigator's 0.2-unit

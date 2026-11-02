@@ -196,6 +196,22 @@ Additional explicitly selected fixtures:
 `probe-walk Ax Ay Az Bx By Bz` is a read-only mailbox diagnostic that writes
 production standability/segment results to `probe.json`.
 
+Throw height fixtures use `stage-player N X Y Z YAW` through the same isolated
+mailbox. It requires an existing stationary, enabled chef and a checked supported
+foot pose; it writes the before/after position and facing to `staging.json`.
+This is an explicit initial condition, separate from measured action execution.
+It changes no input bindings, catch settings, throw forces, ownership or clocks.
+`probe-throw OBJECT_INSTANCE_ID` read-only checks the currently held item's arc
+from P2's current foot pose and writes the production planner's decision,
+diagnostics and plan to `throw-probe.json`. It does not search alternate stances
+or release cargo. Both commands require the opt-in headless runtime below.
+
+The [throw height cases](../tests/actions/native-throw-heights.json) exercise
+raised targets, downward deliveries, stair relocation and player catch heights.
+Run them using `scripts/throw_audit.py`; `expectOffered` checks both each row's
+operations and the action parameter enum after its preview finishes. Fresh native
+snapshots independently confirm the exact delivered item and intended holder.
+
 Files are private local runtime artifacts, not distributable game assets.
 
 The opt-in runtime requires `SOUS_CHEF_NATIVE_SIM`, `-batchmode`, and `-nographics`.
