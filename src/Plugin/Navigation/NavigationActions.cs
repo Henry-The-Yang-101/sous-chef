@@ -195,14 +195,14 @@ namespace SousChef.Plugin.Navigation
             foreach (Destination d in available.Values)
             {
                 if (d.IsPoint) continue; // Generated release stances are internal, never wire target IDs.
-                int portalCount = 0;
+                int portalCount = 0; var portalIds = new List<int>();
                 var cells = search == null ? null : search.Route(d.Goal);
-                if (cells != null) foreach (WalkCell cell in cells) if (cell.Portal != 0) portalCount++;
+                if (cells != null) foreach (WalkCell cell in cells) if (cell.Portal != 0) { portalCount++; portalIds.Add(cell.Portal); }
                 Vector3 offset = d.Object.transform.position - physics.Position; offset.y = 0;
                 destinations.Add(Json.Object("id", d.Id, "label", d.Object.name, "kind", d.Kind,
                     "foodName", FoodName(d.Object),
                     "objectInstanceId", d.Object.GetInstanceID(), "position", Values.Vector(d.Object.transform.position),
-                    "approachPosition", Values.Vector(d.Approach), "routeDistance", d.Distance, "routeTeleports", portalCount, "directDistance", offset.magnitude));
+                    "approachPosition", Values.Vector(d.Approach), "routeDistance", d.Distance, "routeTeleports", portalCount, "routePortalIds", portalIds, "directDistance", offset.magnitude));
             }
             destinations.Sort(delegate(object a, object b) { return String.CompareOrdinal((string)((Json.Record)a)["id"], (string)((Json.Record)b)["id"]); });
             var actions = new List<object> { Json.Object("name", "stop", "parameters", new Dictionary<string, object>()) };

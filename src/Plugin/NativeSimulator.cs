@@ -19,6 +19,7 @@ namespace SousChef.Plugin
         private float nextStatus;
         private bool engaged, split, loaded;
         private int generation, loadedGeneration;
+        private int dlc = -1;
         private Harmony patches;
         private const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
         private static object Call(object obj, string method, params object[] args) { return obj.GetType().GetMethod(method, Flags).Invoke(obj, args); }
@@ -84,7 +85,13 @@ namespace SousChef.Plugin
                 var players = new List<object>();
                 foreach (var p in UnityEngine.Object.FindObjectsOfType<PlayerControls>())
                     players.Add(Json.Object("name", p.name, "position", new[] { p.transform.position.x, p.transform.position.y, p.transform.position.z }, "inputAllowed", p.CanButtonBePressed()));
-                Write("status.json", Json.Object("phase", error != null ? "error" : inRound ? "ready" : phase, "error", error,
+                var portals = new List<object>();
+                foreach (var portal in UnityEngine.Object.FindObjectsOfType<Teleportal>())
+                    portals.Add(Json.Object("id", portal.GetInstanceID(), "objectId", portal.gameObject.GetInstanceID(), "position", Values.Vector(portal.transform.position),
+                        "exitObjectId", portal.m_exitPortal == null ? 0 : portal.m_exitPortal.GetInstanceID(),
+                        "playerSender", portal.GetComponent<ServerTeleportalPlayerSender>() != null,
+                        "enabled", portal.isActiveAndEnabled));
+                Write("status.json", Json.Object("dlc", dlc, "portals", portals,"phase", error != null ? "error" : inRound ? "ready" : phase, "error", error,
                     "scene", SceneManager.GetActiveScene().name, "requestedLevel", requested, "generation", generation,
                     "inRound", inRound, "players", players, "serverUsers", ServerUserSystem.m_Users.Count,
                     "clientUsers", ClientUserSystem.m_Users.Count, "realtime", Time.realtimeSinceStartup,
@@ -115,7 +122,23 @@ namespace SousChef.Plugin
             ServerGameSetup.Mode = GameMode.Party;
             var frontend = T17FrontendFlow.Instance;
             if (frontend == null) frontend = Resources.FindObjectsOfTypeAll<T17FrontendFlow>()[0];
-            var session = frontend.StartEmptySession(GameSession.GameType.Cooperative, -1);
+            var sessions = (DLCSerializedData<GameSession>)typeof(T17FrontendFlow).GetField("m_CoopGameSessionPrefabs", Flags).GetValue(frontend);
+            var all = new List<object>();
+            foreach (var prefab in sessions.AllData)
+            {
+                if (prefab == null) continue;
+                var progress = prefab.GetComponentInChildren<GameProgress>();
+                if (progress == null) continue;
+                foreach (var entry in progress.GetSceneDirectory().Scenes)
+                {
+                    var variant = entry.GetSceneVarient(2);
+                    if (variant != null) all.Add(Json.Object("dlc", prefab.DLC, "name", variant.SceneName, "label", entry.Label, "theme", entry.Theme.ToString()));
+                }
+            }
+            Write("all-levels.json", all);
+            Int32.TryParse(Environment.GetEnvironmentVariable("SOUS_CHEF_NATIVE_DLC") ?? "-1", out dlc);
+            var session = frontend.StartEmptySession(GameSession.GameType.Cooperative, dlc);
+            if (session == null) throw new InvalidOperationException("Unavailable DLC session: " + dlc);
             session.SaveSlot = -1;
             session.TypeSettings.WorldMapScene = "StartScreen";
             var levels = new List<object>();

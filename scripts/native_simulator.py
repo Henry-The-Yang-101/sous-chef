@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -75,8 +76,17 @@ def command(runtime, value, timeout=5):
 
 
 def start(args):
-    if subprocess.run(['pgrep', '-x', 'Overcooked2'], capture_output=True).returncode == 0:
-        raise RuntimeError('Overcooked2 is already running; stop that instance first')
+    base = getattr(args, 'port_base', 24702)
+    if is_running(args.runtime):
+        raise RuntimeError('This runtime is already running')
+    if base == 24702 and subprocess.run(['pgrep', '-x', 'Overcooked2'], capture_output=True).returncode == 0:
+        raise RuntimeError('Use a separate --runtime and --port-base for concurrent simulators')
+    if base != 24702:
+        if args.runtime.resolve() == DEFAULT_RUNTIME.resolve() or not 1024 <= base <= 65533:
+            raise RuntimeError('Isolated ports require a separate runtime and a base in 1024..65533')
+        with socket.socket() as full, socket.socket() as control, socket.socket() as gameplay:
+            for offset, endpoint in enumerate((full, control, gameplay)):
+                endpoint.bind(('127.0.0.1', base + offset))
     runtime = args.runtime
     runtime.mkdir(parents=True, exist_ok=True)
     output = build(args.game)
@@ -88,17 +98,19 @@ def start(args):
     # Application's static constructor is not guaranteed in -nographics.
     (bep / 'config/BepInEx.cfg').write_text(
         '[Preloader.Entrypoint]\nAssembly = Assembly-CSharp.dll\nType = BootFlow\nMethod = Awake\n')
+    (bep / 'config/dev.souschef.observer.cfg').write_text(
+        f'[Stream]\nPort = {base}\n[Control]\nPort = {base+1}\n[Gameplay]\nPort = {base+2}\n')
     for name in ('command', 'status.json', 'levels.json'):
         (runtime / name).unlink(missing_ok=True)
     env = dict(os.environ, SOUS_CHEF_NATIVE_SIM=str(runtime), SOUS_CHEF_NATIVE_LEVEL=args.level,
-               SOUS_CHEF_NAV_TRACE='1', SOUS_CHEF_NATIVE_FPS=str(args.fps))
+               SOUS_CHEF_NATIVE_DLC=str(getattr(args, 'dlc', -1)), SOUS_CHEF_NATIVE_PORT_BASE=str(base), SOUS_CHEF_NAV_TRACE='1', SOUS_CHEF_NATIVE_FPS=str(args.fps))
     with (runtime / 'launcher.log').open('w') as log:
         process = subprocess.Popen([
             sys.executable, str(ROOT / 'scripts/launch.py'), '--game', str(args.game),
             '--doorstop-target-assembly', str(bep / 'core/BepInEx.Preloader.dll'),
             '-batchmode', '-nographics', '-logFile', str(runtime / 'player.log'),
         ], cwd=ROOT, env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True)
-    (runtime / 'process.json').write_text(json.dumps({'pid': process.pid, 'level': args.level}))
+    (runtime / 'process.json').write_text(json.dumps({'pid': process.pid, 'level': args.level, 'portBase': base}))
     try:
         return wait_ready(runtime, timeout=args.timeout)
     except (Exception, KeyboardInterrupt):
@@ -158,6 +170,13 @@ def navigate_leg(client, target, args, trace):
     return result
 
 
+def control_port(runtime):
+    try:
+        return json.loads((runtime / 'process.json').read_text()).get('portBase', 24702) + 1
+    except FileNotFoundError:
+        return 24703
+
+
 def navigate(args):
     # Import the same client used by the harness; do not steer or retry for it.
     sys.path.insert(0, str(ROOT))
@@ -173,7 +192,7 @@ def navigate(args):
         command(args.runtime, 'reset')
         initial = wait_ready(args.runtime, generation, args.timeout)
         result = {'attempt': attempt, 'initial': initial, 'success': False}
-        with (trace_dir / f'attempt-{attempt}.ndjson').open('w') as trace, ActionClient() as client:
+        with (trace_dir / f'attempt-{attempt}.ndjson').open('w') as trace, ActionClient(control_port(args.runtime)) as client:
             started_action = False
             try:
                 if client.hello.get('sessionId') != initial.get('sessionId'):
@@ -210,6 +229,8 @@ def main():
     parser.add_argument('--timeout', type=float, default=90)
     sub = parser.add_subparsers(dest='operation', required=True)
     launch = sub.add_parser('start')
+    launch.add_argument('--dlc', type=int, default=-1)
+    launch.add_argument('--port-base', type=int, default=24702)
     launch.add_argument('--level', default='s_wizard_school_3_4')
     launch.add_argument('--fps', type=int, choices=range(10, 241), metavar='10..240', default=60)
     load = sub.add_parser('load')

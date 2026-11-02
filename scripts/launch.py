@@ -13,7 +13,8 @@ if __name__ == '__main__':
     game = args.game.resolve()
     wrapper = game.parent / 'run_bepinex.sh'
     if not wrapper.exists(): raise SystemExit('Run python3 scripts/install.py first.')
-    if subprocess.run(['pgrep', '-x', 'Overcooked2'], capture_output=True).returncode == 0:
+    isolated = bool(os.environ.get('SOUS_CHEF_NATIVE_SIM')) and os.environ.get('SOUS_CHEF_NATIVE_PORT_BASE', '24702') != '24702' and '-batchmode' in rest and '-nographics' in rest
+    if not isolated and subprocess.run(['pgrep', '-x', 'Overcooked2'], capture_output=True).returncode == 0:
         raise SystemExit('Overcooked! 2 is already running. Quit it normally before relaunching with the bridge.')
     env = dict(os.environ, SteamAppId='728880', SteamGameId='728880')
     os.chdir(game.parent)

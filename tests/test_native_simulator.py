@@ -114,6 +114,26 @@ class NativeSimulatorTests(unittest.TestCase):
                 self.assertEqual(report['results'][0]['teleportsCompleted'], completed)
                 self.assertEqual(report['results'][0]['reason'], 'arrived' if passed else 'insufficient_teleports')
 
+    def test_isolated_control_port_is_read_from_owned_process(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / 'process.json').write_text(json.dumps({'pid': 42, 'portBase': 25712}))
+            self.assertEqual(sim.control_port(root), 25713)
+
+    def test_running_runtime_is_not_overwritten(self):
+        args = SimpleNamespace(runtime=Path('/unused'), port_base=25712)
+        with patch.object(sim, 'is_running', return_value=True), patch.object(sim, 'build') as build:
+            with self.assertRaisesRegex(RuntimeError, 'already running'):
+                sim.start(args)
+            build.assert_not_called()
+
+    def test_isolated_ports_cannot_use_default_runtime(self):
+        args = SimpleNamespace(runtime=sim.DEFAULT_RUNTIME, port_base=25712)
+        with patch.object(sim, 'is_running', return_value=False), patch.object(sim, 'build') as build:
+            with self.assertRaisesRegex(RuntimeError, 'separate runtime'):
+                sim.start(args)
+            build.assert_not_called()
+
     def test_empty_station_arrival_must_be_expected_explicitly(self):
         import io
         for expected, passed in (('arrived', False), ('positioned_no_action', True)):
