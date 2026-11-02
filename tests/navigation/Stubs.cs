@@ -149,6 +149,9 @@ namespace UnityEngine
         public static Func<Vector3,Vector3,float,Vector3,float,RaycastHit[]> Cast;
         private static int Copy<T>(T[] source,T[] output) { int n=Math.Min(source.Length,output.Length); Array.Copy(source,output,n); return n; }
         public static bool GetIgnoreLayerCollision(int a,int b) { return false; }
+        public static int OverlapBoxNonAlloc(Vector3 p,Vector3 half,Collider[] output,Quaternion rotation,int mask,QueryTriggerInteraction q) { return Copy(Nearby(p,half.magnitude),output); }
+        public static Vector3 LastBoxCenter,LastBoxHalf;
+        public static int BoxCastNonAlloc(Vector3 p,Vector3 half,Vector3 d,RaycastHit[] output,Quaternion rotation,float length,int mask,QueryTriggerInteraction q) { LastBoxCenter=p;LastBoxHalf=half;return Copy(Sphere(p,half.magnitude,d,length),output); }
         public static int OverlapSphereNonAlloc(Vector3 p,float r,Collider[] output,int mask,QueryTriggerInteraction q) { return Copy(Nearby(p,r),output); }
         public static int RaycastNonAlloc(Vector3 p,Vector3 d,RaycastHit[] output,float length,int mask,QueryTriggerInteraction q) { return Copy(Ray(p,d,length,mask),output); }
         public static int OverlapCapsuleNonAlloc(Vector3 a,Vector3 b,float r,Collider[] output,int mask,QueryTriggerInteraction q) { return Copy(Overlap(a,b,r),output); }

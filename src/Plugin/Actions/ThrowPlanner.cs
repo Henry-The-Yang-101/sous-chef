@@ -28,7 +28,9 @@ namespace SousChef.Plugin.Actions
     {
         private readonly RaycastHit[] hits = new RaycastHit[128];
         private readonly Collider[] overlaps = new Collider[128];
-        private float speed, vertical, radius, pivot, drag;
+        private float speed, vertical, pivot, drag;
+        private readonly ItemBody itemBody = new ItemBody();
+        private Bounds receiverBounds;
         private Vector3 localRelease;
         private PlayerControls chef;
         private GameObject item, target, receiver;
@@ -67,7 +69,7 @@ namespace SousChef.Plugin.Actions
             var capsule = chef.GetComponent<CapsuleCollider>();
             if (shape == null || capsule == null) return "unsupported_throw_geometry";
             // Held collider bounds may be empty; use actual scaled shape data.
-            if (!ItemBody.Radius(item, out radius)) return "unsupported_throw_geometry";
+            if (!itemBody.Prepare(chef, item)) return "unsupported_throw_geometry";
             localRelease = chef.transform.InverseTransformPoint(item.transform.position);
             pivot = chef.transform.position.y - capsule.bounds.min.y;
             mask = 0;
@@ -98,9 +100,9 @@ namespace SousChef.Plugin.Actions
                     if (!found) { receiving = c.bounds; found = true; } else receiving.Encapsulate(c.bounds);
                 }
                 if (!found) return "unsupported_receiver_geometry";
-                // Aim at the top of the actual collider, on the descending arc.
-                Vector3 center = receiving.center; center.y = receiving.max.y + radius;
-                receiving = new Bounds(center, new Vector3(Mathf.Max(.08f, receiving.size.x - radius * 2), .22f, Mathf.Max(.08f, receiving.size.z - radius * 2)));
+                receiverBounds = receiving;
+                Vector3 toward = receiver.transform.position - chef.transform.position; toward.y = 0;
+                receiving = itemBody.Receiving(receiverBounds, toward.sqrMagnitude > .001f ? toward.normalized : chef.transform.forward);
             }
             return null;
         }
@@ -195,6 +197,7 @@ namespace SousChef.Plugin.Actions
             // not a single constant acceleration pasted onto a ballistic arc.
             for (int i = 0; i < 8; i++)
             {
+                if (player == null) { receiving = itemBody.Receiving(receiverBounds, direction); destination = receiving.center; }
                 origin = actualRelease ? item.transform.position : stance + Vector3.up * pivot + Quaternion.LookRotation(direction) * localRelease;
                 if (!ThrowTrajectory.Intercept(destination.x - origin.x - correction.x, destination.z - origin.z - correction.z,
                     velocity.x, velocity.z, speed, drag, Time.fixedDeltaTime, out time)) return false;
@@ -230,21 +233,21 @@ namespace SousChef.Plugin.Actions
                 if (catcher == null || catchable == null || !catcher.CanHandleCatch(catchable, new Vector2(direction.x, direction.z))) return false;
             }
             var throwable = GameObjectUtils.RequestInterface<IClientThrowable>(item);
-            if (throwable == null || !throwable.CanHandleThrow(chef.GetComponent<ClientAttachmentThrower>(), new Vector2(direction.x, direction.z)) || !Clear(path, velocity)) return false;
+            if (throwable == null || !throwable.CanHandleThrow(chef.GetComponent<ClientAttachmentThrower>(), new Vector2(direction.x, direction.z)) || !Clear(path, velocity, direction)) return false;
             Vector3 calm = origin + new Vector3(ThrowTrajectory.Displacement(launch.x, Physics.gravity.x, drag, time, Time.fixedDeltaTime),
                 ThrowTrajectory.Displacement(launch.y, Physics.gravity.y, drag, time, Time.fixedDeltaTime), ThrowTrajectory.Displacement(launch.z, Physics.gravity.z, drag, time, Time.fixedDeltaTime));
             plan = new ThrowPlan { Stance = stance, Origin = origin, Direction = direction, Arrival = arrival, FlightSeconds = time,
                 InitialVelocity = launch, WindDisplacement = arrival - calm, PeakHeight = path.PeakHeight, Drag = drag }; return true;
         }
-        private bool Clear(FlightPath path, Vector3 receiverVelocity)
+        private bool Clear(FlightPath path, Vector3 receiverVelocity, Vector3 direction)
         {
-            int count = Physics.OverlapSphereNonAlloc(path.Points[0], radius + .02f, overlaps, mask, QueryTriggerInteraction.Collide);
+            int count = itemBody.Overlap(path.Points[0], direction, overlaps, mask, .01f);
             if (count >= overlaps.Length) return false;
             for (int i = 0; i < count; i++) if (Obstruction(overlaps[i], false)) return false;
             for (int step = 1; step < path.Points.Count; step++)
             {
                 Vector3 previous = path.Points[step - 1], next = path.Points[step], segment = next - previous;
-                int n = Physics.SphereCastNonAlloc(previous, radius + .015f, segment.normalized, hits, segment.magnitude, mask, QueryTriggerInteraction.Collide);
+                int n = itemBody.Cast(previous, direction, segment, hits, mask, .01f);
                 if (n >= hits.Length) return false;
                 bool receivingEnd = step >= path.Points.Count - 3;
                 float t = path.Times[step];

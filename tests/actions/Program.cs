@@ -232,6 +232,31 @@ internal static class Program
         foreach(string line in new[] {"work_at r d1 forever 10000","wait_until r d1 cooked 0","wait_until r d1 cooked 120001","activate r d1 toggle","throw_to_player r 2","pick_up r d1 extra"})
         { bool failed=false;try {ControlCommand.Parse(line);}catch(ArgumentException){failed=true;}Check(failed,"malformed action cannot reach game"); }
     }
+    private static void NativeItemGeometry()
+    {
+        var w=new World();var item=w.Ingredient("Cheese_Raw");
+        var shape=item.Add(new BoxCollider {size=new Vector3(.73f,.3793645f,.6994182f),center=new Vector3(0,.19f,0)});
+        item.transform.position=new Vector3(0,.55f,-1);
+        var body=new ItemBody();
+        Check(body.Prepare(w.Chef,item),"native cheese collider is supported despite its old pivot radius exceeding 0.6");
+        Bounds bounds=body.BoundsAt(item.transform.position,Vector3.forward);
+        Check(Math.Abs(bounds.min.y-(.55f+.19f-.3793645f*.5f))<.0001f,"clearance uses the actual collider center rather than a sphere below the ingredient pivot");
+        body.Cast(item.transform.position,Vector3.forward,Vector3.forward*.1f,new RaycastHit[8],~0,.01f);
+        Check(Math.Abs(Physics.LastBoxCenter.y-.74f)<.0001f && Math.Abs(Physics.LastBoxHalf.y-(.3793645f*.5f+.01f))<.0001f,"native box sweep preserves vertical thickness and offset");
+        var receiver=new Bounds(new Vector3(0,.5f,0),new Vector3(1.2f,1,1.2f));
+        Bounds receiving=body.Receiving(receiver,Vector3.forward);
+        Check(Math.Abs(receiving.center.y-(1-.19f+.3793645f*.5f))<.0001f && receiving.size.x>.46f,"counter arrival uses the ingredient's bottom and actual width");
+        item.transform.lossyScale=new Vector3(-1,2,1);body.Prepare(w.Chef,item);
+        Check(Math.Abs(body.BoundsAt(Vector3.zero,Vector3.forward).size.y-.758729f)<.0001f,"mirrored and nonuniform native scales preserve positive dimensions");
+        shape.size=new Vector3(float.NaN,1,1);Check(!body.Prepare(w.Chef,item),"nonfinite native collider dimensions fail closed");
+        shape.size=new Vector3(0,1,1);Check(!body.Prepare(w.Chef,item),"degenerate native collider dimensions fail closed");
+
+        item=w.Ingredient("Lettuce");item.Add(new SphereCollider {radius=.38f,center=new Vector3(0,.38f,0)});
+        Check(body.Prepare(w.Chef,item) && Math.Abs(body.BoundsAt(Vector3.zero,Vector3.forward).min.y)<.0001f,"native lettuce sphere has its base at the item pivot, not 0.76 units below it");
+        item=w.Ingredient("capsule");item.Add(new CapsuleCollider {radius=.2f,height=1.4f,direction=0});item.transform.lossyScale=new Vector3(2,1,3);
+        Check(body.Prepare(w.Chef,item) && Math.Abs(body.BoundsAt(Vector3.zero,Vector3.forward).size.x-2.8f)<.0001f && Math.Abs(body.BoundsAt(Vector3.zero,Vector3.forward).size.z-1.2f)<.0001f,"capsule height and radius use their respective native scale axes");
+        item=w.Ingredient("unsupported mesh");item.Add(new MeshCollider());Check(!body.Prepare(w.Chef,item),"unsupported collision meshes do not silently become point projectiles");
+    }
     private static void Throws()
     {
         var w=new World(t=>t.Add(new Catcher()));var item=w.Ingredient("tomato");item.Add(new Throwable());
@@ -505,6 +530,6 @@ internal static class Program
         Check(!drops.Plan(w.Chef,item,player,out drop),"nearby horizontal position on a different deck is not a valid drop handoff");
         Physics.Sphere=(p,r,d,length)=>new RaycastHit[0];
     }
-    private static void Main() { Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();Throws();GeneratedStances();LogisticsJobs();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();WindAndHeight();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
+    private static void Main() { Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();GeneratedStances();LogisticsJobs();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();WindAndHeight();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
     private static ClientInteractable GetCurrentlyInteractingForTest(this PlayerControls chef) { return chef.GetComponent<ClientPlayerControlsImpl_Default>().Current; }
 }

@@ -20,6 +20,7 @@ namespace SousChef.Plugin.Actions
     {
         private readonly RaycastHit[] hits = new RaycastHit[128];
         private readonly WindField wind = new WindField();
+        private readonly ItemBody itemBody = new ItemBody();
         private int groundMask;
         private static float Foot(PlayerControls player)
         { var capsule = player.GetComponent<CapsuleCollider>(); return capsule == null ? player.transform.position.y : capsule.bounds.min.y; }
@@ -50,15 +51,14 @@ namespace SousChef.Plugin.Actions
             Vector3 launch = physical.m_motion.GetVelocity();
             if (launch.magnitude > .3f) return false;
             if (wind.Prepare(chef, item) != null) return false;
-            float radius;
-            if (!ItemBody.Radius(item, out radius)) return false;
+            if (!itemBody.Prepare(chef, item)) return false;
             if (physical.m_container != null && (!physical.m_container.useGravity || ((int)physical.m_container.constraints & 14) != 0)) return false;
             var path = ThrowFlight.Simulate(item.transform.position, chef.transform.forward, launch, Physics.gravity,
                 physical.m_container == null ? parameters.m_drag : physical.m_container.drag, 1.5f, Time.fixedDeltaTime, wind);
             for (int i = 1; i < path.Points.Count; i++)
             {
                 Vector3 from = path.Points[i - 1], segment = path.Points[i] - from;
-                int count = Physics.SphereCastNonAlloc(from, radius, segment.normalized, hits, segment.magnitude, ~0, QueryTriggerInteraction.Collide);
+                int count = itemBody.Cast(from, chef.transform.forward, segment, hits, ~0, .005f);
                 if (count >= hits.Length) return false;
                 float closest = Single.MaxValue; RaycastHit contact = new RaycastHit();
                 for (int j = 0; j < count; j++)

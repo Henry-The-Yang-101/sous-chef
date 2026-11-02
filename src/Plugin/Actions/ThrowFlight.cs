@@ -6,19 +6,81 @@ using UnityEngine;
 
 namespace SousChef.Plugin.Actions
 {
-    internal static class ItemBody
+    // Query the native primitive at its real offset from the item pivot. Held
+    // collider bounds can be disabled/empty, so derive geometry from shape data.
+    internal sealed class ItemBody
     {
-        public static bool Radius(GameObject item, out float radius)
+        private int kind;
+        private Vector3 half, offset, axis;
+        private Quaternion relativeRotation;
+        private float radius, segment;
+        private static Vector3 Abs(Vector3 v) { return new Vector3(Mathf.Abs(v.x), Mathf.Abs(v.y), Mathf.Abs(v.z)); }
+        private static bool Finite(Vector3 v) { return ThrowTrajectory.Finite(v.x) && ThrowTrajectory.Finite(v.y) && ThrowTrajectory.Finite(v.z); }
+        public bool Prepare(PlayerControls chef, GameObject item)
         {
-            radius = 0; var shape = item.GetComponent<Collider>(); if (shape == null) return false;
-            Vector3 scale = shape.transform.lossyScale; scale = new Vector3(Mathf.Abs(scale.x), Mathf.Abs(scale.y), Mathf.Abs(scale.z));
-            var box = shape as BoxCollider; var sphere = shape as SphereCollider; var pill = shape as CapsuleCollider; Vector3 center;
-            if (box != null) { center = box.center; radius = new Vector3(box.size.x * scale.x, box.size.y * scale.y, box.size.z * scale.z).magnitude * .5f; }
-            else if (sphere != null) { center = sphere.center; radius = sphere.radius * Mathf.Max(scale.x, Mathf.Max(scale.y, scale.z)); }
-            else if (pill != null) { center = pill.center; radius = Mathf.Max(pill.height * .5f, pill.radius) * Mathf.Max(scale.x, Mathf.Max(scale.y, scale.z)); }
+            var shape = item.GetComponent<Collider>(); if (shape == null) return false;
+            Vector3 scale = Abs(shape.transform.lossyScale), center;
+            if (!Finite(scale) || scale.x <= 0 || scale.y <= 0 || scale.z <= 0) return false;
+            var box = shape as BoxCollider; var sphere = shape as SphereCollider; var capsule = shape as CapsuleCollider;
+            if (box != null)
+            {
+                kind = 0; center = box.center;
+                half = new Vector3(box.size.x * scale.x, box.size.y * scale.y, box.size.z * scale.z) * .5f;
+                if (!Finite(half) || half.x <= 0 || half.y <= 0 || half.z <= 0) return false;
+            }
+            else if (sphere != null)
+            {
+                kind = 1; center = sphere.center; radius = sphere.radius * Mathf.Max(scale.x, Mathf.Max(scale.y, scale.z));
+                if (!ThrowTrajectory.Finite(radius) || radius <= 0) return false;
+            }
+            else if (capsule != null)
+            {
+                kind = 2; center = capsule.center;
+                if (capsule.direction < 0 || capsule.direction > 2 || !ThrowTrajectory.Finite(capsule.height) || capsule.height <= 0) return false;
+                axis = capsule.direction == 0 ? Vector3.right : capsule.direction == 1 ? Vector3.up : Vector3.forward;
+                float along = capsule.direction == 0 ? scale.x : capsule.direction == 1 ? scale.y : scale.z;
+                float across = capsule.direction == 0 ? Mathf.Max(scale.y, scale.z) : capsule.direction == 1 ? Mathf.Max(scale.x, scale.z) : Mathf.Max(scale.x, scale.y);
+                radius = capsule.radius * across; segment = Mathf.Max(0, capsule.height * along * .5f - radius);
+                if (!ThrowTrajectory.Finite(radius) || radius <= 0 || !ThrowTrajectory.Finite(segment)) return false;
+            }
             else return false;
-            radius = Mathf.Max(.05f, radius + Vector3.Distance(shape.transform.TransformPoint(center), item.transform.position));
-            return radius <= .6f && ThrowTrajectory.Finite(radius);
+            if (!Finite(center)) return false;
+            Quaternion inverse = Quaternion.Inverse(chef.transform.rotation);
+            offset = inverse * (shape.transform.TransformPoint(center) - item.transform.position);
+            relativeRotation = inverse * shape.transform.rotation;
+            return Finite(offset);
+        }
+        public Bounds BoundsAt(Vector3 origin, Vector3 direction)
+        {
+            Quaternion facing = Quaternion.LookRotation(direction), rotation = facing * relativeRotation;
+            Vector3 extent = kind == 0 ? Abs(rotation * Vector3.right) * half.x + Abs(rotation * Vector3.up) * half.y + Abs(rotation * Vector3.forward) * half.z :
+                kind == 1 ? Vector3.one * radius : Abs(rotation * axis) * segment + Vector3.one * radius;
+            return new Bounds(origin + facing * offset, extent * 2);
+        }
+        public Bounds Receiving(Bounds receiver, Vector3 direction)
+        {
+            Bounds shape = BoundsAt(Vector3.zero, direction);
+            Vector3 center = receiver.center - shape.center; center.y = receiver.max.y - shape.min.y;
+            return new Bounds(center, new Vector3(Mathf.Max(.08f, receiver.size.x - shape.size.x), .16f, Mathf.Max(.08f, receiver.size.z - shape.size.z)));
+        }
+        public int Overlap(Vector3 origin, Vector3 direction, Collider[] output, int mask, float margin)
+        {
+            Quaternion facing = Quaternion.LookRotation(direction), rotation = facing * relativeRotation;
+            Vector3 center = origin + facing * offset;
+            if (kind == 0) return Physics.OverlapBoxNonAlloc(center, half + Vector3.one * margin, output, rotation, mask, QueryTriggerInteraction.Collide);
+            if (kind == 1) return Physics.OverlapSphereNonAlloc(center, radius + margin, output, mask, QueryTriggerInteraction.Collide);
+            Vector3 end = rotation * axis * segment;
+            return Physics.OverlapCapsuleNonAlloc(center - end, center + end, radius + margin, output, mask, QueryTriggerInteraction.Collide);
+        }
+        public int Cast(Vector3 origin, Vector3 direction, Vector3 movement, RaycastHit[] output, int mask, float margin)
+        {
+            if (movement.sqrMagnitude < .00000001f) return 0;
+            Quaternion facing = Quaternion.LookRotation(direction), rotation = facing * relativeRotation;
+            Vector3 center = origin + facing * offset;
+            if (kind == 0) return Physics.BoxCastNonAlloc(center, half + Vector3.one * margin, movement.normalized, output, rotation, movement.magnitude, mask, QueryTriggerInteraction.Collide);
+            if (kind == 1) return Physics.SphereCastNonAlloc(center, radius + margin, movement.normalized, output, movement.magnitude, mask, QueryTriggerInteraction.Collide);
+            Vector3 end = rotation * axis * segment;
+            return Physics.CapsuleCastNonAlloc(center - end, center + end, radius + margin, movement.normalized, output, movement.magnitude, mask, QueryTriggerInteraction.Collide);
         }
     }
     internal static class NativeThrow
