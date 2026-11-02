@@ -143,7 +143,7 @@ namespace SousChef.Plugin.Navigation
             Vector3 exit = attach.position + attach.rotation * link.Receiver.m_ReceiverAnimation.m_TargetPositionValue + offset;
             link.RawExit = exit;
             if ((exit - Position).sqrMagnitude > (Range - 2) * (Range - 2) ||
-                !PortalStand(exit, link.ExitTrigger, out point, out ground, 3f) ||
+                !PortalStand(exit, link.ExitTrigger, out point, out ground, 3.1f) ||
                 !PortalLandingClear(exit, point, link.ExitTrigger)) return false;
             link.Exit = point; link.GeometryReason = "ready";
             return true;
@@ -157,7 +157,7 @@ namespace SousChef.Plugin.Navigation
         public bool PortalLandingClear(Vector3 from, Vector3 to, Collider trigger)
         {
             Vector3 delta = from - to;
-            if (delta.y < -.1f || delta.y > 3f || delta.x*delta.x + delta.z*delta.z > .01f) return Fail("portal_landing_displacement", from);
+            if (delta.y < -.1f || delta.y > 3.01f || delta.x*delta.x + delta.z*delta.z > .01f) return Fail("portal_landing_displacement", from);
             Vector3 supported; Collider support;
             if (!PortalStand(to, trigger, out supported, out support) || Vector3.Distance(supported, to) > .1f)
                 return Fail("portal_landing_support", to);
@@ -181,7 +181,7 @@ namespace SousChef.Plugin.Navigation
                     // box's horizontal underside proves downward separation.
                     if (Dangerous(obstacle) || !(obstacle is BoxCollider) ||
                         Mathf.Abs(Vector3.Dot(obstacle.transform.up, Vector3.up)) < .9999f ||
-                        obstacle.bounds.min.y < from.y + height * .5f ||
+                        obstacle.bounds.center.y < from.y + height * .5f ||
                         to.y + height - Skin >= obstacle.bounds.min.y)
                         return Fail("portal_landing_overlap", from, obstacle);
                     separating.Add(obstacle);

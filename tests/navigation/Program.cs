@@ -538,6 +538,8 @@ internal static class Program
         a.m_exitPortal = receiverOnly; physics = w.Ready(); link = physics.Portal(a.GetInstanceID());
         Check(link.Valid && link.ExitServer == null && link.ExitTrigger == null && Math.Abs(link.Exit.y)<.001f,
             "receiver-only endpoint accepts the native ray-miss fallback with a checked vertical landing");
+        attachOnly.transform.position = new Vector3(10,3,0);
+        physics.Refresh(w.Chef); Check(link.Valid,"three-unit festive receiver fall includes ground-probe contact margin");
         attachOnly.transform.position += Vector3.up;
         physics.Refresh(w.Chef); Check(!link.Valid,"receiver fallback rejects a fall beyond the bounded landing sweep");
         attachOnly.transform.position = new Vector3(10,1,0); receiver.m_groundPlayer=false;
@@ -545,7 +547,7 @@ internal static class Program
         Check(!physics.PortalLandingClear(new Vector3(10.9f,1,0),new Vector3(11.9f,0,0),null),
             "portal landing cannot excuse lateral displacement");
         var airborneWall = new GameObject("airborne exit obstruction"); airborneWall.transform.position=new Vector3(10.9f,1,0);
-        w.Colliders.Add(airborneWall.Add(new BoxCollider { center=new Vector3(0,.5f,0),size=new Vector3(.3f,.3f,.3f) }));
+        w.Colliders.Add(airborneWall.Add(new BoxCollider { center=new Vector3(0,.2f,0),size=new Vector3(.3f,.3f,.3f) }));
         physics.Refresh(w.Chef); Check(!link.Valid,"clear floor below an obstructed native animation endpoint is rejected");
         w.Colliders.Last().enabled=false;
         var ceiling = new GameObject("native receiver ceiling");
