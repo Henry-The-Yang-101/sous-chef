@@ -134,12 +134,14 @@ namespace SousChef.Plugin.Actions
             var surface = target.GetComponent<SurfaceMovable>();
             return surface == null ? Vector3.zero : surface.GetVelocity();
         }
+        private bool offloadCandidates;
         public string Find(NavigationActions navigation, out ThrowPlan plan, float sliceMilliseconds = 25, bool firstFeasible = false, bool prepareNavigation = true)
         {
             plan = null;
             if (candidates == null)
             {
                 if (prepareNavigation) navigation.PrepareStances(chef);
+                offloadCandidates = firstFeasible;
                 candidates = CandidatePositions(navigation).GetEnumerator();
                 planningMilliseconds = 0; bestPlan = null;
             }
@@ -149,6 +151,8 @@ namespace SousChef.Plugin.Actions
             while (frameBudget.Elapsed.TotalMilliseconds < sliceMilliseconds)
             {
                 if (!candidates.MoveNext()) return CompletePlanning(out plan);
+                // A pending worker batch yields without consuming a candidate.
+                if (Single.IsNaN(candidates.Current.x)) return Pending;
                 Vector3 stance; ThrowPlan possible;
                 if (!navigation.TryStance(candidates.Current, out stance)) { Reject("unsupported_stance"); continue; }
                 float uncertainty = Vector3.Distance(stance, chef.transform.position - Vector3.up * pivot) < .02f ? 0 : ArrivalCheck.PositionTolerance + .02f;
@@ -197,6 +201,36 @@ namespace SousChef.Plugin.Actions
                     float distance = ThrowTrajectory.Displacement(speed, 0, drag, flight, Time.fixedDeltaTime) + new Vector2(localRelease.x, localRelease.z).magnitude;
                     Vector3 predictedCenter = center + ReceiverVelocity() * flight;
                     const int angles = 36;
+                    // Batch all calm seed endpoints in one IPC job. Native launch
+                    // parameters are sampled here; From still performs full fresh
+                    // aiming, flight, collision and receiver validation for every
+                    // resulting stance. Wind retains positional native queries.
+                    Vector3[] remoteEnds = null;
+                    WorkerHost worker = WorkerHost.Current;
+                    if (offloadCandidates && !wind.HasWind && worker != null && worker.Ready && worker.Flights != null)
+                    {
+                        var inputs = new float[angles][]; bool valid = true;
+                        for (int a = 0; a < angles; a++)
+                        {
+                            float angle = a * 2 * Mathf.PI / angles, r = Mathf.Max(.5f, distance);
+                            Vector3 candidate = new Vector3(predictedCenter.x + Mathf.Cos(angle) * r, height, predictedCenter.z + Mathf.Sin(angle) * r);
+                            Vector3 direction = predictedCenter - candidate; direction.y = 0; direction.Normalize(); Vector3 launch;
+                            if (!NativeThrow.Velocity(chef, direction, out launch)) { valid = false; break; }
+                            Vector3 origin = candidate + Vector3.up * pivot + Quaternion.LookRotation(direction) * localRelease;
+                            Vector3 gravity = Physics.gravity;
+                            inputs[a] = new[] { origin.x, origin.y, origin.z, launch.x, launch.y, launch.z, gravity.x, gravity.y, gravity.z, drag, flight, Time.fixedDeltaTime };
+                        }
+                        FlightTask task = valid ? worker.Flights.Submit(inputs) : null;
+                        if (task != null)
+                        {
+                            while (!task.Complete) yield return new Vector3(Single.NaN, 0, 0);
+                            if (!task.Failed)
+                            {
+                                remoteEnds = new Vector3[angles];
+                                for (int a = 0; a < angles; a++) remoteEnds[a] = new Vector3(task.Ends[a * 3], task.Ends[a * 3 + 1], task.Ends[a * 3 + 2]);
+                            }
+                        }
+                    }
                     for (int i = 0; i < angles; i++)
                     {
                         float angle = i * 2 * Mathf.PI / angles, r = Mathf.Max(.5f, distance);
@@ -206,7 +240,8 @@ namespace SousChef.Plugin.Actions
                         if (!NativeThrow.Velocity(chef, direction, out launch)) continue;
                         Vector3 origin = candidate + Vector3.up * pivot + Quaternion.LookRotation(direction) * localRelease;
                         Vector3 end; float seedTime;
-                        if (player != null)
+                        if (remoteEnds != null) { seedTime = flight; end = remoteEnds[i]; }
+                        else if (player != null)
                         {
                             seedTime = flight;
                             end = ThrowFlight.Simulate(origin, direction, launch, Physics.gravity, drag, flight, Time.fixedDeltaTime, wind, seedFlight).End;

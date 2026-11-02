@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><ImplicitUsings>disable</ImplicitUsings><Nullable>disable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors></PropertyGroup>
+  <ItemGroup><Compile Include="../src/Core/Json.cs" Link="Json.cs"/><Compile Include="../src/Core/WorkerWire.cs" Link="WorkerWire.cs"/><Compile Include="../src/Core/Navigation.cs" Link="Navigation.cs"/><Compile Include="../src/Core/FlightBatch.cs" Link="FlightBatch.cs"/></ItemGroup>
+</Project>

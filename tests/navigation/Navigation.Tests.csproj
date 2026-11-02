@@ -7,7 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../src/Core/Navigation.cs" />
-    <Compile Include="../../src/Core/Json.cs" />
+    <Compile Include="../../src/Core/Json.cs" /><Compile Include="../../src/Core/WorkerWire.cs"/><Compile Include="../../src/Core/WorkerHost.cs"/><Compile Include="../../src/Core/RemoteWalk.cs"/><Compile Include="../../src/Core/RemoteFlight.cs"/><Compile Include="../../src/Core/FlightBatch.cs"/>
     <Compile Include="../../src/Plugin/Navigation/*.cs" />
     <Compile Include="Stubs.cs" />
     <Compile Include="Program.cs" />

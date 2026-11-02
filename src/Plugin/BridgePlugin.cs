@@ -17,6 +17,7 @@ namespace SousChef.Plugin
         private float nextGameplay, gameplayInterval;
         private SceneCapture capture;
         private Player2Control control;
+        private WorkerHost worker;
         private readonly string session = Guid.NewGuid().ToString("N");
         private long sequence, fixedTicks;
         private bool wasInRound;
@@ -39,6 +40,15 @@ namespace SousChef.Plugin
                 string hash;
                 using (var sha = SHA256.Create()) using (var file = File.OpenRead(assembly))
                     hash = BitConverter.ToString(sha.ComputeHash(file)).Replace("-", "").ToLowerInvariant();
+                string workerDirectory = Path.GetDirectoryName(typeof(BridgePlugin).Assembly.Location);
+                string runtimeFile = Path.Combine(workerDirectory, "worker-dotnet.txt");
+                string workerAssembly = Path.Combine(Path.Combine(workerDirectory, "worker"), "Worker.dll");
+                if (Config.Bind("Worker", "Enabled", true, "Run detached planning and encoding in a separate process; native checks remain inside Unity.").Value &&
+                    Environment.GetEnvironmentVariable("SOUS_CHEF_WORKER") != "0" && File.Exists(runtimeFile) && File.Exists(workerAssembly))
+                {
+                    worker = new WorkerHost(File.ReadAllText(runtimeFile).Trim(), workerAssembly);
+                    WorkerHost.Current = worker; worker.Start();
+                }
                 capture = new SceneCapture(session);
                 if (NativeSimulator.Enabled)
                 {
@@ -59,7 +69,7 @@ namespace SousChef.Plugin
                 Logger.LogInfo("Observer listening on 127.0.0.1:" + port + "; active rounds only; assembly=" + hash);
                 StartCoroutine(CaptureLoop());
             }
-            catch (Exception e) { Logger.LogError("Observer startup failed: " + e); if (server != null) server.Dispose(); if (gameplayServer != null) gameplayServer.Dispose(); if (control != null) control.Dispose(); control = null; server = null; }
+            catch (Exception e) { Logger.LogError("Observer startup failed: " + e); if (server != null) server.Dispose(); if (gameplayServer != null) gameplayServer.Dispose(); if (control != null) control.Dispose(); control = null; server = null; if (worker != null) worker.Dispose(); }
         }
 
         private void FixedUpdate() { fixedTicks++; }
@@ -148,6 +158,6 @@ namespace SousChef.Plugin
                     "role", role, "realtime", Time.realtimeSinceStartup) });
         }
 
-        private void OnDestroy() { StopAllCoroutines(); if (gameplayServer != null) { gameplayServer.Dispose(); gameplayServer = null; } if (control != null) { control.Dispose(); control = null; } if (server != null) { server.Dispose(); server = null; } }
+        private void OnDestroy() { StopAllCoroutines(); if (worker != null) worker.Dispose(); if (gameplayServer != null) { gameplayServer.Dispose(); gameplayServer = null; } if (control != null) { control.Dispose(); control = null; } if (server != null) { server.Dispose(); server = null; } }
     }
 }

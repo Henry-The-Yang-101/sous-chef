@@ -16,7 +16,7 @@ namespace SousChef.Core
         {
             public int Client;
             public ControlCommand Command;
-            public string Response;
+            public object Response;
             public bool Cancelled;
         }
         private readonly object sync = new object();
@@ -76,6 +76,7 @@ namespace SousChef.Core
                     catch (ArgumentException e) { Write(stream, Json.Encode(Json.Object("type", "reply", "ok", false, "error", e.Message))); continue; }
                     var request = new Request { Client = id, Command = command };
                     lock (sync) { if (pending.Count >= 32) throw new IOException("control queue full"); pending.Enqueue(request); }
+                    object response;
                     lock (request)
                     {
                         int waited = 0;
@@ -86,8 +87,9 @@ namespace SousChef.Core
                             { request.Cancelled = true; throw new IOException("dispatch timeout or disconnect"); }
                         }
                         if (stopping) { request.Cancelled = true; break; }
-                        Write(stream, request.Response);
+                        response = request.Response;
                     }
+                    Write(stream, WorkerHost.Encode(response));
                 }
             }
             catch (IOException) { }
@@ -104,8 +106,8 @@ namespace SousChef.Core
                 lock (request)
                 {
                     if (request.Cancelled) continue;
-                    try { request.Response = Json.Encode(handle(request.Client, request.Command)); }
-                    catch (Exception) { disconnect(request.Client); request.Response = Json.Encode(Json.Object("type", "reply", "id", request.Command.Id, "ok", false, "error", "dispatch_error")); }
+                    try { request.Response = handle(request.Client, request.Command); }
+                    catch (Exception) { disconnect(request.Client); request.Response = Json.Object("type", "reply", "id", request.Command.Id, "ok", false, "error", "dispatch_error"); }
                     Monitor.PulseAll(request);
                 }
             }

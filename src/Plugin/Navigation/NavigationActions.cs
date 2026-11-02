@@ -24,7 +24,9 @@ namespace SousChef.Plugin.Navigation
         private readonly Dictionary<int, Destination> identities = new Dictionary<int, Destination>();
         private readonly Action<Vector3, int> move;
         private readonly Action neutral;
-        private WalkSearch search;
+        private WalkTree search;
+        private RemoteWalk remoteSearch;
+        private void ClearRemote() { if (remoteSearch != null) remoteSearch.Dispose(); remoteSearch = null; }
         private bool incrementalSearch, fastWarm;
         private int lastPlanFrame = -1, searchSlices, savedStartCount;
         private long searchGeneration;
@@ -147,9 +149,10 @@ namespace SousChef.Plugin.Navigation
         }
         public void Reset(string reason)
         {
-            incrementalSearch = fastWarm = false;
+            incrementalSearch = fastWarm = false; ClearRemote();
             Stop(reason); teleportsCompleted = 0; lastDestination = arrivalDetails = null; identities.Clear(); available.Clear(); physics.Reset(); search = null; chef = null; lastPlan = -1; unavailable = reason;
         }
+        public void Dispose() { ClearRemote(); }
         public void Stop(string reason)
         {
             Trace(reason, Vector3.zero, Vector3.zero);
@@ -160,7 +163,7 @@ namespace SousChef.Plugin.Navigation
         }
         public void Invalidate(string reason)
         {
-            incrementalSearch = fastWarm = false;
+            incrementalSearch = fastWarm = false; ClearRemote();
             if (Action.State == "navigating") Stop(reason);
             available.Clear(); unavailable = reason;
         }
@@ -178,6 +181,8 @@ namespace SousChef.Plugin.Navigation
                     "searchMilliseconds", searchMilliseconds, "matchMilliseconds", matchMilliseconds, "searchNodes", nodeCount,
                     "searchGeneration", searchGeneration, "searchSlices", searchSlices, "searchReused", searchReused,
                     "searchReuseFailure", physics.ContinuityFailure,
+                    "searchBackend", remoteSearch != null ? "worker_process" : "in_process",
+                    "workerPid", WorkerHost.Current == null ? 0 : WorkerHost.Current.ProcessId,
                     "searchComplete", search != null && search.Complete,
                     "physicsQueries", physics.Queries, "candidateCount", candidateCount, "startCount", startCount, "observationError", observationError,
                     "portals", physics.PortalDiagnostics()));
@@ -667,7 +672,7 @@ namespace SousChef.Plugin.Navigation
             {
                 available.Clear(); chef = player;
                 string error = alreadyRefreshed ? null : physics.Refresh(player);
-                if (error != null) { incrementalSearch = fastWarm = false; unavailable = error; return; }
+                if (error != null) { ClearRemote(); incrementalSearch = fastWarm = false; unavailable = error; return; }
                 observationError = null;
                 List<Destination> candidates = target != null && target.IsPoint ? new List<Destination> { target } : Discover(player); candidateCount = candidates.Count;
                 bool hadIncremental = incrementalSearch;
@@ -683,12 +688,34 @@ namespace SousChef.Plugin.Navigation
                 var searchWatch = Stopwatch.StartNew();
                 double budget = incremental && (searchReused || !hadIncremental) ? IncrementalBudgetMilliseconds : PlanningBudgetMilliseconds;
                 Func<bool> hasBudget = delegate { return searchWatch.Elapsed.TotalMilliseconds < budget && !physics.Overflow; };
-                if (searchReused) search.Continue(hasBudget);
-                else { search = new WalkSearch(starts, physics.Neighbours, 16000, hasBudget); searchGeneration++; searchSlices = 0; }
+                WorkerHost worker = WorkerHost.Current;
+                bool canOffload = incremental && worker != null && worker.Ready && (searchReused || physics.RememberSearch());
+                if (remoteSearch != null && (remoteSearch.Failed || worker == null || !worker.Ready)) { canOffload = false; searchReused = false; }
+                if (!searchReused)
+                {
+                    ClearRemote();
+                    if (starts == null) starts = new List<WalkEdge>(physics.Starts());
+                    searchGeneration++; searchSlices = 0;
+                    if (canOffload) { remoteSearch = new RemoteWalk(worker, searchGeneration, starts.ToArray()); search = remoteSearch.Tree; }
+                    else search = new WalkSearch(starts, physics.Neighbours, 16000, hasBudget);
+                }
+                else if (remoteSearch == null) ((WalkSearch)search).Continue(hasBudget);
+                if (remoteSearch != null)
+                {
+                    remoteSearch.Continue(physics.Neighbours, hasBudget);
+                    // Discovering an arbitrary surface/portal rule during graph
+                    // production invalidates the entire offloaded generation.
+                    if (!physics.RememberSearch(true))
+                    {
+                        ClearRemote(); searchReused = false;
+                        starts = new List<WalkEdge>(physics.Starts());
+                        search = new WalkSearch(starts, physics.Neighbours, 16000, hasBudget);
+                    }
+                }
                 searchSlices++; savedStartCount = startCount;
                 incrementalSearch = incremental;
                 searchMilliseconds = searchWatch.Elapsed.TotalMilliseconds;
-                nodeCount = search.Distances.Count;
+                nodeCount = remoteSearch == null ? search.Distances.Count : search.DiscoveredCount;
                 if (physics.Overflow) { incrementalSearch = fastWarm = false; unavailable = "physics_query_overflow"; return; }
                 // Index the reachable nodes once, then only inspect cells around each
                 // meaningful object. Never emit the lattice itself as available actions.
@@ -771,14 +798,14 @@ namespace SousChef.Plugin.Navigation
                 }
                 if (physics.Overflow) { available.Clear(); unavailable = "physics_query_overflow"; }
                 else unavailable = search.Complete ? null : "planning_in_progress";
-                bool reusable = incremental && !physics.Overflow && physics.RememberSearch();
+                bool reusable = incremental && !physics.Overflow && physics.RememberSearch(remoteSearch != null);
                 fastWarm = reusable && !search.NodeLimitReached && (searchReused || !hadIncremental);
                 if (search.NodeLimitReached) warmTicks = 0;
                 matchMilliseconds = watch.Elapsed.TotalMilliseconds - prepareMilliseconds - searchMilliseconds;
             }
             catch (Exception e)
             {
-                incrementalSearch = fastWarm = false;
+                ClearRemote(); incrementalSearch = fastWarm = false;
                 available.Clear(); unavailable = "navigation_observation_error"; observationError = e.GetType().Name + ": " + e.Message;
             }
             finally { watch.Stop(); planMilliseconds = watch.Elapsed.TotalMilliseconds; lastPlan = Time.realtimeSinceStartup; lastPlanFrame = Time.frameCount; revision++; planning = false; }

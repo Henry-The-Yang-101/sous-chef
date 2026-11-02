@@ -95,6 +95,8 @@ def start(args):
     shutil.copytree(TOOLS / 'bepinex/BepInEx/core', bep / 'core', dirs_exist_ok=True)
     (bep / 'plugins').mkdir(exist_ok=True)
     shutil.copy2(output / 'SousChef.Bridge.dll', bep / 'plugins')
+    shutil.copy2(output / 'worker-dotnet.txt', bep / 'plugins')
+    shutil.copytree(output / 'worker', bep / 'plugins/worker', dirs_exist_ok=True)
     (bep / 'config').mkdir(exist_ok=True)
     # Application's static constructor is not guaranteed in -nographics.
     (bep / 'config/BepInEx.cfg').write_text(

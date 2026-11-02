@@ -191,7 +191,7 @@ namespace SousChef.Core
             // Client threads are background threads and sockets are closed above.
         }
 
-        private static byte[] Line(object value) { return Json.Utf8Line(Json.Encode(value)); }
+        private static byte[] Line(object value) { return Json.Utf8Line(WorkerHost.Encode(value)); }
         private static Thread Background(ThreadStart action, string name)
         {
             var thread = new Thread(action) { IsBackground = true, Name = name }; thread.Start(); return thread;

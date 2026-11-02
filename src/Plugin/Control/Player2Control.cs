@@ -334,7 +334,7 @@ namespace SousChef.Plugin.Control
             scheme = null;
         }
         private void Revoke(string reason) { logistics.Cancel(reason); interactions.Cancel(reason); if (navigation.Action.State == "navigating") navigation.Stop(reason); lease.Revoke(reason); Restore(); }
-        public void Dispose() { disposed = true; Revoke("shutdown"); server.Dispose(); }
+        public void Dispose() { disposed = true; Revoke("shutdown"); navigation.Dispose(); server.Dispose(); }
 
         private sealed class Axis : ILogicalValue
         {

@@ -207,6 +207,9 @@ class NativeSimulatorTests(unittest.TestCase):
             output = root / 'build'
             output.mkdir()
             (output / 'SousChef.Bridge.dll').write_bytes(b'fixture')
+            (output / 'worker-dotnet.txt').write_text('/fixture/dotnet\n')
+            (output / 'worker').mkdir()
+            (output / 'worker/Worker.dll').write_bytes(b'worker')
             args = SimpleNamespace(runtime=root / 'runtime', game=root / 'game.app',
                                    level='invalid', fps=60, timeout=1)
             (args.runtime / 'BepInEx').mkdir(parents=True)

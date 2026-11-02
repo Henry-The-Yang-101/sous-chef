@@ -28,6 +28,9 @@ def install(game):
             files[str(source.relative_to(TOOLS / 'bepinex'))] = source
     files['BepInEx/plugins/SousChef/SousChef.Bridge.dll'] = output / 'SousChef.Bridge.dll'
     files['BepInEx/plugins/SousChef/build.json'] = output / 'build.json'
+    files['BepInEx/plugins/SousChef/worker-dotnet.txt'] = output / 'worker-dotnet.txt'
+    for source in (output / 'worker').iterdir():
+        if source.is_file(): files['BepInEx/plugins/SousChef/worker/' + source.name] = source
     # Check every destination before writing any of them.
     for relative, source in files.items():
         target = dest / relative

@@ -24,7 +24,7 @@ namespace SousChef.Plugin.Navigation
 
         // Search progress is main-thread state, separate from the geometry cache.
         // Keep exact values, not a lossy hash or a time-based freshness guess.
-        public bool RememberSearch()
+        public bool RememberSearch(bool retainGrounds = false)
         {
             searchRemembered = false; searchGrounds.Clear(); searchWinds.Clear();
             // Native conveyors have an explicit continuity proof. Arbitrary

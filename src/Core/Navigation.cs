@@ -62,21 +62,45 @@ namespace SousChef.Core
         public WalkEdge(WalkCell cell, float distance) { Cell = cell; Distance = distance; }
     }
 
+    public class WalkTree
+    {
+        public readonly Dictionary<WalkCell, float> Distances = new Dictionary<WalkCell, float>();
+        public readonly HashSet<WalkCell> Settled = new HashSet<WalkCell>();
+        protected readonly Dictionary<WalkCell, WalkCell> parents = new Dictionary<WalkCell, WalkCell>();
+        public bool Complete { get; protected set; }
+        public virtual bool NodeLimitReached { get; set; }
+        public virtual float MinimumPendingDistance { get; set; }
+        public int DiscoveredCount { get; set; }
+        public bool Parent(WalkCell cell, out WalkCell parent) { return parents.TryGetValue(cell, out parent); }
+        public void Import(WalkCell cell, float cost, bool hasParent, WalkCell parent)
+        { Distances[cell] = cost; Settled.Add(cell); if (hasParent) parents[cell] = parent; }
+        public void Finish(bool complete, bool limited, float minimum, int discovered)
+        { Complete = complete; NodeLimitReached = limited; MinimumPendingDistance = minimum; DiscoveredCount = discovered; }
+        public List<WalkCell> Route(WalkCell goal)
+        {
+            if (!Settled.Contains(goal)) return null;
+            var path = new List<WalkCell>(); WalkCell current = goal, parent;
+            while (true)
+            {
+                path.Add(current);
+                if (!parents.TryGetValue(current, out parent)) break;
+                current = parent;
+            }
+            path.Reverse(); return path;
+        }
+    }
+
     // One Dijkstra tree serves every destination. Costs are distance, not elapsed
     // time: environmental flow removes infeasible directed edges, never discounts
     // distance and silently trades a longer route for a faster one.
-    public sealed class WalkSearch
+    public sealed class WalkSearch : WalkTree
     {
         private struct Pending { public WalkCell Cell; public float Cost; }
         private readonly List<Pending> heap = new List<Pending>();
-        public readonly Dictionary<WalkCell, float> Distances = new Dictionary<WalkCell, float>();
-        public readonly HashSet<WalkCell> Settled = new HashSet<WalkCell>();
-        private readonly Dictionary<WalkCell, WalkCell> parents = new Dictionary<WalkCell, WalkCell>();
         private readonly Func<WalkCell, IEnumerable<WalkEdge>> expand;
         private readonly int maxNodes;
-        public bool Complete { get; private set; }
-        public bool NodeLimitReached { get { return Distances.Count > maxNodes; } }
-        public float MinimumPendingDistance { get { return heap.Count == 0 ? Single.PositiveInfinity : heap[0].Cost; } }
+        public override bool NodeLimitReached { get { return Distances.Count > maxNodes; } set { } }
+        public override float MinimumPendingDistance { get { return heap.Count == 0 ? Single.PositiveInfinity : heap[0].Cost; } set { } }
         public WalkSearch(IEnumerable<WalkEdge> starts, Func<WalkCell, IEnumerable<WalkEdge>> expand,
             int maxNodes, Func<bool> budgetAvailable)
         {
@@ -98,10 +122,14 @@ namespace SousChef.Core
             while (heap.Count > 0)
             {
                 if (NodeLimitReached || !budgetAvailable()) return;
-                Pending next = Pop();
-                if (Distances[next.Cell] < next.Cost) continue;
-                Settled.Add(next.Cell);
-                foreach (WalkEdge edge in expand(next.Cell))
+                Pending next = heap[0];
+                if (Distances[next.Cell] < next.Cost) { Pop(); continue; }
+                // An unavailable adjacency list pauses BEFORE settling/popping.
+                // Unknown outgoing edges must not certify any more distant node.
+                IEnumerable<WalkEdge> outgoing = expand(next.Cell);
+                if (outgoing == null) return;
+                Pop(); Settled.Add(next.Cell);
+                foreach (WalkEdge edge in outgoing)
                 {
                     if (!Valid(edge.Distance)) throw new ArgumentException("invalid_distance");
                     float cost = next.Cost + edge.Distance, old;
@@ -112,20 +140,6 @@ namespace SousChef.Core
             Complete = true;
         }
         private static bool Valid(float cost) { return cost >= 0 && !Single.IsNaN(cost) && !Single.IsInfinity(cost); }
-        public List<WalkCell> Route(WalkCell goal)
-        {
-            // Settled Dijkstra nodes already have proven shortest paths even when
-            // the rest of a large or newly changed kitchen exceeds this frame's budget.
-            if (!Settled.Contains(goal)) return null;
-            var path = new List<WalkCell>(); WalkCell current = goal, parent;
-            while (true)
-            {
-                path.Add(current);
-                if (!parents.TryGetValue(current, out parent)) break;
-                current = parent;
-            }
-            path.Reverse(); return path;
-        }
         private void Push(WalkCell cell, float cost)
         {
             var item = new Pending { Cell = cell, Cost = cost }; int at = heap.Count; heap.Add(item);

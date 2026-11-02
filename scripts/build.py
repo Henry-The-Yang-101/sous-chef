@@ -34,6 +34,9 @@ def build(game):
     fingerprints = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in references
                     if p.name in ('Assembly-CSharp.dll', 'Assembly-CSharp-firstpass.dll', 'BepInEx.dll')}
     (output / 'build.json').write_text(json.dumps({'sdk': SDK, 'references': fingerprints}, indent=2) + '\n')
+    subprocess.run([str(dotnet), 'publish', str(ROOT / 'worker/Worker.csproj'), '-c', 'Release',
+                    '-o', str(output / 'worker'), '--nologo'], check=True, cwd=ROOT)
+    (output / 'worker-dotnet.txt').write_text(str(dotnet.resolve()) + '\n')
     print('Built', output / 'SousChef.Bridge.dll')
     return output
 

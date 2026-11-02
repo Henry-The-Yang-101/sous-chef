@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Text;
 
 namespace SousChef.Core
@@ -61,6 +62,20 @@ namespace SousChef.Core
         {
             public FloatArrayLayout Layout;
             public float[] Values;
+        }
+
+        internal static bool WriteNumeric(BinaryWriter writer, object value)
+        {
+            var numeric = value as FloatArrayRecord;
+            if (numeric == null) return false;
+            writer.Write((byte)5); writer.Write(numeric.Layout.Names.Length); int offset = 0;
+            for (int i = 0; i < numeric.Layout.Names.Length; i++)
+            {
+                WorkerWire.WriteString(writer, numeric.Layout.Names[i]);
+                writer.Write((byte)7); writer.Write(numeric.Layout.Lengths[i]);
+                for (int j = 0; j < numeric.Layout.Lengths[i]; j++) writer.Write(numeric.Values[offset++]);
+            }
+            return true;
         }
 
         public static string Encode(object value)
