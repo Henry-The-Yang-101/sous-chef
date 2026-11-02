@@ -138,3 +138,65 @@ the simulator preserves the production lease and grounding checks. See
 `.local/native-final-runs/`. A full native observation contained two chefs and
 180 colliders with no adapter errors. Exact loading of `s_wizard_3_1` was also
 verified in the same process.
+
+## Chocolate stair round trips — 2026-11-02
+
+The current source at `60bb718` was rebuilt and run in the native headless
+`s_wizard_school_3_4` kitchen. **Stair traversal fails this validation.**
+Player 2 spawned at `[21.8963, -1.8356, 2.9158]`; Chocolate's approach is on
+the upper floor at `[14.4, 0, 9.6]`. Egg's approach is on the spawn floor at
+`[19.2, -1.8356, 2.4]`, so the return request requires descending the stairs.
+
+```sh
+python3 scripts/native_simulator.py start --level s_wizard_school_3_4
+python3 scripts/native_simulator.py navigate Chocolate --then Egg --repeat 5 --fps 60 --trace-dir .local/stair-roundtrip-60-20261102
+python3 scripts/native_simulator.py navigate Chocolate --then Egg --repeat 5 --fps 20 --trace-dir .local/stair-roundtrip-20-20261102
+python3 scripts/native_simulator.py stop
+```
+
+Every attempt reset to the native spawn. Each leg used one normal navigation
+request, without manual steering or retries. The return leg ran immediately in
+the same round only if Chocolate was reached. Failed climbs therefore did not
+count as descent attempts. FPS values below are requested Update rates.
+
+| Requested FPS | Climbs arriving at Chocolate | Descents arriving at Egg | Complete round trips |
+| --- | --- | --- | --- |
+| 60 | 1 / 5 | 0 / 1 | 0 / 5 |
+| 20 | 1 / 5 | 0 / 1 | 0 / 5 |
+
+| Attempt | 60 FPS climb / return | 20 FPS climb / return |
+| --- | --- | --- |
+| 1 | `next_step_unsafe` / not attempted | `not_grounded` / not attempted |
+| 2 | `no_safe_start` / not attempted | `not_grounded` / not attempted |
+| 3 | `arrived` / `not_grounded` | `arrived` / `not_grounded` |
+| 4 | `next_step_unsafe` / not attempted | `not_grounded` / not attempted |
+| 5 | `not_grounded` / not attempted | `not_grounded` / not attempted |
+
+The native execution traces identify three distinct failure observations:
+
+- At 60 FPS, attempt 1 rejected a `Step 3` support transition at
+  `[15.0293, -0.4446, 6.3179]`; attempt 4 rejected a `Wedge` transition near
+  the outside lower stair edge at `[16.3686, -1.3076, 4.9870]`. Both stopped
+  with `next_step_unsafe` and `support_discontinuity`.
+- Attempt 2 at 60 FPS stopped at `[16.0251, -1.6068, 5.0816]` with
+  `no_safe_start`; all 25 start connectors were rejected by a current-body
+  sweep against `Step`. This is a contact-check failure; the trace alone does
+  not establish whether the native chef was physically snagged.
+- Both descents lost native ground contact near the top of the staircase:
+  `[15.2373, 0.1492, 6.3866]` at 60 FPS and
+  `[15.4492, 0.0018, 6.2163]` at 20 FPS. They stopped with `not_grounded`
+  after approximately 0.76 and 0.72 seconds, respectively.
+
+Even the two successful climbs contained neutral `settling_ground` decisions:
+eight updates across three episodes at 60 FPS, and three updates across two
+episodes at 20 FPS. Both arrivals did satisfy native Chocolate selection,
+positioning, zero relative speed, and pickup readiness. Arrival alone therefore
+does not establish smooth stair movement. Neither batch reported a lease,
+test-timeout, or navigation-timeout failure.
+
+Local evidence consists of each directory's `report.json` and five
+`attempt-*.ndjson` traces, plus `.local/stair-current-catalog.json`,
+`.local/stair-roundtrip-20261102-analysis.json`, and
+`.local/stair-roundtrip-20261102-status.json`. The runtime reported Unity
+2017.4.8f1, `graphicsDevice: Null`, `physicsAutoSimulation: true`, and the
+native 0.02-second fixed timestep. The simulator was stopped after testing.
