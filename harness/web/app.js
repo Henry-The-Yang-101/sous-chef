@@ -16,6 +16,16 @@ let pending = false;
 let lastError = '';
 let sessionId = null;
 const rows = new Map();
+let mapSelection = null;
+const mapPicker = new KitchenPicker(target => {
+  const mode = el('map-mode').value;
+  if (!fresh()) return;
+  if (mode === 'throw') el('throw-target').value = throwIdentity(target);
+  else if (mode === 'job') el('job-destination').value = target.id;
+  else mapSelection = {id: target.id, objectInstanceId: target.objectInstanceId,
+    session: state.sessionId, epoch: state.kitchenMap?.levelEpoch};
+  render();
+}, nameOf);
 
 const reasons = {
   outside_local_round: 'Enter an Arcade → Couch kitchen with two local players.',
@@ -154,6 +164,50 @@ function nameOf(d) {
 function fresh() {
   return state?.fresh && performance.now() - receivedAt + (state.ageMs || 0) <= 1500;
 }
+function chooseOnMap(mode) {
+  el('map-mode').value = mode;
+  mapPicker.overlapIds = [];
+  render();
+  el('map-title').closest('.kitchen').scrollIntoView({block: 'start'});
+}
+function renderMap(catalog, destinations, busy, live) {
+  if (document.hidden) return;
+  renderFps(state, live && performance.now() - receivedAt + (state?.gamePerformance?.ageMs || 0) <= 1500);
+  const mode = el('map-mode').value;
+  const control = state?.control || {};
+  const blocked = !live || pending || busy || (!control.available && control.reason !== 'game_unfocused');
+  let choices = destinations.filter(d => actionChoices(d).length), selected = null;
+  let description = 'Choose an available target on the map.';
+  if (mapSelection && (!live || mapSelection.session !== state.sessionId || mapSelection.epoch !== state.kitchenMap?.levelEpoch ||
+      !destinations.some(d => d.id === mapSelection.id && d.objectInstanceId === mapSelection.objectInstanceId))) mapSelection = null;
+  if (mode === 'throw') {
+    choices = throwTargets(catalog, el('throw-kind').value);
+    selected = choices.find(d => throwIdentity(d) === el('throw-target').value);
+    description = selected ? `Throw to ${nameOf(selected)}. Use the throw button below to send it.` : el('throw-status').textContent || 'Choose a throw recipient on the map.';
+  } else if (mode === 'job') {
+    const ids = new Set(Array.from(el('job-destination').options).map(option => option.value).filter(Boolean));
+    choices = (catalog.deliveryDestinations || []).filter(d => ids.has(d.id));
+    selected = choices.find(d => d.id === el('job-destination').value);
+    description = el('job-kind').value === 'return_utensil' ? 'Return utensil uses its observed home. Choose the utensil below.'
+      : selected ? `Deliver to ${nameOf(selected)}. Use Run job below to start.` : 'Choose a job and source below, then select an available delivery target here.';
+    if (el('job-kind').value === 'return_utensil') choices = [];
+  } else {
+    selected = choices.find(d => d.id === mapSelection?.id && d.objectInstanceId === mapSelection?.objectInstanceId);
+    description = selected ? `${nameOf(selected)} · height ${number(selected.position?.[1])}${contentsOf(selected) ? ` · ${contentsOf(selected)}` : ''}` : description;
+  }
+  // Include every observed target as context, but enable only the exact current
+  // operation/source-compatible catalogue. Map clicks never issue commands.
+  const all = new Map([...destinations, ...(catalog.deliveryDestinations || []), ...choices].map(d => [d.id, d]));
+  const map = state?.kitchenMap;
+  const mapLive = live && map && performance.now() - receivedAt + (map.ageMs || 0) <= 1500;
+  mapPicker.render(mapLive ? map : null, Array.from(all.values()), blocked ? [] : choices, selected?.id, live);
+  el('map-action-controls').hidden = mode !== 'action';
+  setJobOptions(el('map-action'), selected ? actionChoices(selected) : []);
+  if (selected && !el('map-action').value) el('map-action').selectedIndex = 1;
+  el('map-action').disabled = blocked || !selected || !mapLive;
+  el('map-run').disabled = blocked || !selected || !el('map-action').value || !mapLive;
+  el('map-selection').textContent = !mapLive ? 'Waiting for a fresh kitchen map.' : busy ? 'Player 2 is running an action. Press Stop to choose another.' : description;
+}
 function render() {
   const live = fresh();
   const control = state?.control || {};
@@ -255,6 +309,7 @@ function render() {
     const atIndex = el('rows').children[index];
     if (atIndex !== row.tr) el('rows').insertBefore(row.tr, atIndex || null);
   }
+  renderMap(catalog, destinations, busy, live);
   el('details').textContent = JSON.stringify({sessionId: state?.sessionId, bridgeVersion: state?.bridgeVersion, supportedActions: state?.supportedActions, pad: control.pad, side: control.side, navigation: nav, action: receipt, error: state?.error}, null, 2);
 }
 
@@ -383,6 +438,15 @@ el('job-form').addEventListener('submit', runJob);
 el('throw-kind').addEventListener('change', render);
 el('throw-target').addEventListener('change', render);
 el('throw-form').addEventListener('submit', runThrow);
+el('throw-map').addEventListener('click', () => chooseOnMap('throw'));
+el('job-map').addEventListener('click', () => chooseOnMap('job'));
+el('map-mode').addEventListener('change', () => { mapPicker.overlapIds = []; render(); });
+el('map-action').addEventListener('change', render);
+el('map-run').addEventListener('click', () => {
+  const d = mapPicker.targets.get(mapSelection?.id);
+  if (d && d.objectInstanceId === mapSelection?.objectInstanceId && !el('map-run').disabled) perform(d, el('map-action').value);
+});
+document.addEventListener('visibilitychange', render);
 el('stop').addEventListener('click', stop);
 document.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); stop(); } });
 window.addEventListener('pagehide', () => {

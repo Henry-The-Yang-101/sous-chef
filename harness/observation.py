@@ -62,19 +62,30 @@ class KitchenView:
                     'Default': 'wall', 'PlayerBlocker': 'wall'}.get(layer)
             if not kind:
                 continue
+            if layer == 'Ground' and 'wall' in obj.get('name', '').lower():
+                kind = 'wall'
             for collider in obj.get('colliders', []):
                 if not collider.get('enabled') or collider.get('isTrigger'):
                     continue
                 bounds = collider.get('worldBounds', {})
                 center, size = bounds.get('center'), bounds.get('size')
-                if not finite_vector(center, 3) or not finite_vector(size, 3) or min(size) <= 0:
+                if (not finite_vector(center, 3) or not finite_vector(size, 3) or min(size) < 0 or
+                        min(size[0], size[2]) <= .001):
+                    continue
+                # Default-layer mesh planes include grass and decorative paths
+                # outside the playable floor. They are not kitchen walls.
+                if layer == 'Default' and (collider.get('shape', {}).get('kind') != 'box' or size[1] < .1):
                     continue
                 # Do not let scenery, the sky or distant level-wide blockers
                 # set the kitchen's extent. Ground is allowed to be large.
                 if kind != 'ground' and (max(size[0], size[2]) > 65 or center[1] > 20):
                     continue
                 matrix, shape = transform.get('localToWorld'), collider.get('shape', {})
-                key = (collider.get('componentInstanceId'), repr(matrix), repr(shape), repr(bounds))
+                geometry = dict(shape)
+                for asset_kind in ('mesh', 'terrain'):
+                    if geometry.get(asset_kind):
+                        geometry[asset_kind] = geometry[asset_kind].get('assetId')
+                key = (collider.get('componentInstanceId'), repr(matrix), repr(geometry), repr(bounds))
                 if key in self.cache:
                     polygons, estimated = self.cache[key]
                 else:
@@ -118,6 +129,8 @@ class KitchenView:
                         a, b, c = triangle
                         if abs((b[0]-a[0])*(c[1]-a[1]) - (b[1]-a[1])*(c[0]-a[0])) < .0001:
                             continue
+                        if (b[0]-a[0])*(c[1]-a[1]) - (b[1]-a[1])*(c[0]-a[0]) < 0:
+                            triangle.reverse()
                         key = tuple(sorted(map(tuple, triangle)))
                         if key not in seen:
                             seen.add(key)
@@ -155,6 +168,7 @@ class ObservationViews:
             if not (valid and isinstance(frame, int) and frame >= 0 and
                     isinstance(realtime, (float, int)) and math.isfinite(realtime)):
                 self.baseline = None
+                self.samples.clear()
                 return
             if self.baseline:
                 elapsed, frames = realtime - self.baseline[0], frame - self.baseline[1]

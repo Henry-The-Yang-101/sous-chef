@@ -19,6 +19,29 @@ the menus.
 
 ## Use
 
+The **Kitchen map** is the default destination picker. It shows a simple top-down
+x/z projection of observed floors, walls, counters and chefs; +z is up. Select
+**Action target**, **Throw recipient** or **Supply delivery** in **Choose on map**.
+Click a marker to select it, then use the corresponding Run/Throw button. Map clicks
+never dispatch an action. For placing, select an action target and choose **Place
+held item**. The throw and supplies forms also have **Choose on map** buttons;
+choose the throw kind or job/source first, then pick its destination on the map.
+
+Only targets in the current operation/source-compatible catalogue are enabled.
+Other observed targets remain dimmed for context. Numbers group nearby or stacked
+targets; clicking a group offers explicit choices with height and identity. This
+also keeps markers usable at phone width. Moving platforms update from each sample,
+and removed, stale or replaced targets cannot remain runnable. The detailed
+**Show target list** and form dropdowns remain available as alternatives.
+
+**Game FPS** plots up to 60 seconds of interval averages, calculated from changes
+in the game's render-frame counter divided by its real-time clock. It measures
+rendered game updates, including paused frames, independently of browser refresh,
+HTTP timing and game time scale. It is not a per-frame stutter or 1% low metric.
+The displayed Low is the lowest plotted interval average. History resets at round/
+session changes, clock/frame regression or observation gaps. The installed bridge
+exports frame counters in kitchens only, so the graph waits in menus/lobbies.
+
 The **Throw held item** form uses the item already in Player 2's hands. Choose
 **Player** or **Place**, choose the recipient/destination, then click **Throw to
 player** or **Throw to place**. There is no separate source-item selector.
@@ -150,6 +173,15 @@ follow explicit attachment, workstation, cooking, stack and ingredient-container
 fields from a fresh sample of the same bridge session, joined by exact Unity
 object instance and name. They are not inferred from proximity or model children.
 Host observations prefer server fields; client observations use client fields.
+That same connection supplies FPS and map data. No additional game connection,
+capture, physics query or increased polling rate is used for these features.
+The separate Python process caches collider footprints and keeps a bounded FPS
+history; HTTP viewers share the results. Browser SVG/marker rendering runs on the
+existing page poll, skips hidden tabs and has no animation loop or external assets.
+Boxes use their transformed footprint; readable mesh triangles preserve gaps and
+separate platforms. Unreadable/unsupported shapes use bounds and are labeled as
+approximate, and the display reports its 3,000-polygon limit if reached. This is
+a map view of observed collision geometry, not a claim of walking reachability.
 Every sample replaces the previous contents, including item removals and round
 changes. A disconnected, missing or over-1.5-second-old contents sample cannot
 describe a holder as empty. Content enrichment does not change navigation targets
@@ -218,3 +250,14 @@ targeting. A browser preview using an actual recorded kitchen showed pans on
 cookers, plates and a fire extinguisher on counters; filtering by `plate` found
 the holding counters. The contents lines also fit phone width without horizontal
 overflow. The live game was outside a kitchen during this verification.
+
+FPS/map checks on November 2, 2026 passed 109 Python tests and JavaScript syntax
+checks. Browser checks used actual recorded Moon Festival and Wizard kitchens to
+verify action/placement/throw dispatch identities, source-compatible delivery,
+nearby-target choice, stale-state clearing and a 390-pixel phone viewport without
+horizontal overflow. Across recorded Sushi, Moon Festival and Wizard snapshots,
+cached map extraction took median 1.2–2.2 ms in Python, with 5.4–10.8 KB map payloads.
+These are off-process extraction measurements, not a live game FPS comparison.
+The restarted localhost harness connected to the running bridge in its Arcade
+lobby; the graph correctly waited for an in-round render counter. No plugin change
+or game restart was needed.

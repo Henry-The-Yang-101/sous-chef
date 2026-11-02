@@ -80,6 +80,7 @@ class ObservationTests(unittest.TestCase):
         value = snapshot(); value.pop('clock')
         self.views.publish(value)
         self.assertIsNone(self.views.baseline)
+        self.assertFalse(self.state()['gamePerformance']['samples'])
 
     def test_box_transform_rotation_movement_removal_and_disabled_colliders(self):
         floor = box()
@@ -116,6 +117,33 @@ class ObservationTests(unittest.TestCase):
         result = KitchenView().build(kitchen(trigger, inactive, scenery, player), {})
         self.assertFalse(result['shapes'])
         self.assertEqual(len(result['players']), 1)
+
+    def test_flat_floor_mesh_is_shown_but_default_layer_grass_is_not_a_wall(self):
+        floor, grass = box(), box(2, layer=0)
+        for obj in (floor, grass):
+            obj['colliders'][0]['worldBounds']['size'][1] = 0
+            obj['colliders'][0]['shape'] = dict(kind='mesh', mesh=dict(assetId='m'))
+        value = kitchen(floor, grass)
+        value['physics']['layers'].append(dict(index=0, name='Default'))
+        result = KitchenView().build(value, dict(m=dict(data=dict(status='observed',
+                    vertices=[0,0,0, 1,0,0, 0,0,1], triangles=[0,1,2]))))
+        self.assertEqual([s['kind'] for s in result['shapes']], ['ground'])
+
+    def test_mesh_age_does_not_recompute_cached_geometry_and_limits_are_explicit(self):
+        floor = box()
+        floor['colliders'][0]['shape'] = dict(kind='mesh', mesh=dict(assetId='m', sampleAgeSeconds=0))
+        view = KitchenView()
+        view.build(kitchen(floor), {})
+        cached = next(iter(view.cache.values()))
+        floor['colliders'][0]['shape']['mesh']['sampleAgeSeconds'] = .2
+        view.build(kitchen(floor), {})
+        self.assertIs(next(iter(view.cache.values()))[0], cached[0])
+        view.MAX_POLYGONS = 1
+        second = box(2)
+        second['transform']['localToWorld'][12] = 10
+        result = view.build(kitchen(box(), second), {})
+        self.assertTrue(result['truncated'])
+        self.assertEqual(sum(len(s['polygons']) for s in result['shapes']), 1)
 
     def test_same_contents_stream_publishes_both_views_without_touching_targets(self):
         observer = ContentsObserver(clock=lambda: self.now)

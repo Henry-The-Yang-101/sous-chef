@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Sous Chef · Actions</title>
   <link rel="stylesheet" href="/style.css">
+  <script src="/visuals.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
@@ -20,6 +21,11 @@
       <p id="result" role="status" aria-live="polite"></p>
       <p id="error" role="alert" hidden></p>
     </section>
+    <section class="performance" aria-labelledby="fps-title">
+      <div class="fps-heading"><h2 id="fps-title">Game FPS</h2><strong id="fps-current">Waiting</strong><span id="fps-summary"></span></div>
+      <svg id="fps-graph" viewBox="0 0 1000 100" role="img" aria-label="Game render FPS over the last 60 seconds" preserveAspectRatio="none"></svg>
+      <p id="fps-note">Waiting for a kitchen observation. FPS uses the game's render-frame counter.</p>
+    </section>
     <details id="phone-share" class="phone-share" open>
       <summary>Open on your phone</summary>
       <div class="phone-content">
@@ -32,6 +38,24 @@
         </div>
       </div>
     </details>
+    <section class="kitchen" aria-labelledby="map-title">
+      <div class="toolbar">
+        <div><h2 id="map-title">Kitchen map</h2><p>Pick a target on the map, then run the action. Top-down view: +z is up, +x is right.</p></div>
+        <label class="search">Choose on map<select id="map-mode"><option value="action">Action target</option><option value="throw">Throw recipient</option><option value="job">Supply delivery</option></select></label>
+      </div>
+      <div id="map-stage" class="map-stage" hidden>
+        <svg id="map-geometry" viewBox="0 0 1000 600" aria-hidden="true"></svg>
+        <div id="map-markers" role="group" aria-label="Kitchen destinations"></div>
+      </div>
+      <p id="map-empty" class="map-empty">Waiting for the current kitchen map…</p>
+      <div class="map-legend"><span><i class="ground-key"></i>Floor</span><span><i class="counter-key"></i>Counter / wall</span><span><i class="target-key"></i>Available target</span><span><i class="player-key"></i>Player</span></div>
+      <p id="map-note"></p>
+      <div id="map-overlaps" class="map-overlaps" hidden></div>
+      <div class="map-selection">
+        <p id="map-selection">Choose an available target.</p>
+        <div id="map-action-controls"><label class="sr-only" for="map-action">Action for selected target</label><select id="map-action" disabled></select><button id="map-run" type="button" disabled>Run action</button></div>
+      </div>
+    </section>
     <section class="throwing" aria-labelledby="throwing-title">
       <h2 id="throwing-title">Throw held item</h2>
       <p>Send the item Player 2 is holding to a player or a place. Player 2 moves to a safe release position when needed.</p>
@@ -39,6 +63,7 @@
         <label>Throw to<select id="throw-kind"><option value="throw_to_player">Player</option><option value="throw_to">Place</option></select></label>
         <label><span id="throw-target-name">Player</span><select id="throw-target"></select></label>
         <button id="throw-run" type="submit" disabled>Throw to player</button>
+        <button id="throw-map" type="button">Choose on map</button>
       </form>
       <p id="throw-status" role="status" aria-live="polite"></p>
     </section>
@@ -50,6 +75,7 @@
         <label id="job-source-label"><span id="job-source-name">Item</span><select id="job-source"></select></label>
         <label id="job-destination-label">Destination<select id="job-destination"></select></label>
         <button id="job-run" type="submit" disabled>Run job</button>
+        <button id="job-map" type="button">Choose on map</button>
       </form>
       <p id="job-status" role="status" aria-live="polite"></p>
     </section>
@@ -59,12 +85,14 @@
         <label class="search">Filter destinations or contents<input id="filter" type="search" placeholder="Tomato, pot, sink…" autocomplete="off"></label>
       </div>
       <p id="empty">Waiting for live destinations…</p>
+      <details id="target-list"><summary>Show target list</summary>
       <div class="table-wrap" id="table-wrap" hidden>
         <table>
           <thead><tr><th scope="col">Destination / food</th><th scope="col">Position <small>x / z</small></th><th scope="col">From Player 2</th><th scope="col"><span class="sr-only">Action</span></th></tr></thead>
           <tbody id="rows"></tbody>
         </table>
       </div>
+      </details>
     </section>
     <footer>
       <p>Live catalogue: up to 5 Hz · Outcome-checked Player 2 actions</p>

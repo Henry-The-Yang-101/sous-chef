@@ -342,9 +342,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send(200, self.server.sharing.describe())
         elif path == '/api/state':
             self.send(200, self.server.bridge.state(self.headers.get('X-Viewer-Id')))
-        elif path in {'/', '/app.js', '/style.css'}:
+        elif path in {'/', '/app.js', '/visuals.js', '/style.css'}:
             name, content_type = {'/': ('index.html', 'text/html; charset=utf-8'),
                                   '/app.js': ('app.js', 'text/javascript; charset=utf-8'),
+                                  '/visuals.js': ('visuals.js', 'text/javascript; charset=utf-8'),
                                   '/style.css': ('style.css', 'text/css; charset=utf-8')}[path]
             self.send(200, (ASSETS / name).read_bytes(), content_type)
         else:
