@@ -62,12 +62,13 @@ namespace SousChef.Plugin.Control
             if (interactions.Run.Running && lease.Owner(Now) != interactions.Run.Owner) interactions.Cancel("control_lost");
             if (logistics.Run.Running && lease.Owner(Now) != logistics.Run.Owner) logistics.Cancel("control_lost");
             server.Pump(Handle);
-            if (reason == null)
-            {
-                navigation.Tick(target); interactions.Tick(); logistics.Tick();
-                if (lease.Owner(Now) == 0 && navigation.Action.State == "idle" && !interactions.Run.Running && !logistics.Run.Running) throwOptions.Tick(target);
-                else throwOptions.Reset();
-            }
+            if (reason == null) { navigation.Tick(target); interactions.Tick(); logistics.Tick(); }
+            // The browser may be in front while the catalogue is observed.
+            // Advance read-only previews under the observation gates; never
+            // advance input-owning actions without the normal input gates.
+            if ((reason == null || (reason == "game_unfocused" && Check(gate, true) == null)) &&
+                lease.Owner(Now) == 0 && navigation.Action.State == "idle" && !interactions.Run.Running && !logistics.Run.Running)
+                throwOptions.Tick(target);
             else throwOptions.Reset();
         }
 
@@ -103,10 +104,10 @@ namespace SousChef.Plugin.Control
                 // A browser may inspect reachability while the game is unfocused.
                 // Replicate the remaining native button gates; never permit motion
                 // or ignore dialogs/menus merely because this is an observation.
-                if (!observation || Application.isFocused || !target.GetDirectlyUnderPlayerControl() ||
+                if (!observation || NativeSimulator.InputFocused || !target.GetDirectlyUnderPlayerControl() ||
                     T17DialogBoxManager.HasAnyOpenDialogs() || (T17InGameFlow.Instance != null &&
                     T17InGameFlow.Instance.m_Rootmenu.GetCurrentOpenMenu() != null))
-                    return Application.isFocused ? "input_suppressed" : "game_unfocused";
+                    return NativeSimulator.InputFocused ? "input_suppressed" : "game_unfocused";
             }
             if (scheme != null && !OwnsBindings()) return "bindings_changed";
             return null;

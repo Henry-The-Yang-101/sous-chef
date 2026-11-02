@@ -27,6 +27,8 @@ namespace SousChef.Plugin
         private int dlc = -1;
         private Harmony patches;
         private static ServerDynamicFlowController advanceFlow;
+        private static bool unfocusedFixture;
+        internal static bool InputFocused { get { return Application.isFocused && !unfocusedFixture; } }
         private const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
         private static object Call(object obj, string method, params object[] args) { return obj.GetType().GetMethod(method, Flags).Invoke(obj, args); }
         private void Awake()
@@ -71,7 +73,7 @@ namespace SousChef.Plugin
         }
         private static bool InputAllowed(PlayerControls __instance, ref bool __result)
         {
-            __result = __instance.GetDirectlyUnderPlayerControl() && !T17DialogBoxManager.HasAnyOpenDialogs() &&
+            __result = !unfocusedFixture && __instance.GetDirectlyUnderPlayerControl() && !T17DialogBoxManager.HasAnyOpenDialogs() &&
                 (T17InGameFlow.Instance == null || T17InGameFlow.Instance.m_Rootmenu.GetCurrentOpenMenu() == null);
             return false;
         }
@@ -111,6 +113,8 @@ namespace SousChef.Plugin
                         else if (value == "launch-cannon") LaunchLoadedCannon();
                         else if (value == "aim-cannon-down") AimLoadedCannon();
                         else if (value == "advance-phase") AdvancePhase();
+                        else if (value == "input-focus off") unfocusedFixture = true;
+                        else if (value == "input-focus on") unfocusedFixture = false;
                         else if (value.StartsWith("stage-portal ", StringComparison.Ordinal)) StagePortal(Int32.Parse(value.Substring(13)));
                         else if (value.StartsWith("stage-player ", StringComparison.Ordinal)) StagePlayer(value.Substring(13));
                         else if (value.StartsWith("probe-throw ", StringComparison.Ordinal)) ProbeThrow(Int32.Parse(value.Substring(12)));
@@ -163,6 +167,7 @@ namespace SousChef.Plugin
                     "clientUsers", ClientUserSystem.m_Users.Count, "realtime", Time.realtimeSinceStartup,
                     "pid", System.Diagnostics.Process.GetCurrentProcess().Id, "sessionId", BridgeSession, "lastCommand", lastCommand, "commandError", commandError,
                     "targetFrameRate", Application.targetFrameRate,
+                    "applicationFocused", Application.isFocused, "unfocusedInputFixture", unfocusedFixture,
                     "unityVersion", Application.unityVersion, "gameAssemblySha256", GameAssemblyHash, "audioPaused", AudioListener.pause, "audioVolume", AudioListener.volume,
                     "graphicsDevice", SystemInfo.graphicsDeviceType.ToString(), "frame", Time.frameCount, "physicsAutoSimulation", Physics.autoSimulation, "fixedDeltaTime", Time.fixedDeltaTime));
             }

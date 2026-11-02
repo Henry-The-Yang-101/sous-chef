@@ -19,6 +19,21 @@ the menus.
 
 ## Use
 
+The **Throw held item** form uses the item already in Player 2's hands. Choose
+**Player** or **Place**, choose the recipient/destination, then click **Throw to
+player** or **Throw to place**. There is no separate source-item selector.
+Only targets with a checked throw arc and reachable release position appear.
+Raised or obstructed targets are withheld unless a valid release stance exists;
+P2 can walk, climb or descend before releasing. Place labels include position
+and height to distinguish similar counters on different decks.
+
+Throw previews continue while the browser is focused, without acquiring a
+control lease or moving the chef/item. The page reports when paths are still
+being checked, the hands are empty, an action is running, or state is unavailable.
+Clicking a throw brings the game forward before dispatch. Target/session/object
+identity and current feasibility are checked again, and removed/replaced
+selections clear. Both throw operations also remain in the per-target row menus.
+
 The **Move supplies** form exposes the seven finite logistics jobs. Choose the
 job, an observed item/ingredient/type/station where required, and its delivery
 surface. The job selector contains only jobs with a currently usable source and

@@ -1,0 +1,114 @@
+[
+  {
+    "name": "unfocused-player",
+    "level": "s_wizard_5_5",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Cheese_Raw"
+      },
+      {
+        "operation": "observe_unfocused",
+        "action": "throw_to_player",
+        "target": 1,
+        "expectOffered": true
+      }
+    ],
+    "operation": "throw_to_player",
+    "target": 1,
+    "expected": "throw_received",
+    "expectOffered": true
+  },
+  {
+    "name": "unfocused-place",
+    "level": "s_wizard_5_5",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Cheese_Raw"
+      },
+      {
+        "operation": "observe_unfocused",
+        "action": "throw_to",
+        "target": "countertop_01_standard_gold (4)",
+        "expectOffered": true
+      }
+    ],
+    "operation": "throw_to",
+    "target": "countertop_01_standard_gold (4)",
+    "expected": "throw_received",
+    "expectOffered": true
+  },
+  {
+    "name": "unfocused-height-refusal",
+    "level": "s_wizard_5_5",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Cheese_Raw"
+      },
+      {
+        "operation": "observe_unfocused",
+        "action": "throw_to",
+        "target": {
+          "label": "countertop_01_standard_gold (14)",
+          "position": [
+            31.200000762939453,
+            2,
+            -7.200000286102295
+          ]
+        },
+        "expectOffered": false
+      }
+    ],
+    "operation": "throw_to",
+    "target": {
+      "label": "countertop_01_standard_gold (14)",
+      "position": [
+        31.200000762939453,
+        2,
+        -7.200000286102295
+      ]
+    },
+    "expected": "no_reachable_throw_position",
+    "expectOffered": false
+  },
+  {
+    "name": "unfocused-upstairs-player-20",
+    "level": "s_wizard_school_3_4",
+    "fps": 20,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Egg"
+      },
+      {
+        "operation": "stage_player",
+        "playerId": 1,
+        "position": [
+          15.6,
+          0,
+          11.4
+        ],
+        "yaw": 180
+      },
+      {
+        "operation": "observe_unfocused",
+        "action": "throw_to_player",
+        "target": 1,
+        "expectOffered": true
+      }
+    ],
+    "operation": "throw_to_player",
+    "target": 1,
+    "expected": "throw_received",
+    "expectOffered": true,
+    "expectArc": {
+      "minimumClimb": 1,
+      "minimumRise": 0.2
+    }
+  }
+]

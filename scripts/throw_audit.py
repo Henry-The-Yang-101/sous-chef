@@ -110,6 +110,47 @@ def throw_option(client, operation, selector, timeout):
         time.sleep(.1)
 
 
+def observe_unfocused(args, client, step, directory, session):
+    """Preview with native input gated, then prove a command cannot move cargo."""
+    sim.command(args.runtime, 'input-focus off')
+    try:
+        before = snapshot(args.snapshot_port, session, directory / 'unfocused-before.json')
+        operation = step['action']
+        available, row = throw_option(client, operation, step['target'], args.timeout)
+        offered = operation in row['operations']
+        key = 'player_id' if operation == 'throw_to_player' else 'target_id'
+        choices = next((action['parameters'][key]['options'] for action in available['actions']
+                        if action['name'] == operation), [])
+        enumerated = any(choice['id'] == row['id'] for choice in choices)
+        error = None
+        try:
+            getattr(client, operation)(row['playerId'] if operation == 'throw_to_player' else row['id'])
+        except ControlError as rejected:
+            error = str(rejected)
+        control = client.status()
+        after = snapshot(args.snapshot_port, session, directory / 'unfocused-after.json')
+        def actor_position(sample):
+            return next(obj['transform']['position'] for obj in sample['objects']
+                        if obj['name'] == 'Player 2' and fields(obj, 'ServerPlayerAttachmentCarrier'))
+        a, b = actor_position(before), actor_position(after)
+        retained = bool(carrier_items(before)) and {obj['unityInstanceId'] for obj in carrier_items(before)} == {
+            obj['unityInstanceId'] for obj in carrier_items(after)}
+        checks = {'operationOffered': offered == step.get('expectOffered', True),
+                  'parameterEnumerated': enumerated == step.get('expectOffered', True),
+                  'inputStillBlocked': control.get('reason') == 'game_unfocused' and not control.get('available'),
+                  'commandRejected': error == 'game_unfocused',
+                  'noLease': not control.get('ownedByYou'),
+                  'noRunningAction': control['action']['state'] != 'running' and control['navigation']['state'] == 'idle',
+                  'chefStationary': max(abs(x-y) for x, y in zip(a, b)) < .02,
+                  'cargoRetained': retained}
+        if not all(checks.values()):
+            raise RuntimeError('Unfocused preview checks failed: ' + str(checks))
+        return dict(step, checks=checks, preview=row.get('throw'),
+                    snapshotSequences=[before['sequence'], after['sequence']])
+    finally:
+        sim.command(args.runtime, 'input-focus on')
+
+
 def execute(client, operation, argument, trace, timeout, cancel=None, cancel_mode='stop'):
     started = time.monotonic()
     result = {'operation': operation, 'argument': argument, 'phases': []}
@@ -173,6 +214,9 @@ def run_case(args, case, index):
             if client.hello['sessionId'] != initial['sessionId']:
                 raise RuntimeError('Control belongs to another native session')
             for i, step in enumerate(case.get('setup', [])):
+                if step['operation'] == 'observe_unfocused':
+                    result['setup'].append(observe_unfocused(args, client, step, directory, initial['sessionId']))
+                    continue
                 if step['operation'] == 'stage_player':
                     command = 'stage-player ' + ' '.join(str(v) for v in
                               [step['playerId'], *step['position'], step['yaw']])
