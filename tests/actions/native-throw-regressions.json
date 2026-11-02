@@ -326,7 +326,8 @@
     "operation": "throw_to_player",
     "target": 1,
     "expected": "no_reachable_throw_position",
-    "expectationReason": "No supported release stance in this fixture satisfies the receiver's native forward PI/2 catch scan."
+    "expectationReason": "No supported release stance in this fixture satisfies the receiver's native forward PI/2 catch scan.",
+    "expectOffered": false
   },
   {
     "name": "flour-player-outside-catch-scan",
@@ -341,7 +342,8 @@
     "operation": "throw_to_player",
     "target": 1,
     "expected": "no_reachable_throw_position",
-    "expectationReason": "No supported release stance in this fixture satisfies the receiver's native forward PI/2 catch scan."
+    "expectationReason": "No supported release stance in this fixture satisfies the receiver's native forward PI/2 catch scan.",
+    "expectOffered": false
   },
   {
     "name": "airborne-stop",
@@ -396,7 +398,8 @@
     ],
     "operation": "throw_to_player",
     "target": 1,
-    "expected": "player_cannot_catch"
+    "expected": "player_cannot_catch",
+    "expectOffered": false
   },
   {
     "name": "flour-incompatible-receiver",
@@ -444,7 +447,8 @@
     "operation": "throw_to_player",
     "target": 1,
     "expected": "no_reachable_throw_position",
-    "expectationReason": "No supported release stance in this fixture satisfies the receiver's native forward PI/2 catch scan."
+    "expectationReason": "No supported release stance in this fixture satisfies the receiver's native forward PI/2 catch scan.",
+    "expectOffered": false
   },
   {
     "name": "lettuce-player-20",
