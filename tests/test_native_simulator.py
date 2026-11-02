@@ -26,6 +26,17 @@ class NativeSimulatorTests(unittest.TestCase):
         self.assertEqual(result['lastPosition'], [0, 0, 6])
         self.assertEqual(sim.summarize_trace({})['decisionFrames'], 0)
 
+    def test_motion_summary_measures_body_stalls_without_counting_arrival_alignment(self):
+        samples = {i: {'frame': i, 'time': i * .05, 'phase': phase, 'position': position}
+                   for i, (phase, position) in enumerate([
+                       ('steer', [0, 0, 0]), ('following_support', [0, .1, 0]),
+                       ('settling_ground', [0, .2, 0]), ('steer', [0, .2, .3]),
+                       ('aligning', [0, .2, .6]), ('arrived', [0, .2, .6])])}
+        result = sim.summarize_trace(samples)
+        self.assertAlmostEqual(result['longestStationarySeconds'], .1)
+        self.assertAlmostEqual(result['maximumDecisionGapSeconds'], .05)
+        self.assertEqual(result['supportedLandingFrames'], 1)
+
     def test_reset_waits_for_new_ready_generation(self):
         states = [
             {'generation': 1, 'inRound': True},

@@ -45,6 +45,7 @@ namespace SousChef.Plugin.Navigation
         private bool planning;
         private const double PlanningBudgetMilliseconds = 12;
         private float settlingSince = -1;
+        private bool followingSupport;
         private readonly Queue<object> executionTrace = new Queue<object>();
         private void Trace(string phase, Vector3 goal, Vector3 input)
         {
@@ -158,7 +159,7 @@ namespace SousChef.Plugin.Navigation
         {
             return Json.Object("state", Action.State, "destinationId", Action.Destination, "reason", Action.Reason,
                 "destination", target == null ? lastDestination : Identity(target),
-                "phase", Action.State == "idle" ? "idle" : activePortal != null ? portalPhase : settlingSince >= 0 ? "settling_ground" : facingSince < 0 ? "walking" : "aligning", "arrival", arrivalDetails,
+                "phase", Action.State == "idle" ? "idle" : activePortal != null ? portalPhase : settlingSince >= 0 ? (followingSupport ? "following_support" : "settling_ground") : facingSince < 0 ? "walking" : "aligning", "arrival", arrivalDetails,
                 "teleportsCompleted", teleportsCompleted, "portal", DescribePortal(),
                 "executionTrace", physics.TraceEnabled ? executionTrace.ToArray() : null,
                 "revision", Action.Revision, "catalogRevision", revision, "catalogReason", unavailable,
@@ -277,6 +278,7 @@ namespace SousChef.Plugin.Navigation
         }
         public void Tick(PlayerControls player)
         {
+            followingSupport = false;
             if (Action.State != "navigating")
             {
                 // A cold physics graph may take several bounded updates to warm.
@@ -295,6 +297,7 @@ namespace SousChef.Plugin.Navigation
             {
                 if (settlingSince < 0) settlingSince = Time.realtimeSinceStartup;
                 if (Time.realtimeSinceStartup - settlingSince > 2f) { Stop("ground_contact_timeout"); return; }
+                if (ContinueAboveSupport(commandMilliseconds)) return;
                 Trace("settling_ground", Vector3.zero, Vector3.zero);
                 move(Vector3.zero, commandMilliseconds);
                 return;
@@ -388,6 +391,23 @@ namespace SousChef.Plugin.Navigation
             }
             move(input, commandMilliseconds);
         }
+        private bool ContinueAboveSupport(int commandMilliseconds)
+        {
+            if (route == null || target == null || TargetMoved()) return false;
+            Vector3 remaining = target.Approach - physics.Position; remaining.y = 0;
+            if (remaining.magnitude < .8f) return false;
+            int limit = Math.Min(route.Count - 1, waypoint + 5);
+            for (int i = waypoint; i <= limit; i++) if (portalSteps.ContainsKey(i)) { limit = i - 1; break; }
+            for (int i = limit; i >= waypoint; i--)
+            {
+                Vector3 input;
+                if (!physics.TryLandingWalk(route[i], Mathf.Max(commandMilliseconds / 1000f, Time.deltaTime), out input)) continue;
+                waypoint = i;
+                followingSupport = true;
+                Trace("following_support", route[i], input); move(input, commandMilliseconds); return true;
+            }
+            return false;
+        }
         private bool TryWalkingGoal(Vector3 position, out Vector3 goal)
         {
             int limit = route.Count - 1;
@@ -472,6 +492,7 @@ namespace SousChef.Plugin.Navigation
             // The game's axis helper normalizes every nonzero input to full speed.
             // Use its native turn helper at the normal turn rate with neutral walking
             // input, instead of walking into the counter just to change heading.
+            Trace("aligning", target.Approach, Vector3.zero);
             move(Vector3.zero, commandMilliseconds);
             PlayerControlsHelper.TurnTowardsDirection(chef.gameObject, direction.normalized,
                 chef.Movement.TurnSpeed, Mathf.Min(Time.deltaTime, .05f));

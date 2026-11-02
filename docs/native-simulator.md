@@ -39,8 +39,11 @@ in place. The command exits 2 if any attempt fails. Each attempt's native action
 trace and initial runtime state are written under `.local/native-player/runs-*`,
 with a `report.json`. Use `--trace-dir PATH` to choose an output directory.
 Each leg also reports a `motion` summary with neutral ground-recovery episode
-count/duration, checked steering adjustments, and first/last native positions.
-Use the raw trace to distinguish commanded neutral input from a physical stall.
+count/duration, checked landing continuation and steering adjustments, first/last
+native positions, maximum decision interval, and longest horizontal stationary
+interval while walking (speed at most 0.1 units/second; arrival alignment excluded).
+These measurements distinguish neutral commands from physical pauses; use the raw
+trace for their positions, velocities, and native contact details.
 
 For teleporter validation, require confirmed native transitions so an alternative
 walking route cannot pass the test. `--then TARGET` adds a return leg in the same

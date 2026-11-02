@@ -432,13 +432,48 @@ internal static class Program
         Physics.Penetration = (a,p,ar,b,q,br) =>
         { Physics.PenetrationDirection = Vector3.forward; Physics.PenetrationDistance = .03f; return true; };
         Check(physics.NeedsGroundSettling(), "shallow lateral tread contact retains neutral recovery above a clear landing");
+        Physics.Penetration = (a,p,ar,b,q,br) =>
+        { Physics.PenetrationDirection = Vector3.forward; Physics.PenetrationDistance = .09f; return true; };
+        Check(physics.NeedsGroundSettling(), "native contact skin is included in the shallow lateral landing allowance");
         var wall = new GameObject("wall along native resolution").Add(new Collider());
         Physics.Cast = (a,b,r,d,length) => a.z+d.z*length > .02f ? new[] {new RaycastHit {collider=wall}} : new RaycastHit[0];
         Check(!physics.NeedsGroundSettling(), "lateral depenetration toward an obstructed landing is rejected");
         Physics.Cast = (a,b,r,d,length) => new RaycastHit[0];
         Physics.Penetration = (a,p,ar,b,q,br) =>
-        { Physics.PenetrationDirection = Vector3.forward; Physics.PenetrationDistance = .12f; return true; };
+        { Physics.PenetrationDirection = Vector3.forward; Physics.PenetrationDistance = .2f; return true; };
         Check(!physics.NeedsGroundSettling(), "deep sideways ground penetration is not treated as a harmless tread lip");
+    }
+    private static void SupportedAirborneWalking()
+    {
+        var w = new World(); var floor = w.AddFloor((x,z) => Math.Abs(x)<3 && Math.Abs(z)<3 ? 0 : (float?)null);
+        w.Chef.transform.position = new Vector3(0,.5f,-1);
+        var physics = w.Ready(); w.Chef.GroundCollider = null; Vector3 input;
+        Check(physics.TryLandingWalk(Vector3.zero,.05f,out input) && input.z > .9f,
+            "airborne input continues above a certified connected landing corridor");
+        w.Chef.GroundCollider = floor;
+        Check(physics.TryLandingWalk(Vector3.zero,.05f,out input),
+            "stale native contact can continue over the same independently checked landing corridor");
+        var contact = w.Chef.GetComponent<GroundCast>();
+        contact.Normal = new Vector3(0,.8f,-.6f);
+        Check(physics.TryLandingWalk(Vector3.zero,.05f,out input),
+            "a stale walkable slope normal permits the checked native movement envelope");
+        contact.Normal = new Vector3(0,.5f,-.8660254f);
+        Check(!physics.TryLandingWalk(Vector3.zero,.05f,out input),
+            "an unsupported native ground normal forbids landing steering");
+        contact.Normal = Vector3.up;
+        w.Chef.GroundCollider = null;
+        var ceiling = new GameObject("ceiling inside airborne envelope").Add(new Collider());
+        Physics.Overlap = (a,b,r) => b.y+r > 1.25f ? new Collider[] {ceiling} : new Collider[0];
+        Check(!physics.TryLandingWalk(Vector3.zero,.05f,out input),
+            "grounded clearance alone cannot authorize an airborne body under a low ceiling");
+        Physics.Overlap = (a,b,r) => new Collider[0];
+        w.Chef.Motion.Velocity = new Vector3(4,0,0);
+        Check(!physics.TryLandingWalk(Vector3.zero,.05f,out input), "airborne continuation rejects a sharp turn against native momentum");
+        w.Chef.Motion.Velocity = Vector3.zero;
+        floor.Elevation = (x,z) => z < -.6f || z > .5f ? 0 : (float?)null;
+        Check(!physics.TryLandingWalk(Vector3.zero,.05f,out input), "airborne steering cannot bridge missing support to the next route point");
+        floor.enabled = false;
+        Check(!physics.TryLandingWalk(Vector3.zero,.05f,out input), "loss of current landing support forbids airborne continuation");
     }
     private static Teleportal AddPortal(World w, Vector3 position)
     {
@@ -626,7 +661,7 @@ internal static class Program
     }
     private static void Main()
     {
-        NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); StepsAndRamps(); InteriorFlow(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
+        NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
         Console.WriteLine("PASS: " + checks + " navigator integration checks (analytical geometry; not PhysX)");
     }
 }

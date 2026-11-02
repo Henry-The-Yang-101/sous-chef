@@ -129,12 +129,27 @@ def summarize_trace(samples):
         elif current is not None:
             current[1] = decision['time']
             current = None
+    stationary, longest_stationary, maximum_gap = 0, 0, 0
+    walking = {'steer', 'steer_adjusted', 'following_support', 'settling_ground'}
+    for before, after in zip(decisions, decisions[1:]):
+        elapsed = max(0, after['time'] - before['time'])
+        maximum_gap = max(maximum_gap, elapsed)
+        a, b = before['position'], after['position']
+        distance = ((b[0] - a[0]) ** 2 + (b[2] - a[2]) ** 2) ** .5
+        if before['phase'] in walking and distance <= .1 * elapsed:
+            stationary += elapsed
+            longest_stationary = max(longest_stationary, stationary)
+        else:
+            stationary = 0
     return {
         'decisionFrames': len(decisions),
         'groundPauseCount': len(pauses),
         'longestGroundPauseSeconds': max((end - start for start, end in pauses), default=0),
         'neutralGroundCommandSeconds': sum(end - start for start, end in pauses),
         'steeringAdjustments': sum(row['phase'] == 'steer_adjusted' for row in decisions),
+        'supportedLandingFrames': sum(row['phase'] == 'following_support' for row in decisions),
+        'longestStationarySeconds': longest_stationary,
+        'maximumDecisionGapSeconds': maximum_gap,
         'firstPosition': decisions[0]['position'] if decisions else None,
         'lastPosition': decisions[-1]['position'] if decisions else None,
     }
