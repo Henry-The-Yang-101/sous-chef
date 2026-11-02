@@ -401,6 +401,7 @@ namespace SousChef.Plugin.Navigation
             var pickup = PlayerControlsHelper.GetControllingPickupHandler_Client(go);
             var placement = PlayerControlsHelper.GetControllingPlacementHandler_Client(go);
             if (go.GetComponent<WashingStation>() != null) kind = "washing_station";
+            else if (go.GetComponent<RubbishBin>() != null) kind = "disposal_station";
             else if (go.GetComponent<ServerWorkstation>() != null) kind = "workstation";
             else if (go.GetComponent<PickupItemSpawner>() != null) kind = "ingredient_supply";
             else if (go.GetComponent<CookingStation>() != null) kind = "cooking_station";

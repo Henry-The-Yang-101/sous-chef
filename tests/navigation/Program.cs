@@ -209,6 +209,17 @@ internal static class Program
         w.Chef.transform.position=Vector3.zero; Time.realtimeSinceStartup += .02f; physics.Refresh(w.Chef);
         Check(!physics.Neighbours(boundary).Any(e => e.Cell.Equals(outside)),"moving away reapplies live radius to cached edge");
     }
+    private static void EmptyHandsBin()
+    {
+        var w=new World();w.AddFloor((x,z)=>Math.Abs(x)<2 && Math.Abs(z)<2 ? 0 : (float?)null);
+        w.Chef.transform.position=new Vector3(0,0,-1);
+        var bin=new GameObject("Bin 1");bin.Add(new RubbishBin());bin.Add(new AttachStation());
+        var manager=bin.Add(new GridManager {Station=bin});var grid=bin.Add(new StationGrid {Manager=manager});
+        w.Colliders.Add(bin.Add(new BoxCollider {center=new Vector3(0,.5f,0),size=new Vector3(.8f,1,.8f)}));
+        w.Chef.CurrentInteractionObjects.m_gridLocation=grid;
+        var navigation=w.Navigate(bin);
+        Check(navigation.Action.State=="navigating","a bin is navigable with empty hands and no available discard action");
+    }
     private static void ArrivalMotion()
     {
         var w=new World(); w.AddFloor((x,z) => Math.Abs(x)<2 && Math.Abs(z)<2 ? 0 : (float?)null);
@@ -304,7 +315,7 @@ internal static class Program
     }
     private static void Main()
     {
-        StepsAndRamps(); InteriorFlow(); MovingBoundary(); ArrivalMotion(); ApproachFallback(); SlowFrames();
+        StepsAndRamps(); InteriorFlow(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
         Console.WriteLine("PASS: " + checks + " navigator integration checks (analytical geometry; not PhysX)");
     }
 }

@@ -217,6 +217,7 @@ public class RespawnCollider : UnityEngine.MonoBehaviour { }
 public class ServerFireHazard : UnityEngine.MonoBehaviour { }
 public class Teleportal : UnityEngine.MonoBehaviour { }
 public class WashingStation : UnityEngine.MonoBehaviour { }
+public class RubbishBin : UnityEngine.MonoBehaviour { }
 public class ServerWorkstation : UnityEngine.MonoBehaviour { }
 public class PickupItemSpawner : UnityEngine.MonoBehaviour { public UnityEngine.GameObject m_itemPrefab; }
 public class CookingStation : UnityEngine.MonoBehaviour { }

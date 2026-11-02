@@ -48,7 +48,8 @@ plate stations and native interactables such as buttons. Fixed task stations
 remain destinations even when no work is available: an empty sink can be
 approached. Ordinary counters are included when their native pickup predicate is
 true or the chef carries something to place. This avoids listing every empty
-counter. Navigation availability does not establish that chopping, pickup or
+counter. Rubbish bins are fixed disposal stations and can be approached with empty
+hands; only the discard action requires a held item. Navigation availability does not establish that chopping, pickup or
 washing will be possible after arrival; those actions need separate preconditions.
 Approaches also respect the native interaction layer mask and counter grid:
 standing near a counter's corner does not make it selectable from a neighbouring
