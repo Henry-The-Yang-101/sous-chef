@@ -72,11 +72,15 @@ namespace SousChef.Core
         public readonly Dictionary<WalkCell, float> Distances = new Dictionary<WalkCell, float>();
         public readonly HashSet<WalkCell> Settled = new HashSet<WalkCell>();
         private readonly Dictionary<WalkCell, WalkCell> parents = new Dictionary<WalkCell, WalkCell>();
+        private readonly Func<WalkCell, IEnumerable<WalkEdge>> expand;
+        private readonly int maxNodes;
         public bool Complete { get; private set; }
+        public bool NodeLimitReached { get { return Distances.Count > maxNodes; } }
         public float MinimumPendingDistance { get { return heap.Count == 0 ? Single.PositiveInfinity : heap[0].Cost; } }
         public WalkSearch(IEnumerable<WalkEdge> starts, Func<WalkCell, IEnumerable<WalkEdge>> expand,
             int maxNodes, Func<bool> budgetAvailable)
         {
+            this.expand = expand; this.maxNodes = maxNodes;
             foreach (WalkEdge start in starts)
             {
                 if (!Valid(start.Distance)) throw new ArgumentException("invalid_distance");
@@ -84,9 +88,16 @@ namespace SousChef.Core
                 if (Distances.TryGetValue(start.Cell, out prior) && prior <= start.Distance) continue;
                 Distances[start.Cell] = start.Distance; Push(start.Cell, start.Distance);
             }
+            Continue(budgetAvailable);
+        }
+        // The caller must establish that the graph and starting costs have not
+        // changed before resuming. A slice keeps its frontier and settled work;
+        // it never restarts Dijkstra or publishes an unsettled route as proven.
+        public void Continue(Func<bool> budgetAvailable)
+        {
             while (heap.Count > 0)
             {
-                if (Distances.Count > maxNodes || !budgetAvailable()) return;
+                if (NodeLimitReached || !budgetAvailable()) return;
                 Pending next = Pop();
                 if (Distances[next.Cell] < next.Cost) continue;
                 Settled.Add(next.Cell);

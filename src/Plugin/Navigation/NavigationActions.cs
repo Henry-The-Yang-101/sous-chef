@@ -25,6 +25,10 @@ namespace SousChef.Plugin.Navigation
         private readonly Action<Vector3, int> move;
         private readonly Action neutral;
         private WalkSearch search;
+        private bool incrementalSearch, fastWarm;
+        private int lastPlanFrame = -1, searchSlices, savedStartCount;
+        private long searchGeneration;
+        private bool searchReused;
         private List<Vector3> route;
         private Destination target;
         private object lastDestination;
@@ -44,6 +48,7 @@ namespace SousChef.Plugin.Navigation
         private string observationError;
         private bool planning;
         private const double PlanningBudgetMilliseconds = 12;
+        private const double IncrementalBudgetMilliseconds = 3;
         private float settlingSince = -1;
         private bool followingSupport;
         private readonly Queue<object> executionTrace = new Queue<object>();
@@ -140,6 +145,7 @@ namespace SousChef.Plugin.Navigation
         }
         public void Reset(string reason)
         {
+            incrementalSearch = fastWarm = false;
             Stop(reason); teleportsCompleted = 0; lastDestination = arrivalDetails = null; identities.Clear(); available.Clear(); physics.Reset(); search = null; chef = null; lastPlan = -1; unavailable = reason;
         }
         public void Stop(string reason)
@@ -152,6 +158,7 @@ namespace SousChef.Plugin.Navigation
         }
         public void Invalidate(string reason)
         {
+            incrementalSearch = fastWarm = false;
             if (Action.State == "navigating") Stop(reason);
             available.Clear(); unavailable = reason;
         }
@@ -167,6 +174,8 @@ namespace SousChef.Plugin.Navigation
                 "catalogAgeSeconds", lastPlan < 0 ? null : (object)(Time.realtimeSinceStartup - lastPlan),
                 "diagnostics", Json.Object("planMilliseconds", planMilliseconds, "prepareMilliseconds", prepareMilliseconds,
                     "searchMilliseconds", searchMilliseconds, "matchMilliseconds", matchMilliseconds, "searchNodes", nodeCount,
+                    "searchGeneration", searchGeneration, "searchSlices", searchSlices, "searchReused", searchReused,
+                    "searchComplete", search != null && search.Complete,
                     "physicsQueries", physics.Queries, "candidateCount", candidateCount, "startCount", startCount, "observationError", observationError,
                     "portals", physics.PortalDiagnostics()));
         }
@@ -183,14 +192,14 @@ namespace SousChef.Plugin.Navigation
         }
         public object Available(PlayerControls player)
         {
-            warmTicks = 8;
+            warmTicks = 32;
             // Observation must not replan an in-flight action. Tick owns the
             // ground-settling/transport checks and only replans at a usable pose.
             // A harness catalogue poll during a native stair hop otherwise turns
             // a recoverable contact transition into an immediate not_grounded stop.
             if (Action.State != "navigating")
             {
-                Refresh(player, true);
+                Refresh(player, true, false, true);
             }
             var destinations = new List<object>();
             foreach (Destination d in available.Values)
@@ -296,14 +305,12 @@ namespace SousChef.Plugin.Navigation
             followingSupport = false;
             if (Action.State != "navigating")
             {
-                // A cold graph may take several passes to warm. Do not repeat a
-                // full budget-limited search every render frame or immediately
-                // after Available() already refreshed it in the same Update.
-                // Explicit catalogue requests and active movement remain fresh;
-                // only speculative idle warming waits between passes.
+                // Stable graphs continue their frontier once per render frame
+                // in a short slice. Unversioned/dynamic graphs keep paced fresh
+                // searches; a catalogue request never duplicates work in Tick.
                 if (chef == player && (unavailable == "planning_budget_exceeded" || unavailable == "planning_in_progress") &&
-                    warmTicks > 0 && Time.realtimeSinceStartup - lastPlan >= .1f)
-                { warmTicks--; Refresh(player, true); }
+                    warmTicks > 0 && lastPlanFrame != Time.frameCount && (fastWarm || Time.realtimeSinceStartup - lastPlan >= .1f))
+                { Refresh(player, true, false, true); warmTicks -= fastWarm ? 1 : 4; }
                 return;
             }
             if (player != chef || target == null || target.Object == null ||
@@ -633,7 +640,7 @@ namespace SousChef.Plugin.Navigation
             foreach (int key in removed) identities.Remove(key);
             return new List<Destination>(found.Values);
         }
-        private void Refresh(PlayerControls player, bool force, bool alreadyRefreshed = false)
+        private void Refresh(PlayerControls player, bool force, bool alreadyRefreshed = false, bool incremental = false)
         {
             if (planning) return;
             if (!force && Time.realtimeSinceStartup - lastPlan < .1f) return;
@@ -644,18 +651,29 @@ namespace SousChef.Plugin.Navigation
             {
                 available.Clear(); chef = player;
                 string error = alreadyRefreshed ? null : physics.Refresh(player);
-                if (error != null) { unavailable = error; return; }
+                if (error != null) { incrementalSearch = fastWarm = false; unavailable = error; return; }
                 observationError = null;
                 List<Destination> candidates = target != null && target.IsPoint ? new List<Destination> { target } : Discover(player); candidateCount = candidates.Count;
-                var starts = new List<WalkEdge>(physics.Starts()); startCount = starts.Count;
-                if (startCount == 0) { unavailable = "no_safe_start"; return; }
+                bool hadIncremental = incrementalSearch;
+                searchReused = incremental && incrementalSearch && search != null && physics.CanContinueSearch();
+                List<WalkEdge> starts = null;
+                if (!searchReused)
+                {
+                    starts = new List<WalkEdge>(physics.Starts());
+                    if (starts.Count == 0) { incrementalSearch = fastWarm = false; unavailable = "no_safe_start"; return; }
+                }
+                startCount = starts == null ? savedStartCount : starts.Count;
                 prepareMilliseconds = watch.Elapsed.TotalMilliseconds;
                 var searchWatch = Stopwatch.StartNew();
-                search = new WalkSearch(starts, physics.Neighbours, 16000,
-                    delegate { return searchWatch.Elapsed.TotalMilliseconds < PlanningBudgetMilliseconds && !physics.Overflow; });
+                double budget = incremental && (searchReused || !hadIncremental) ? IncrementalBudgetMilliseconds : PlanningBudgetMilliseconds;
+                Func<bool> hasBudget = delegate { return searchWatch.Elapsed.TotalMilliseconds < budget && !physics.Overflow; };
+                if (searchReused) search.Continue(hasBudget);
+                else { search = new WalkSearch(starts, physics.Neighbours, 16000, hasBudget); searchGeneration++; searchSlices = 0; }
+                searchSlices++; savedStartCount = startCount;
+                incrementalSearch = incremental;
                 searchMilliseconds = searchWatch.Elapsed.TotalMilliseconds;
                 nodeCount = search.Distances.Count;
-                if (physics.Overflow) { unavailable = "physics_query_overflow"; return; }
+                if (physics.Overflow) { incrementalSearch = fastWarm = false; unavailable = "physics_query_overflow"; return; }
                 // Index the reachable nodes once, then only inspect cells around each
                 // meaningful object. Never emit the lattice itself as available actions.
                 var byXZ = new Dictionary<long, List<WalkCell>>();
@@ -737,13 +755,17 @@ namespace SousChef.Plugin.Navigation
                 }
                 if (physics.Overflow) { available.Clear(); unavailable = "physics_query_overflow"; }
                 else unavailable = search.Complete ? null : "planning_in_progress";
+                bool reusable = incremental && !physics.Overflow && physics.RememberSearch();
+                fastWarm = reusable && !search.NodeLimitReached && (searchReused || !hadIncremental);
+                if (search.NodeLimitReached) warmTicks = 0;
                 matchMilliseconds = watch.Elapsed.TotalMilliseconds - prepareMilliseconds - searchMilliseconds;
             }
             catch (Exception e)
             {
+                incrementalSearch = fastWarm = false;
                 available.Clear(); unavailable = "navigation_observation_error"; observationError = e.GetType().Name + ": " + e.Message;
             }
-            finally { watch.Stop(); planMilliseconds = watch.Elapsed.TotalMilliseconds; lastPlan = Time.realtimeSinceStartup; revision++; planning = false; }
+            finally { watch.Stop(); planMilliseconds = watch.Elapsed.TotalMilliseconds; lastPlan = Time.realtimeSinceStartup; lastPlanFrame = Time.frameCount; revision++; planning = false; }
         }
     }
 }

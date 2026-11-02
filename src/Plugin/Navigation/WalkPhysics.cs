@@ -69,6 +69,7 @@ namespace SousChef.Plugin.Navigation
 
         public void Reset()
         {
+            ForgetSearch();
             chef = null; probes.Clear(); edges.Clear(); stamps.Clear(); meshes.Clear(); dangers.Clear(); nativeSteps.Clear(); surfaces.Clear(); surfaceHistories.Clear(); properties.Clear(); grids.Clear(); ignoredChefColliders.Clear(); portals.Clear(); portalEntries.Clear(); portalExits.Clear(); exitPortal = null;
         }
         public string Refresh(PlayerControls player)
@@ -184,6 +185,7 @@ namespace SousChef.Plugin.Navigation
                 if (dirty.Count > 0) Changed = true;
             }
             RefreshPortals();
+            if (Changed || changed.Count > 0) geometryVersion++;
             return player.GroundCollider == null ? "not_grounded" : null;
         }
         private int ShapeKey(Collider c, bool reconcile)

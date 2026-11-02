@@ -137,6 +137,7 @@ namespace UnityEngine
     public static class Physics
     {
         public static Vector3 gravity = new Vector3(0,-9.81f,0);
+        public static bool queriesHitBackfaces;
         public static Func<Vector3,float,Collider[]> Nearby;
         public static Func<Collider,Vector3,Quaternion,Collider,Vector3,Quaternion,bool> Penetration=(a,p,q,b,r,s)=>false;
         public static Vector3 PenetrationDirection = Vector3.up;

@@ -36,6 +36,34 @@ internal static class NavigationTests
         check(!tree.Complete && tree.Settled.Contains(b) && tree.Route(b).Count == 2, "settled routes survive an incomplete full-map search");
         check(!tree.Settled.Contains(goal) && tree.Route(goal) == null, "frontier guesses are never published as proven routes");
         check(tree.Distances[b] < tree.MinimumPendingDistance, "frontier bound certifies nearest known approach");
+        int expansions = 0;
+        Func<WalkCell, IEnumerable<WalkEdge>> counted = node => { expansions++; return expand(node); };
+        int remaining = 1;
+        var sliced = new WalkSearch(new[] {new WalkEdge(a, 0)}, counted, 50, () => remaining-- > 0);
+        check(expansions == 1 && !sliced.Complete, "first slice expands one node");
+        for (int i = 0; i < 10 && !sliced.Complete; i++)
+        { remaining = 1; sliced.Continue(() => remaining-- > 0); }
+        var uninterrupted = plan();
+        check(sliced.Complete && expansions == sliced.Settled.Count, "resumption does not re-expand the settled prefix");
+        foreach (var pair in uninterrupted.Distances)
+            check(sliced.Distances[pair.Key] == pair.Value, "sliced search preserves shortest-path costs");
+        check(sliced.Route(goal).Count == uninterrupted.Route(goal).Count && sliced.Route(goal)[1].Equals(b), "sliced search preserves route reconstruction");
+        sliced.Continue(() => true);
+        check(expansions == sliced.Settled.Count, "completed search does no repeated expansion");
+        var capped = new WalkSearch(new[] {new WalkEdge(a, 0)}, counted, 1, () => true);
+        int beforeCap = expansions; capped.Continue(() => true);
+        check(capped.NodeLimitReached && !capped.Complete && expansions == beforeCap, "continuation cannot bypass the node cap");
+        int expandedChain = 0, allowance = 5;
+        Func<WalkCell, IEnumerable<WalkEdge>> chain = node => {
+            expandedChain++;
+            return node.X < 99 ? new[] { new WalkEdge(new WalkCell(node.X + 1, 0, 0), 1) } : new WalkEdge[0];
+        };
+        var progressive = new WalkSearch(new[] {new WalkEdge(a, 0)}, chain, 1000, () => allowance-- > 0);
+        int slices = 1;
+        while (!progressive.Complete && slices < 30)
+        { allowance = 5; progressive.Continue(() => allowance-- > 0); slices++; }
+        check(progressive.Complete && slices == 20 && expandedChain == 100 && progressive.Distances[new WalkCell(99,0,0)] == 99,
+            "twenty five-node slices fill the entire catalogue instead of repeating the first five nodes");
         Func<WalkCell, IEnumerable<WalkEdge>> fireDetour = delegate(WalkCell node)
         {
             if (node.Equals(a)) return new[] { new WalkEdge(b, 1), new WalkEdge(c, 1.4f) };

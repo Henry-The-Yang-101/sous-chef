@@ -773,17 +773,52 @@ internal static class Program
         var reason=typeof(NavigationActions).GetField("unavailable",flags);
         reason.SetValue(navigation,"planning_in_progress");
         long revision=(long)((Json.Record)navigation.Describe())["catalogRevision"];
-        for(int i=0;i<5;i++) { navigation.Tick(w.Chef); Time.realtimeSinceStartup+=.01f; }
-        Check((long)((Json.Record)navigation.Describe())["catalogRevision"]==revision,"idle planner does not duplicate a catalogue rebuild on every render frame");
-        Time.realtimeSinceStartup+=.06f; navigation.Tick(w.Chef);
-        Check((long)((Json.Record)navigation.Describe())["catalogRevision"]==revision+1,"pending idle graph still warms after the pacing interval");
-        reason.SetValue(navigation,"planning_in_progress");
+        long generation=(long)((Json.Record)((Json.Record)navigation.Describe())["diagnostics"])["searchGeneration"];
+        for(int i=0;i<5;i++) { navigation.Tick(w.Chef); Time.realtimeSinceStartup+=.001f; }
+        Check((long)((Json.Record)navigation.Describe())["catalogRevision"]==revision,"catalogue and background tick cannot duplicate a slice in one render frame");
+        Time.frameCount++; Time.realtimeSinceStartup+=.016f; navigation.Tick(w.Chef);
+        var diagnostics=(Json.Record)((Json.Record)navigation.Describe())["diagnostics"];
+        Check((long)((Json.Record)navigation.Describe())["catalogRevision"]==revision+1 && (bool)diagnostics["searchReused"] && (long)diagnostics["searchGeneration"]==generation,"stable idle graph continues next frame without the old 100ms delay or a new search");
         navigation.Available(w.Chef);
-        Check((long)((Json.Record)navigation.Describe())["catalogRevision"]==revision+2,"explicit catalogue request bypasses idle warming delay");
+        Check((long)((Json.Record)navigation.Describe())["catalogRevision"]==revision+2,"explicit catalogue request still refreshes its observation");
+        w.Chef.transform.position+=new Vector3(.2f,0,0);navigation.Available(w.Chef);
+        diagnostics=(Json.Record)((Json.Record)navigation.Describe())["diagnostics"];
+        Check(!(bool)diagnostics["searchReused"] && (long)diagnostics["searchGeneration"]==generation+1,"moving the chef discards old starting costs");
+    }
+    private static void SearchContinuity()
+    {
+        var w=new World(); var floor=w.AddFloor((x,z)=>Math.Abs(x)<3 && Math.Abs(z)<3 ? 0 : (float?)null);
+        var material=floor.gameObject.Add(new PlayerPhysicsSurface()); var physics=w.Ready();
+        Action remember=()=>{physics.Refresh(w.Chef);physics.Starts().ToArray();Check(physics.RememberSearch(),"stationary supported graph can remember a search proof");};
+        remember(); Time.realtimeSinceStartup+=.02f;physics.Refresh(w.Chef);
+        Check(physics.CanContinueSearch(),"unchanged geometry and movement rules permit continuation");
+        material.Properties.SpeedMultiplier=.5f;physics.Refresh(w.Chef);
+        Check(!physics.CanContinueSearch(),"surface speed edits invalidate settled reachability");remember();
+        material.Properties.Slidiness=.2f;physics.Refresh(w.Chef);
+        Check(!physics.CanContinueSearch(),"surface mode edits invalidate settled reachability");material.Properties.Slidiness=0;remember();
+        Physics.queriesHitBackfaces=true;physics.Refresh(w.Chef);
+        Check(!physics.CanContinueSearch(),"global physics query changes invalidate progress");Physics.queriesHitBackfaces=false;remember();
+        var wall=new GameObject("new wall").Add(new BoxCollider());w.Colliders.Add(wall);physics.Refresh(w.Chef);
+        Check(!physics.CanContinueSearch(),"new collision geometry invalidates progress");remember();
+        wall.transform.position+=Vector3.right;physics.Refresh(w.Chef);
+        Check(!physics.CanContinueSearch(),"moving geometry invalidates progress");remember();
+        w.Colliders.Remove(wall);physics.Refresh(w.Chef);
+        Check(!physics.CanContinueSearch(),"removed geometry invalidates progress");remember();
+        w.Chef.Movement.RunSpeed=2;physics.Refresh(w.Chef);
+        Check(!physics.CanContinueSearch(),"chef speed changes invalidate progress");remember();
+        w.Chef.Movement.StepHeightMax=.3f;physics.Refresh(w.Chef);
+        Check(!physics.CanContinueSearch(),"chef step changes invalidate progress");remember();
+        var zone=new GameObject("wind");var wind=zone.Add(new WindVolume());w.Colliders.Add(zone.Add(new BoxCollider {size=Vector3.one*20}));remember();
+        physics.Refresh(w.Chef);Check(physics.CanContinueSearch(),"unchanged wind does not force a restart");
+        wind.Velocity=Vector3.right;physics.Refresh(w.Chef);Check(!physics.CanContinueSearch(),"wind velocity changes invalidate progress");remember();
+        wind.enabled=false;physics.Refresh(w.Chef);Check(!physics.CanContinueSearch(),"wind enabled state changes invalidate progress");remember();
+        floor.gameObject.Add(new Belt());Time.realtimeSinceStartup+=.25f;physics.Refresh(w.Chef);
+        Check(!physics.CanContinueSearch(),"a newly discovered moving surface invalidates the old static proof");physics.Starts().ToArray();
+        Check(!physics.RememberSearch(),"unversioned moving-surface predicates retain fresh-search fallback");
     }
     private static void Main()
     {
-        IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
+        SearchContinuity(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
         Console.WriteLine("PASS: " + checks + " navigator integration checks (analytical geometry; not PhysX)");
     }
 }
