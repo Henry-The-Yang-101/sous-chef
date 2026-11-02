@@ -26,7 +26,7 @@ namespace SousChef.Plugin.Navigation
         // Keep exact values, not a lossy hash or a time-based freshness guess.
         public bool RememberSearch(bool retainGrounds = false)
         {
-            searchRemembered = false; searchGrounds.Clear(); searchWinds.Clear();
+            searchRemembered = false; if (!retainGrounds) searchGrounds.Clear(); searchWinds.Clear();
             // Native conveyors have an explicit continuity proof. Arbitrary
             // moving surfaces and portal readiness retain fresh searches.
             if (portals.Count > 0 || Overflow) return CannotContinue(portals.Count > 0 ? "portal_predicates" : "physics_query_overflow");
@@ -40,7 +40,9 @@ namespace SousChef.Plugin.Navigation
                     IMovingSurface moving = MovingSurface(ground);
                     if (ground == null || (moving != null && !(moving is Travelator))) return CannotContinue("moving_or_missing_support");
                 }
-                searchGrounds.Add(new GroundProof { Ground = ground, Speed = pair.Value, Surface = MovingSurface(ground) });
+                bool known = false;
+                foreach (GroundProof proof in searchGrounds) if (System.Object.ReferenceEquals(proof.Ground, ground)) { known = true; break; }
+                if (!known) searchGrounds.Add(new GroundProof { Ground = ground, Speed = pair.Value, Surface = MovingSurface(ground) });
             }
             if (!RememberConveyors()) return CannotContinue("untracked_conveyor_rules");
             foreach (var pair in winds)

@@ -689,22 +689,33 @@ namespace SousChef.Plugin.Navigation
                 double budget = incremental && (searchReused || !hadIncremental) ? IncrementalBudgetMilliseconds : PlanningBudgetMilliseconds;
                 Func<bool> hasBudget = delegate { return searchWatch.Elapsed.TotalMilliseconds < budget && !physics.Overflow; };
                 WorkerHost worker = WorkerHost.Current;
-                bool canOffload = incremental && worker != null && worker.Ready && (searchReused || physics.RememberSearch());
-                if (remoteSearch != null && (remoteSearch.Failed || worker == null || !worker.Ready)) { canOffload = false; searchReused = false; }
+                bool workerReady = worker != null && worker.Ready;
+                if (remoteSearch != null && (remoteSearch.Failed || !workerReady)) searchReused = false;
                 if (!searchReused)
                 {
                     ClearRemote();
                     if (starts == null) starts = new List<WalkEdge>(physics.Starts());
                     searchGeneration++; searchSlices = 0;
-                    if (canOffload) { remoteSearch = new RemoteWalk(worker, searchGeneration, starts.ToArray()); search = remoteSearch.Tree; }
-                    else search = new WalkSearch(starts, physics.Neighbours, 16000, hasBudget);
+                    // A fresh native slice keeps immediate certified options when
+                    // animation/held-object motion invalidates continuity each frame.
+                    search = new WalkSearch(starts, physics.Neighbours, 16000, hasBudget);
                 }
-                else if (remoteSearch == null) ((WalkSearch)search).Continue(hasBudget);
+                else if (remoteSearch == null)
+                {
+                    if (incremental && workerReady && !search.Complete && !search.NodeLimitReached)
+                    {
+                        starts = new List<WalkEdge>(physics.Starts());
+                        remoteSearch = new RemoteWalk(worker, ++searchGeneration, starts.ToArray());
+                    }
+                    else ((WalkSearch)search).Continue(hasBudget);
+                }
                 if (remoteSearch != null)
                 {
                     remoteSearch.Continue(physics.Neighbours, hasBudget);
-                    // Discovering an arbitrary surface/portal rule during graph
-                    // production invalidates the entire offloaded generation.
+                    // Keep already certified local results while the worker warms.
+                    // Only replace them with an equally advanced certified frontier.
+                    if (remoteSearch.Tree.MinimumPendingDistance >= search.MinimumPendingDistance)
+                        search = remoteSearch.Tree;
                     if (!physics.RememberSearch(true))
                     {
                         ClearRemote(); searchReused = false;
@@ -715,7 +726,7 @@ namespace SousChef.Plugin.Navigation
                 searchSlices++; savedStartCount = startCount;
                 incrementalSearch = incremental;
                 searchMilliseconds = searchWatch.Elapsed.TotalMilliseconds;
-                nodeCount = remoteSearch == null ? search.Distances.Count : search.DiscoveredCount;
+                nodeCount = search is WalkSearch ? search.Distances.Count : search.DiscoveredCount;
                 if (physics.Overflow) { incrementalSearch = fastWarm = false; unavailable = "physics_query_overflow"; return; }
                 // Index the reachable nodes once, then only inspect cells around each
                 // meaningful object. Never emit the lattice itself as available actions.
@@ -798,7 +809,7 @@ namespace SousChef.Plugin.Navigation
                 }
                 if (physics.Overflow) { available.Clear(); unavailable = "physics_query_overflow"; }
                 else unavailable = search.Complete ? null : "planning_in_progress";
-                bool reusable = incremental && !physics.Overflow && physics.RememberSearch(remoteSearch != null);
+                bool reusable = incremental && !physics.Overflow && physics.RememberSearch(searchReused || remoteSearch != null);
                 fastWarm = reusable && !search.NodeLimitReached && (searchReused || !hadIncremental);
                 if (search.NodeLimitReached) warmTicks = 0;
                 matchMilliseconds = watch.Elapsed.TotalMilliseconds - prepareMilliseconds - searchMilliseconds;

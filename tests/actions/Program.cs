@@ -579,6 +579,15 @@ internal static class Program
             Check(System.Object.ReferenceEquals(actual,scratch) && actual.Points.SequenceEqual(expected.Points) && actual.Times.SequenceEqual(expected.Times) && actual.Velocities.SequenceEqual(expected.Velocities),"reused flight buffer retains every step and removes the previous trajectory tail");
             Check(actual.End.Equals(expected.End) && actual.FinalVelocity.Equals(expected.FinalVelocity) && actual.WindDisplacement.Equals(expected.WindDisplacement) && actual.PeakHeight==expected.PeakHeight,"reused flight summaries match fresh trajectories");
         }
+        // No wind: worker seed endpoints must equal the production integrator,
+        // including fractional final steps and damping at each full physics step.
+        var calmItem=w.Ingredient("calm"); var calmField=new WindField(); calmField.Prepare(w.Chef,calmItem);
+        foreach(float duration in new[] {.1f,.735f,2f,3.99f})
+        {
+            var expected=ThrowFlight.Simulate(new Vector3(1,2,3),Vector3.forward,new Vector3(5,4,-2),Physics.gravity,.2f,duration,.02f,calmField);
+            var ends=FlightBatch.Ends(new[] {new[] {1f,2f,3f,5f,4f,-2f,Physics.gravity.x,Physics.gravity.y,Physics.gravity.z,.2f,duration,.02f}});
+            Check(expected.End.Equals(new Vector3(ends[0],ends[1],ends[2])),"worker calm seeds preserve every production fixed step and fractional endpoint");
+        }
         long allocationStart=GC.GetAllocatedBytesForCurrentThread();
         for(int i=0;i<100;i++) ThrowFlight.Simulate(Vector3.zero,Vector3.forward,new Vector3(0,2,3),Physics.gravity,.2f,1,.02f,wind);
         long freshBytes=GC.GetAllocatedBytesForCurrentThread()-allocationStart;

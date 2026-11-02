@@ -837,6 +837,8 @@ internal static class Program
         Action remember=()=>{physics.Refresh(w.Chef);physics.Starts().ToArray();Check(physics.RememberSearch(),"stationary supported graph can remember a search proof");};
         remember(); Time.realtimeSinceStartup+=.02f;physics.Refresh(w.Chef);
         Check(physics.CanContinueSearch(),"unchanged geometry and movement rules permit continuation");
+        // A worker may request a later batch without touching earlier supports.
+        Check(physics.RememberSearch(true),"worker batches retain earlier support proofs even without re-expansion");
         material.Properties.SpeedMultiplier=.5f;physics.Refresh(w.Chef);
         Check(!physics.CanContinueSearch(),"surface speed edits invalidate settled reachability");remember();
         material.Properties.Slidiness=.2f;physics.Refresh(w.Chef);
@@ -904,9 +906,35 @@ internal static class Program
         Check(!(bool)diagnostics["searchReused"] && (long)diagnostics["searchGeneration"]>generation,
             "starting after movement rules change rebuilds the old tree");
     }
+    private static void WorkerStartingStateChanges()
+    {
+        string root=System.IO.Directory.GetCurrentDirectory();
+        using(var host=new WorkerHost(System.IO.Path.Combine(root,".tools/dotnet/dotnet"),System.IO.Path.Combine(root,"artifacts/plugin/worker/Worker.dll")))
+        {
+            host.Start();var clock=System.Diagnostics.Stopwatch.StartNew();
+            while(!host.Ready && clock.Elapsed.TotalSeconds<8) System.Threading.Thread.Sleep(5);
+            Check(host.Ready,"integration worker starts in a separate process");WorkerHost.Current=host;
+            var w=new World();w.AddFloor((x,z)=>Math.Abs(x)<2 && Math.Abs(z)<2 ? 0 : (float?)null);w.AddStation();
+            var navigation=new NavigationActions((v,ms)=>{},()=>{});int populated=0;
+            try
+            {
+                for(int i=0;i<12;i++)
+                {
+                    // Held-animation numerical movement must not cause endless
+                    // asynchronous generations with an empty destination list.
+                    w.Chef.Movement.RunSpeed=3+i*.0001f;Time.frameCount++;Time.realtimeSinceStartup+=.02f;
+                    var catalog=(Json.Record)navigation.Available(w.Chef);
+                    if(((List<object>)catalog["destinations"]).Count>0)populated++;
+                }
+                Check(populated>=10,"changing starting rules retain native immediate destination discovery with a worker enabled");
+            }
+            finally {navigation.Dispose();WorkerHost.Current=null;}
+        }
+    }
     private static void Main()
     {
         SearchContinuity(); ConveyorSearchContinuity(); CertifiedStart(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); DirectedConveyors(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
+        WorkerStartingStateChanges();
         Console.WriteLine("PASS: " + checks + " navigator integration checks (analytical geometry; not PhysX)");
     }
 }

@@ -18,6 +18,8 @@ namespace SousChef.Core
         private readonly AutoResetEvent signal = new AutoResetEvent(false);
         private volatile bool stopping;
         private WorkerConnection connection;
+        private long completedBatches;
+        public long CompletedBatches { get { return Interlocked.Read(ref completedBatches); } }
         public RemoteFlight(WorkerHost owner)
         { host = owner; new Thread(Loop) { IsBackground = true, Name = "SousChef throw IPC" }.Start(); }
         public FlightTask Submit(float[][] inputs)
@@ -45,7 +47,7 @@ namespace SousChef.Core
                         connection.Writer.Flush();
                         var ends = new float[WorkerWire.Count(connection.Reader, 108)];
                         if (ends.Length != task.Inputs.Length * 3) throw new System.IO.IOException("Flight reply shape");
-                        for (int i = 0; i < ends.Length; i++) ends[i] = connection.Reader.ReadSingle(); task.Ends = ends;
+                        for (int i = 0; i < ends.Length; i++) ends[i] = connection.Reader.ReadSingle(); task.Ends = ends; Interlocked.Increment(ref completedBatches);
                     }
                     catch (Exception) { task.Failed = true; if (connection != null) connection.Dispose(); connection = null; }
                     finally { task.Inputs = null; task.Complete = true; }

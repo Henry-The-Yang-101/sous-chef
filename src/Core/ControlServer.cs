@@ -89,13 +89,13 @@ namespace SousChef.Core
                         if (stopping) { request.Cancelled = true; break; }
                         response = request.Response;
                     }
-                    Write(stream, WorkerHost.Encode(response));
+                    byte[] encoded = WorkerHost.EncodeLine(response); stream.Write(encoded, 0, encoded.Length);
                 }
             }
             catch (IOException) { }
             catch (SocketException) { }
             catch (ObjectDisposedException) { }
-            finally { disconnect(id); client.Close(); lock (sync) clients.Remove(client); }
+            finally { WorkerHost.CloseEncoder(); disconnect(id); client.Close(); lock (sync) clients.Remove(client); }
         }
         public void Pump(Func<int, ControlCommand, object> handle)
         {

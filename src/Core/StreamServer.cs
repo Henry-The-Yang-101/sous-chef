@@ -102,6 +102,7 @@ namespace SousChef.Core
                 }
                 catch (Exception e) { report("Serialization failed: " + e.Message); }
             }
+            WorkerHost.CloseEncoder();
         }
 
         private void AcceptLoop()
@@ -169,7 +170,7 @@ namespace SousChef.Core
             catch (ObjectDisposedException) { }
             finally
             {
-                client.Close();
+                WorkerHost.CloseEncoder(); client.Close();
                 lock (sync)
                 {
                     clients.Remove(client);
@@ -191,7 +192,7 @@ namespace SousChef.Core
             // Client threads are background threads and sockets are closed above.
         }
 
-        private static byte[] Line(object value) { return Json.Utf8Line(WorkerHost.Encode(value)); }
+        private static byte[] Line(object value) { return WorkerHost.EncodeLine(value); }
         private static Thread Background(ThreadStart action, string name)
         {
             var thread = new Thread(action) { IsBackground = true, Name = name }; thread.Start(); return thread;

@@ -43,7 +43,7 @@ namespace SousChef.Plugin.Control
             logistics = new LogisticsActions(navigation, interactions, Buttons, FinishLogistics);
             throwOptions = new ThrowOptions(navigation);
             server = new ControlServer(port, Json.Object("type", "hello", "controlProtocolVersion", 1,
-                "sessionId", session, "bridgeVersion", "0.6.0", "player", 2, "mode", "direct_logical_input", "maxHoldMs", 1000, "actions", ActionRun.AllNames),
+                "sessionId", session, "bridgeVersion", "0.7.0", "player", 2, "mode", "direct_logical_input", "maxHoldMs", 1000, "actions", ActionRun.AllNames),
                 delegate(int client) { lease.Release(client, "disconnected"); });
             server.Start();
         }
@@ -210,6 +210,7 @@ namespace SousChef.Plugin.Control
         {
             int owner = lease.Owner(Now);
             return Json.Object("player", 2, "navigation", navigation.Describe(), "action", lastWasLogistics ? logistics.Describe() : interactions.Describe(), "available", unavailable == null, "reason", unavailable,
+                "worker", WorkerHost.Current == null ? Json.Object("state", "disabled") : Json.Object("state", WorkerHost.Current.Ready ? "ready" : "fallback", "pid", WorkerHost.Current.ProcessId, "error", WorkerHost.Current.Error, "encodedMessages", WorkerHost.Current.EncodedMessages, "throwBatches", WorkerHost.Current.Flights == null ? 0L : WorkerHost.Current.Flights.CompletedBatches),
                 "claimed", owner != 0, "ownedByYou", client != 0 && owner == client,
                 "lastRelease", lease.LastRelease, "inputTrace", traceInput ? inputTrace.ToArray() : null,
                 "chefInstanceId", target == null ? null : (object)target.GetInstanceID(),

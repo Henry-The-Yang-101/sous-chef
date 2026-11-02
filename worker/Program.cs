@@ -31,7 +31,7 @@ internal static class Program
         {
             using (client)
             {
-                client.NoDelay = true; client.SendTimeout = 2000; client.ReceiveTimeout = 10000;
+                client.NoDelay = true; client.SendTimeout = 2000; client.ReceiveTimeout = 0;
                 var stream = client.GetStream();
                 var r = new BinaryReader(new BufferedStream(stream, 65536), Encoding.UTF8);
                 var w = new BinaryWriter(new BufferedStream(stream, 65536), Encoding.UTF8);
@@ -42,7 +42,7 @@ internal static class Program
                 while (true)
                 {
                     byte kind = r.ReadByte();
-                    if (kind == 1) WorkerWire.WriteString(w, Json.Encode(WorkerWire.ReadValue(r)));
+                    if (kind == 1) { byte[] bytes = Json.Utf8Line(Json.Encode(WorkerWire.ReadValue(r))); if (bytes.Length > WorkerWire.Limit) throw new IOException("Reply size limit"); w.Write(bytes.Length); w.Write(bytes); }
                     else if (kind == 2)
                     {
                         long next = r.ReadInt64(); WalkEdge[] starts = WorkerWire.Edges(r);

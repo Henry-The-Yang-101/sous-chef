@@ -20,6 +20,8 @@ namespace SousChef.Core
         public RemoteFlight Flights { get; private set; }
         public bool Ready { get { return ready && !stopping; } }
         public int ProcessId { get; private set; }
+        private long encodedMessages;
+        public long EncodedMessages { get { return Interlocked.Read(ref encodedMessages); } }
         public WorkerHost(string dotnet, string worker) { runtime = dotnet; assembly = worker; }
         public void Start()
         {
@@ -63,22 +65,29 @@ namespace SousChef.Core
         }
         [ThreadStatic] private static WorkerConnection encoding;
         [ThreadStatic] private static WorkerHost encodingHost;
+        public static void CloseEncoder()
+        { if (encoding != null) encoding.Dispose(); encoding = null; encodingHost = null; }
         public static string Encode(object frozen)
+        { byte[] bytes = EncodeLine(frozen); return Encoding.UTF8.GetString(bytes, 0, bytes.Length - 1); }
+        public static byte[] EncodeLine(object frozen)
         {
             WorkerHost host = Current;
-            if (host == null || !host.Ready) return Json.Encode(frozen);
+            if (host == null || !host.Ready) return Json.Utf8Line(Json.Encode(frozen));
             try
             {
                 if (encoding == null || encodingHost != host)
                 { if (encoding != null) encoding.Dispose(); encoding = host.Connect(); encodingHost = host; }
                 encoding.Writer.Write((byte)1); WorkerWire.WriteValue(encoding.Writer, frozen); encoding.Writer.Flush();
-                return WorkerWire.ReadString(encoding.Reader);
+                int count = WorkerWire.Count(encoding.Reader, WorkerWire.Limit);
+                byte[] bytes = encoding.Reader.ReadBytes(count);
+                if (bytes.Length != count || count < 1 || bytes[count - 1] != 10) throw new IOException("Incomplete encoded reply");
+                Interlocked.Increment(ref host.encodedMessages); return bytes;
             }
             catch (Exception e)
             {
                 host.Error = e.Message;
                 if (encoding != null) encoding.Dispose(); encoding = null;
-                return Json.Encode(frozen);
+                return Json.Utf8Line(Json.Encode(frozen));
             }
         }
         public void Dispose()
@@ -135,8 +144,8 @@ namespace SousChef.Core
                 }
             }
             catch (Exception) { failed = true; }
-            finally { if (connection != null) connection.Dispose(); }
+            finally { if (connection != null) connection.Dispose(); signal.Close(); }
         }
-        public void Dispose() { stopping = true; signal.Set(); if (connection != null) connection.Dispose(); }
+        public void Dispose() { if (stopping) return; stopping = true; try { signal.Set(); } catch (ObjectDisposedException) { } if (connection != null) connection.Dispose(); }
     }
 }

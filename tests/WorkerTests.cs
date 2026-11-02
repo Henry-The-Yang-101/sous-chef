@@ -56,6 +56,14 @@ internal static class WorkerTests
                 check(expansions == expected.Settled.Count, "batched adjacency production does not repeat native expansions");
                 foreach (var cell in expected.Settled) check(remote.Tree.Route(cell).SequenceEqual(expected.Route(cell)), "worker preserves exact route tie ordering");
             }
+            long encodedBefore = host.EncodedMessages;
+            for (int i = 0; i < 24; i++)
+            {
+                Exception error = null;
+                var clientThread = new Thread(() => { try { WorkerHost.EncodeLine(value); } catch (Exception e) { error = e; } finally { WorkerHost.CloseEncoder(); } });
+                clientThread.Start(); clientThread.Join(); check(error == null, "short-lived encoder connection completes");
+            }
+            check(host.EncodedMessages == encodedBefore + 24, "disconnecting encoder clients release worker connections without exhausting the limit");
             // An independent generation cannot retain old cells or parent edges.
             using (var reset = new RemoteWalk(host, 8, new[] { new WalkEdge(new WalkCell(99,0,0),0) }))
             {

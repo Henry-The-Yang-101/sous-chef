@@ -808,3 +808,13 @@ Search diagnostics now expose generations, continuation counts and failure reaso
 The final build passes 840 core assertions, 239 navigator integration checks,
 267 action checks, 93 Python tests and the 151-type installed-assembly audit.
 Check log: `.local/progressive-search-final-check.log`.
+
+## Separate worker process — 2026-11-02
+
+Bridge 0.7.0 adds a persistent .NET worker for detached JSON/UTF-8 encoding,
+certified stable incomplete walking searches and calm throw seed batches. Native
+physics, live predicates, active execution and input ownership remain in Unity.
+The [worker report](worker.md) records the process-boundary tests, native
+catalogue/held-item/throw checks, deliberate worker-loss fallback and performance
+measurement limits. No on-screen FPS improvement is claimed from Null-graphics
+simulator measurements.

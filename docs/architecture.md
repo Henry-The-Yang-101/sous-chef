@@ -206,3 +206,10 @@ Throw shooting iterations terminate early only at an exact direction/correction
 fixed point. The final full trajectory, collision sweeps, receiving-volume checks
 and native catch/throw predicates still run. No approximate aim tolerance is
 introduced by this optimization.
+
+## Worker process
+
+The bridge can now hand detached JSON encoding, stable incomplete catalogue
+searches and calm throw seed batches to a separate process. Native reads, physics
+certification and input authority stay in the plugin. See [worker.md](worker.md)
+for the handoff, consistency checks, bounded transport and fallback behaviour.

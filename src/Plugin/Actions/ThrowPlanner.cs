@@ -205,7 +205,7 @@ namespace SousChef.Plugin.Actions
                     // parameters are sampled here; From still performs full fresh
                     // aiming, flight, collision and receiver validation for every
                     // resulting stance. Wind retains positional native queries.
-                    Vector3[] remoteEnds = null;
+                    Vector3[] remoteEnds = null; float[][] remoteInputs = null;
                     WorkerHost worker = WorkerHost.Current;
                     if (offloadCandidates && !wind.HasWind && worker != null && worker.Ready && worker.Flights != null)
                     {
@@ -226,7 +226,7 @@ namespace SousChef.Plugin.Actions
                             while (!task.Complete) yield return new Vector3(Single.NaN, 0, 0);
                             if (!task.Failed)
                             {
-                                remoteEnds = new Vector3[angles];
+                                remoteEnds = new Vector3[angles]; remoteInputs = inputs;
                                 for (int a = 0; a < angles; a++) remoteEnds[a] = new Vector3(task.Ends[a * 3], task.Ends[a * 3 + 1], task.Ends[a * 3 + 2]);
                             }
                         }
@@ -240,7 +240,13 @@ namespace SousChef.Plugin.Actions
                         if (!NativeThrow.Velocity(chef, direction, out launch)) continue;
                         Vector3 origin = candidate + Vector3.up * pivot + Quaternion.LookRotation(direction) * localRelease;
                         Vector3 end; float seedTime;
-                        if (remoteEnds != null) { seedTime = flight; end = remoteEnds[i]; }
+                        float[] sampled = remoteInputs == null ? null : remoteInputs[i];
+                        Vector3 gravityNow = Physics.gravity;
+                        bool sameInputs = sampled != null && sampled[0] == origin.x && sampled[1] == origin.y && sampled[2] == origin.z &&
+                            sampled[3] == launch.x && sampled[4] == launch.y && sampled[5] == launch.z &&
+                            sampled[6] == gravityNow.x && sampled[7] == gravityNow.y && sampled[8] == gravityNow.z &&
+                            sampled[9] == drag && sampled[10] == flight && sampled[11] == Time.fixedDeltaTime;
+                        if (sameInputs) { seedTime = flight; end = remoteEnds[i]; }
                         else if (player != null)
                         {
                             seedTime = flight;

@@ -126,6 +126,7 @@ frame-rate tests, saved traces, and current limitations.
 | Directory | Responsibility |
 | --- | --- |
 | `src/Core/` | JSON, stable identities, bounded TCP transport, graph search and action state |
+| `worker/` | Separate .NET planner/encoder process; see [worker architecture](docs/worker.md) |
 | `src/Plugin/` | Round gate, main-thread scene/geometry capture, lifecycle |
 | `src/Plugin/Adapters/` | Explicit field schemas and bounded readers |
 | `src/Plugin/Navigation/` | Live physics reachability, destination catalogue, autonomous walking |
