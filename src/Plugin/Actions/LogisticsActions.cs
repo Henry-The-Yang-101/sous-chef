@@ -195,9 +195,8 @@ namespace SousChef.Plugin.Actions
                         bool matches;
                         if (selected.IngredientId != null)
                         {
-                            var properties = cargo.GetComponent<IngredientPropertiesComponent>();
-                            var definition = properties == null ? null : ActionObservations.Read<UnityEngine.Object>(properties, "m_ingredientOrderNode");
-                            matches = definition != null && "i" + ActionObservations.Read<int>(definition, "m_uID") == selected.IngredientId;
+                            string ingredientId, ingredientName;
+                            matches = LogisticsInventory.IngredientIdentity(cargo, out ingredientId, out ingredientName) && ingredientId == selected.IngredientId;
                         }
                         else matches = selected.UtensilType != null && LogisticsInventory.UtensilType(cargo) == selected.UtensilType && LogisticsInventory.Empty(cargo);
                         if (!matches) { Finish("blocked", "supply_contents_changed"); return; }

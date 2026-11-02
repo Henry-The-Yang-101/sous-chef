@@ -24,6 +24,9 @@ job, an observed item/ingredient/type/station where required, and its delivery
 surface. Return utensil chooses an observed home or compatible empty station.
 Source and destination object identities are both rechecked before dispatch;
 removed selections clear rather than silently switching to another item.
+Raw choppable foods such as Chocolate are included even when the game gives them
+no ingredient-order definition. Their native chopping-output prefab identifies
+the raw supply and its spawned items; processed ingredients retain separate IDs.
 Parent and child phases remain visible through pickup and delivery. Stop and
 browser-disconnect cleanup cancel the entire job.
 

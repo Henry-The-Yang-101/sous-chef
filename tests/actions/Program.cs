@@ -343,6 +343,28 @@ internal static class Program
         foreach(string command in new[] {"clear_station r d1 d2 extra","move_item r d1 nope","get_utensil r s%%% d2","fetch_ingredient r sCg d2","return_utensil r d1 d2"})
         {bool failed=false;try{ControlCommand.Parse(command);}catch(ArgumentException){failed=true;}Check(failed,"malformed logistics command is rejected");}
     }
+    private static void RawIngredientSupplies()
+    {
+        var w=new World(); var destination=w.Delivery();
+        var chopped=w.Ingredient("Chocolate_Chopped");
+        var prefab=new GameObject("Chocolate"); prefab.Add(new WorkableItem {Next=chopped});
+        w.Target.Add(new PickupItemSpawner {m_itemPrefab=prefab});
+        var catalog=(Json.Record)w.Navigation.Available(w.Chef); catalog["targets"]=w.Navigation.Targets().Select(w.Navigation.TargetIdentity).ToList(); w.Logistics.Decorate(catalog,w.Chef);
+        var ingredients=(List<object>)catalog["ingredients"];
+        Check(ingredients.Cast<Json.Record>().Any(i=>(string)i["label"]=="Chocolate"),"raw chocolate without IngredientPropertiesComponent appears in ingredient options");
+        string rawId,rawName,choppedId,choppedName;
+        Check(LogisticsInventory.IngredientIdentity(prefab,out rawId,out rawName) && LogisticsInventory.IngredientIdentity(chopped,out choppedId,out choppedName) && rawId!=choppedId,"raw and chopped identities stay distinct");
+        Check(w.Logistics.Start(w.Chef,1,new ControlCommand {Operation="fetch_ingredient",Selector=rawId,Destination=w.IdOf(destination)})==null,"raw ingredient job starts from its dispenser");
+        w.Arrive(); var spawned=new GameObject("Chocolate(Clone)"); spawned.Add(new WorkableItem {Next=chopped}); w.Hold(spawned); w.Verify();
+        Check(w.Logistics.Run.Phase=="delivering","native raw output identity verifies dispenser pickup and advances delivery");
+        w.ArriveAt(destination); w.Hold(null); destination.GetComponent<ServerAttachStation>().Item=spawned; w.Verify();
+        Check(w.Logistics.Run.State=="succeeded","raw ingredient fetch completes after verified delivery");
+
+        w=new World(); w.Target.Add(new PickupItemSpawner {m_itemPrefab=prefab});
+        Check(w.Start("pick_up")==null,"raw supply pickup starts");w.Arrive();
+        var wrong=new GameObject("Chocolate(Clone)"); wrong.Add(new WorkableItem {Next=w.Ingredient("Onion_Chopped")});w.Hold(wrong);w.Verify();
+        Check(w.Skills.Run.State!="succeeded","matching display name cannot verify a different raw ingredient");
+    }
     private static void WindAndHeight()
     {
         var w=new World();var item=w.Ingredient("test");item.Add(new BoxCollider {size=Vector3.one*.2f});
@@ -414,6 +436,6 @@ internal static class Program
         Check(!drops.Plan(w.Chef,item,player,out drop),"nearby horizontal position on a different deck is not a valid drop handoff");
         Physics.Sphere=(p,r,d,length)=>new RaycastHit[0];
     }
-    private static void Main() { Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();Throws();GeneratedStances();LogisticsJobs();WindAndHeight();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
+    private static void Main() { Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();Throws();GeneratedStances();LogisticsJobs();RawIngredientSupplies();WindAndHeight();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
     private static ClientInteractable GetCurrentlyInteractingForTest(this PlayerControls chef) { return chef.GetComponent<ClientPlayerControlsImpl_Default>().Current; }
 }

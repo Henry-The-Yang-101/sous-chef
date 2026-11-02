@@ -59,6 +59,26 @@ namespace SousChef.Plugin.Actions
             var definition = ActionObservations.Read<UnityEngine.Object>(properties, "m_itemDefinition");
             return definition == null || String.IsNullOrEmpty(definition.name) ? null : CanonicalUtensil(definition.name);
         }
+        public static bool IngredientIdentity(GameObject item, out string id, out string name)
+        {
+            id = name = null;
+            if (item == null) return false;
+            var ingredient = item.GetComponent<IngredientPropertiesComponent>();
+            var definition = ingredient == null ? null : ActionObservations.Read<UnityEngine.Object>(ingredient, "m_ingredientOrderNode");
+            if (definition != null)
+            {
+                id = "i" + ActionObservations.Read<int>(definition, "m_uID"); name = definition.name; return true;
+            }
+            // Raw choppable foods (e.g. Chocolate) have no IOrderDefinition.
+            // Their native output prefab is shared by the supply and spawned item.
+            // Keep this identity separate from the processed ingredient's order ID.
+            var workable = item.GetComponent<WorkableItem>();
+            GameObject output = workable == null ? null : workable.GetNextPrefab();
+            if (output == null) return false;
+            id = "raw" + output.GetInstanceID(); name = item.name;
+            if (name.EndsWith("(Clone)", StringComparison.Ordinal)) name = name.Substring(0, name.Length - 7).TrimEnd();
+            return true;
+        }
         public static bool Empty(GameObject item)
         {
             if (item == null) return false;
@@ -112,16 +132,7 @@ namespace SousChef.Plugin.Actions
             var stack = item.GetComponent<ServerStack>();
             if (stack != null && item.GetComponent<CleanPlateStack>() != null) plateItem = stack.InspectTopOfStack();
             entry.CleanPlate = plateItem != null && plateItem.GetComponent<ServerPlate>() != null && Empty(plateItem);
-            var ingredient = item.GetComponent<IngredientPropertiesComponent>();
-            if (ingredient != null)
-            {
-                var definition = ActionObservations.Read<UnityEngine.Object>(ingredient, "m_ingredientOrderNode");
-                if (definition != null)
-                {
-                    entry.IngredientId = "i" + ActionObservations.Read<int>(definition, "m_uID");
-                    entry.IngredientName = definition.name;
-                }
-            }
+            IngredientIdentity(item, out entry.IngredientId, out entry.IngredientName);
             var interaction = source.GetComponent<ClientInteractable>();
             entry.InUse = HeldByOther(chef, item) || (interaction != null && interaction.InteractorCount() > 0);
             if (System.Object.ReferenceEquals(ActionObservations.Held(chef), item)) entry.Distance = 0;
