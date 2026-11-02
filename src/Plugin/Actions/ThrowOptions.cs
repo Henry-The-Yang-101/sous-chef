@@ -88,14 +88,14 @@ namespace SousChef.Plugin.Actions
             {
                 // Refresh positive proofs against current obstacles, height,
                 // receiver availability, wind and the current walking graph.
-                ThrowPlan checkedPlan = null; Vector3 stance;
+                ThrowPlan checkedPlan = null; Vector3 stance; float routeCost = Single.MaxValue;
                 Vector3 foot = chef.transform.position; foot.y = chef.GetComponent<CapsuleCollider>().bounds.min.y;
                 float uncertainty = Vector3.Distance(option.Plan.Stance, foot) < .02f ? 0 : ArrivalCheck.PositionTolerance + .02f;
                 if (option.Planner.Prepare(chef, item, target) != null ||
                     !navigation.TryStance(option.Plan.Stance, out stance) || Vector3.Distance(stance, option.Plan.Stance) > .02f ||
-                    !option.Planner.From(stance, false, out checkedPlan, uncertainty) || navigation.RouteCost(stance) == Single.MaxValue)
+                    !option.Planner.From(stance, false, out checkedPlan, uncertainty) || (routeCost = navigation.RouteCost(stance)) == Single.MaxValue)
                     Prepare(option);
-                else { checkedPlan.WalkDistance = navigation.RouteCost(stance); option.Plan = checkedPlan; }
+                else { checkedPlan.WalkDistance = routeCost; option.Plan = checkedPlan; }
             }
             description = Json.Object("state", option.Plan != null ? "feasible" : option.Reason == ThrowPlanner.Pending ? "pending" : "unavailable",
                 "reason", option.Reason, "plan", option.Plan == null ? null : option.Plan.Describe());

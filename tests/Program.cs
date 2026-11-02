@@ -21,7 +21,7 @@ internal static class Program
     private static void Main(string[] args)
     {
         checks += NavigationTests.Run();
-        TestSchedule(); TestJson(); TestUtf8Line(); TestIdentity(); TestStream(); TestStreamDemand(); TestControl();
+        TestSchedule(); TestJson(); TestNumericRecords(); TestUtf8Line(); TestIdentity(); TestStream(); TestStreamDemand(); TestControl();
         if (args.Length > 0) Audit(args[0]);
         Console.WriteLine("PASS: " + checks + " assertions");
     }
@@ -80,6 +80,43 @@ internal static class Program
             { "adapter", new Dictionary<string, object> { { "field", "value" } } } };
         Assert(Json.Encode(Json.Object("x", new[] { .1f, Single.NaN, -2f }, "adapter", legacy["adapter"])) ==
             Json.Encode(legacy), "compact records and typed arrays preserve JSON semantics");
+    }
+
+    private static void TestNumericRecords()
+    {
+        var names = new[] { "position", "rotation", "localPosition", "localRotation", "localScale", "lossyScale", "localToWorld" };
+        var widths = new[] { 3, 4, 3, 4, 3, 3, 16 };
+        var layout = new Json.FloatArrayLayout(names, widths);
+        var values = Enumerable.Range(0, 36).Select(i => i / 10f).ToArray();
+        values[5] = Single.NaN; values[15] = Single.PositiveInfinity;
+        Func<object> legacy = () => {
+            var pairs = new object[14]; int offset = 0;
+            for (int i = 0; i < names.Length; i++)
+            {
+                var vector = new float[widths[i]]; Array.Copy(values, offset, vector, 0, vector.Length); offset += vector.Length;
+                pairs[i * 2] = names[i]; pairs[i * 2 + 1] = vector;
+            }
+            return Json.Object(pairs);
+        };
+        string expected = Json.Encode(legacy());
+        Assert(Json.Encode(layout.Capture((float[])values.Clone())) == expected, "packed transforms retain all fields, matrix order and exact numeric encoding");
+        object retained = layout.Capture((float[])values.Clone());
+        object next = layout.Capture(new float[36]);
+        Assert(Json.Encode(retained) == expected && Json.Encode(next) != expected, "later capture cannot overwrite published numeric values");
+        legacy(); layout.Capture((float[])values.Clone());
+        long start = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 1000; i++) GC.KeepAlive(legacy());
+        long before = GC.GetAllocatedBytesForCurrentThread() - start;
+        start = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 1000; i++) GC.KeepAlive(layout.Capture((float[])values.Clone()));
+        long after = GC.GetAllocatedBytesForCurrentThread() - start;
+        Assert(after < before / 2, "packed transform construction cuts allocations by more than half");
+        Console.WriteLine("1000 transform records allocated " + before + " -> " + after + " bytes");
+        names[0] = "changed"; widths[0] = 99;
+        Assert(Json.Encode(retained) == expected, "layout cannot be changed by the constructor caller");
+        bool rejected = false;
+        try { layout.Capture(new float[35]); } catch (ArgumentException) { rejected = true; }
+        Assert(rejected, "numeric record rejects truncated data");
     }
 
     private static void TestUtf8Line()

@@ -531,6 +531,22 @@ internal static class Program
         var wrong=new GameObject("Chocolate(Clone)"); wrong.Add(new WorkableItem {Next=w.Ingredient("Onion_Chopped")});w.Hold(wrong);w.Verify();
         Check(w.Skills.Run.State!="succeeded","matching display name cannot verify a different raw ingredient");
     }
+    private static void InventoryObservationCost()
+    {
+        var w=new World(); var first=w.Ingredient("first"); var second=w.Ingredient("second");
+        w.Target.GetComponent<ServerAttachStation>().Item=first;
+        var station=w.Delivery(); station.GetComponent<ServerAttachStation>().Item=second;
+        var other=new GameObject("other chef").Add(new PlayerControls());
+        var carrier=other.gameObject.Add(new ServerPlayerAttachmentCarrier {Item=first});
+        var catalog=(Json.Record)w.Navigation.Available(w.Chef);
+        UnityEngine.Object.PlayerSearches=0;
+        w.Logistics.Inventory.Refresh(w.Chef,catalog);
+        Check(UnityEngine.Object.PlayerSearches==1,"inventory scans players once for all items in the observation pass");
+        Check(w.Logistics.Inventory.Items.Any(i=>i.Item==first && i.InUse) && w.Logistics.Inventory.Items.Any(i=>i.Item==second && !i.InUse),"shared carrier observation marks only the exact held item busy");
+        carrier.Item=second;
+        w.Logistics.Inventory.Refresh(w.Chef,catalog);
+        Check(w.Logistics.Inventory.Items.Any(i=>i.Item==first && !i.InUse) && w.Logistics.Inventory.Items.Any(i=>i.Item==second && i.InUse),"next inventory refresh observes changed ownership without a stale carrier cache");
+    }
     private static void WindAndHeight()
     {
         var w=new World();var item=w.Ingredient("test");item.Add(new BoxCollider {size=Vector3.one*.2f});
@@ -552,6 +568,25 @@ internal static class Program
         typeof(WindVolume).GetField("m_windFilter",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic).SetValue(volume,(LayerMask)0);
         wind.Prepare(w.Chef,item);path=ThrowFlight.Simulate(Vector3.zero,Vector3.forward,Vector3.forward,Vector3.zero,0,1,.1f,wind);
         Check(Math.Abs(path.End.y)<.0001f,"wind layer filtering is applied to the thrown item");
+
+        var scratch=new FlightPath();
+        foreach(float duration in new[] {2f,.17f,1f})
+        {
+            typeof(WindVolume).GetField("m_windFilter",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic).SetValue(volume,(LayerMask)(duration>1 ? ~0 : 0));
+            wind.Prepare(w.Chef,item);
+            var expected=ThrowFlight.Simulate(Vector3.up,Vector3.forward,new Vector3(1,2,3),Physics.gravity,.2f,duration,.02f,wind);
+            var actual=ThrowFlight.Simulate(Vector3.up,Vector3.forward,new Vector3(1,2,3),Physics.gravity,.2f,duration,.02f,wind,scratch);
+            Check(System.Object.ReferenceEquals(actual,scratch) && actual.Points.SequenceEqual(expected.Points) && actual.Times.SequenceEqual(expected.Times) && actual.Velocities.SequenceEqual(expected.Velocities),"reused flight buffer retains every step and removes the previous trajectory tail");
+            Check(actual.End.Equals(expected.End) && actual.FinalVelocity.Equals(expected.FinalVelocity) && actual.WindDisplacement.Equals(expected.WindDisplacement) && actual.PeakHeight==expected.PeakHeight,"reused flight summaries match fresh trajectories");
+        }
+        long allocationStart=GC.GetAllocatedBytesForCurrentThread();
+        for(int i=0;i<100;i++) ThrowFlight.Simulate(Vector3.zero,Vector3.forward,new Vector3(0,2,3),Physics.gravity,.2f,1,.02f,wind);
+        long freshBytes=GC.GetAllocatedBytesForCurrentThread()-allocationStart;
+        allocationStart=GC.GetAllocatedBytesForCurrentThread();
+        for(int i=0;i<100;i++) ThrowFlight.Simulate(Vector3.zero,Vector3.forward,new Vector3(0,2,3),Physics.gravity,.2f,1,.02f,wind,scratch);
+        long reusedBytes=GC.GetAllocatedBytesForCurrentThread()-allocationStart;
+        Check(reusedBytes<freshBytes/10,"warm flight scratch removes trajectory-list allocation pressure");
+        Console.WriteLine("100 flight simulations allocated "+freshBytes+" -> "+reusedBytes+" bytes");
 
         w=new World(t=>t.Add(new Catcher()));item=w.Ingredient("tomato");item.Add(new Throwable());item.Add(new PhysicalAttachment());item.Add(new BoxCollider {size=Vector3.one*.2f});
         w.Chef.gameObject.Add(new AttachmentThrower {m_throwForce=99,m_throwInclination=1});w.Chef.gameObject.Add(new ClientAttachmentThrower());
@@ -670,6 +705,6 @@ internal static class Program
         Check(!drops.Plan(w.Chef,item,player,out drop),"nearby horizontal position on a different deck is not a valid drop handoff");
         Physics.Sphere=(p,r,d,length)=>new RaycastHit[0];
     }
-    private static void Main() { Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();WindAndHeight();HeightOptions();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
+    private static void Main() { Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
     private static ClientInteractable GetCurrentlyInteractingForTest(this PlayerControls chef) { return chef.GetComponent<ClientPlayerControlsImpl_Default>().Current; }
 }

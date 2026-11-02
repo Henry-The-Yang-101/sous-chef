@@ -37,6 +37,32 @@ namespace SousChef.Core
 
         public static Record Object(params object[] pairs) { return new Record(pairs); }
 
+        // Immutable-layout numeric records avoid a separate float array and
+        // key/value array for each vector in every captured transform.
+        public sealed class FloatArrayLayout
+        {
+            internal readonly string[] Names;
+            internal readonly int[] Lengths;
+            private readonly int count;
+            public FloatArrayLayout(string[] names, int[] lengths)
+            {
+                if (names.Length != lengths.Length) throw new ArgumentException("Mismatched layout");
+                Names = (string[])names.Clone(); Lengths = (int[])lengths.Clone();
+                foreach (int length in Lengths)
+                { if (length < 0) throw new ArgumentException("Negative array length"); count += length; }
+            }
+            public object Capture(float[] values)
+            {
+                if (values.Length != count) throw new ArgumentException("Mismatched numeric record");
+                return new FloatArrayRecord { Layout = this, Values = values };
+            }
+        }
+        private sealed class FloatArrayRecord
+        {
+            public FloatArrayLayout Layout;
+            public float[] Values;
+        }
+
         public static string Encode(object value)
         {
             var output = new StringBuilder(4096);
@@ -60,6 +86,21 @@ namespace SousChef.Core
             if (value == null) { output.Append("null"); return; }
             if (value is string) { Quote(output, (string)value); return; }
             if (value is bool) { output.Append((bool)value ? "true" : "false"); return; }
+            var numeric = value as FloatArrayRecord;
+            if (numeric != null)
+            {
+                output.Append('{'); int offset = 0;
+                for (int field = 0; field < numeric.Layout.Names.Length; field++)
+                {
+                    if (field > 0) output.Append(',');
+                    Quote(output, numeric.Layout.Names[field]); output.Append(":[");
+                    int length = numeric.Layout.Lengths[field];
+                    for (int i = 0; i < length; i++)
+                    { if (i > 0) output.Append(','); WriteNumber(output, numeric.Values[offset++]); }
+                    output.Append(']');
+                }
+                output.Append('}'); return;
+            }
             var record = value as Record;
             if (record != null)
             {

@@ -216,9 +216,14 @@ namespace SousChef.Plugin.Actions
 
     internal static class ThrowFlight
     {
-        public static FlightPath Simulate(Vector3 origin, Vector3 direction, Vector3 launch, Vector3 gravity, float drag, float time, float step, WindField wind)
+        public static FlightPath Simulate(Vector3 origin, Vector3 direction, Vector3 launch, Vector3 gravity, float drag, float time, float step, WindField wind, FlightPath scratch = null)
         {
-            var result = new FlightPath { InitialVelocity = launch, PeakHeight = origin.y };
+            // A planner runs many shooting iterations per candidate. Reuse only
+            // its private scratch buffers; published ThrowPlans copy scalar data.
+            var result = scratch ?? new FlightPath();
+            result.Points.Clear(); result.Times.Clear(); result.Velocities.Clear();
+            result.InitialVelocity = launch; result.PeakHeight = origin.y;
+            result.End = result.FinalVelocity = result.WindDisplacement = Vector3.zero;
             Vector3 position = origin, velocity = launch; ulong membership = wind.At(position, direction);
             result.Points.Add(position); result.Times.Add(0); result.Velocities.Add(velocity);
             int count = Mathf.CeilToInt(time / step);

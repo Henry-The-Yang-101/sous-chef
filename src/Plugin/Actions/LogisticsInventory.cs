@@ -30,8 +30,9 @@ namespace SousChef.Plugin.Actions
         private readonly Dictionary<int, GameObject> homeItems = new Dictionary<int, GameObject>();
         private readonly NavigationActions navigation;
         private readonly Dictionary<string, float> distances = new Dictionary<string, float>();
+        private readonly List<GameObject> otherHeldItems = new List<GameObject>();
         public LogisticsInventory(NavigationActions nav) { navigation = nav; }
-        public void Reset() { Items.Clear(); Errors.Clear(); homes.Clear(); homeItems.Clear(); distances.Clear(); }
+        public void Reset() { Items.Clear(); Errors.Clear(); homes.Clear(); homeItems.Clear(); distances.Clear(); otherHeldItems.Clear(); }
         public float DistanceTo(GameObject target)
         { float cost; string id = Id(target); return id != null && distances.TryGetValue(id, out cost) ? cost : Single.MaxValue; }
         public static string Normalize(string text)
@@ -102,16 +103,25 @@ namespace SousChef.Plugin.Actions
             // observed container before we can call them empty and clean.
             return contents != null ? contents.GetContentsCount() == 0 : plate == null;
         }
-        public static bool HeldByOther(PlayerControls chef, GameObject item)
+        private bool HeldByOther(GameObject item)
         {
-            foreach (PlayerControls player in UnityEngine.Object.FindObjectsOfType<PlayerControls>())
-                if (player != chef && System.Object.ReferenceEquals(ActionObservations.Held(player), item)) return true;
+            foreach (GameObject held in otherHeldItems)
+                if (System.Object.ReferenceEquals(held, item)) return true;
             return false;
         }
         public void Refresh(PlayerControls chef, Json.Record currentCatalog = null)
         {
             Items.Clear(); Errors.Clear(); distances.Clear();
             var catalog = currentCatalog ?? (Json.Record)navigation.Available(chef);
+            // One synchronous observation pass: discover carriers once, rather
+            // than scanning all Unity objects again for each inventory item.
+            otherHeldItems.Clear();
+            foreach (PlayerControls player in UnityEngine.Object.FindObjectsOfType<PlayerControls>())
+            {
+                if (player == chef) continue;
+                GameObject otherHeld = ActionObservations.Held(player);
+                if (otherHeld != null) otherHeldItems.Add(otherHeld);
+            }
             foreach (Json.Record d in (List<object>)catalog["destinations"]) distances[(string)d["id"]] = (float)d["routeDistance"];
             GameObject held = ActionObservations.Held(chef);
             if (held != null) navigation.RegisterItem(held);
@@ -147,7 +157,7 @@ namespace SousChef.Plugin.Actions
             entry.CleanPlate = plateItem != null && plateItem.GetComponent<ServerPlate>() != null && Empty(plateItem);
             IngredientIdentity(item, out entry.IngredientId, out entry.IngredientName);
             var interaction = source.GetComponent<ClientInteractable>();
-            entry.InUse = HeldByOther(chef, item) || (interaction != null && interaction.InteractorCount() > 0);
+            entry.InUse = HeldByOther(item) || (interaction != null && interaction.InteractorCount() > 0);
             if (System.Object.ReferenceEquals(ActionObservations.Held(chef), item)) entry.Distance = 0;
             else { float cost; if (distances.TryGetValue(entry.SourceId ?? "", out cost)) entry.Distance = cost;
                 else if (distances.TryGetValue(entry.ItemId ?? "", out cost)) { entry.Distance = cost; entry.Source = item; entry.SourceId = entry.ItemId; } }

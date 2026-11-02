@@ -38,6 +38,8 @@ namespace SousChef.Plugin.Actions
         private Bounds receiving;
         private int mask;
         private readonly WindField wind = new WindField();
+        // Seed solving nests inside aiming, so these must not share a buffer.
+        private readonly FlightPath seedFlight = new FlightPath(), aimedFlight = new FlightPath();
         private readonly Dictionary<string, object> rejected = new Dictionary<string, object>();
         public const string Pending = "throw_planning";
         public void CancelPlanning() { if (candidates != null) candidates.Dispose(); candidates = null; }
@@ -206,7 +208,7 @@ namespace SousChef.Plugin.Actions
                         if (player != null)
                         {
                             seedTime = flight;
-                            end = ThrowFlight.Simulate(origin, direction, launch, Physics.gravity, drag, flight, Time.fixedDeltaTime, wind).End;
+                            end = ThrowFlight.Simulate(origin, direction, launch, Physics.gravity, drag, flight, Time.fixedDeltaTime, wind, seedFlight).End;
                         }
                         else if (!Seed(origin, direction, launch, flight, out seedTime, out end)) continue;
                         Vector3 correction = center + ReceiverVelocity() * seedTime - end; correction.y = 0;
@@ -230,8 +232,8 @@ namespace SousChef.Plugin.Actions
         {
             time = calmTime; end = Vector3.zero;
             if (!wind.HasWind)
-            { end = ThrowFlight.Simulate(origin, direction, launch, Physics.gravity, drag, calmTime, Time.fixedDeltaTime, wind).End; return true; }
-            var path = ThrowFlight.Simulate(origin, direction, launch, Physics.gravity, drag, 4, Time.fixedDeltaTime, wind);
+            { end = ThrowFlight.Simulate(origin, direction, launch, Physics.gravity, drag, calmTime, Time.fixedDeltaTime, wind, seedFlight).End; return true; }
+            var path = ThrowFlight.Simulate(origin, direction, launch, Physics.gravity, drag, 4, Time.fixedDeltaTime, wind, seedFlight);
             Vector3 targetVelocity = ReceiverVelocity();
             for (int i = 1; i < path.Points.Count; i++)
             {
@@ -278,7 +280,7 @@ namespace SousChef.Plugin.Actions
                 }
                 direction = destination + velocity * time - origin - correction; direction.y = 0; direction.Normalize();
                 if (!NativeThrow.Velocity(chef, direction, out launch)) return Reject("native_launch_velocity");
-                path = ThrowFlight.Simulate(origin, direction, launch, Physics.gravity, drag, time, Time.fixedDeltaTime, wind);
+                path = ThrowFlight.Simulate(origin, direction, launch, Physics.gravity, drag, time, Time.fixedDeltaTime, wind, aimedFlight);
                 correction = path.End - origin - direction * ThrowTrajectory.Displacement(speed, 0, drag, time, Time.fixedDeltaTime); correction.y = 0;
             }
             if (actualRelease)
@@ -289,7 +291,7 @@ namespace SousChef.Plugin.Actions
             }
             origin = actualRelease ? item.transform.position : stance + Vector3.up * pivot + Quaternion.LookRotation(direction) * localRelease;
             if (!NativeThrow.Velocity(chef, direction, out launch)) return Reject("native_launch_velocity");
-            path = ThrowFlight.Simulate(origin, direction, launch, Physics.gravity, drag, time, Time.fixedDeltaTime, wind);
+            path = ThrowFlight.Simulate(origin, direction, launch, Physics.gravity, drag, time, Time.fixedDeltaTime, wind, aimedFlight);
             Vector3 arrival = path.End, predicted = destination + velocity * time; lastArrival = arrival;
             int lastStep = path.Points.Count - 1;
             if (player != null)
