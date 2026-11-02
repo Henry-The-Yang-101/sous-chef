@@ -302,5 +302,7 @@ jump pass or fail depending on where a segment's samples started. If native
 motion displaces the chef from a previously valid connector, execution now
 replans from the actual position before declaring the destination blocked.
 
-The [headless motion suite](../tests/simulation/README.md) drives this production
-controller through recorded geometry without launching or contacting the game.
+The [native headless simulator](native-simulator.md) runs this production
+controller with the installed game’s actual physics and named kitchens. Use it
+for repeatable traversal tests; the navigation unit fixtures remain available
+for isolated geometry regressions.

@@ -43,7 +43,7 @@ namespace SousChef.Plugin.Navigation
         private int nodeCount, candidateCount, startCount;
         private string observationError;
         private bool planning;
-        private readonly double planningBudgetMilliseconds;
+        private const double PlanningBudgetMilliseconds = 12;
         private float settlingSince = -1;
         private readonly Queue<object> executionTrace = new Queue<object>();
         private void Trace(string phase, Vector3 goal, Vector3 input)
@@ -62,9 +62,9 @@ namespace SousChef.Plugin.Navigation
                 "settlement", physics.Settlement, "failure", physics.Failure, "startFailures", phase == "no_safe_start" ? physics.StartFailures : null));
             while (executionTrace.Count > 96) executionTrace.Dequeue();
         }
-        public NavigationActions(Action<Vector3, int> walk, Action halt, double planningBudget = 12)
+        public NavigationActions(Action<Vector3, int> walk, Action halt)
         {
-            move = walk; neutral = halt; planningBudgetMilliseconds = planningBudget;
+            move = walk; neutral = halt;
             physics.TraceEnabled = Environment.GetEnvironmentVariable("SOUS_CHEF_NAV_TRACE") == "1";
         }
         public GameObject Resolve(string id)
@@ -519,7 +519,7 @@ namespace SousChef.Plugin.Navigation
                 prepareMilliseconds = watch.Elapsed.TotalMilliseconds;
                 var searchWatch = Stopwatch.StartNew();
                 search = new WalkSearch(starts, physics.Neighbours, 16000,
-                    delegate { return searchWatch.Elapsed.TotalMilliseconds < planningBudgetMilliseconds && !physics.Overflow; });
+                    delegate { return searchWatch.Elapsed.TotalMilliseconds < PlanningBudgetMilliseconds && !physics.Overflow; });
                 searchMilliseconds = searchWatch.Elapsed.TotalMilliseconds;
                 nodeCount = search.Distances.Count;
                 if (physics.Overflow) { unavailable = "physics_query_overflow"; return; }

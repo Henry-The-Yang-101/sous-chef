@@ -564,6 +564,10 @@ pass; another single-request live climb is required before declaring completion.
 
 ### 2026-11-02: closed-loop headless stair validation
 
+Historical record: this approximate simulator was subsequently removed in favor
+of the [native headless simulator](native-simulator.md). The results below describe
+the earlier implementation, not a currently available test suite.
+
 At the user's request, further game restarts and live attempts stopped. The last
 live build (`be20fde`) still stopped on simultaneous tread/wedge contact; none of
 its attempted climbs is counted as successful autonomous validation.
@@ -638,3 +642,16 @@ processes, command acknowledgements/rejection, PID reuse, startup cleanup,
 pending-command preservation, and single-request navigation after discovery.
 The final native process was shut down through the simulator CLI and no
 Overcooked2 process remained. No normal-game reinstall or push was performed.
+
+### 2026-11-02: remove the approximate simulator
+
+Removed the CPU simulator script, project, motion/contact implementation, its
+exclusive full-route fixture, and its invocation from `scripts/check.py`. Removed
+the simulator-only planning-budget override and GroundCast stub mode; the native
+production planning budget remains 12 ms. Shared geometry fixtures and navigation
+unit tests remain. Active documentation now points to the native simulator.
+Historical validation records above are preserved as evidence of earlier results.
+
+After removal, `python3 scripts/check.py` passes the real plugin build, 151-type
+API audit, 815 core assertions, 104 navigation checks, 181 action checks, and 74
+Python tests. No game process was launched for this cleanup.

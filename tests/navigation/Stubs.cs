@@ -176,9 +176,8 @@ namespace UnityEngine
 #pragma warning disable CS0414 // Reflection fields must match the installed game.
 public class GroundCast : UnityEngine.MonoBehaviour {
     private UnityEngine.LayerMask m_landscapeMask = (1 << 9) | (1 << 28);
-    public bool Simulated;
-    public UnityEngine.Vector3 Point, Normal = UnityEngine.Vector3.up;
-    public UnityEngine.Vector3 GetGroundPoint() { return Simulated ? Point : transform.position; }
+    public UnityEngine.Vector3 Normal = UnityEngine.Vector3.up;
+    public UnityEngine.Vector3 GetGroundPoint() { return transform.position; }
     public UnityEngine.Vector3 GetGroundNormal() { return Normal; }
     public float Distance;
     public float GetGroundDistance() { return Distance; }

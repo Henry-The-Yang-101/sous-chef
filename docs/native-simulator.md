@@ -5,8 +5,9 @@ PhysX simulation, chef controllers, asset bundles, kitchen scripts, and local
 server/client lifecycle. It is a silent background process with no rendering or
 window. It does not require menu input or random theme selection.
 
-The older `scripts/simulate_navigation.py` is a separate, approximate CPU model.
-It is useful for fast regressions but cannot replace this native runtime.
+The former approximate CPU simulator has been removed. Navigation unit tests
+remain for isolated regressions; this native runtime is the simulator for
+complete level traversal.
 
 ## Start and repeat
 
