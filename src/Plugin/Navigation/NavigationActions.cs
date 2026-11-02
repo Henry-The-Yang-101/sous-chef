@@ -97,7 +97,7 @@ namespace SousChef.Plugin.Navigation
             chef = player;
             var chosen = new Destination { Id = "throw_stance", Object = aim, Kind = "throw_stance", IsPoint = true, Approach = position };
             if (!Action.Start(owner, chosen.Id, true)) return "action_in_progress";
-            settlingSince = -1; target = chosen; started = lastProgress = Time.realtimeSinceStartup; progressPosition = player.transform.position;
+            settlingSince = -1; teleportsCompleted = 0; target = chosen; started = lastProgress = Time.realtimeSinceStartup; progressPosition = player.transform.position;
             arrivalDetails = null; arrival.Reset(); facingSince = -1; haveMotion = motionSampleValid = false;
             Refresh(player, true);
             if (!ApplyPlan()) return Action.Reason;
@@ -139,7 +139,7 @@ namespace SousChef.Plugin.Navigation
         }
         public void Reset(string reason)
         {
-            Stop(reason); lastDestination = arrivalDetails = null; identities.Clear(); available.Clear(); physics.Reset(); search = null; chef = null; lastPlan = -1; unavailable = reason;
+            Stop(reason); teleportsCompleted = 0; lastDestination = arrivalDetails = null; identities.Clear(); available.Clear(); physics.Reset(); search = null; chef = null; lastPlan = -1; unavailable = reason;
         }
         public void Stop(string reason)
         {
@@ -247,7 +247,7 @@ namespace SousChef.Plugin.Navigation
                     from = portal.Exit; surfaceHistory = 0; i++;
                     if (++i < route.Count)
                     {
-                        if (!physics.PortalSegment(from, route[i], portal.ExitTrigger)) return false;
+                        if (!physics.PortalSegment(from, route[i], portal.ExitTrigger, ref surfaceHistory)) return false;
                         from = route[i];
                     }
                     continue;

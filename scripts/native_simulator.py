@@ -116,6 +116,48 @@ def start(args):
         raise
 
 
+def navigate_leg(client, target, args, trace):
+    result = {'success': False}
+    catalog_deadline = time.monotonic() + args.timeout
+    while True:
+        catalog = client.available_actions()
+        if catalog.get('complete'):
+            break
+        if time.monotonic() >= catalog_deadline:
+            raise RuntimeError('Action discovery did not finish: ' + str(catalog.get('reason')))
+        time.sleep(.1)
+    actions = catalog['actions']
+    schema = next((a for a in actions if a['name'] == 'navigate_to'), None)
+    options = [] if schema is None else schema['parameters']['destination_id']['options']
+    matches = [o for o in options if target.casefold() in
+               (str(o.get(k) or '').casefold() for k in ('label', 'foodName'))]
+    if len(matches) != 1:
+        raise RuntimeError(f'Expected one reachable target matching {target!r}, found {len(matches)}')
+    result['target'] = matches[0]
+    started = time.monotonic()
+    client.navigate_to(matches[0]['id'])
+    while time.monotonic() - started < args.timeout:
+        status = client.status()
+        trace.write(json.dumps(status) + '\n')
+        trace.flush()
+        nav = status['navigation']
+        if nav['state'] != 'navigating':
+            result['success'] = nav['reason'] == 'arrived'
+            result['reason'] = nav['reason']
+            result['arrival'] = nav.get('arrival')
+            result['teleportsCompleted'] = nav.get('teleportsCompleted', 0)
+            if result['success'] and result['teleportsCompleted'] < getattr(args, 'min_teleports', 0):
+                result['success'] = False
+                result['reason'] = 'insufficient_teleports'
+            break
+        time.sleep(.1)
+    else:
+        client.stop()
+        result['reason'] = 'test_timeout'
+    result['seconds'] = time.monotonic() - started
+    return result
+
+
 def navigate(args):
     # Import the same client used by the harness; do not steer or retry for it.
     sys.path.insert(0, str(ROOT))
@@ -136,44 +178,17 @@ def navigate(args):
             try:
                 if client.hello.get('sessionId') != initial.get('sessionId'):
                     raise RuntimeError('Action endpoint belongs to a different game session')
-                catalog_deadline = time.monotonic() + args.timeout
-                while True:
-                    catalog = client.available_actions()
-                    if catalog.get('complete'):
+                result['legs'] = []
+                for target in [args.target] + getattr(args, 'then', []):
+                    started_action = True
+                    leg = navigate_leg(client, target, args, trace)
+                    result['legs'].append(leg)
+                    result.update(leg)
+                    if not leg['success']:
                         break
-                    if time.monotonic() >= catalog_deadline:
-                        raise RuntimeError('Action discovery did not finish: ' + str(catalog.get('reason')))
-                    time.sleep(.1)
-                actions = catalog['actions']
-                options = next(a for a in actions if a['name'] == 'navigate_to')['parameters']['destination_id']['options']
-                matches = [o for o in options if args.target.casefold() in
-                           (str(o.get(k) or '').casefold() for k in ('label', 'foodName'))]
-                if len(matches) != 1:
-                    raise RuntimeError(f'Expected one reachable target matching {args.target!r}, found {len(matches)}')
-                result['target'] = matches[0]
-                started = time.monotonic()
-                client.navigate_to(matches[0]['id'])
-                started_action = True
-                while time.monotonic() - started < args.timeout:
-                    status = client.status()
-                    trace.write(json.dumps(status) + '\n')
-                    trace.flush()
-                    nav = status['navigation']
-                    if nav['state'] != 'navigating':
-                        result['success'] = nav['reason'] == 'arrived'
-                        result['reason'] = nav['reason']
-                        result['arrival'] = nav.get('arrival')
-                        result['teleportsCompleted'] = nav.get('teleportsCompleted', 0)
-                        if result['success'] and result['teleportsCompleted'] < getattr(args, 'min_teleports', 0):
-                            result['success'] = False
-                            result['reason'] = 'insufficient_teleports'
-                        break
-                    time.sleep(.1)
-                else:
-                    client.stop()
-                    result['reason'] = 'test_timeout'
-                result['seconds'] = time.monotonic() - started
+                result['totalTeleportsCompleted'] = sum(leg.get('teleportsCompleted', 0) for leg in result['legs'])
             except (RuntimeError, ControlError, OSError) as exc:
+                result['success'] = False
                 if started_action:
                     try:
                         client.stop()
@@ -201,11 +216,13 @@ def main():
     load.add_argument('level')
     run = sub.add_parser('navigate')
     run.add_argument('target', help='Exact food name or target label (IDs change on reset)')
+    run.add_argument('--then', action='append', default=[], metavar='TARGET',
+                     help='Navigate to another target after arrival, without resetting (repeatable)')
     run.add_argument('--repeat', type=int, choices=range(1, 101), metavar='1..100', default=1)
     run.add_argument('--fps', type=int, choices=range(10, 241), metavar='10..240')
     run.add_argument('--trace-dir', type=Path)
     run.add_argument('--min-teleports', type=int, choices=range(0, 101), default=0,
-                     help='Require this many completed native portal transitions as well as arrival')
+                     help='Require this many completed native portal transitions on every leg as well as arrival')
     fps = sub.add_parser('fps')
     fps.add_argument('fps', type=int, choices=range(10, 241), metavar='10..240')
     for name in ('status', 'reset', 'levels', 'stop'):

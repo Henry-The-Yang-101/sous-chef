@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using SousChef.Core;
 using UnityEngine;
 
 namespace SousChef.Plugin.Navigation
@@ -10,6 +11,8 @@ namespace SousChef.Plugin.Navigation
     {
         public Teleportal Source;
         public ServerTeleportal Server;
+        public ServerTeleportalPlayerSender Sender;
+        public ServerTeleportal ExitServer;
         public TeleportalPlayerReceiver Receiver;
         public ServerTeleportalPlayerReceiver ServerReceiver;
         public Collider Trigger, ExitTrigger;
@@ -21,6 +24,7 @@ namespace SousChef.Plugin.Navigation
             get
             {
                 return Source != null && Source.isActiveAndEnabled && Server != null && Server.isActiveAndEnabled &&
+                    Sender != null && Sender.isActiveAndEnabled && ExitServer != null && ExitServer.isActiveAndEnabled &&
                     Trigger != null && Trigger.enabled && Trigger.isTrigger &&
                     Receiver != null && Receiver.isActiveAndEnabled && ServerReceiver != null && ServerReceiver.isActiveAndEnabled &&
                     Source.m_exitPortal == Receiver.gameObject && Receiver.m_attachPoint != null &&
@@ -55,6 +59,9 @@ namespace SousChef.Plugin.Navigation
     internal sealed partial class WalkPhysics
     {
         private readonly Dictionary<int, PortalLink> portals = new Dictionary<int, PortalLink>();
+        private sealed class PortalConnector { public bool Valid; public GroundSample[] Support; }
+        private readonly Dictionary<int, Dictionary<WalkCell, PortalConnector>> portalEntries = new Dictionary<int, Dictionary<WalkCell, PortalConnector>>();
+        private readonly Dictionary<int, Dictionary<WalkCell, PortalConnector>> portalExits = new Dictionary<int, Dictionary<WalkCell, PortalConnector>>();
         private Collider permittedPortalTrigger, exitPortal;
         public PortalLink Portal(int id) { PortalLink link; return portals.TryGetValue(id, out link) ? link : null; }
         public void LeavePortal(PortalLink link) { exitPortal = link.ExitTrigger; }
@@ -68,6 +75,9 @@ namespace SousChef.Plugin.Navigation
 
         private void RefreshPortals()
         {
+            // Connector geometry shares the walking cache's invalidation rules.
+            // Flow and native availability remain live, outside this cache.
+            if (Changed || changed.Count > 0) { portalEntries.Clear(); portalExits.Clear(); }
             var present = new HashSet<int>();
             for (int i = 0; i < nearbyCount; i++)
             {
@@ -83,14 +93,19 @@ namespace SousChef.Plugin.Navigation
                 int id = source.GetInstanceID(); present.Add(id);
                 PortalLink link;
                 if (!portals.TryGetValue(id, out link)) portals[id] = link = new PortalLink();
-                link.Source = source; link.Server = server; link.Trigger = trigger;
+                Vector3 oldEntry = link.Entry, oldExit = link.Exit;
+                Collider oldTrigger = link.Trigger, oldExitTrigger = link.ExitTrigger;
+                link.Source = source; link.Server = server; link.Sender = sender; link.Trigger = trigger;
+                link.ExitServer = source.m_exitPortal.GetComponent<ServerTeleportal>();
                 link.Receiver = receiver; link.ServerReceiver = serverReceiver;
                 link.ExitTrigger = source.m_exitPortal.GetComponent<Collider>();
                 link.Valid = PortalGeometry(link);
+                if (!oldEntry.Equals(link.Entry) || !oldExit.Equals(link.Exit) || oldTrigger != link.Trigger || oldExitTrigger != link.ExitTrigger)
+                { portalEntries.Remove(id); portalExits.Remove(id); }
             }
             var removed = new List<int>();
             foreach (var pair in portals) if (!present.Contains(pair.Key)) { pair.Value.Valid = false; removed.Add(pair.Key); }
-            foreach (int id in removed) portals.Remove(id);
+            foreach (int id in removed) { portals.Remove(id); portalEntries.Remove(id); portalExits.Remove(id); }
         }
 
         public bool PortalGeometry(PortalLink link)
@@ -100,7 +115,11 @@ namespace SousChef.Plugin.Navigation
             // The native activation cone points along the portal's local +X.
             Vector3 facing = link.Source.transform.right; facing.y = 0;
             if (facing.sqrMagnitude < .99f) return false;
-            Vector3 entry = link.Trigger.bounds.center + facing.normalized * .1f;
+            Vector3 extent = link.Trigger.bounds.extents;
+            float front = Mathf.Abs(facing.x) * extent.x + Mathf.Abs(facing.z) * extent.z;
+            // Native trigger contact happens at the front of the capsule. The
+            // trigger centre can sit behind the portal's solid frame/wall.
+            Vector3 entry = link.Trigger.bounds.center + facing.normalized * (front + nativeRadius - .12f);
             entry.y = link.Source.transform.position.y;
             Collider ground; Vector3 point;
             if (!PortalStand(entry, link.Trigger, out point, out ground)) return false;
@@ -128,49 +147,88 @@ namespace SousChef.Plugin.Navigation
             finally { permittedPortalTrigger = saved; }
         }
         public bool PortalSegment(Vector3 from, Vector3 to, Collider trigger, int history = 0)
+        { return PortalSegment(from, to, trigger, ref history); }
+        public bool PortalSegment(Vector3 from, Vector3 to, Collider trigger, ref int history)
         {
             Collider saved = permittedPortalTrigger; permittedPortalTrigger = trigger;
-            try { return Segment(from, to, Vector3.Distance(from, Position) < .02f ? ContactRadius : radius, true, null, null, history); }
+            int result = history;
+            try
+            {
+                bool clear = Segment(from, to, Vector3.Distance(from, Position) < .02f ? ContactRadius : radius, true, null, value => result = value, history);
+                history = result; return clear;
+            }
             finally { permittedPortalTrigger = saved; }
         }
         public bool PortalEntry(Vector3 from, PortalLink link, int history = 0)
+        {
+            return InPortalArc(from, link) && PortalSegment(from, link.Entry, link.Trigger, history);
+        }
+        private bool InPortalArc(Vector3 from, PortalLink link)
         {
             if (!link.Valid || !link.Connected || Vector3.Distance(from, link.Entry) > 1.6f) return false;
             Vector3 delta = from - link.Trigger.bounds.center; delta.y = 0;
             // Stay strictly inside the activation cone, including at first contact.
             if (Vector3.Dot(delta.normalized, link.Source.transform.right) <= Mathf.Cos(link.Source.m_teleportArc * Mathf.Deg2Rad) + .02f) return false;
-            return PortalSegment(from, link.Entry, link.Trigger, history);
+            return true;
         }
-        private IEnumerable<SousChef.Core.WalkEdge> WithPortals(SousChef.Core.WalkCell cell, IEnumerable<SousChef.Core.WalkEdge> walking)
+        private bool PortalConnectorClear(PortalLink link, WalkCell cell, bool entering, out int history)
+        {
+            var cache = entering ? portalEntries : portalExits;
+            Dictionary<WalkCell, PortalConnector> connectors;
+            if (!cache.TryGetValue(link.Id, out connectors)) cache[link.Id] = connectors = new Dictionary<WalkCell, PortalConnector>();
+            WalkCell key = GeometryCell(cell); PortalConnector connector;
+            Vector3 from = entering ? Point(cell) : link.Exit, to = entering ? link.Entry : Point(cell);
+            if (!connectors.TryGetValue(key, out connector))
+            {
+                var samples = new List<GroundSample>();
+                Collider saved = permittedPortalTrigger; permittedPortalTrigger = entering ? link.Trigger : link.ExitTrigger;
+                bool valid;
+                try { valid = Segment(from, to, radius, false, samples); }
+                finally { permittedPortalTrigger = saved; }
+                connectors[key] = connector = new PortalConnector { Valid = valid, Support = samples.ToArray() };
+            }
+            history = entering ? cell.SurfaceHistory : 0;
+            if (!connector.Valid) return false;
+            IMovingSurface current = null, previous = null;
+            if (history != 0) surfaceHistories.TryGetValue(history, out previous);
+            bool first = true;
+            foreach (GroundSample sample in connector.Support)
+            {
+                if (sample.Ground == null) return false;
+                if (first) { current = MovingSurface(sample.Ground); first = false; }
+                TrackSurface(sample.Ground, sample.Point, ref current, ref previous);
+                if (!CanWalkDirection(from, to, sample.Ground, sample.Point, previous)) return false;
+            }
+            history = SurfaceHistory(previous); return true;
+        }
+        private IEnumerable<WalkEdge> WithPortals(WalkCell cell, IEnumerable<WalkEdge> walking)
         {
             foreach (var edge in walking) yield return edge;
             Vector3 from = Point(cell);
             foreach (PortalLink link in portals.Values)
             {
-                if (!PortalEntry(from, link, cell.SurfaceHistory)) continue;
+                int history;
+                if (!InPortalArc(from, link) || !PortalConnectorClear(link, cell, true, out history)) continue;
                 // Teleport displacement adds no walking distance. Entry and exit
                 // connectors retain their full distances and fresh physics checks.
-                yield return new SousChef.Core.WalkEdge(new SousChef.Core.WalkCell(
+                yield return new WalkEdge(new WalkCell(
                     Mathf.RoundToInt(link.Exit.x / Spacing), Mathf.RoundToInt(link.Exit.y / HeightBand),
                     Mathf.RoundToInt(link.Exit.z / Spacing), 0, link.Id), Vector3.Distance(from, link.Entry));
             }
         }
-        private IEnumerable<SousChef.Core.WalkEdge> PortalDepartures(PortalLink link)
+        private IEnumerable<WalkEdge> PortalDepartures(PortalLink link)
         {
             if (!link.Valid || !link.Connected) yield break;
             int x = Mathf.RoundToInt(link.Exit.x / Spacing), y = Mathf.RoundToInt(link.Exit.y / HeightBand), z = Mathf.RoundToInt(link.Exit.z / Spacing);
             for (int dx = -3; dx <= 3; dx++) for (int dz = -3; dz <= 3; dz++)
             {
-                var key = new SousChef.Core.WalkCell(x + dx, y, z + dz); Probe probe = Sample(key);
+                var key = new WalkCell(x + dx, y, z + dz); Probe probe = Sample(key);
                 if (!probe.Valid || Vector3.Distance(probe.Point, link.Exit) > 1.6f) continue;
-                int history = 0; Collider saved = permittedPortalTrigger; permittedPortalTrigger = link.ExitTrigger;
-                bool clear;
-                try { clear = Segment(link.Exit, probe.Point, radius, true, null, value => history = value); }
-                finally { permittedPortalTrigger = saved; }
-                if (clear)
+                int history;
+                if (PortalConnectorClear(link, key, false, out history))
                 {
                     var resolved = Resolved(key, probe); resolved.SurfaceHistory = history;
-                    yield return new SousChef.Core.WalkEdge(resolved, Vector3.Distance(link.Exit, probe.Point));
+                    yield return new WalkEdge(resolved, Vector3.Distance(link.Exit, probe.Point));
                 }
             }
         }

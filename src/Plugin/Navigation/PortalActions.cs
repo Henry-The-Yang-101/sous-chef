@@ -44,6 +44,10 @@ namespace SousChef.Plugin.Navigation
                 { Stop("teleport_exit_mismatch"); return; }
                 physics.LeavePortal(activePortal); teleportsCompleted++;
                 Trace("teleport_complete", activePortal.Exit, Vector3.zero);
+                // Consume the entry and arrival together. If the fresh search
+                // hits its budget, retention must validate the remaining walk,
+                // not attempt to walk back across the completed teleport.
+                waypoint = Mathf.Min(route.Count - 1, waypoint + 2);
                 activePortal = null; lastPlan = -1; settlingSince = -1;
                 progressPosition = physics.Position; lastProgress = Time.realtimeSinceStartup;
                 haveMotion = motionSampleValid = false; arrival.Reset(); facingSince = -1;
@@ -56,6 +60,10 @@ namespace SousChef.Plugin.Navigation
             if (!activePortal.Ready(chef))
             {
                 portalPhase = "waiting_portal";
+                // Native recently-teleported suppression clears when the chef
+                // faces back into the portal, as well as after leaving its trigger.
+                PlayerControlsHelper.TurnTowardsDirection(chef.gameObject, activePortal.Entry - physics.Position,
+                    chef.Movement.TurnSpeed, Time.deltaTime);
                 Trace(portalPhase, activePortal.Entry, Vector3.zero);
                 move(Vector3.zero, commandMilliseconds); return;
             }

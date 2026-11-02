@@ -13,6 +13,10 @@ analytical floors and injectable collision queries. No game process, input
 connection or installed plugin is touched.
 
 Coverage includes non-Steppable ledges, native stair markers, continuous ramps,
+directed portal chains/cycles across decks, activation cones, receiver animation
+endpoints, disabled links, blocked landings and connectors, cached portal geometry
+with live flow, cooldown waits, native transport with disabled controls, bounded
+timeouts, wrong exits, and route retention after transport with an incomplete search;
 native-size spherical contact at measured wizard-stair wedge lips, steep ramps,
 step-component cache reconciliation, conveyor-corner history across graph edges,
 intermediate conveyor/wind samples, changing

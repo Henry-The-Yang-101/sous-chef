@@ -45,11 +45,12 @@ namespace SousChef.Plugin.Navigation
         private string failureReason;
         private Vector3 failurePoint;
         private Collider failureCollider;
+        private object failureSupport;
         public object Failure { get { return Json.Object("reason", failureReason, "point", Values.Vector(failurePoint),
             "collider", failureCollider == null ? null : failureCollider.gameObject.name,
-            "colliderId", failureCollider == null ? 0 : failureCollider.GetInstanceID()); } }
+            "colliderId", failureCollider == null ? 0 : failureCollider.GetInstanceID(), "support", failureSupport); } }
         private bool Fail(string reason, Vector3 point, Collider collider = null)
-        { failureReason = reason; failurePoint = point; failureCollider = collider; return false; }
+        { failureReason = reason; failurePoint = point; failureCollider = collider; failureSupport = null; return false; }
         public bool Overflow { get; private set; }
         public int Queries { get; private set; }
         public bool Changed { get; private set; }
@@ -67,7 +68,7 @@ namespace SousChef.Plugin.Navigation
 
         public void Reset()
         {
-            chef = null; probes.Clear(); edges.Clear(); stamps.Clear(); meshes.Clear(); dangers.Clear(); nativeSteps.Clear(); surfaces.Clear(); surfaceHistories.Clear(); properties.Clear(); grids.Clear(); ignoredChefColliders.Clear(); portals.Clear(); exitPortal = null;
+            chef = null; probes.Clear(); edges.Clear(); stamps.Clear(); meshes.Clear(); dangers.Clear(); nativeSteps.Clear(); surfaces.Clear(); surfaceHistories.Clear(); properties.Clear(); grids.Clear(); ignoredChefColliders.Clear(); portals.Clear(); portalEntries.Clear(); portalExits.Clear(); exitPortal = null;
         }
         public string Refresh(PlayerControls player)
         {
@@ -249,7 +250,8 @@ namespace SousChef.Plugin.Navigation
         private bool Blocks(Collider c)
         {
             if (c == null || !c.enabled || !c.gameObject.activeInHierarchy || Own(c)) return false;
-            if (c == permittedPortalTrigger && c.isTrigger) return false;
+            if (c == permittedPortalTrigger && c.isTrigger && !c.CompareTag("Hazard") &&
+                c.GetComponentInParent<RespawnCollider>() == null && c.GetComponentInParent<ServerFireHazard>() == null) return false;
             if (Dangerous(c)) return true;
             if (c.isTrigger) return false;
             return (collisionMask & (1 << c.gameObject.layer)) != 0;
@@ -481,7 +483,13 @@ namespace SousChef.Plugin.Navigation
                     if (!visit((previous + point) * .5f, depth + 1)) return false;
                     return visit(guess, depth + 1);
                 }
-                if (havePrevious && !SupportConnected(previousGround, centre)) return Fail("support_discontinuity", point, ground);
+                if (havePrevious && !SupportConnected(previousGround, centre))
+                {
+                    Fail("support_discontinuity", point, ground);
+                    if (TraceEnabled) failureSupport = Json.Object("from", Values.Vector(previousGround.point),
+                        "fromNormal", Values.Vector(previousGround.normal), "toNormal", Values.Vector(centre.normal));
+                    return false;
+                }
                 if (checkFlow)
                 {
                     if (!havePrevious && initialHistory != 0)

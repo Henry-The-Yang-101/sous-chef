@@ -39,6 +39,20 @@ in place. The command exits 2 if any attempt fails. Each attempt's native action
 trace and initial runtime state are written under `.local/native-player/runs-*`,
 with a `report.json`. Use `--trace-dir PATH` to choose an output directory.
 
+For teleporter validation, require confirmed native transitions so an alternative
+walking route cannot pass the test. `--then TARGET` adds a return leg in the same
+round; each leg uses one ordinary navigation request, with no retries. The minimum
+applies to every leg. Only the next attempt resets the kitchen.
+
+```sh
+python3 scripts/native_simulator.py load s_wizard_3_3
+python3 scripts/native_simulator.py navigate utensil_frying_pan_01 --then Meat --min-teleports 2 --repeat 3
+```
+
+Reports include each leg's target, arrival checks and `teleportsCompleted`, plus
+the attempt's total. An arrival with too few transitions fails as
+`insufficient_teleports`. A failed later leg fails the entire attempt.
+
 For timing-dependent failures:
 
 ```sh

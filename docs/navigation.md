@@ -69,8 +69,9 @@ sampling. It uses the chef's scaled capsule dimensions and native ground/layer
 masks. A native-radius sphere cast resolves the supported centre pose. Capsule overlaps and
 sweeps check clearance along edges. This accounts for rotating walls, moving
 parents, enabled/disabled collision, narrow passages and other physical objects.
-Triggers are not automatically solid walls; known fire, respawn and teleport
-regions are excluded. **Local player chefs are deliberately ignored as obstacles**,
+Triggers are not automatically solid walls; known fire and respawn regions are
+excluded. Portal triggers are excluded from ordinary walking and crossed only by
+explicit native transport edges. **Local player chefs are deliberately ignored as obstacles**,
 including their carried descendants; Player 2 can push past Player 1 using normal
 game physics. Pedestrians and other non-player objects retain their native solid
 colliders and are rechecked as they move. A fully jammed chef can still hit the
@@ -165,7 +166,44 @@ Player 2; walking cells stay within 58 units, with at most 16,000 discovered nod
 This covers the tested kitchens but is a real distance limit for unusually large
 levels. Very narrow or unusual geometry may
 be conservatively omitted. Height checks exclude drops/jumps and steep or abrupt
-unsupported transitions; teleporters and cannons are not walking shortcuts.
+unsupported transitions. Cannons remain unsupported; teleporters use separate
+directed transitions as described below.
+
+### Teleporters
+
+The graph reads each live `Teleportal.m_exitPortal` link, the native player sender
+and receiver, and the receiver's attach point and animation endpoint. It supports
+one-way links, chains, cycles and exits on different decks. Routes minimize
+walking distance: entry and exit connectors count toward `routeDistance`, while
+transport displacement does not. `routeTeleports` reports the number of portal
+transitions in a destination's selected route. This is not a shortest-time estimate.
+
+Entry must lie inside the native activation cone, on supported floor, near the
+front of the trigger. Its centre can be behind the portal's solid frame. Only that
+trigger is exempted from the entry connector's collision check; walls, other
+portals, fire and respawn hazards still block it. The native landing must be
+supported and clear, with a checked connection back to walking cells. Receivers
+that do not ground the chef, missing endpoints and disabled senders/receivers are
+conservatively omitted. Normal discovery radius and node limits still apply.
+
+Portal connector geometry is cached and invalidated by geometry and endpoint
+changes; environmental flow remains live. Execution checks the actual entry step
+again and uses ordinary walking input to enter. Native cooldowns, occupancy and
+per-player teleport predicates govern entry. A busy portal gets neutral input
+while waiting. Waiting and transport share a timeout derived from native delays
+and animations, bounded to 5–30 seconds. Disabled or broken links stop the action.
+
+During native transport, the action retains its lease with neutral commands.
+The temporary disabled chef/collider state is accepted only for an active portal
+transition with native teleport state. Pause, focus, ownership, respawn, menu and
+round checks remain in force. The bridge never calls the teleport method or
+writes the chef's transform. Completion requires native teleport state to finish
+and the chef to reach the linked receiver's landing. `teleportsCompleted` counts
+confirmed transitions. A fresh search continues from the actual exit. If its
+budget expires, the checked route tail can be retained without trying to walk
+across the completed teleport. Lookahead never skips a pending portal.
+Stop/disconnect cancels further navigation; an already-started native animation
+may finish.
 
 Floor conveyors and supported moving surfaces contribute native surface velocity;
 wind is evaluated using current volumes, filters and direction. Travelator corner
@@ -253,7 +291,8 @@ record and include `control.navigation`. `actions` additionally returns
 raw label, kind, Unity instance ID and position. It survives completion/cancellation
 until another action or round reset, so an interruption cannot look like arrival
 at a different object. `destinationId` remains null when idle. While navigating,
-`phase` distinguishes `walking` from `aligning`; both are interrupted by Stop.
+`phase` distinguishes `walking`, `aligning`, `settling_ground`, `entering_portal`,
+`waiting_portal` and `teleporting`; all are interrupted by Stop.
 
 Read-only catalogues can be queried while the game is unfocused, provided the
 other native round, pause, menu and player gates pass. Movement still requires

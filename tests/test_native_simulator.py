@@ -91,6 +91,57 @@ class NativeSimulatorTests(unittest.TestCase):
             self.assertEqual(report['passed'], 0)
             self.assertEqual(report['results'][0]['reason'], 'no_safe_start')
 
+    def test_portal_validation_rejects_walking_only_arrival(self):
+        for completed, passed in ((0, 0), (1, 0), (2, 1)):
+            with self.subTest(completed=completed), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                args = SimpleNamespace(runtime=root, trace_dir=root / 'traces', fps=None,
+                                       repeat=1, target='Pan', timeout=2, min_teleports=2)
+                catalogue = {'complete': True, 'actions': [{'name': 'navigate_to', 'parameters': {
+                    'destination_id': {'options': [{'id': 'd42', 'label': 'Pan'}]}}}]}
+                with patch('clients.actions.ActionClient', autospec=True) as factory, \
+                     patch.object(sim, 'read_status', return_value={'generation': 1}), \
+                     patch.object(sim, 'wait_ready', return_value={'sessionId': 'sim'}), \
+                     patch.object(sim, 'command'), patch.object(sim.time, 'sleep'):
+                    client = factory.return_value.__enter__.return_value
+                    client.hello = {'sessionId': 'sim'}
+                    client.available_actions.return_value = catalogue
+                    client.status.return_value = {'navigation': {'state': 'idle', 'reason': 'arrived',
+                                                                 'teleportsCompleted': completed}}
+                    report = sim.navigate(args)
+                    client.navigate_to.assert_called_once_with('d42')
+                self.assertEqual(report['passed'], passed)
+                self.assertEqual(report['results'][0]['teleportsCompleted'], completed)
+                self.assertEqual(report['results'][0]['reason'], 'arrived' if passed else 'insufficient_teleports')
+
+    def test_return_leg_uses_same_round_and_failure_is_not_hidden(self):
+        for fail_second in (False, True):
+            with self.subTest(fail_second=fail_second), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                args = SimpleNamespace(runtime=root, trace_dir=root / 'traces', fps=None,
+                                       repeat=1, target='Pan', timeout=2, min_teleports=2,
+                                       **{'then': ['Meat']})
+                def catalogue(label, ident):
+                    return {'complete': True, 'actions': [{'name': 'navigate_to', 'parameters': {
+                        'destination_id': {'options': [{'id': ident, 'label': label}]}}}]}
+                with patch('clients.actions.ActionClient', autospec=True) as factory, \
+                     patch.object(sim, 'read_status', return_value={'generation': 1}), \
+                     patch.object(sim, 'wait_ready', return_value={'sessionId': 'sim'}), \
+                     patch.object(sim, 'command') as command, patch.object(sim.time, 'sleep'):
+                    client = factory.return_value.__enter__.return_value
+                    client.hello = {'sessionId': 'sim'}
+                    client.available_actions.side_effect = [catalogue('Pan', 'd1'),
+                        RuntimeError('round ended') if fail_second else catalogue('Meat', 'd2')]
+                    client.status.return_value = {'navigation': {'state': 'idle', 'reason': 'arrived',
+                                                                 'teleportsCompleted': 2}}
+                    report = sim.navigate(args)
+                    command.assert_called_once_with(root, 'reset')
+                    self.assertEqual(client.navigate_to.call_count, 1 if fail_second else 2)
+                self.assertEqual(report['passed'], 0 if fail_second else 1)
+                self.assertEqual(len(report['results'][0]['legs']), 1 if fail_second else 2)
+                if not fail_second:
+                    self.assertEqual(report['results'][0]['totalTeleportsCompleted'], 4)
+
     def test_failed_start_terminates_only_its_own_child(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

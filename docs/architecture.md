@@ -141,7 +141,9 @@ The executor reads live physics and native interaction selection independently
 of the observation streams. It follows and rechecks the route inside Unity's
 update loop, converting world directions to P2's native logical axes. The same
 exclusive input lease handles disconnects and timeouts. No external steering
-loop, dash, object teleport or model call participates in navigation. Only plain
+loop, dash, transform writes or model call participates in navigation. Directed
+portal edges use the game's own trigger and animation lifecycle, with neutral
+input during transport and checked walking on either side. Only plain
 command data and JSON replies cross the control server's worker boundary.
 
 `InteractionActions` composes child navigation with first-layer button actions,

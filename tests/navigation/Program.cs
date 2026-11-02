@@ -437,6 +437,23 @@ internal static class Program
         WalkCell far = search.Settled.First(c=>c.Portal==0 && c.X==30 && c.Z==0);
         Check(search.Complete && search.Route(far).Count(c=>c.Portal!=0)==1,"Dijkstra crosses a disconnected island with an explicit portal edge");
         Check(search.Distances[far]<4,"transport displacement is not charged as walking distance");
+        var portalStart=new WalkCell(4,0,0);
+        Check(physics.Neighbours(portalStart).Any(e=>e.Cell.Portal==a.GetInstanceID()),"portal connector is cached after a valid first search");
+        int queries=physics.Queries;
+        Check(physics.Neighbours(portalStart).Any(e=>e.Cell.Portal==a.GetInstanceID()) && physics.Queries==queries,
+            "warm portal expansion reuses geometry instead of exhausting the planning budget");
+        var obstacle=new GameObject("entry obstruction"); obstacle.transform.position=new Vector3(.85f,0,0);
+        var obstruction=obstacle.Add(new BoxCollider {center=new Vector3(0,.5f,0),size=new Vector3(.1f,1,.5f)}); w.Colliders.Add(obstruction);
+        physics.Refresh(w.Chef);
+        Check(physics.Portal(a.GetInstanceID()).Valid && !physics.Neighbours(portalStart).Any(e=>e.Cell.Portal!=0),
+            "new obstruction invalidates a cached entry without blocking the portal endpoint");
+        obstruction.enabled=false; physics.Refresh(w.Chef);
+        Check(physics.Neighbours(portalStart).Any(e=>e.Cell.Portal!=0),"removed obstruction restores cached entry connectivity");
+        var conveyor=w.Chef.GroundCollider.gameObject.Add(new Belt {Velocity=new Vector3(5,0,0)});
+        Time.realtimeSinceStartup+=.21f; physics.Refresh(w.Chef);
+        Check(!physics.Neighbours(portalStart).Any(e=>e.Cell.Portal!=0),"cached portal connector still rejects live opposing flow");
+        conveyor.Velocity=Vector3.zero; physics.Refresh(w.Chef);
+        Check(physics.Neighbours(portalStart).Any(e=>e.Cell.Portal!=0),"changed flow restores cached portal connector without a geometry edit");
         var virtualCell = search.Route(far).First(c=>c.Portal!=0);
         Check(!virtualCell.Equals(new WalkCell(virtualCell.X,virtualCell.Y,virtualCell.Z)),"portal arrival and ordinary lattice nodes have distinct identity");
         w.Chef.transform.position = new Vector3(12,0,0); physics.Refresh(w.Chef);
@@ -446,10 +463,19 @@ internal static class Program
         b.GetComponent<ServerTeleportalPlayerReceiver>().enabled = false; physics.Refresh(w.Chef);
         Check(!physics.Portal(a.GetInstanceID()).Valid,"disabled receiver invalidates link");
         b.GetComponent<ServerTeleportalPlayerReceiver>().enabled = true;
+        a.gameObject.tag="Hazard"; physics.Refresh(w.Chef);
+        Check(!physics.Portal(a.GetInstanceID()).Valid,"selected trigger exemption never masks a separate hazard");
+        a.gameObject.tag="Untagged"; physics.Refresh(w.Chef);
         var wall = new GameObject("exit wall"); wall.transform.position = new Vector3(10.9f,0,0);
         var block = wall.Add(new BoxCollider {center=new Vector3(0,.5f,0),size=new Vector3(.5f,1,.5f)}); w.Colliders.Add(block);
         physics.Refresh(w.Chef); Check(!physics.Portal(a.GetInstanceID()).Valid,"blocked native landing removes portal from graph");
         block.enabled=false; physics.Refresh(w.Chef); Check(physics.Portal(a.GetInstanceID()).Valid,"clearing exit restores portal without restarting physics");
+        w.AddFloor((x,z) => x>19 && x<24 && Math.Abs(z)<2 ? 2 : (float?)null);
+        var third = AddPortal(w,new Vector3(20,2,0)); b.m_exitPortal=third.gameObject; third.m_exitPortal=a.gameObject;
+        physics.Refresh(w.Chef); search=new WalkSearch(physics.Starts(),physics.Neighbours,16000,()=>true);
+        var upper=search.Settled.First(c=>c.Portal==0 && c.X==55 && c.Y==10 && c.Z==0);
+        Check(search.Complete && search.Route(upper).Count(c=>c.Portal!=0)==2,"multi-hop routes cross different heights and terminate despite a portal cycle");
+        b.m_exitPortal=null; third.m_exitPortal=null;
         a.m_exitPortal=null; physics.Refresh(w.Chef); Check(physics.Portal(a.GetInstanceID())==null,"unlinking portal removes cached transport edge");
 
         w = PortalWorld(out a,out b);
@@ -472,6 +498,11 @@ internal static class Program
         w.Chef.transform.position=new Vector3(10.9f,0,0);
         Time.realtimeSinceStartup+=.02f; navigation.Tick(w.Chef);
         Check((int)((Json.Record)navigation.Describe())["teleportsCompleted"]==1,"linked native arrival records exactly one completed transport");
+        var flags=System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic;
+        ((System.Collections.IDictionary)typeof(NavigationActions).GetField("available",flags).GetValue(navigation)).Clear();
+        typeof(NavigationActions).GetField("unavailable",flags).SetValue(navigation,"planning_in_progress");
+        Check((bool)typeof(NavigationActions).GetMethod("ApplyPlan",flags).Invoke(navigation,null),
+            "budget exhaustion after native arrival retains the checked tail instead of walking back across the portal");
         Time.realtimeSinceStartup+=.02f; navigation.Tick(w.Chef);
         Check(navigation.Action.State=="navigating" && (string)((Json.Record)navigation.Describe())["phase"]!="teleporting","walking resumes from actual exit without another request");
         navigation.Stop("stopped"); Check(!navigation.NativeTeleportInProgress(w.Chef),"stop clears portal control exception");
@@ -481,6 +512,21 @@ internal static class Program
         Time.realtimeSinceStartup+=.02f; navigation.Tick(w.Chef);
         Time.realtimeSinceStartup+=8; navigation.Tick(w.Chef);
         Check(navigation.Action.Reason=="teleport_timeout","permanently busy portal ends within a bounded timeout");
+
+        w=PortalWorld(out a,out b); station=w.AddStation(); station.transform.position=new Vector3(12,0,0);
+        navigation=w.Navigate(station); Time.realtimeSinceStartup+=.02f; navigation.Tick(w.Chef);
+        w.Chef.GetComponent<ServerTeleportablePlayer>().Travelling=true;
+        Time.realtimeSinceStartup+=.02f; navigation.Tick(w.Chef);
+        w.Chef.GetComponent<ServerTeleportablePlayer>().Travelling=false;
+        Time.realtimeSinceStartup+=.02f; navigation.Tick(w.Chef);
+        Check(navigation.Action.Reason=="teleport_exit_mismatch" && (int)((Json.Record)navigation.Describe())["teleportsCompleted"]==0,
+            "native flag alone cannot establish arrival at the linked exit");
+
+        w=PortalWorld(out a,out b); station=w.AddStation(); station.transform.position=new Vector3(12,0,0);
+        navigation=w.Navigate(station); Time.realtimeSinceStartup+=.02f; navigation.Tick(w.Chef);
+        a.GetComponent<ServerTeleportalPlayerSender>().enabled=false;
+        Time.realtimeSinceStartup+=.02f; navigation.Tick(w.Chef);
+        Check(navigation.Action.Reason=="teleport_unavailable","disabling sender interrupts an active portal entry");
     }
     private static void Main()
     {
