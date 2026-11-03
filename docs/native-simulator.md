@@ -170,6 +170,41 @@ The runner stores catalogues, control traces, fixture timing, snapshots and a
 summary report, including the tested plugin hash. Select cases with repeatable
 `--case NAME` flags; the case names are in `scripts/job_recovery_audit.py`.
 
+Recovery testing also exposed two timing issues: idle 3 ms slices (and, under
+load, ordinary 12 ms slices) could repeatedly stop short of a delivery goal in a
+portal kitchen, where search continuity is deliberately disabled. Recovery now
+allows a bounded 25 ms slice while input is neutral. Its 100 ms retry cadence also
+needs a final fresh check at grace expiry: otherwise a 450 ms outage can return
+between the last periodic retry and the 500 ms deadline and still be cancelled.
+Unit regressions cover that boundary for both missing routes and inactive targets,
+and retain one continuous window through parent/child startup transitions.
+
+Final verification on **2026-11-03**, source `1554754`, passed **12/12 native
+checks** in story 3-2 (`s_wizard_5_5`):
+
+| Requested FPS | Exact item deliveries | Persistent outages blocked with cargo retained | Immediate stop with cargo retained | Checks passed |
+| --- | --- | --- | --- | --- |
+| 60 | 5 | 2 | 1 | 8/8 |
+| 20 | 3 | 1 | 0 | 4/4 |
+
+Every delivery had one completed item, the original request ID, ownership through
+execution, and the exact cargo in the intended authoritative station. The explicit
+stop completed in 22 ms. The full check also passed 2,840 core/assembly assertions,
+318 navigation checks, 332 action checks and 109 Python tests. The simulator was
+stopped after verification; the normal installed game plugin was not replaced.
+
+Local evidence: `.local/job-recovery-final-1554754/report.json` and its per-case
+catalogues, traces, fixture timings and native snapshots. The tested runtime and
+current build artifact both have DLL SHA-256
+`e3d74eacd12297b4763d881429540d4d3ae5a6c720508b6f7f721ab5883dfc16`.
+
+An initial baseline delivery to the counter at `[15.6, 0, -1.2]` stopped with
+`no_progress`, without any injected outage or recovery. P1 was stationary near
+its approach at `[15.4, 0, -2.2]`; P2 stopped near `[16.39, 0, -3.19]` while
+holding cheese. That separate stall was not resolved by this change. The matrix
+uses the counter at `[22.8, 0, -2.4]` to isolate interruption recovery. Evidence
+for the first route is in `.local/job-recovery-results/baseline/`.
+
 ## Isolation and implementation
 
 The simulator has its own BepInEx core/config/plugin copy and save directory under
