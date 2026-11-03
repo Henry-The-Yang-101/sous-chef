@@ -14,6 +14,12 @@ namespace SousChef.Plugin.Actions
         public bool Active { get { return since >= 0; } }
         public void Reset() { Clear(); Count = 0; }
         public void Clear() { since = -1; reason = null; }
+        public void ContinueFrom(ActionRecovery previous)
+        {
+            if (!previous.Active || (Active && since <= previous.since)) return;
+            since = previous.since;
+            if (reason == null) reason = previous.reason;
+        }
         public bool Wait(string failure)
         {
             if (!Transient(failure)) return false;

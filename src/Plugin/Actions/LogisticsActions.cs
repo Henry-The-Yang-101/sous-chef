@@ -179,7 +179,7 @@ namespace SousChef.Plugin.Actions
         private string ChildStarted(string error)
         {
             pendingStart = error != null; spawnedChild = error == null;
-            if (error == null) { recovery.Clear(); return null; }
+            if (error == null) { child.ContinueRecovery(recovery); recovery.Clear(); return null; }
             input(0);
             if (recovery.Wait(error)) return null;
             Finish("blocked", error); return error;

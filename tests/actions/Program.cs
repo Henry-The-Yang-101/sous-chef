@@ -482,6 +482,17 @@ internal static class Program
         w.Target.GetComponent<Placement>().Accepts=_=>true;w.Tick();w.Target.GetComponent<ServerAttachStation>().Item=item;w.Hold(null);w.Verify();
         Check(w.Skills.Run.State=="succeeded","native placement recovery presses once after revalidation");
 
+        w=new World();item=w.Ingredient("tomato");w.Hold(item);w.Start("place_at");w.Arrive();w.Tick(.16f);
+        int presses=w.Inputs.Count(i=>i==1);w.Target.activeInHierarchy=false;w.Tick();w.Tick(.2f);w.Target.activeInHierarchy=true;
+        w.Target.GetComponent<ServerAttachStation>().Item=item;w.Hold(null);w.Verify();
+        Check(w.Skills.Run.State=="succeeded" && w.Inputs.Count(i=>i==1)==presses,"target loss during verification never repeats an already issued placement press");
+
+        w=new World();destination=w.Delivery();item=w.Ingredient("Tomato_Raw");w.Target.GetComponent<ServerAttachStation>().Item=item;
+        w.Logistics.Start(w.Chef,1,new ControlCommand {Operation="fetch_ingredient",Selector="tomato",Destination=w.IdOf(destination)});w.Arrive();
+        destination.activeInHierarchy=false;w.Hold(item);w.Target.GetComponent<ServerAttachStation>().Item=null;w.Tick();w.Tick(.3f);
+        destination.activeInHierarchy=true;destination.GetComponent<BoxCollider>().enabled=false;w.Tick();w.Tick(.2f);
+        Check(w.Logistics.Run.State=="blocked" && w.Carrier.Item==item,"transitioning from a missing destination to a missing route shares the same 500 ms window");
+
         w=new World(t=>{t.Add(new WashingStation());t.Add(new ServerWashingStation {m_plateCount=2});});
         w.Start("work_at","one_plate_clean");w.Arrive();var nativeUse=w.Chef.CurrentInteractionObjects.m_interactable;
         w.Chef.CurrentInteractionObjects.m_interactable=null;w.Tick();w.Tick(.25f);

@@ -50,6 +50,7 @@ namespace SousChef.Plugin.Navigation
         private string observationError;
         private bool planning;
         private const double PlanningBudgetMilliseconds = 12;
+        private const double RecoveryBudgetMilliseconds = 25;
         private const double IncrementalBudgetMilliseconds = 3;
         private float settlingSince = -1;
         private bool followingSupport;
@@ -229,13 +230,16 @@ namespace SousChef.Plugin.Navigation
             return Json.Object("actions", actions, "navigation", Describe(), "destinations", destinations,
                 "complete", unavailable == null && search != null && search.Complete, "reason", unavailable);
         }
-        public string Start(PlayerControls player, int owner, string destination, bool incremental = true)
+        public string Start(PlayerControls player, int owner, string destination, bool recovering = false)
         {
             if (Action.State != "idle") return "action_in_progress";
             // Revalidate and reuse the idle tree when its exact continuity proof
             // still holds. Restarting here can lose a distant conveyor route
             // solely because one active search slice cannot rebuild the loop.
-            Refresh(player, true, false, incremental);
+            // Recovery runs with neutral input and may need a fresh graph after
+            // a target/geometry outage. Portal kitchens cannot reuse a frontier;
+            // a small idle slice can starve the same distant goal indefinitely.
+            Refresh(player, true, false, !recovering, recovering ? RecoveryBudgetMilliseconds : PlanningBudgetMilliseconds);
             Destination chosen;
             if (!available.TryGetValue(destination, out chosen)) return unavailable ?? "destination_unavailable";
             if (!Action.Start(owner, destination, true)) return "action_in_progress";
@@ -661,7 +665,7 @@ namespace SousChef.Plugin.Navigation
             foreach (int key in removed) identities.Remove(key);
             return new List<Destination>(found.Values);
         }
-        private void Refresh(PlayerControls player, bool force, bool alreadyRefreshed = false, bool incremental = false)
+        private void Refresh(PlayerControls player, bool force, bool alreadyRefreshed = false, bool incremental = false, double activeBudgetMilliseconds = PlanningBudgetMilliseconds)
         {
             if (planning) return;
             if (!force && Time.realtimeSinceStartup - lastPlan < .1f) return;
@@ -686,7 +690,7 @@ namespace SousChef.Plugin.Navigation
                 startCount = starts == null ? savedStartCount : starts.Count;
                 prepareMilliseconds = watch.Elapsed.TotalMilliseconds;
                 var searchWatch = Stopwatch.StartNew();
-                double budget = incremental && (searchReused || !hadIncremental) ? IncrementalBudgetMilliseconds : PlanningBudgetMilliseconds;
+                double budget = incremental && (searchReused || !hadIncremental) ? IncrementalBudgetMilliseconds : activeBudgetMilliseconds;
                 Func<bool> hasBudget = delegate { return searchWatch.Elapsed.TotalMilliseconds < budget && !physics.Overflow; };
                 WorkerHost worker = WorkerHost.Current;
                 bool workerReady = worker != null && worker.Ready;

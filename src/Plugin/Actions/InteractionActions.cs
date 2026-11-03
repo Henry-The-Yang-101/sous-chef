@@ -48,6 +48,8 @@ namespace SousChef.Plugin.Actions
         }
         public static bool Handles(string operation)
         { return Array.IndexOf(ActionRun.Names, operation) >= 0 && operation != "navigate_to" && operation != "stop"; }
+        public void ContinueRecovery(ActionRecovery previous)
+        { if (Run.Phase == "recovering_navigation") recovery.ContinueFrom(previous); }
         public static string[] Offered(PlayerControls chef, GameObject go)
         {
             var options = new List<string> { "wait_until" };
@@ -239,9 +241,9 @@ namespace SousChef.Plugin.Actions
                     if (Time.realtimeSinceStartup < nextRecoveryAttempt) return;
                     nextRecoveryAttempt = Time.realtimeSinceStartup + .1f;
                     // Recovery has no usable route to retain. Give rebuilding
-                    // the normal active planning budget, rather than an idle
+                    // a bounded recovery planning budget, rather than an idle
                     // catalogue slice that may repeatedly stop short of the goal.
-                    string error = throwPlan == null ? navigation.Start(chef, Run.Owner, command.Destination, false) :
+                    string error = throwPlan == null ? navigation.Start(chef, Run.Owner, command.Destination, true) :
                         navigation.StartPosition(chef, Run.Owner, target, throwPlan.Stance, true);
                     if (error != null) { RecoverNavigation(error); return; }
                     Run.Advance("navigating"); return;
