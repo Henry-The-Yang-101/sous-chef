@@ -470,6 +470,12 @@ internal static class Program
         w.Arrive();w.Target.GetComponent<ServerAttachStation>().Item=item;w.Hold(null);w.Verify();
         Check(w.Skills.Run.State=="succeeded","first-layer placement also recovers transient route loss");
 
+        w=new World();item=w.Ingredient("tomato");w.Hold(item);w.Start("place_at");w.Target.GetComponent<BoxCollider>().enabled=false;
+        w.Navigation.Stop("destination_unreachable");w.Tick();w.Tick(.45f);w.Target.GetComponent<BoxCollider>().enabled=true;w.Tick(.06f);
+        Check(w.Skills.Run.Running && w.Skills.Run.Phase=="navigating","expiry performs a fresh route check even when the last periodic poll missed its restoration");
+        w.Arrive();w.Target.GetComponent<ServerAttachStation>().Item=item;w.Hold(null);w.Verify();
+        Check(w.Skills.Run.State=="succeeded","last-chance revalidation completes the original delivery without extending the overall deadline");
+
         w=new World();item=w.Ingredient("tomato");w.Hold(item);w.Start("place_at");w.Navigation.Stop("destination_unreachable");w.Tick();w.Hold(w.Ingredient("replacement"));w.Tick();
         Check(w.Skills.Run.Reason=="held_item_changed" && w.Navigation.Action.State=="idle","navigation recovery validates the original cargo before moving again");
 

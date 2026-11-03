@@ -237,8 +237,11 @@ namespace SousChef.Plugin.Actions
                     input(0);
                     if (held != null && !System.Object.ReferenceEquals(ActionObservations.Held(chef), held))
                     { Finish("blocked", "held_item_changed"); return; }
-                    if (!recovery.Wait(recoveryReason)) { Finish("blocked", recoveryReason); return; }
-                    if (Time.realtimeSinceStartup < nextRecoveryAttempt) return;
+                    bool withinGrace = recovery.Wait(recoveryReason);
+                    // Recheck once at expiry even if the next periodic retry is
+                    // later. A route restored near 500 ms must not lose solely
+                    // because the last poll happened just before it returned.
+                    if (withinGrace && Time.realtimeSinceStartup < nextRecoveryAttempt) return;
                     nextRecoveryAttempt = Time.realtimeSinceStartup + .1f;
                     // Recovery has no usable route to retain. Give rebuilding
                     // a bounded recovery planning budget, rather than an idle

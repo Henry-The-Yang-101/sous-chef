@@ -90,14 +90,15 @@ Accepted jobs and interaction actions allow **500 ms of continuous interruption*
 for a temporarily missing target, unavailable walking route, or native
 pickup/placement/use readiness. This includes the transition after a successful
 pickup: delivery can wait for its original destination to return. Input is neutral
-while waiting; navigation retries at most once per 100 ms using fresh route checks.
+while waiting; navigation retries once per 100 ms, plus a final check at grace
+expiry, using fresh route checks with a bounded 25 ms recovery planning budget.
 Recovery retains the request, ownership lease, exact cargo and target identities,
 and original deadlines. Changing transient failure reasons does not restart the
 grace period. A persistent interruption blocks the job with cargo retained.
 
 The executor revalidates contents before interaction and never repeats a pickup,
 placement or toggle that has already been pressed. Changed cargo, source contents
-or container identities still block immediately, as do observation failures and
+or container identities remain terminal errors, as do observation failures and
 expired action watchdogs. Explicit stop/release, disconnect, focus loss, pause,
 respawn, reassignment and round changes still cancel immediately.
 Interaction receipts include `recovery` (`reason`, `elapsedSeconds`,
