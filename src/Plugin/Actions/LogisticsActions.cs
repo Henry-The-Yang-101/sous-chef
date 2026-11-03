@@ -25,6 +25,8 @@ namespace SousChef.Plugin.Actions
         private int delivered, batchLimit;
         private bool supply;
         private bool spawnedChild;
+        private bool pendingStart;
+        private readonly ActionRecovery recovery = new ActionRecovery();
         private readonly Queue<GameObject> plates = new Queue<GameObject>();
         public LogisticsActions(NavigationActions nav, InteractionActions primitive, Action<int> buttons, Action finished)
         { navigation = nav; child = primitive; input = buttons; release = finished; Inventory = new LogisticsInventory(nav); }
@@ -35,14 +37,15 @@ namespace SousChef.Plugin.Actions
             return Run.Describe(Json.Object("sourceId", sourceId, "destinationId", destinationId,
                 "sourceInstanceId", originalSource == null ? null : (object)originalSource.GetInstanceID(),
                 "cargo", cargo == null ? null : Json.Object("objectInstanceId", cargo.GetInstanceID(), "label", cargo.name),
-                "deliveredCount", delivered, "batchLimit", batchLimit, "deliveryOperation", deliveryOperation, "child", spawnedChild ? child.Describe() : null));
+                "deliveredCount", delivered, "batchLimit", batchLimit, "deliveryOperation", deliveryOperation,
+                "recovery", recovery.Describe(), "child", spawnedChild ? child.Describe() : null));
         }
         public string Start(PlayerControls actor, int owner, ControlCommand command)
         {
             if (Run.Running || child.Run.Running || navigation.Action.State != "idle") return "action_in_progress";
             chef = actor; request = command; Inventory.Refresh(chef);
             selected = null; cargo = expected = originalSource = sourceStation = destination = null;
-            sourceId = deliveryOperation = null; destinationId = command.Destination; delivered = 0; batchLimit = 1; spawnedChild = false; plates.Clear();
+            sourceId = deliveryOperation = null; destinationId = command.Destination; delivered = 0; batchLimit = 1; spawnedChild = pendingStart = false; recovery.Reset(); plates.Clear();
             string error = Select(); if (error != null) return error;
             if (selected != null)
             {
@@ -160,20 +163,26 @@ namespace SousChef.Plugin.Actions
         private string StartPickup()
         {
             Run.Advance("picking_up");
-            spawnedChild = true;
             string error = child.Start(chef, Run.Owner, new ControlCommand { Id = request.Id, Operation = "pick_up", Destination = sourceId });
-            if (error != null) Finish("blocked", error); return error;
+            return ChildStarted(error);
         }
         private string StartDelivery()
         {
+            Run.Advance("delivering");
             string error = Delivery(cargo);
             if (error == null)
             {
-                Run.Advance("delivering");
-                spawnedChild = true;
                 error = child.Start(chef, Run.Owner, new ControlCommand { Id = request.Id, Operation = deliveryOperation, Destination = destinationId });
             }
-            if (error != null) Finish("blocked", error); return error;
+            return ChildStarted(error);
+        }
+        private string ChildStarted(string error)
+        {
+            pendingStart = error != null; spawnedChild = error == null;
+            if (error == null) { recovery.Clear(); return null; }
+            input(0);
+            if (recovery.Wait(error)) return null;
+            Finish("blocked", error); return error;
         }
         public void Tick()
         {
@@ -181,6 +190,23 @@ namespace SousChef.Plugin.Actions
             try
             {
                 if (Run.Expired(Time.realtimeSinceStartup)) { Finish("failed", "logistics_timeout"); return; }
+                if (pendingStart)
+                {
+                    input(0);
+                    if (Run.Phase == "delivering")
+                    {
+                        if (!System.Object.ReferenceEquals(ActionObservations.Held(chef), cargo)) { Finish("blocked", "held_item_changed"); return; }
+                        StartDelivery();
+                    }
+                    else
+                    {
+                        if (sourceStation != null && sourceStation.activeInHierarchy && sourceStation != originalSource &&
+                            !System.Object.ReferenceEquals(ActionObservations.Occupant(sourceStation), originalSource) && !supply)
+                        { Finish("blocked", "station_contents_changed"); return; }
+                        StartPickup();
+                    }
+                    return;
+                }
                 if (child.Run.Running) return;
                 input(0);
                 if (child.Run.State != "succeeded") { Finish(child.Run.State == "cancelled" ? "cancelled" : "blocked", child.Run.Reason ?? "child_failed"); return; }

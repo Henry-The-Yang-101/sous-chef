@@ -36,12 +36,15 @@ namespace SousChef.Plugin.Actions
         private bool sawLaunch;
         private Vector3 observedLaunchVelocity;
         private object evidence;
+        private readonly ActionRecovery recovery = new ActionRecovery();
+        private float nextRecoveryAttempt;
 
         public InteractionActions(NavigationActions walking, Action<int> buttons, Action finished)
         { navigation = walking; input = buttons; release = finished; }
         public object Describe()
         {
-            return Run.Describe(sawLaunch ? Json.Object("result", evidence, "observedLaunchVelocity", Values.Vector(observedLaunchVelocity)) : evidence);
+            var receipt = (Json.Record)Run.Describe(sawLaunch ? Json.Object("result", evidence, "observedLaunchVelocity", Values.Vector(observedLaunchVelocity)) : evidence);
+            receipt["recovery"] = recovery.Describe(); return receipt;
         }
         public static bool Handles(string operation)
         { return Array.IndexOf(ActionRun.Names, operation) >= 0 && operation != "navigate_to" && operation != "stop"; }
@@ -95,6 +98,7 @@ namespace SousChef.Plugin.Actions
         public string Start(PlayerControls player, int owner, ControlCommand request)
         {
             if (Run.Running || navigation.Action.State != "idle") return "action_in_progress";
+            recovery.Reset(); nextRecoveryAttempt = 0;
             chef = player; command = request; target = null;
             if (request.Operation == "throw_to_player")
             {
@@ -134,7 +138,11 @@ namespace SousChef.Plugin.Actions
                     Run.Advance("navigating");
                     error = navigation.Start(chef, owner, request.Destination);
                 }
-                if (error != null) Finish("blocked", error);
+                if (error != null)
+                {
+                    if (request.Operation == "throw_to" || request.Operation == "throw_to_player") Finish("blocked", error);
+                    else if (RecoverNavigation(error)) return null;
+                }
                 return error;
             }
             catch (Exception) { Finish("failed", "observation_unavailable"); throw; }
@@ -219,7 +227,20 @@ namespace SousChef.Plugin.Actions
                 // The last plate can destroy its own source stack. Verify the
                 // surviving carried identity before requiring a live source.
                 if (pressed && command.Operation == "pick_up" && Outcome()) { Finish("succeeded", "outcome_observed"); return; }
-                if (target == null || !target.activeInHierarchy) { Finish("blocked", "target_unavailable"); return; }
+                if (target == null || !target.activeInHierarchy) { WaitFor("target_unavailable"); return; }
+                if (recoveryReason == "target_unavailable" && Run.Phase != "navigating" &&
+                    Run.Phase != "recovering_navigation" && Run.Phase != "pressing") recovery.Clear();
+                if (Run.Phase == "recovering_navigation")
+                {
+                    input(0);
+                    if (!recovery.Wait("destination_unavailable")) { Finish("blocked", recoveryReason); return; }
+                    if (Time.realtimeSinceStartup < nextRecoveryAttempt) return;
+                    nextRecoveryAttempt = Time.realtimeSinceStartup + .1f;
+                    string error = throwPlan == null ? navigation.Start(chef, Run.Owner, command.Destination) :
+                        navigation.StartPosition(chef, Run.Owner, target, throwPlan.Stance, true);
+                    if (error != null) { RecoverNavigation(error); return; }
+                    Run.Advance("navigating"); return;
+                }
                 if (Run.Phase == "planning_throw")
                 {
                     input(0);
@@ -231,10 +252,10 @@ namespace SousChef.Plugin.Actions
                 }
                 if (Run.Phase == "navigating")
                 {
-                    if (navigation.Action.State == "navigating") return;
+                    if (navigation.Action.State == "navigating") { recovery.Clear(); return; }
                     input(0);
                     if (navigation.Action.Reason != "arrived" && navigation.Action.Reason != "positioned_no_action")
-                    { Finish("blocked", navigation.Action.Reason); return; }
+                    { RecoverNavigation(navigation.Action.Reason); return; }
                     if (command.Operation == "throw_to" || command.Operation == "throw_to_player") { SetPhase("aiming"); return; }
                     if (!BeforePress()) return;
                     if (Run.Running) SetPhase(command.Operation == "work_at" ? "working" : "pressing");
@@ -310,6 +331,18 @@ namespace SousChef.Plugin.Actions
             catch (Exception) { Finish("failed", "observation_unavailable"); }
         }
         private void SetPhase(string phase) { Run.Advance(phase); phaseStarted = Time.realtimeSinceStartup; }
+        private string recoveryReason;
+        private bool WaitFor(string reason)
+        {
+            input(0); recoveryReason = reason;
+            if (recovery.Wait(reason)) return true;
+            Finish("blocked", reason); return false;
+        }
+        private bool RecoverNavigation(string reason)
+        {
+            if (!WaitFor(reason)) return false;
+            Run.Advance("recovering_navigation"); return true;
+        }
         private int Button()
         {
             if (command.Operation != "activate") return 1;
@@ -327,12 +360,14 @@ namespace SousChef.Plugin.Actions
                 var stack = ActionObservations.Receiver(target).GetComponent<ServerStack>();
                 if (expectedTopPlate != null && (stack == null || !System.Object.ReferenceEquals(stack.InspectTopOfStack(), expectedTopPlate)))
                 { Finish("blocked", "pickup_target_changed"); return false; }
-                if (initialOccupant != ActionObservations.Occupant(target) || !ActionObservations.CanPickUp(chef, target))
+                if (initialOccupant != ActionObservations.Occupant(target))
                 { Finish("blocked", "pickup_target_changed"); return false; }
+                if (!ActionObservations.CanPickUp(chef, target)) { WaitFor("pickup_unavailable"); return false; }
             }
             else if (op == "work_at" || op == "activate")
             {
-                if (ActionObservations.Held(chef) != null || !ActionObservations.CanUse(chef, target)) { Finish("blocked", "interaction_unavailable"); return false; }
+                if (ActionObservations.Held(chef) != null) { Finish("blocked", "hands_full"); return false; }
+                if (!ActionObservations.CanUse(chef, target)) { WaitFor("interaction_unavailable"); return false; }
                 var client = target.GetComponent<ClientInteractable>();
                 if (op == "activate" && client.UsePlacementButton && ActionObservations.CanPickUp(chef, target))
                 { Finish("blocked", "pickup_would_take_precedence"); return false; }
@@ -341,11 +376,12 @@ namespace SousChef.Plugin.Actions
             else
             {
                 if (!System.Object.ReferenceEquals(ActionObservations.Held(chef), held)) { Finish("blocked", "held_item_changed"); return false; }
-                if (!ActionObservations.CanPlace(chef, target)) { Finish("blocked", "placement_unavailable"); return false; }
                 if (op == "add_ingredient" && ActionObservations.Container(target) != container) { Finish("blocked", "container_changed"); return false; }
                 if (op == "place_at" && initialOccupant != ActionObservations.Occupant(target)) { Finish("blocked", "station_contents_changed"); return false; }
                 if (op == "place_at" && initialOccupant != null && initialStack == 0) { Finish("blocked", "station_occupied_use_add_ingredient"); return false; }
+                if (!ActionObservations.CanPlace(chef, target)) { WaitFor("placement_unavailable"); return false; }
             }
+            recovery.Clear();
             return true;
         }
         private void Subscribe()

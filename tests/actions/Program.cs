@@ -442,6 +442,50 @@ internal static class Program
         foreach(string command in new[] {"clear_station r d1 d2 extra","move_item r d1 nope","get_utensil r s%%% d2","fetch_ingredient r sCg d2","return_utensil r d1 d2"})
         {bool failed=false;try{ControlCommand.Parse(command);}catch(ArgumentException){failed=true;}Check(failed,"malformed logistics command is rejected");}
     }
+    private static void JobRecovery()
+    {
+        var w=new World();var destination=w.Delivery();var item=w.Ingredient("Tomato_Raw");w.Target.GetComponent<ServerAttachStation>().Item=item;
+        Check(w.Logistics.Start(w.Chef,1,new ControlCommand {Id="fetch-once",Operation="fetch_ingredient",Selector="tomato",Destination=w.IdOf(destination)})==null,"recovery fetch accepted once");
+        w.Arrive();destination.activeInHierarchy=false;w.Hold(item);w.Target.GetComponent<ServerAttachStation>().Item=null;w.Tick();
+        Check(w.Logistics.Run.Running && w.Logistics.Run.Phase=="delivering" && w.Releases==0,"brief destination loss between pickup and delivery retains parent lease");
+        w.Tick(.25f);destination.activeInHierarchy=true;w.Tick();
+        Check(w.Skills.Run.Running && w.Skills.Run.Target==w.IdOf(destination) && w.Logistics.Run.RequestId=="fetch-once","same job resumes delivery to the original destination");
+        w.ArriveAt(destination);destination.GetComponent<ServerAttachStation>().Item=item;w.Hold(null);w.Verify();
+        Check(w.Logistics.Run.State=="succeeded" && w.Releases==1,"destination restored inside grace completes exact delivery");
+
+        w=new World();item=w.Ingredient("tomato");w.Hold(item);w.Start("place_at");
+        double started=w.Skills.Run.Started,deadline=w.Skills.Run.Deadline;
+        w.Navigation.Stop("destination_unreachable");w.Tick();
+        Check(w.Skills.Run.Phase=="recovering_navigation" && w.Inputs.Last()==0 && w.Releases==0,"route dropout neutralizes input and waits before cancelling");
+        w.Tick(.1f);
+        Check(w.Skills.Run.Phase=="navigating" && w.Skills.Run.Started==started && w.Skills.Run.Deadline==deadline,"replan retains original action deadline and snapshots");
+        w.Arrive();w.Target.GetComponent<ServerAttachStation>().Item=item;w.Hold(null);w.Verify();
+        Check(w.Skills.Run.State=="succeeded","first-layer placement also recovers transient route loss");
+
+        w=new World();item=w.Ingredient("tomato");w.Hold(item);w.Start("place_at");w.Target.activeInHierarchy=false;w.Navigation.Stop("destination_unavailable");w.Tick();w.Tick(.49f);
+        Check(w.Skills.Run.Running && w.Releases==0,"a 490 ms interruption keeps the job alive");w.Tick(.02f);
+        Check(w.Skills.Run.State=="blocked" && w.Skills.Run.Reason=="target_unavailable" && w.Releases==1 && w.Carrier.Item==item,"persistent target loss ends after 500 ms with cargo retained");
+
+        w=new World();item=w.Ingredient("tomato");w.Hold(item);w.Start("place_at");w.Target.GetComponent<Placement>().Accepts=_=>false;w.Arrive();w.Tick(.3f);
+        Check(w.Skills.Run.Running && !w.Inputs.Contains(1),"temporary native placement unavailability waits without pressing");
+        w.Target.GetComponent<Placement>().Accepts=_=>true;w.Tick();w.Target.GetComponent<ServerAttachStation>().Item=item;w.Hold(null);w.Verify();
+        Check(w.Skills.Run.State=="succeeded","native placement recovery presses once after revalidation");
+
+        w=new World();item=w.Ingredient("tomato");w.Hold(item);w.Start("place_at");w.Target.activeInHierarchy=false;w.Navigation.Stop("destination_unavailable");w.Tick();w.Skills.Cancel("stopped");
+        Check(w.Skills.Run.State=="cancelled" && w.Skills.Run.Reason=="stopped" && w.Releases==1,"explicit stop bypasses recovery grace");
+
+        w=new World();destination=w.Delivery();item=w.Ingredient("Tomato_Raw");w.Target.GetComponent<ServerAttachStation>().Item=item;
+        w.Logistics.Start(w.Chef,1,new ControlCommand {Operation="fetch_ingredient",Selector="tomato",Destination=w.IdOf(destination)});w.Arrive();destination.activeInHierarchy=false;w.Hold(item);w.Target.GetComponent<ServerAttachStation>().Item=null;w.Tick();w.Hold(w.Ingredient("someone else's cargo"));w.Tick();
+        Check(w.Logistics.Run.Reason=="held_item_changed" && w.Releases==1,"parent recovery never resumes with replacement cargo");
+
+        w=new World();item=w.Ingredient("tomato");w.Hold(item);w.Start("place_at",ms:100);w.Target.activeInHierarchy=false;w.Navigation.Stop("destination_unavailable");w.Tick();w.Tick(.1f);
+        Check(w.Skills.Run.Reason=="action_timeout","overall deadline takes precedence over grace");
+
+        var grace=new ActionRecovery();Check(grace.Wait("destination_unreachable"),"route interruption starts grace");
+        Time.realtimeSinceStartup+=.3f;Check(grace.Wait("planning_in_progress"),"reason changes remain in the same interruption");
+        Time.realtimeSinceStartup+=.21f;Check(!grace.Wait("no_safe_start") && grace.Count==1,"changing failure reasons cannot restart the timeout");
+        Check(!grace.Wait("control_lost") && !grace.Wait("station_contents_changed") && !grace.Wait("navigation_timeout"),"ownership, identity and watchdog failures are terminal");
+    }
     private static void PreparationSupplies()
     {
         var w=new World(); var destination=w.Delivery();
@@ -781,6 +825,6 @@ internal static class Program
         Check(!drops.Plan(w.Chef,item,player,out drop),"nearby horizontal position on a different deck is not a valid drop handoff");
         Physics.Sphere=(p,r,d,length)=>new RaycastHit[0];
     }
-    private static void Main() { Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
+    private static void Main() { Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
     private static ClientInteractable GetCurrentlyInteractingForTest(this PlayerControls chef) { return chef.GetComponent<ClientPlayerControlsImpl_Default>().Current; }
 }
