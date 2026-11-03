@@ -229,7 +229,15 @@ namespace SousChef.Plugin.Actions
                 // The last plate can destroy its own source stack. Verify the
                 // surviving carried identity before requiring a live source.
                 if (pressed && command.Operation == "pick_up" && Outcome()) { Finish("succeeded", "outcome_observed"); return; }
-                if (target == null || !target.activeInHierarchy) { WaitFor("target_unavailable"); return; }
+                if (target == null || !target.activeInHierarchy)
+                {
+                    if (Run.Phase == "navigating")
+                    {
+                        if (navigation.Action.State == "navigating") navigation.Stop("target_unavailable");
+                        Run.Advance("recovering_navigation");
+                    }
+                    WaitFor("target_unavailable"); return;
+                }
                 if (recoveryReason == "target_unavailable" && Run.Phase != "navigating" &&
                     Run.Phase != "recovering_navigation" && Run.Phase != "pressing" && Run.Phase != "working") recovery.Clear();
                 if (Run.Phase == "recovering_navigation")

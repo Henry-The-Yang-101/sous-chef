@@ -476,6 +476,11 @@ internal static class Program
         w.Arrive();w.Target.GetComponent<ServerAttachStation>().Item=item;w.Hold(null);w.Verify();
         Check(w.Skills.Run.State=="succeeded","last-chance revalidation completes the original delivery without extending the overall deadline");
 
+        w=new World();item=w.Ingredient("tomato");w.Hold(item);w.Start("place_at");w.Target.activeInHierarchy=false;w.Tick();w.Tick(.45f);
+        w.Target.activeInHierarchy=true;w.Tick(.06f);
+        Check(w.Skills.Run.Running && w.Skills.Run.Phase=="navigating","a target first observed restored at the deadline gets the same final route check");
+        w.Skills.Cancel("test_end");
+
         w=new World();item=w.Ingredient("tomato");w.Hold(item);w.Start("place_at");w.Navigation.Stop("destination_unreachable");w.Tick();w.Hold(w.Ingredient("replacement"));w.Tick();
         Check(w.Skills.Run.Reason=="held_item_changed" && w.Navigation.Action.State=="idle","navigation recovery validates the original cargo before moving again");
 
