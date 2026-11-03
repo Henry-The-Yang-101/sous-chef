@@ -453,6 +453,14 @@ internal static class Program
         w.ArriveAt(destination);destination.GetComponent<ServerAttachStation>().Item=item;w.Hold(null);w.Verify();
         Check(w.Logistics.Run.State=="succeeded" && w.Releases==1,"destination restored inside grace completes exact delivery");
 
+        w=new World();destination=w.Delivery();item=w.Ingredient("Tomato_Raw");w.Target.GetComponent<ServerAttachStation>().Item=item;
+        w.Logistics.Start(w.Chef,1,new ControlCommand {Operation="fetch_ingredient",Selector="tomato",Destination=w.IdOf(destination)});w.Arrive();
+        destination.GetComponent<BoxCollider>().enabled=false;w.Hold(item);w.Target.GetComponent<ServerAttachStation>().Item=null;w.Tick();
+        Check(w.Logistics.Run.Running && w.Skills.Run.Phase=="recovering_navigation" && w.Releases==0,"delivery navigation startup failure is accepted as recoverable under the existing job");
+        w.Tick(.2f);destination.GetComponent<BoxCollider>().enabled=true;w.Tick(.1f);w.ArriveAt(destination);
+        destination.GetComponent<ServerAttachStation>().Item=item;w.Hold(null);w.Verify();
+        Check(w.Logistics.Run.State=="succeeded" && w.Releases==1,"route returns after pickup and delivers without another fetch request");
+
         w=new World();item=w.Ingredient("tomato");w.Hold(item);w.Start("place_at");
         double started=w.Skills.Run.Started,deadline=w.Skills.Run.Deadline;
         w.Navigation.Stop("destination_unreachable");w.Tick();
@@ -462,6 +470,9 @@ internal static class Program
         w.Arrive();w.Target.GetComponent<ServerAttachStation>().Item=item;w.Hold(null);w.Verify();
         Check(w.Skills.Run.State=="succeeded","first-layer placement also recovers transient route loss");
 
+        w=new World();item=w.Ingredient("tomato");w.Hold(item);w.Start("place_at");w.Navigation.Stop("destination_unreachable");w.Tick();w.Hold(w.Ingredient("replacement"));w.Tick();
+        Check(w.Skills.Run.Reason=="held_item_changed" && w.Navigation.Action.State=="idle","navigation recovery validates the original cargo before moving again");
+
         w=new World();item=w.Ingredient("tomato");w.Hold(item);w.Start("place_at");w.Target.activeInHierarchy=false;w.Navigation.Stop("destination_unavailable");w.Tick();w.Tick(.49f);
         Check(w.Skills.Run.Running && w.Releases==0,"a 490 ms interruption keeps the job alive");w.Tick(.02f);
         Check(w.Skills.Run.State=="blocked" && w.Skills.Run.Reason=="target_unavailable" && w.Releases==1 && w.Carrier.Item==item,"persistent target loss ends after 500 ms with cargo retained");
@@ -470,6 +481,15 @@ internal static class Program
         Check(w.Skills.Run.Running && !w.Inputs.Contains(1),"temporary native placement unavailability waits without pressing");
         w.Target.GetComponent<Placement>().Accepts=_=>true;w.Tick();w.Target.GetComponent<ServerAttachStation>().Item=item;w.Hold(null);w.Verify();
         Check(w.Skills.Run.State=="succeeded","native placement recovery presses once after revalidation");
+
+        w=new World(t=>{t.Add(new WashingStation());t.Add(new ServerWashingStation {m_plateCount=2});});
+        w.Start("work_at","one_plate_clean");w.Arrive();var nativeUse=w.Chef.CurrentInteractionObjects.m_interactable;
+        w.Chef.CurrentInteractionObjects.m_interactable=null;w.Tick();w.Tick(.25f);
+        Check(w.Skills.Run.Running && w.Inputs.Last()==0,"transient work readiness loss pauses active work with neutral input");
+        w.Chef.CurrentInteractionObjects.m_interactable=nativeUse;w.Tick();
+        Check(w.Inputs.Last()==2,"the same work job resumes normal use after readiness returns");
+        w.Target.GetComponent<ServerWashingStation>().m_plateCount=1;w.Tick();
+        Check(w.Skills.Run.State=="succeeded","resumed work still requires the original completion condition");
 
         w=new World();item=w.Ingredient("tomato");w.Hold(item);w.Start("place_at");w.Target.activeInHierarchy=false;w.Navigation.Stop("destination_unavailable");w.Tick();w.Skills.Cancel("stopped");
         Check(w.Skills.Run.State=="cancelled" && w.Skills.Run.Reason=="stopped" && w.Releases==1,"explicit stop bypasses recovery grace");

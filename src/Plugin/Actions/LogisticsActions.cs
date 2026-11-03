@@ -203,6 +203,11 @@ namespace SousChef.Plugin.Actions
                         if (sourceStation != null && sourceStation.activeInHierarchy && sourceStation != originalSource &&
                             !System.Object.ReferenceEquals(ActionObservations.Occupant(sourceStation), originalSource) && !supply)
                         { Finish("blocked", "station_contents_changed"); return; }
+                        var stack = originalSource == null ? null : originalSource.GetComponent<ServerStack>();
+                        var spawner = sourceStation == null ? null : sourceStation.GetComponent<PickupItemSpawner>();
+                        if ((stack != null && originalSource.GetComponent<CleanPlateStack>() != null && !System.Object.ReferenceEquals(stack.InspectTopOfStack(), expected)) ||
+                            (supply && spawner != null && !System.Object.ReferenceEquals(spawner.m_itemPrefab, originalSource)))
+                        { Finish("blocked", "station_contents_changed"); return; }
                         StartPickup();
                     }
                     return;

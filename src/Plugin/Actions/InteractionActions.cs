@@ -98,7 +98,7 @@ namespace SousChef.Plugin.Actions
         public string Start(PlayerControls player, int owner, ControlCommand request)
         {
             if (Run.Running || navigation.Action.State != "idle") return "action_in_progress";
-            recovery.Reset(); nextRecoveryAttempt = 0;
+            recovery.Reset(); recoveryReason = null; nextRecoveryAttempt = 0;
             chef = player; command = request; target = null;
             if (request.Operation == "throw_to_player")
             {
@@ -229,14 +229,19 @@ namespace SousChef.Plugin.Actions
                 if (pressed && command.Operation == "pick_up" && Outcome()) { Finish("succeeded", "outcome_observed"); return; }
                 if (target == null || !target.activeInHierarchy) { WaitFor("target_unavailable"); return; }
                 if (recoveryReason == "target_unavailable" && Run.Phase != "navigating" &&
-                    Run.Phase != "recovering_navigation" && Run.Phase != "pressing") recovery.Clear();
+                    Run.Phase != "recovering_navigation" && Run.Phase != "pressing" && Run.Phase != "working") recovery.Clear();
                 if (Run.Phase == "recovering_navigation")
                 {
                     input(0);
-                    if (!recovery.Wait("destination_unavailable")) { Finish("blocked", recoveryReason); return; }
+                    if (held != null && !System.Object.ReferenceEquals(ActionObservations.Held(chef), held))
+                    { Finish("blocked", "held_item_changed"); return; }
+                    if (!recovery.Wait(recoveryReason)) { Finish("blocked", recoveryReason); return; }
                     if (Time.realtimeSinceStartup < nextRecoveryAttempt) return;
                     nextRecoveryAttempt = Time.realtimeSinceStartup + .1f;
-                    string error = throwPlan == null ? navigation.Start(chef, Run.Owner, command.Destination) :
+                    // Recovery has no usable route to retain. Give rebuilding
+                    // the normal active planning budget, rather than an idle
+                    // catalogue slice that may repeatedly stop short of the goal.
+                    string error = throwPlan == null ? navigation.Start(chef, Run.Owner, command.Destination, false) :
                         navigation.StartPosition(chef, Run.Owner, target, throwPlan.Stance, true);
                     if (error != null) { RecoverNavigation(error); return; }
                     Run.Advance("navigating"); return;
@@ -494,8 +499,10 @@ namespace SousChef.Plugin.Actions
                     "dirtyPlatesAfter", ActionObservations.DirtyCount(target), "cleanPlatesBefore", initialClean, "cleanPlatesAfter", ActionObservations.CleanCount(target));
                 Finish("succeeded", "condition_met"); return;
             }
-            if (ActionObservations.Held(chef) != null || !ActionObservations.CanUse(chef, target)) { Finish("blocked", "interaction_unavailable"); return; }
+            if (ActionObservations.Held(chef) != null) { Finish("blocked", "hands_full"); return; }
             if (command.Condition == "work_complete" && (workable == null || ActionObservations.Receiver(target) != workable.gameObject)) { Finish("blocked", "work_item_changed"); return; }
+            if (!ActionObservations.CanUse(chef, target)) { WaitFor("interaction_unavailable"); return; }
+            recovery.Clear();
             float progress = workable != null ? workable.GetProgress() + ActionObservations.Read<int>(workable, "m_subProgress") * .001f :
                 ActionObservations.Read<float>(target.GetComponent<ServerWashingStation>(), "m_cleaningTimer") - ActionObservations.DirtyCount(target);
             if (!pressed || progress != lastProgress) { lastProgressTime = Time.realtimeSinceStartup; lastProgress = progress; }

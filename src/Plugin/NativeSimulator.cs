@@ -28,6 +28,7 @@ namespace SousChef.Plugin
         private Harmony patches;
         private static ServerDynamicFlowController advanceFlow;
         private static bool unfocusedFixture;
+        private bool interruptingTarget;
         internal static bool InputFocused { get { return Application.isFocused && !unfocusedFixture; } }
         private const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
         private static object Call(object obj, string method, params object[] args) { return obj.GetType().GetMethod(method, Flags).Invoke(obj, args); }
@@ -119,6 +120,7 @@ namespace SousChef.Plugin
                         else if (value.StartsWith("stage-player ", StringComparison.Ordinal)) StagePlayer(value.Substring(13));
                         else if (value.StartsWith("probe-throw ", StringComparison.Ordinal)) ProbeThrow(Int32.Parse(value.Substring(12)));
                         else if (value.StartsWith("probe-walk ", StringComparison.Ordinal)) ProbeWalk(value.Substring(11));
+                        else if (value.StartsWith("interrupt-target ", StringComparison.Ordinal)) InterruptTarget(value.Substring(17));
                         else if (value.StartsWith("load ", StringComparison.Ordinal)) Load(value.Substring(5));
                         else if (value.StartsWith("fps ", StringComparison.Ordinal)) SetFrameRate(Int32.Parse(value.Substring(4)));
                         else throw new ArgumentException("Unknown simulator command");
@@ -226,6 +228,58 @@ namespace SousChef.Plugin
             bool feasible = error == null && planner.From(foot, false, out plan);
             Write("throw-probe.json", Json.Object("feasible", feasible, "error", error, "diagnostics", planner.Diagnostics,
                 "plan", plan == null ? null : plan.Describe()));
+        }
+        private void InterruptTarget(string arguments)
+        {
+            // Deliberate fault injection in an opt-in isolated native runtime.
+            // Wait for a real pickup, then briefly remove the delivery location
+            // or its route-discovery colliders. Never alter chef/cargo state.
+            string[] values = arguments.Split(' ');
+            if (values.Length != 4) throw new ArgumentException("interrupt-target requires instance ID, duration ms, target|route, and delay after pickup ms");
+            int id = Int32.Parse(values[0]), milliseconds = Int32.Parse(values[1]), delay = Int32.Parse(values[3]);
+            if (milliseconds < 50 || milliseconds > 2000 || delay < 0 || delay > 2000 || (values[2] != "target" && values[2] != "route"))
+                throw new ArgumentException("Invalid interruption fixture parameters");
+            GameObject target = null; PlayerControls chef = null;
+            foreach (var t in UnityEngine.Object.FindObjectsOfType<Transform>()) if (t.gameObject.GetInstanceID() == id) target = t.gameObject;
+            foreach (var p in UnityEngine.Object.FindObjectsOfType<PlayerControls>())
+                if (p.PlayerIDProvider != null && p.PlayerIDProvider.GetID() == PlayerInputLookup.Player.Two) chef = p;
+            if (interruptingTarget || target == null || chef == null || target.GetComponent<ServerAttachStation>() == null ||
+                Actions.ActionObservations.Occupant(target) != null || !KitchenGate.Inspect().InRound)
+                throw new InvalidOperationException("Interruption requires an empty station, Player 2, and no pending fixture");
+            interruptingTarget = true;
+            StartCoroutine(InterruptTargetRoutine(target, chef, milliseconds, values[2], delay));
+        }
+        private IEnumerator InterruptTargetRoutine(GameObject target, PlayerControls chef, int milliseconds, string kind, int delay)
+        {
+            var colliders = new List<Collider>(); float hiddenAt = -1;
+            var record = Json.Object("targetInstanceId", target.GetInstanceID(), "kind", kind, "durationMs", milliseconds, "delayMs", delay, "phase", "armed");
+            Write("interruption.json", record);
+            try
+            {
+                float until = Time.realtimeSinceStartup + 60;
+                while (target != null && chef != null && Actions.ActionObservations.Held(chef) == null && Time.realtimeSinceStartup < until) yield return null;
+                if (target == null || chef == null || Actions.ActionObservations.Held(chef) == null) yield break;
+                float pickedAt = Time.realtimeSinceStartup;
+                while (Time.realtimeSinceStartup - pickedAt < delay / 1000f) yield return null;
+                if (target == null || chef == null || Actions.ActionObservations.Held(chef) == null || Actions.ActionObservations.Occupant(target) != null) yield break;
+                record["cargoInstanceId"] = Actions.ActionObservations.Held(chef).GetInstanceID();
+                if (kind == "target") target.SetActive(false);
+                else foreach (var c in target.GetComponentsInChildren<Collider>()) if (c.enabled) { colliders.Add(c); c.enabled = false; }
+                Physics.SyncTransforms(); hiddenAt = Time.realtimeSinceStartup;
+                record["hiddenAt"] = hiddenAt; record["phase"] = "interrupted"; Write("interruption.json", record);
+                while (Time.realtimeSinceStartup - hiddenAt < milliseconds / 1000f) yield return null;
+            }
+            finally
+            {
+                if (hiddenAt >= 0)
+                {
+                    if (kind == "target" && target != null) target.SetActive(true);
+                    foreach (var c in colliders) if (c != null) c.enabled = true;
+                    Physics.SyncTransforms(); record["restoredAt"] = Time.realtimeSinceStartup;
+                }
+                record["phase"] = hiddenAt >= 0 ? "restored" : "not_triggered"; Write("interruption.json", record);
+                interruptingTarget = false;
+            }
         }
         private void StagePlayer(string arguments)
         {

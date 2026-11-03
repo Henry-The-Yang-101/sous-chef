@@ -142,6 +142,34 @@ catalogue is saved as `full-hands-catalog.json`.
 A fetch job submitted through the browser then delivered that held cheese to
 the selected counter and displayed `succeeded: item delivered`.
 
+### Job interruption recovery
+
+Use the repeatable native regression runner with a freshly built isolated runtime:
+
+```sh
+python3 scripts/native_simulator.py --runtime .local/job-recovery-native start --level s_wizard_5_5 --port-base 25432
+python3 scripts/job_recovery_audit.py --runtime .local/job-recovery-native --port-base 25432 --output .local/job-recovery-results
+python3 scripts/native_simulator.py --runtime .local/job-recovery-native stop
+```
+
+The opt-in mailbox fixture `interrupt-target INSTANCE_ID DURATION_MS target|route
+DELAY_AFTER_PICKUP_MS` waits for P2 to pick up a real item, then temporarily disables
+an empty delivery station (`target`) or its enabled colliders (`route`). It restores
+the original availability and writes the exact cargo identity and native
+interruption times to `interruption.json`. Durations are bounded to 50–2000 ms;
+only one fixture can be armed at a time. This deliberately changes test geometry;
+chef pose, cargo ownership, physics settings and gameplay timers are untouched.
+
+The audit runs ordinary single-request `fetch_ingredient` jobs at requested 60 and
+20 FPS. It checks baseline delivery, target/route outages of 250–450 ms, persistent
+900 ms outages, and explicit stop during recovery. Each case resets the native
+kitchen, checks ownership and request continuity, and captures a fresh full native
+snapshot. Success requires the exact ingredient in the intended server station;
+timeout/stop requires that same item still held by P2 with zero deliveries.
+The runner stores catalogues, control traces, fixture timing, snapshots and a
+summary report, including the tested plugin hash. Select cases with repeatable
+`--case NAME` flags; the case names are in `scripts/job_recovery_audit.py`.
+
 ## Isolation and implementation
 
 The simulator has its own BepInEx core/config/plugin copy and save directory under

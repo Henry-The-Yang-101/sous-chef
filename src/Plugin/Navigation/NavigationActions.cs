@@ -229,13 +229,13 @@ namespace SousChef.Plugin.Navigation
             return Json.Object("actions", actions, "navigation", Describe(), "destinations", destinations,
                 "complete", unavailable == null && search != null && search.Complete, "reason", unavailable);
         }
-        public string Start(PlayerControls player, int owner, string destination)
+        public string Start(PlayerControls player, int owner, string destination, bool incremental = true)
         {
             if (Action.State != "idle") return "action_in_progress";
             // Revalidate and reuse the idle tree when its exact continuity proof
             // still holds. Restarting here can lose a distant conveyor route
             // solely because one active search slice cannot rebuild the loop.
-            Refresh(player, true, false, true);
+            Refresh(player, true, false, incremental);
             Destination chosen;
             if (!available.TryGetValue(destination, out chosen)) return unavailable ?? "destination_unavailable";
             if (!Action.Start(owner, destination, true)) return "action_in_progress";
