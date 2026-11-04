@@ -154,6 +154,16 @@ namespace SousChef.Plugin.Navigation
             Stop(reason); teleportsCompleted = 0; lastDestination = arrivalDetails = null; identities.Clear(); available.Clear(); physics.Reset(); search = null; chef = null; lastPlan = -1; unavailable = reason;
         }
         public void Dispose() { ClearRemote(); }
+        public void ResumeAfterPause(float seconds)
+        {
+            if (Action.State != "navigating") return;
+            started += seconds; lastProgress += seconds;
+            if (facingSince >= 0) facingSince += seconds;
+            if (settlingSince >= 0) settlingSince += seconds;
+            if (activePortal != null) portalStarted += seconds;
+            if (portalReplanUntil > 0) portalReplanUntil += seconds;
+            lastPlan = -1; haveMotion = motionSampleValid = false; arrival.Reset();
+        }
         public void Stop(string reason)
         {
             Trace(reason, Vector3.zero, Vector3.zero);

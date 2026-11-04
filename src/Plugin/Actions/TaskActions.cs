@@ -147,6 +147,11 @@ namespace SousChef.Plugin.Actions
         }
         private void Wait(string reason) { waitingReason = reason; input(0); retryAt = Time.realtimeSinceStartup + .2f; }
         public void Cancel(string reason) { if (Run.Running) Finish("cancelled", reason); }
+        public void ResumeAfterPause(float seconds)
+        {
+            Run.Delay(seconds); retryAt += seconds; nextDeliveryCheck += seconds;
+            foreach (CounterMotion motion in counterMotion.Values) motion.Delay(seconds);
+        }
         public void Reset(string reason)
         {
             Cancel(reason); inventory.Reset(); counterMotion.Clear(); humanDistances.Clear(); deliveredItems.Clear(); pendingDeliveries.Clear();

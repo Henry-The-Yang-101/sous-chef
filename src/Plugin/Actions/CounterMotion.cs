@@ -10,6 +10,7 @@ namespace SousChef.Plugin.Actions
         private bool sampled, visited, away;
         private Vector3 position, velocity, stop;
         private float time, lastVisit, period;
+        public void Delay(float seconds) { time += seconds; lastVisit += seconds; }
         public void Observe(Vector3 point, float now, bool humanCanReach)
         {
             if (sampled && now > time + .01f) velocity = (point - position) / (now - time);

@@ -116,6 +116,12 @@ namespace SousChef.Plugin
                         else if (value == "advance-phase") AdvancePhase();
                         else if (value == "input-focus off") unfocusedFixture = true;
                         else if (value == "input-focus on") unfocusedFixture = false;
+                        else if (value == "pause on" || value == "pause off")
+                        {
+                            var timeManager = UnityEngine.Object.FindObjectOfType<TimeManager>();
+                            if (timeManager == null) throw new InvalidOperationException("native_time_manager_missing");
+                            timeManager.SetPaused(TimeManager.PauseLayer.Main, value == "pause on", this);
+                        }
                         else if (value.StartsWith("stage-portal ", StringComparison.Ordinal)) StagePortal(Int32.Parse(value.Substring(13)));
                         else if (value.StartsWith("stage-player ", StringComparison.Ordinal)) StagePlayer(value.Substring(13));
                         else if (value.StartsWith("probe-throw ", StringComparison.Ordinal)) ProbeThrow(Int32.Parse(value.Substring(12)));
@@ -164,7 +170,7 @@ namespace SousChef.Plugin
                 var phaseOrders = dynamic == null || !inRound ? null : (ServerDynamicOrderController)Call(dynamic, "GetOrderController");
                 Write("status.json", Json.Object("dynamicPhase", phaseData == null ? -1 : phaseData.m_phase, "boss", dynamic is ServerBossFlowController,
                     "phaseTransitionsPending", transitions == null ? 0 : transitions.Count, "phaseCanAdvance", phaseOrders != null && phaseOrders.HasMorePhases(),
-                    "dlc", dlc, "cannons", cannons, "portals", portals,"phase", error != null ? "error" : inRound ? "ready" : phase, "error", error,
+                    "dlc", dlc, "paused", TimeManager.IsPaused(TimeManager.PauseLayer.Main), "cannons", cannons, "portals", portals,"phase", error != null ? "error" : inRound ? "ready" : phase, "error", error,
                     "scene", SceneManager.GetActiveScene().name, "requestedLevel", requested, "generation", generation,
                     "inRound", inRound, "players", players, "serverUsers", ServerUserSystem.m_Users.Count,
                     "clientUsers", ClientUserSystem.m_Users.Count, "realtime", Time.realtimeSinceStartup,

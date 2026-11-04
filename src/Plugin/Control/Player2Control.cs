@@ -31,6 +31,13 @@ namespace SousChef.Plugin.Control
         private double nextScan;
         private string unavailable = "player2_absent";
         private bool disposed;
+        private float pausedAt = -1;
+        private bool Autonomous { get { return navigation.Action.State == "navigating" || interactions.Run.Running || logistics.Run.Running || tasks.Run.Running; } }
+        private bool PreservingPause(string reason)
+        {
+            return Autonomous && (reason == "paused" || (pausedAt >= 0 &&
+                (reason == "input_suppressed" || reason == "game_unfocused") && target != null && !target.m_bRespawning));
+        }
         private readonly bool traceInput = Environment.GetEnvironmentVariable("SOUS_CHEF_NAV_TRACE") == "1";
         private readonly System.Collections.Generic.Queue<object> inputTrace = new System.Collections.Generic.Queue<object>();
         private Vector3 lastWalk;
@@ -58,15 +65,27 @@ namespace SousChef.Plugin.Control
             if (flow != gate.Flow) { Revoke("round_changed"); logistics.Reset("round_changed"); tasks.Reset("round_changed"); throwOptions.Reset(); navigation.Reset("round_changed"); flow = gate.Flow; nextScan = 0; }
             if (Now >= nextScan) { Discover(); nextScan = Now + 0.25; }
             string reason = Check(gate);
+            bool preservingPause = PreservingPause(reason);
+            if (preservingPause)
+            {
+                if (pausedAt < 0) pausedAt = Time.realtimeSinceStartup;
+                lease.Suspend(Now);
+            }
+            else if (pausedAt >= 0)
+            {
+                float seconds = Time.realtimeSinceStartup - pausedAt; pausedAt = -1;
+                navigation.ResumeAfterPause(seconds); interactions.ResumeAfterPause(seconds);
+                logistics.ResumeAfterPause(seconds); tasks.ResumeAfterPause(seconds); lease.Resume(Now);
+            }
             bool observationAllowed = reason == null || (reason == "game_unfocused" && Check(gate, true) == null);
-            if (reason != null)
+            if (reason != null && !preservingPause)
             {
                 // Focus loss revokes all input, but must not erase the read-only
                 // catalogue frontier that the focused browser is asking to see.
                 if (!observationAllowed) navigation.Invalidate(reason);
                 Revoke(reason);
             }
-            else if (lease.Owner(Now) == 0) Restore();
+            else if (!preservingPause && lease.Owner(Now) == 0) Restore();
             unavailable = reason;
             if (navigation.Action.State == "navigating" && lease.Owner(Now) != navigation.Action.Owner) navigation.Stop("control_lost");
             if (interactions.Run.Running && lease.Owner(Now) != interactions.Run.Owner) interactions.Cancel("control_lost");
@@ -162,7 +181,7 @@ namespace SousChef.Plugin.Control
             {
                 Discover(); KitchenGate gate = KitchenGate.Inspect(); unavailable = Check(gate);
                 string observationError = Check(gate, true);
-                if (observationError != null) { navigation.Invalidate(observationError); actions = Json.Object("actions", new[] { Json.Object("name", "stop") }, "destinations", new object[0], "navigation", navigation.Describe()); }
+                if (observationError != null) { if (!PreservingPause(observationError)) navigation.Invalidate(observationError); actions = Json.Object("actions", new[] { Json.Object("name", "stop") }, "destinations", new object[0], "navigation", navigation.Describe()); }
                 else if (lease.Owner(Now) != 0 && navigation.Action.State == "idle" && !interactions.Run.Running && !logistics.Run.Running && !tasks.Run.Running)
                     actions = Json.Object("actions", new[] { Json.Object("name", "stop") }, "destinations", new object[0], "reason", "already_claimed", "navigation", navigation.Describe());
                 else actions = Catalog();
@@ -217,7 +236,7 @@ namespace SousChef.Plugin.Control
             int owner = lease.Owner(Now);
             return Json.Object("player", 2, "navigation", navigation.Describe(), "action", lastWasTask ? tasks.Describe() : lastWasLogistics ? logistics.Describe() : interactions.Describe(), "available", unavailable == null, "reason", unavailable,
                 "worker", WorkerHost.Current == null ? Json.Object("state", "disabled") : Json.Object("state", WorkerHost.Current.Ready ? "ready" : "fallback", "pid", WorkerHost.Current.ProcessId, "error", WorkerHost.Current.Error, "encodedMessages", WorkerHost.Current.EncodedMessages, "throwBatches", WorkerHost.Current.Flights == null ? 0L : WorkerHost.Current.Flights.CompletedBatches),
-                "claimed", owner != 0, "ownedByYou", client != 0 && owner == client,
+                "claimed", owner != 0, "ownedByYou", client != 0 && owner == client, "suspended", pausedAt >= 0,
                 "lastRelease", lease.LastRelease, "inputTrace", traceInput ? inputTrace.ToArray() : null,
                 "chefInstanceId", target == null ? null : (object)target.GetInstanceID(),
                 "chefObjectInstanceId", target == null ? null : (object)target.gameObject.GetInstanceID(),
@@ -347,7 +366,7 @@ namespace SousChef.Plugin.Control
             if (scheme.m_dashButton == bridgeDash) scheme.m_dashButton = oldDash;
             scheme = null;
         }
-        private void Revoke(string reason) { tasks.Cancel(reason); logistics.Cancel(reason); interactions.Cancel(reason); if (navigation.Action.State == "navigating") navigation.Stop(reason); lease.Revoke(reason); Restore(); }
+        private void Revoke(string reason) { pausedAt = -1; tasks.Cancel(reason); logistics.Cancel(reason); interactions.Cancel(reason); if (navigation.Action.State == "navigating") navigation.Stop(reason); lease.Revoke(reason); Restore(); }
         public void Dispose() { disposed = true; Revoke("shutdown"); tasks.Reset("shutdown"); navigation.Dispose(); server.Dispose(); }
 
         private sealed class Axis : ILogicalValue

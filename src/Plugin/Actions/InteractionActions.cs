@@ -55,6 +55,13 @@ namespace SousChef.Plugin.Actions
             (recoveryReason == "no_progress" || recoveryReason == "alignment_failed" || recoveryReason == "navigation_timeout"); } }
         public void ContinueRecovery(ActionRecovery previous)
         { if (Run.Phase == "recovering_navigation") recovery.ContinueFrom(previous); }
+        public void ResumeAfterPause(float seconds)
+        {
+            if (!Run.Running) return;
+            Run.Delay(seconds); phaseStarted += seconds; lastProgressTime += seconds;
+            nextRecoveryAttempt += seconds; if (dropStableSince >= 0) dropStableSince += seconds;
+            lastTick = Time.realtimeSinceStartup;
+        }
         public static string[] Offered(PlayerControls chef, GameObject go)
         {
             var options = new List<string> { "wait_until" };

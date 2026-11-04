@@ -120,12 +120,31 @@ namespace SousChef.Core
         private readonly object sync = new object();
         private int owner;
         private bool persistent;
+        private bool suspended;
+        private double suspendedAt;
         private long sequence;
         private double deadline, inputDeadline;
         private ControlInput input;
         public string LastRelease { get; private set; }
-        private void Clear(string reason) { owner = 0; persistent = false; input = new ControlInput(); inputDeadline = 0; LastRelease = reason; }
-        private void Expire(double now) { if (owner != 0 && now >= deadline) Clear("expired"); }
+        private void Clear(string reason) { owner = 0; persistent = suspended = false; input = new ControlInput(); inputDeadline = 0; LastRelease = reason; }
+        private void Expire(double now) { if (!suspended && owner != 0 && now >= deadline) Clear("expired"); }
+        public void Suspend(double now)
+        {
+            lock (sync)
+            {
+                Expire(now);
+                if (owner != 0 && !suspended) { suspended = true; suspendedAt = now; }
+                input = new ControlInput(); inputDeadline = now;
+            }
+        }
+        public void Resume(double now)
+        {
+            lock (sync)
+            {
+                if (suspended) { deadline += Math.Max(0, now - suspendedAt); suspended = false; }
+                input = new ControlInput(); inputDeadline = now;
+            }
+        }
         public bool Claim(int client, double now, bool retainOwnership = false)
         {
             lock (sync)
@@ -161,7 +180,7 @@ namespace SousChef.Core
             lock (sync)
             {
                 Expire(now);
-                if (now >= inputDeadline) input = new ControlInput();
+                if (suspended || now >= inputDeadline) input = new ControlInput();
                 return input;
             }
         }

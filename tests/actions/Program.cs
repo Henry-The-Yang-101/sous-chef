@@ -207,6 +207,16 @@ internal static class Program
         Check(!TaskNative.Ready(pan),"ruined cooking overrides an earlier completed mixing stage");
         Check(w.Start("collect_contents")=="processing_not_ready","burnt contents are never treated as ready food");
     }
+    private static void PauseTimers()
+    {
+        var w=new World();var item=w.Ingredient("tomato");w.Hold(item);w.Start("place_at");w.Arrive();w.Verify();
+        Check(w.Skills.Run.Phase=="verifying","pause fixture reaches an issued placement's verification phase");
+        Time.realtimeSinceStartup+=1000;Time.frameCount+=60000;
+        w.Navigation.ResumeAfterPause(1000);w.Skills.ResumeAfterPause(1000);w.Tick();
+        Check(w.Skills.Run.Running,"a long pause does not consume the finite action or two-second outcome watchdog");
+        w.Hold(null);w.Target.GetComponent<ServerAttachStation>().Item=item;w.Verify();
+        Check(w.Skills.Run.State=="succeeded","the same issued placement can verify after resuming without another press");
+    }
     private static void Transactions()
     {
         var w=new World();var item=w.Ingredient("tomato");w.Target.GetComponent<ServerAttachStation>().Item=item;
@@ -1006,6 +1016,6 @@ internal static class Program
         Check(!drops.Plan(w.Chef,item,player,out drop),"nearby horizontal position on a different deck is not a valid drop handoff");
         Physics.Sphere=(p,r,d,length)=>new RaycastHit[0];
     }
-    private static void Main() { CounterForecasts();PersistentTasks();HumanSinkEligibility();NativeUtensilDefinitions();MixerReadiness();ReadyFoodTasks();Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
+    private static void Main() { CounterForecasts();PersistentTasks();HumanSinkEligibility();NativeUtensilDefinitions();MixerReadiness();ReadyFoodTasks();PauseTimers();Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
     private static ClientInteractable GetCurrentlyInteractingForTest(this PlayerControls chef) { return chef.GetComponent<ClientPlayerControlsImpl_Default>().Current; }
 }

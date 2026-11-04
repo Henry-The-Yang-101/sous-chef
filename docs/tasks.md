@@ -7,13 +7,17 @@ Each repetition executes a complete batch. Completion leaves P2 idle.
 
 Environmental blocks wait indefinitely with neutral input and bounded periodic
 revalidation. Completed steps are retained. Explicit Stop, release, disconnect,
-pause, focus loss, reassignment, respawn and round changes still cancel and restore
+focus loss, reassignment, respawn and round changes still cancel and restore
 native input bindings. Changed source identities wait for the original source before an unpressed step.
 Changed cargo or unverified button outcomes fail safely with cargo retained. Waiting does not replay a successful step or disposal.
 
 The existing interaction/logistics recovery window is also indefinite; time spent
 recovering suspends finite watchdogs. Button outcome verification remains bounded.
 New tasks and their child actions have no overall deadline.
+Pausing suspends an active autonomous task/action with neutral input, preserving
+its request, cargo and ownership. Unpausing revalidates navigation and resumes
+with action watchdogs adjusted for the pause. Stop and disconnect still cancel
+while paused; raw manual input leases are not retained.
 
 The localhost Tasks panel uses `/api/task`, with the current `sessionId` and
 `arguments` containing `action`, `repetitions` (integer or null), and preparation

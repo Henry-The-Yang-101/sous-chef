@@ -33,6 +33,7 @@ namespace SousChef.Plugin.Actions
         { navigation = nav; child = primitive; input = buttons; release = finished; Inventory = new LogisticsInventory(nav); }
         public static bool Handles(string operation) { return Array.IndexOf(ActionRun.LogisticsNames, operation) >= 0; }
         public void Reset(string reason) { Cancel(reason); Inventory.Reset(); }
+        public void ResumeAfterPause(float seconds) { Run.Delay(seconds); lastTick = Time.realtimeSinceStartup; }
         public object Describe()
         {
             return Run.Describe(Json.Object("sourceId", sourceId, "destinationId", destinationId,

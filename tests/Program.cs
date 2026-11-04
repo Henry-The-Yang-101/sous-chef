@@ -39,6 +39,13 @@ internal static class Program
         lease.Set(1, new ControlCommand {Sequence=1,Milliseconds=300,Buttons=2}, 0);
         Assert(lease.Owner(1000)==1 && lease.Read(1000).Buttons==0, "task ownership survives stalls while input expires neutral");
         lease.Release(1,"disconnected");Assert(lease.Owner(1001)==0,"disconnect releases persistent task ownership");
+        lease = new ControlLease(); Assert(lease.Claim(1, 0), "finite action lease starts before pause");
+        lease.Set(1, new ControlCommand {Sequence=1,Milliseconds=300,Buttons=2}, 0);
+        lease.Suspend(.1); Assert(lease.Owner(1000)==1 && lease.Read(1000).Buttons==0, "pause retains finite ownership with neutral input indefinitely");
+        lease.Resume(1000); Assert(lease.Owner(1000.1)==1 && lease.Read(1000.1).Buttons==0, "resume preserves the remaining lease window without replaying held input");
+        Assert(lease.Owner(1000.3)==0,"ordinary input expiry resumes after unpause");
+        lease.Claim(2,2000,true);lease.Suspend(2000);lease.Release(2,"disconnected");lease.Resume(3000);
+        Assert(lease.Owner(3000)==0,"unpausing cannot revive a disconnected owner");
         var run = new ActionRun(); run.Start(1, command, 10);
         Assert(!run.Expired(1000000) && Double.IsPositiveInfinity(run.Deadline), "tasks have no overall deadline");
         run.Finish("cancelled", "stopped"); Assert(!run.Running, "infinite tasks remain explicitly cancellable");
