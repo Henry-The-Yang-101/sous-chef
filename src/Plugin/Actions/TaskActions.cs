@@ -55,7 +55,7 @@ namespace SousChef.Plugin.Actions
             return Run.Describe(Json.Object("taskAction", request == null ? null : request.Action,
                 "repetitions", request == null ? 1 : request.Repetitions, "infinite", request != null && request.Repetitions == 0,
                 "completedRepetitions", completed, "completedSteps", completedSteps, "waitingReason", waitingReason,
-                "handoff", handoffEvidence, "observationError", observationError,
+                "handoff", handoffEvidence, "pendingDeliveries", pendingDeliveries.Count, "observationError", observationError,
                 "child", childStarted ? child.Describe() : null));
         }
         public string Start(PlayerControls actor, int owner, ControlCommand command)
@@ -65,6 +65,7 @@ namespace SousChef.Plugin.Actions
             if (command.Task == null || !definitions.TryGetValue(command.Task.Action, out definition)) return "unsupported_task";
             chef = actor; request = command.Task; inventory.Refresh(chef);
             if (!definition.Available()) return "task_not_available";
+            pendingDeliveries.Clear(); nextDeliveryCheck = 0;
             completed = completedSteps = 0; childStarted = false; waitingReason = null; observationError = null; handoffEvidence = null; step = null; plan = null; retryAt = 0;
             command.Indefinite = true; Run.Start(owner, command, Time.realtimeSinceStartup); input(0); return null;
         }
@@ -74,6 +75,7 @@ namespace SousChef.Plugin.Actions
             inventory.BeginObservation();
             try
             {
+                ObserveDeliveries();
                 if (!child.Run.Running && navigation.Action.State == "idle") handoffThrows.Tick(chef);
                 if (childStarted)
                 {
@@ -100,6 +102,12 @@ namespace SousChef.Plugin.Actions
                 { if (step.Progress()) { input(0); completedSteps++; step = null; } return; }
                 input(0);
                 if (Time.realtimeSinceStartup < retryAt) return;
+                if (request.Repetitions != 0 && completed >= request.Repetitions)
+                {
+                    if (pendingDeliveries.Count == 0) Finish("succeeded", "task_complete");
+                    else { Run.Advance("waiting_for_transport_delivery"); Wait("waiting_for_transport_delivery"); }
+                    return;
+                }
                 if (plan == null)
                 {
                     inventory.Refresh(chef);
@@ -112,7 +120,7 @@ namespace SousChef.Plugin.Actions
                     if (!plan.MoveNext())
                     {
                         plan.Dispose(); plan = null; completed++;
-                        if (request.Repetitions != 0 && completed >= request.Repetitions) { Finish("succeeded", "task_complete"); return; }
+                        if (request.Repetitions != 0 && completed >= request.Repetitions && pendingDeliveries.Count == 0) { Finish("succeeded", "task_complete"); return; }
                         retryAt = Time.realtimeSinceStartup + .2f; Run.Advance("next_repetition"); return;
                     }
                     step = plan.Current;
@@ -141,7 +149,7 @@ namespace SousChef.Plugin.Actions
         public void Cancel(string reason) { if (Run.Running) Finish("cancelled", reason); }
         public void Reset(string reason)
         {
-            Cancel(reason); inventory.Reset(); counterMotion.Clear(); humanDistances.Clear(); deliveredItems.Clear();
+            Cancel(reason); inventory.Reset(); counterMotion.Clear(); humanDistances.Clear(); deliveredItems.Clear(); pendingDeliveries.Clear();
             foreach (NavigationActions observer in observers.Values) observer.Dispose(); observers.Clear();
         }
         private void Finish(string state, string reason)

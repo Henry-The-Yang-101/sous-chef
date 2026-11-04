@@ -98,15 +98,16 @@ namespace SousChef.Plugin.Actions
             }
             return false;
         }
-        private bool HumanCanCollect(GameObject item, int player)
+        private bool HumanCanCollect(GameObject item, int player, bool refresh = true)
         {
-            RefreshHuman(player); var human = Human(player);
+            if (item == null) return false;
+            if (refresh) RefreshHuman(player); var human = Human(player);
             if (human != null && System.Object.ReferenceEquals(ActionObservations.Held(human), item)) return true;
             foreach (GameObject target in navigation.Targets())
                 if (HumanDistance(target) != Single.MaxValue && System.Object.ReferenceEquals(ActionObservations.Occupant(target), item)) return true;
             return false;
         }
-        private IEnumerable<TaskStep> Give(GameObject item, int player = 1)
+        private IEnumerable<TaskStep> Give(GameObject item, int player = 1, bool backgroundTransport = false)
         {
             var excluded = new List<Vector3>();
             var blockedTargets = new HashSet<GameObject>();
@@ -141,7 +142,11 @@ namespace SousChef.Plugin.Actions
                 else delivery = Do(choice.Throw ? "throw_to" : "place_at", choice.Target);
                 delivery.ReplanOnBlock = true; yield return delivery;
                 if (!delivery.Succeeded) { if (choice.Target != null) blockedTargets.Add(choice.Target); rejectedAt = Time.realtimeSinceStartup; continue; }
-                if (choice.Transport) yield return Until("waiting_for_transport_delivery", delegate { return HumanCanCollect(item, player); });
+                if (choice.Transport)
+                {
+                    if (backgroundTransport) DispatchDelivery(item, player);
+                    else yield return Until("waiting_for_transport_delivery", delegate { return HumanCanCollect(item, player); });
+                }
                 deliveredItems.Add(item);
                 yield break;
             }

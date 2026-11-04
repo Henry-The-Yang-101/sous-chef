@@ -106,6 +106,8 @@ internal static class Program
         var item=w.Ingredient("Tomato_Raw");w.Target.Add(new PickupItemSpawner {m_itemPrefab=item});
         var request=new TaskRequest {Action="prepare_near_player",Repetitions=2};request.Items.Add(new PreparationRequest {Selector="tomato",Preparation="raw",Quantity=1});
         Check(w.Tasks.Start(w.Chef,1,new ControlCommand {Id="two-batches",Operation="task",Task=request})==null,"finite preparation task accepted");
+        var shipment=new GameObject("ingredient still in transit");
+        typeof(TaskActions).GetMethod("DispatchDelivery",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic).Invoke(w.Tasks,new object[] {shipment,1});
         int pickups=0;
         for(int n=0;n<150 && w.Tasks.Run.Running;n++)
         {
@@ -120,6 +122,9 @@ internal static class Program
                 if(w.Skills.Run.Operation=="place_at" && w.Carrier.Item!=null) {destination.GetComponent<ServerAttachStation>().Item=w.Carrier.Item;w.Hold(null);}
             }
         }
+        Check(w.Tasks.Run.Running && pickups==2 && w.Releases==0,"pending transport does not block preparing subsequent repetitions, but finite completion still waits for delivery");
+        human.GetComponent<ServerPlayerAttachmentCarrier>().Item=shipment;
+        for(int n=0;n<8 && w.Tasks.Run.Running;n++)w.Tick(.25f);
         Check(w.Tasks.Run.State=="succeeded" && pickups==2 && w.Releases==1,"two repetitions perform two observed deliveries with one parent release");
         request.Repetitions=0;Check(w.Tasks.Start(w.Chef,1,new ControlCommand {Id="loop",Operation="task",Task=request})==null,"infinite task accepted");
         w.Target.GetComponent<BoxCollider>().enabled=false;w.Tick(1000);w.Tick(1000);

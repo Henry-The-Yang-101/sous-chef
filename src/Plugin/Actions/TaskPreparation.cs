@@ -129,7 +129,7 @@ namespace SousChef.Plugin.Actions
                         yield return Do("collect_contents", next.Station);
                     }
                     else yield return Do("pick_up", next.Station);
-                    foreach (TaskStep give in Give(ActionObservations.Held(chef), request.Player)) yield return give;
+                    foreach (TaskStep give in Give(ActionObservations.Held(chef), request.Player, true)) yield return give;
                     next.Delivered = true; continue;
                 }
                 LogisticsItem source = null; bool utensil = next.Request.Preparation == "empty";
@@ -173,7 +173,7 @@ namespace SousChef.Plugin.Actions
                     // No wait child occupies P2 while native time advances.
                     continue;
                 }
-                foreach (TaskStep give in Give(next.Item, request.Player)) yield return give;
+                foreach (TaskStep give in Give(next.Item, request.Player, true)) yield return give;
                 next.Delivered = true;
             }
         }
