@@ -11,7 +11,11 @@ namespace SousChef.Plugin.Actions
     internal static class TaskNative
     {
         public static Component Component(GameObject go, string name)
-        { if (go != null) foreach (Component c in go.GetComponents<Component>()) if (c != null && c.GetType().Name == name) return c; return null; }
+        {
+            if (go != null) foreach (Component c in go.GetComponents<Component>())
+                if (c != null) for (Type type = c.GetType(); type != null; type = type.BaseType) if (type.Name == name) return c;
+            return null;
+        }
         public static object Call(object instance, string method, params object[] args)
         {
             if (instance == null) return null;

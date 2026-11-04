@@ -113,6 +113,9 @@ internal static class Program
         w.Target.GetComponent<BoxCollider>().enabled=false;w.Tick(1000);w.Tick(1000);
         Check(w.Tasks.Run.Running && w.Releases==1,"infinite task survives long environmental wait");
         w.Tasks.Cancel("stopped");Check(!w.Tasks.Run.Running && !w.Skills.Run.Running && w.Releases==2,"stop cancels complete task and releases once");
+        var busy=(Json.Record)w.Navigation.Available(w.Chef);busy["actions"]=new[] {Json.Object("name","stop")};
+        w.Logistics.Decorate(busy,w.Chef,true);w.Tasks.Decorate(busy,w.Chef,true);
+        Check(((List<object>)busy["taskOptions"]).Count==0,"catalogue polling during a parent wait withholds jobs without casting the busy action array");
     }
     private static void ReadyFoodTasks()
     {

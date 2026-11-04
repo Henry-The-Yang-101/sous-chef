@@ -66,6 +66,23 @@ namespace SousChef.Plugin.Actions
                     }
                     else if (next == null || (!next.Processing && Passive(unit.Request) && !Passive(next.Request))) next = unit;
                 }
+                // Avoid beginning an indivisible chopping/travel segment that
+                // would carry us past another pot's native completion time.
+                // Short jobs can still fill the available cooking interval.
+                if (next != null && !next.Processing)
+                {
+                    float availableTime = Single.MaxValue;
+                    foreach (PreparationUnit unit in units)
+                        if (unit.Processing && !unit.Delivered) availableTime = Math.Min(availableTime, TaskNative.Remaining(unit.Item, unit.Request.Preparation == "mixed"));
+                    if (availableTime != Single.MaxValue)
+                    {
+                        PreparationUnit fits = null;
+                        foreach (PreparationUnit unit in units)
+                            if (!unit.Processing && !unit.Delivered && PreparationSeconds(unit) + 2 < availableTime &&
+                                (fits == null || Passive(unit.Request) && !Passive(fits.Request))) fits = unit;
+                        next = fits;
+                    }
+                }
                 if (next == null)
                 {
                     bool done = true; foreach (PreparationUnit unit in units) if (!unit.Delivered) done = false;
@@ -117,5 +134,16 @@ namespace SousChef.Plugin.Actions
             }
         }
         private static bool Passive(PreparationRequest request) { return request.Preparation == "cooked" || request.Preparation == "mixed"; }
+        private float PreparationSeconds(PreparationUnit unit)
+        {
+            LogisticsItem source = Source(unit.Request.Selector, unit.Request.Preparation == "empty");
+            if (source == null) return Single.MaxValue;
+            // Travel uses certified route distance and the native chef speed.
+            // Chopping is an estimate (animation/collaboration can change it),
+            // while equipment readiness uses exact native progress and duration.
+            float travel = source.Distance / Math.Max(.1f, chef.Movement.RunSpeed);
+            float chopping = unit.Request.Preparation != "raw" && unit.Request.Preparation != "empty" && source.Item.GetComponent<WorkableItem>() != null ? 8 : 0;
+            return travel * 2 + chopping + 4;
+        }
     }
 }

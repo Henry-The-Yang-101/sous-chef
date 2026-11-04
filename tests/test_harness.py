@@ -24,6 +24,7 @@ class FakeBridge:
         self.players = []
         self.items, self.ingredients, self.utensil_types, self.delivery_destinations, self.jobs = [], [], [], [], []
         self.job_options = None
+        self.tasks = []
 
     def available_actions(self):
         if self.failure:
@@ -36,7 +37,7 @@ class FakeBridge:
                        'get_plate': [''], 'clear_station': [t['id'] for t in targets]}
             job_options = {name: [{'sourceId': source, 'destinationIds': [d['id'] for d in self.delivery_destinations]}
                                   for source in sources.get(name, [i['id'] for i in self.items])] for name in self.jobs}
-        return {'destinations': copy.deepcopy(self.destinations), 'targets': copy.deepcopy(targets),
+        return {'taskOptions': copy.deepcopy(self.tasks), 'destinations': copy.deepcopy(self.destinations), 'targets': copy.deepcopy(targets),
                 'players': copy.deepcopy(self.players), 'navigation': self.control['navigation'],
                 'items': copy.deepcopy(self.items), 'ingredients': copy.deepcopy(self.ingredients),
                 'utensilTypes': self.utensil_types[:], 'deliveryDestinations': copy.deepcopy(self.delivery_destinations),
@@ -59,6 +60,11 @@ class FakeBridge:
     def pick_up(self, target):
         self.calls.append(('pick_up', target))
         self.control.update(ownedByYou=True, action={'state': 'running', 'operation': 'pick_up'})
+        return copy.deepcopy(self.control)
+
+    def run_task(self, action, repetitions=1, **kwargs):
+        self.calls.append(('task', action, repetitions, kwargs))
+        self.control.update(ownedByYou=True, action={'state': 'running', 'operation': 'task'})
         return copy.deepcopy(self.control)
 
     def work_at(self, target, until='work_complete', timeout=60):
@@ -116,6 +122,17 @@ class HarnessTests(unittest.TestCase):
         self.native.destinations.clear()
         self.bridge.poll()
         self.assertEqual(self.bridge.state()['catalog']['destinations'], [])
+
+    def test_task_requires_live_eligibility_and_preserves_infinite_repeat(self):
+        self.native.tasks = [{'name': 'monitor_equipment'}]
+        self.bridge.poll()
+        result = self.bridge.act('viewer', 'test-session', 'task', 0, 'task', {'action': 'monitor_equipment', 'repetitions': None})
+        self.assertTrue(result['control']['ownedByYou'])
+        self.assertEqual(self.native.calls[-1], ('task', 'monitor_equipment', None, {}))
+        self.native.tasks = []
+        with self.assertRaises(HarnessError):
+            self.bridge.act('viewer', 'test-session', 'task', 0, 'task', {'action': 'wash_dishes'})
+        self.assertEqual(len([c for c in self.native.calls if c[0] == 'task']), 1)
 
     def test_implemented_actions_remain_visible_when_paused_catalogue_hides_jobs(self):
         self.native.hello.update(bridgeVersion='0.6.0', actions=['navigate_to', 'move_item', 'stop'])

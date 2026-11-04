@@ -9,7 +9,7 @@ namespace SousChef.Core
         public static readonly string[] Names = { "navigate_to", "pick_up", "place_at", "add_ingredient", "collect_contents", "work_at", "activate", "discard", "wait_until", "throw_to", "throw_to_player", "stop" };
         public static readonly string[] LogisticsNames = { "move_item", "fetch_ingredient", "get_plate", "get_utensil", "stage_item", "return_utensil", "clear_station" };
         public static string[] AllNames
-        { get { var result = new string[Names.Length + LogisticsNames.Length]; Names.CopyTo(result, 0); LogisticsNames.CopyTo(result, Names.Length); return result; } }
+        { get { var result = new string[Names.Length + LogisticsNames.Length + 1]; Names.CopyTo(result, 0); LogisticsNames.CopyTo(result, Names.Length); result[result.Length - 1] = "task"; return result; } }
         public static readonly string[] WorkConditions = { "work_complete", "one_plate_clean", "sink_empty" };
         public static readonly string[] WaitConditions = { "work_complete", "one_plate_clean", "sink_empty", "occupied", "empty", "cooked", "mixed", "reachable", "ready" };
         public int Owner { get; private set; }

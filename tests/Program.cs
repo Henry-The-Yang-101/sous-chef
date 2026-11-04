@@ -35,6 +35,10 @@ internal static class Program
         Assert(command.Task.Items.Count == 2 && command.Task.Items[0].Selector == "chicken" && command.Task.Items[0].Quantity == 2, "mixed ingredient utensil task grammar");
         foreach (string value in new[] {"0", "11", "-1", "nan", "1.5"})
         { bool rejected=false; try { ControlCommand.Parse("task bad take_ready " + value); } catch(ArgumentException) { rejected=true; } Assert(rejected,"reject invalid repetitions " + value); }
+        var lease = new ControlLease(); Assert(lease.Claim(1, 0, true), "task owns durable lease");
+        lease.Set(1, new ControlCommand {Sequence=1,Milliseconds=300,Buttons=2}, 0);
+        Assert(lease.Owner(1000)==1 && lease.Read(1000).Buttons==0, "task ownership survives stalls while input expires neutral");
+        lease.Release(1,"disconnected");Assert(lease.Owner(1001)==0,"disconnect releases persistent task ownership");
         var run = new ActionRun(); run.Start(1, command, 10);
         Assert(!run.Expired(1000000) && Double.IsPositiveInfinity(run.Deadline), "tasks have no overall deadline");
         run.Finish("cancelled", "stopped"); Assert(!run.Running, "infinite tasks remain explicitly cancellable");

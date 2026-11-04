@@ -119,19 +119,20 @@ namespace SousChef.Core
     {
         private readonly object sync = new object();
         private int owner;
+        private bool persistent;
         private long sequence;
         private double deadline, inputDeadline;
         private ControlInput input;
         public string LastRelease { get; private set; }
-        private void Clear(string reason) { owner = 0; input = new ControlInput(); inputDeadline = 0; LastRelease = reason; }
+        private void Clear(string reason) { owner = 0; persistent = false; input = new ControlInput(); inputDeadline = 0; LastRelease = reason; }
         private void Expire(double now) { if (owner != 0 && now >= deadline) Clear("expired"); }
-        public bool Claim(int client, double now)
+        public bool Claim(int client, double now, bool retainOwnership = false)
         {
             lock (sync)
             {
                 Expire(now);
                 if (owner != 0) return false;
-                owner = client; sequence = 0; deadline = now + 0.5; inputDeadline = now; input = new ControlInput(); return true;
+                owner = client; persistent = retainOwnership; sequence = 0; deadline = persistent ? Double.PositiveInfinity : now + 0.5; inputDeadline = now; input = new ControlInput(); return true;
             }
         }
         public string Set(int client, ControlCommand command, double now)
@@ -144,7 +145,7 @@ namespace SousChef.Core
                 if (owner != client || owner == 0) return "not_owner";
                 if (inputMilliseconds < 1 || inputMilliseconds > command.Milliseconds) return "invalid_input_window";
                 if (command.Sequence <= sequence) return "stale_sequence";
-                sequence = command.Sequence; deadline = now + command.Milliseconds / 1000.0;
+                sequence = command.Sequence; deadline = persistent ? Double.PositiveInfinity : now + command.Milliseconds / 1000.0;
                 inputDeadline = now + inputMilliseconds / 1000.0;
                 input = new ControlInput { X = command.X, Y = command.Y, Buttons = command.Buttons }; return null;
             }

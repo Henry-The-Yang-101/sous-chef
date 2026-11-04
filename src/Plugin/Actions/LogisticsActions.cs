@@ -270,7 +270,7 @@ namespace SousChef.Plugin.Actions
                 default: return !entry.Supply ? entry.ItemId : null;
             }
         }
-        public void Decorate(Json.Record catalog, PlayerControls actor)
+        public void Decorate(Json.Record catalog, PlayerControls actor, bool parentBusy = false)
         {
             var items = new List<object>(); var ingredients = new List<object>(); var utensils = new List<string>();
             var destinations = new List<object>(); var options = Json.Object();
@@ -278,7 +278,7 @@ namespace SousChef.Plugin.Actions
             catalog["items"] = items; catalog["ingredients"] = ingredients; catalog["utensilTypes"] = utensils;
             catalog["deliveryDestinations"] = destinations; catalog["jobOptions"] = options;
             catalog["logisticsObservationErrors"] = Inventory.Errors;
-            if (Run.Running || child.Run.Running || navigation.Action.State != "idle") return;
+            if (parentBusy || Run.Running || child.Run.Running || navigation.Action.State != "idle") return;
             Inventory.Refresh(actor, catalog);
             var reachable = new Dictionary<string, Json.Record>();
             foreach (Json.Record identity in (List<object>)catalog["destinations"]) reachable[(string)identity["id"]] = identity;

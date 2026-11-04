@@ -105,7 +105,7 @@ def run_case(args, case):
         ref = fields(station, 'ServerAttachStation').get('m_item')
         occupant = next((o for o in after['objects'] if ref and o['id'] == ref.get('objectId')), None)
         cargo_id = ((final.get('details') or {}).get('cargo') or {}).get('objectInstanceId')
-        expected = 'cancelled' if stop else 'blocked' if duration > 500 else 'succeeded'
+        expected = 'cancelled' if stop else 'succeeded'
         exact_delivered = occupant is not None and occupant['unityInstanceId'] == cargo_id and not carried
         cargo_retained = len(carried) == 1 and carried[0]['unityInstanceId'] == cargo_id and occupant is None
         result.update(state=final['state'], reason=final['reason'], recoveryObserved=recovered,

@@ -12,7 +12,7 @@ using UnityEngine.SceneManagement;
 namespace SousChef.Plugin
 {
     // Opt-in automation of the installed player. No replacement physics or level data.
-    internal sealed class NativeSimulator : MonoBehaviour
+    internal sealed partial class NativeSimulator : MonoBehaviour
     {
         public static bool Enabled { get { return !String.IsNullOrEmpty(Environment.GetEnvironmentVariable("SOUS_CHEF_NATIVE_SIM")) && Array.IndexOf(Environment.GetCommandLineArgs(), "-batchmode") >= 0 && Array.IndexOf(Environment.GetCommandLineArgs(), "-nographics") >= 0; } }
         internal string GameAssemblyHash, BridgeSession;
@@ -121,6 +121,7 @@ namespace SousChef.Plugin
                         else if (value.StartsWith("probe-throw ", StringComparison.Ordinal)) ProbeThrow(Int32.Parse(value.Substring(12)));
                         else if (value.StartsWith("probe-walk ", StringComparison.Ordinal)) ProbeWalk(value.Substring(11));
                         else if (value.StartsWith("interrupt-target ", StringComparison.Ordinal)) InterruptTarget(value.Substring(17));
+                        else if (value.StartsWith("task-fixture ", StringComparison.Ordinal)) TaskFixture(value.Substring(13));
                         else if (value.StartsWith("load ", StringComparison.Ordinal)) Load(value.Substring(5));
                         else if (value.StartsWith("fps ", StringComparison.Ordinal)) SetFrameRate(Int32.Parse(value.Substring(4)));
                         else throw new ArgumentException("Unknown simulator command");

@@ -22,7 +22,7 @@ namespace SousChef.Plugin.Actions
             var planner = new ThrowPlanner(); ThrowPlan proof;
             return planner.Prepare(chef, item, target) == null && planner.Find(navigation, out proof) == null;
         }
-        private Handoff FindHandoff(GameObject item, int player)
+        private Handoff FindHandoff(GameObject item, int player, List<Vector3> excluded)
         {
             RefreshWorld(player); PlayerControls human = Human(player); if (human == null || item == null) return null;
             GameObject best = null; bool throwItem = false; float score = Single.MaxValue;
@@ -43,6 +43,8 @@ namespace SousChef.Plugin.Actions
             {
                 float angle = i * Mathf.PI / 6; Vector3 stance;
                 Vector3 near = human.transform.position + new Vector3(Mathf.Cos(angle), 0, Mathf.Sin(angle)) * 1.15f;
+                bool skip = false; foreach (Vector3 tried in excluded) if (Vector3.Distance(tried, near) < .4f) skip = true;
+                if (skip) continue;
                 if (navigation.TryStance(near, out stance) && navigation.RouteCost(stance) != Single.MaxValue)
                     return new Handoff { Player = player, Mode = "drop_at_player", Approach = stance };
             }
@@ -89,19 +91,31 @@ namespace SousChef.Plugin.Actions
         }
         private IEnumerable<TaskStep> Give(GameObject item, int player = 1)
         {
-            Handoff choice = null;
-            yield return Until("waiting_for_player_handoff", delegate { choice = FindHandoff(item, player); return choice != null; });
-            handoffEvidence = Json.Object("mode", choice.Mode, "itemInstanceId", item.GetInstanceID(), "player", player,
-                "targetInstanceId", choice.Target == null ? null : (object)choice.Target.GetInstanceID());
-            if (choice.Player != 0)
+            var excluded = new List<Vector3>();
+            while (true)
             {
-                if (choice.Approach.HasValue) yield return WalkTo(Human(player).gameObject, choice.Approach.Value);
-                yield return new TaskStep { Phase = "giving_to_player", Command = delegate { return new ControlCommand { Operation = "throw_to_player", Destination = player.ToString() }; } };
-            }
-            else
-            {
-                yield return Do(choice.Throw ? "throw_to" : "place_at", choice.Target);
+                Handoff choice = null;
+                yield return Until("waiting_for_player_handoff", delegate { choice = FindHandoff(item, player, excluded); return choice != null; });
+                handoffEvidence = Json.Object("mode", choice.Mode, "itemInstanceId", item.GetInstanceID(), "player", player,
+                    "targetInstanceId", choice.Target == null ? null : (object)choice.Target.GetInstanceID());
+                TaskStep delivery;
+                if (choice.Player != 0)
+                {
+                    if (choice.Approach.HasValue)
+                    {
+                        yield return WalkTo(Human(player).gameObject, choice.Approach.Value);
+                        float settle = Time.realtimeSinceStartup + .3f;
+                        yield return Until("settling_for_handoff", delegate { return Time.realtimeSinceStartup >= settle; });
+                        DropPlan proof;
+                        if (!new DropHandoff().Plan(chef, item, Human(player), out proof)) { excluded.Add(choice.Approach.Value); continue; }
+                    }
+                    delivery = new TaskStep { Phase = "giving_to_player", Command = delegate { return new ControlCommand { Operation = "throw_to_player", Destination = player.ToString() }; } };
+                }
+                else delivery = Do(choice.Throw ? "throw_to" : "place_at", choice.Target);
+                delivery.ReplanOnBlock = true; yield return delivery;
+                if (!delivery.Succeeded) continue;
                 if (choice.Transport) yield return Until("waiting_for_transport_delivery", delegate { return HumanCanCollect(item, player); });
+                yield break;
             }
         }
     }

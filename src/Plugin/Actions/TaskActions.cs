@@ -12,6 +12,7 @@ namespace SousChef.Plugin.Actions
         public Func<ControlCommand> Command;
         public Func<bool> Ready;
         public Func<bool> Progress;
+        public bool ReplanOnBlock, Succeeded;
     }
     internal sealed class TaskDefinition
     {
@@ -76,9 +77,12 @@ namespace SousChef.Plugin.Actions
                     childStarted = false;
                     if (child.Run.State != "succeeded")
                     {
+                        if (step.ReplanOnBlock && child.CanRetry) { step = null; Wait(child.Run.Reason); return; }
+                        if (child.Run.State == "blocked" && child.CanRetry) { Wait(child.Run.Reason); return; }
                         if (!ActionRecovery.Transient(child.Run.Reason)) { Finish(child.Run.State == "cancelled" ? "cancelled" : "failed", child.Run.Reason); return; }
                         Wait(child.Run.Reason); return;
                     }
+                    step.Succeeded = true;
                     completedSteps++; step = null;
                 }
                 if (step != null && step.Progress != null)
@@ -112,6 +116,7 @@ namespace SousChef.Plugin.Actions
                 string error = child.Start(chef, Run.Owner, command);
                 if (error != null)
                 {
+                    if (step.ReplanOnBlock) step = null;
                     // A failed precondition has not pressed a button. Revalidate
                     // the same step when the environment allows it again.
                     Wait(error); return;
@@ -137,15 +142,26 @@ namespace SousChef.Plugin.Actions
         }
         private TaskStep Do(string operation, GameObject target, string condition = null)
         {
-            return new TaskStep { Phase = operation, Command = delegate { return new ControlCommand {
+            GameObject originalHeld = ActionObservations.Held(chef), originalOccupant = ActionObservations.Occupant(target);
+            var supply = target == null ? null : target.GetComponent<PickupItemSpawner>();
+            GameObject originalPrefab = supply == null ? null : supply.m_itemPrefab;
+            return new TaskStep { Phase = operation, Ready = delegate {
+                if (target == null || !target.activeInHierarchy) return false;
+                if (operation == "pick_up")
+                    return System.Object.ReferenceEquals(ActionObservations.Occupant(target), originalOccupant) &&
+                        (supply == null || System.Object.ReferenceEquals(supply.m_itemPrefab, originalPrefab));
+                if ((operation == "place_at" || operation == "add_ingredient" || operation == "collect_contents" || operation == "discard") &&
+                    !System.Object.ReferenceEquals(ActionObservations.Held(chef), originalHeld)) throw new InvalidOperationException("task_cargo_changed");
+                return operation != "place_at" && operation != "collect_contents" || System.Object.ReferenceEquals(ActionObservations.Occupant(target), originalOccupant);
+            }, Command = delegate { return new ControlCommand {
                 Operation = operation, Destination = navigation.RegisterItem(target), Condition = condition, DesiredState = "trigger" }; } };
         }
         private static TaskStep Until(string phase, Func<bool> ready) { return new TaskStep { Phase = phase, Ready = ready }; }
-        public void Decorate(Json.Record catalog, PlayerControls actor)
+        public void Decorate(Json.Record catalog, PlayerControls actor, bool parentBusy = false)
         {
             var choices = new List<object>(); catalog["taskOptions"] = choices;
             catalog["task"] = Describe();
-            if (Run.Running || child.Run.Running || navigation.Action.State != "idle") return;
+            if (parentBusy || Run.Running || child.Run.Running || navigation.Action.State != "idle") return;
             chef = actor; inventory.Refresh(chef, catalog);
             foreach (var pair in definitions)
             {

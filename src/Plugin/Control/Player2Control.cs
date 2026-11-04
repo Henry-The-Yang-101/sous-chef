@@ -46,7 +46,7 @@ namespace SousChef.Plugin.Control
             tasks = new TaskActions(navigation, interactions, Buttons, FinishLogistics);
             throwOptions = new ThrowOptions(navigation);
             server = new ControlServer(port, Json.Object("type", "hello", "controlProtocolVersion", 1,
-                "sessionId", session, "bridgeVersion", "0.7.3", "player", 2, "mode", "direct_logical_input", "maxHoldMs", 1000, "actions", ActionRun.AllNames),
+                "sessionId", session, "bridgeVersion", "0.8.0", "player", 2, "mode", "direct_logical_input", "maxHoldMs", 1000, "actions", ActionRun.AllNames),
                 delegate(int client) { lease.Release(client, "disconnected"); });
             server.Start();
         }
@@ -172,7 +172,7 @@ namespace SousChef.Plugin.Control
                 Discover(); unavailable = Check(KitchenGate.Inspect());
                 if (unavailable != null) error = unavailable;
                 else if (navigation.Action.State != "idle" || interactions.Run.Running || logistics.Run.Running || tasks.Run.Running) error = "action_in_progress";
-                else if (!lease.Claim(client, Now)) error = "already_claimed";
+                else if (!lease.Claim(client, Now, command.Operation == "task")) error = "already_claimed";
                 else
                 {
                     Restore(); Install(); navigationSequence = 0;
@@ -317,7 +317,7 @@ namespace SousChef.Plugin.Control
             else catalog["actions"] = new[] { Json.Object("name", "stop") };
             catalog["targets"] = targets; catalog["players"] = players; catalog["action"] = lastWasTask ? tasks.Describe() : lastWasLogistics ? logistics.Describe() : interactions.Describe();
             catalog["throwOptionsComplete"] = throwOptions.End();
-            logistics.Decorate(catalog, target); tasks.Decorate(catalog, target); return catalog;
+            logistics.Decorate(catalog, target, tasks.Run.Running); tasks.Decorate(catalog, target, logistics.Run.Running); return catalog;
         }
         private void Install()
         {

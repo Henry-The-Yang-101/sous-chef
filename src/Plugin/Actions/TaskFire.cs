@@ -27,7 +27,7 @@ namespace SousChef.Plugin.Actions
             stance = Vector3.zero; if (fire == null || !fire.OnFire()) return false;
             Component spray = TaskNative.Component(tool, "SprayingUtensil"); if (spray == null) return false;
             float range = ActionObservations.Read<float>(spray, "m_sprayDistance");
-            navigation.PrepareStances(chef); float best = Single.MaxValue;
+            float best = Single.MaxValue;
             for (int ring = 0; ring < 3; ring++)
                 for (int n = 0; n < 16; n++)
                 {
@@ -55,6 +55,7 @@ namespace SousChef.Plugin.Actions
                 if (Time.realtimeSinceStartup >= retry)
                 {
                     retry = Time.realtimeSinceStartup + .2f; Vector3 position;
+                    RefreshWorld();
                     if (FireStance(tool, fire, out position)) navigation.StartPosition(chef, Run.Owner, fire.gameObject, position, true);
                 }
                 return false;
@@ -66,10 +67,16 @@ namespace SousChef.Plugin.Actions
             if (!System.Object.ReferenceEquals(ActionObservations.Held(chef), tool)) yield return Do("pick_up", source.Source);
             while (true)
             {
+                RefreshWorld();
                 ServerFlammable selected = null; Vector3 stance = Vector3.zero;
                 foreach (ServerFlammable fire in ServerFlammable.GetAllOnFire())
                     if (FireStance(tool, fire, out stance)) { selected = fire; break; }
-                if (selected == null) break;
+                if (selected == null)
+                {
+                    if (!botSearchComplete)
+                    { yield return Until("waiting_for_fire_routes", delegate { RefreshWorld(); return botSearchComplete; }); continue; }
+                    break;
+                }
                 yield return WalkTo(selected.gameObject, stance);
                 yield return SprayFire(tool, selected);
                 // Re-scan after each extinguish: native fire can spread while
