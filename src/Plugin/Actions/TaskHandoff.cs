@@ -51,17 +51,17 @@ namespace SousChef.Plugin.Actions
             foreach (GameObject target in navigation.Targets())
             {
                 if (!Reachable(target) || !CanDeliver(item, target)) continue;
-                if (ConveyorReachesHuman(target, item) || ReturningCounter(target))
+                if (ConveyorReachesHuman(target, item) || ReturningCounter(target, player))
                     return new Handoff { Target = target, Transport = true, Mode = "transport_to_player" };
             }
             return null;
         }
-        private bool ReturningCounter(GameObject target)
+        private bool ReturningCounter(GameObject target, int player)
         {
             Vector3 visited;
             // Observe an actual human-accessible stop in this round. Unknown
             // motion is never treated as a promise about a future counter pose.
-            return Counter(target) && humanCounterVisits.TryGetValue(target.GetInstanceID(), out visited) &&
+            return Counter(target) && humanCounterVisits.TryGetValue(player + ":" + target.GetInstanceID(), out visited) &&
                 Vector3.Distance(visited, target.transform.position) > .5f;
         }
         private bool ConveyorReachesHuman(GameObject start, GameObject item)

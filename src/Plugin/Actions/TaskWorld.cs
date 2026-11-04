@@ -45,7 +45,8 @@ namespace SousChef.Plugin.Actions
     {
         private readonly Dictionary<int, NavigationActions> observers = new Dictionary<int, NavigationActions>();
         private readonly Dictionary<int, float> humanDistances = new Dictionary<int, float>();
-        private readonly Dictionary<int, Vector3> humanCounterVisits = new Dictionary<int, Vector3>();
+        private readonly Dictionary<string, Vector3> humanCounterVisits = new Dictionary<string, Vector3>();
+        private bool botSearchComplete;
         private PlayerControls Human(int player = 1)
         {
             PlayerControls found = null;
@@ -56,7 +57,8 @@ namespace SousChef.Plugin.Actions
         }
         private void RefreshWorld(int player = 1)
         {
-            inventory.Refresh(chef); RefreshHuman(player);
+            var catalog = (Json.Record)navigation.Available(chef); botSearchComplete = (bool)catalog["complete"];
+            inventory.Refresh(chef, catalog); RefreshHuman(player);
         }
         private void RefreshHuman(int player)
         {
@@ -69,7 +71,7 @@ namespace SousChef.Plugin.Actions
             {
                 int instance = (int)identity["objectInstanceId"]; humanDistances[instance] = (float)identity["routeDistance"];
                 GameObject go = observer.Resolve((string)identity["id"]);
-                if (Counter(go)) humanCounterVisits[instance] = go.transform.position;
+                if (Counter(go)) humanCounterVisits[player + ":" + instance] = go.transform.position;
             }
         }
         private float HumanDistance(GameObject go)

@@ -25,6 +25,11 @@ namespace SousChef.Plugin.Actions
             var stack = entry.Item.GetComponent<ServerStack>();
             return entry.Item.GetComponent<CleanPlateStack>() != null ? (stack == null ? null : stack.InspectTopOfStack()) : entry.Item;
         }
+        public static bool CanCollectEmpty(PlayerControls actor, GameObject source)
+        {
+            var pickup = PlayerControlsHelper.GetControllingPickupHandler_Client(source);
+            return pickup != null && pickup.CanHandlePickup(new CarrierView(actor, null));
+        }
         public static string Collect(PlayerControls actor, LogisticsItem entry, string operation)
         {
             if (entry.Item == null || entry.Source == null || !entry.Source.activeInHierarchy) return "source_unavailable";

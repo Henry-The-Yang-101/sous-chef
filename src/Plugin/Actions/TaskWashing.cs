@@ -11,7 +11,7 @@ namespace SousChef.Plugin.Actions
         {
             inventory.Refresh(chef); var sources = new List<LogisticsItem>();
             foreach (LogisticsItem item in inventory.Items)
-                if (!item.Supply && TaskNative.Dirty(item.Item) && !item.InUse && Reachable(item.Source)) sources.Add(item);
+                if (!item.Supply && TaskNative.Dirty(item.Item) && !item.InUse && Reachable(item.Source) && LogisticsChecks.CanCollectEmpty(chef, item.Source)) sources.Add(item);
             sources.Sort(delegate(LogisticsItem a, LogisticsItem b) { return a.Distance.CompareTo(b.Distance); });
             return sources;
         }
@@ -25,6 +25,7 @@ namespace SousChef.Plugin.Actions
                 float cost = humanOnly ? HumanDistance(target) : inventory.DistanceTo(target);
                 if (cost < distance) { chosen = target; distance = cost; }
             }
+            if (humanOnly && !botSearchComplete) return null;
             return chosen;
         }
         private bool WashingAvailable()

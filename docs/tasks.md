@@ -68,3 +68,12 @@ already in that sink). It snapshots the currently obtainable stacks, merges them
 using native placement/pickup, carries the whole batch to the sink, and washes
 until the sink empties. New dirty stacks are handled by the next repetition.
 An already-held dirty stack can join the batch; unrelated cargo is never moved.
+
+## Deliver dirty dishes
+
+`deliver_dirty_dishes` is offered only with obtainable dirty stacks, a sink the
+human can reach, and a completed P2 route search proving no accessible sink.
+An incomplete P2 search cannot authorize this option. It shares batch collection
+with washing and the same player/conveyor/moving-counter delivery planner with
+ingredient preparation. Dirty stacks use native drop/placement; they are never
+treated as throwable ingredients.
