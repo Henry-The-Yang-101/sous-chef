@@ -40,6 +40,9 @@ and plates). Each repetition prepares the entire list. Native ingredient IDs
 from the catalogue also work. Chopping follows the native output prefab;
 cooking/mixing uses compatible empty containers on equipment, or stages the
 ingredient while retrieving and installing an empty compatible container.
+Processed requests also recognize later stages in that native work-output chain:
+supplied chopped food can go directly into compatible equipment. Sources needing
+less chopping take priority. Raw requests retain exact raw identities.
 
 The localhost ingredient chooser is a dropdown populated from
 `catalog.preparationOptions`: native dispenser roots for this kitchen, or observed
@@ -56,6 +59,9 @@ destination; if all alternatives are blocked, the same task waits and retries.
 The scheduler starts passive processing before short deliveries, performs other
 requested preparation while equipment runs, and collects completed containers
 before starting more work. Processing remains native and uses native progress/time.
+Missing ingredients defer only their own units; other available requested food
+continues. On moving supports, an incomplete background catalogue may propose a
+local board or processor for the active action planner to verify before use.
 It retains exact containers and stations between visits. Native remaining cooking
 time and conservative estimates of travel/chopping prevent starting long work
 just before a pot finishes. Full equipment defers new cooking units instead of
@@ -72,6 +78,11 @@ toward that stop or an observed complete return cycle. Unknown/one-way motion
 waits for evidence. Forecasts never replace the final accessibility check. Transport delivery completes only after the
 exact item reaches a human-accessible holder or the human's hands. Safe empty
 countertops are used when putting equipment down; conveyor belts are not storage.
+An armed native throw is committed: releasing its use button also launches during
+cleanup. The executor keeps observing that cargo if its final proof changes or a
+native launch arrives early. A failed primitive handoff can still fulfill the task
+when a fresh native route proves the exact item is collectible within five walking
+units of the human. This never replays the throw or takes another ingredient.
 
 ## Take ready food off heat
 
