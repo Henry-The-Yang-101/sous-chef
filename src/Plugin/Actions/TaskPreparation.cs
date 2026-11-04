@@ -15,6 +15,38 @@ namespace SousChef.Plugin.Actions
         }
         partial void RegisterPreparation()
         { Register("prepare_near_player", PreparationAvailable, PrepareNearPlayer); }
+        private bool PreparedIngredientMatches(LogisticsItem candidate, string selector)
+        {
+            // A preparation request names a dispenser root. Follow its native
+            // work outputs to recognize supplied food at later stages without
+            // weakening exact raw identities in the logistics API.
+            foreach (LogisticsItem root in inventory.Items)
+            {
+                if (!root.Supply || !LogisticsInventory.IngredientMatches(root, selector)) continue;
+                var seen = new HashSet<GameObject>(); GameObject stage = root.Item;
+                while (stage != null && seen.Add(stage))
+                {
+                    var workable = stage.GetComponent<WorkableItem>();
+                    stage = workable == null ? null : workable.GetNextPrefab();
+                    string id, name;
+                    if (LogisticsInventory.IngredientIdentity(stage, out id, out name) && id == candidate.IngredientId) return true;
+                }
+            }
+            return false;
+        }
+        private static int PreparationWork(GameObject item)
+        {
+            int count = 0; var seen = new HashSet<GameObject>();
+            while (item != null && seen.Add(item))
+            {
+                var workable = item.GetComponent<WorkableItem>();
+                if (workable == null) return count;
+                count++; item = workable.GetNextPrefab();
+            }
+            return count;
+        }
+        private LogisticsItem PreparationSource(PreparationRequest desired)
+        { return Source(desired.Selector, desired.Preparation == "empty", desired.Preparation != "raw" && desired.Preparation != "empty"); }
         private bool PreparationAvailable()
         {
             if (ActionObservations.Held(chef) != null || Human() == null) return false;
@@ -137,12 +169,12 @@ namespace SousChef.Plugin.Actions
                 }
                 LogisticsItem source = null; bool utensil = next.Request.Preparation == "empty";
                 PreparationUnit current = next;
-                yield return Until("waiting_for_ingredient", delegate { source = Source(current.Request.Selector, utensil); return source != null; });
+                yield return Until("waiting_for_ingredient", delegate { source = PreparationSource(current.Request); return source != null; });
                 TaskStep pickup = Do("pick_up", ActionObservations.PickupTarget(source.Source, source.Supply ? null : source.Item));
                 pickup.ReplanOnBlock = true; yield return pickup;
                 if (!pickup.Succeeded) continue;
                 next.Item = ActionObservations.Held(chef);
-                if (!utensil && next.Request.Preparation != "raw" && next.Item.GetComponent<WorkableItem>() != null)
+                while (!utensil && next.Request.Preparation != "raw" && next.Item.GetComponent<WorkableItem>() != null)
                 {
                     GameObject board = null;
                     yield return Until("waiting_for_chopping_board", delegate { board = Board(current.Item); return board != null; });
@@ -193,7 +225,7 @@ namespace SousChef.Plugin.Actions
         }
         private float PreparationSeconds(PreparationUnit unit)
         {
-            LogisticsItem source = Source(unit.Request.Selector, unit.Request.Preparation == "empty");
+            LogisticsItem source = PreparationSource(unit.Request);
             if (source == null) return Single.MaxValue;
             // Travel uses certified route distance and the native chef speed.
             // Chopping is an estimate (animation/collaboration can change it),

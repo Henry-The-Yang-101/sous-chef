@@ -186,6 +186,33 @@ internal static class Program
         Check(board.Invoke(w.Tasks,new object[] {item})==null,"a board on another elevation is not a provisional local station");
         inventory.EndObservation();
     }
+    private static void PreparedIngredientSources()
+    {
+        var w=new World();var chopped=w.Ingredient("arbitrary chopped identity");
+        var root=new GameObject("arbitrary raw prefab");root.Add(new WorkableItem {Next=chopped});
+        w.Target.Add(new PickupItemSpawner {m_itemPrefab=root});
+        var counter=w.Delivery();counter.Add(new Pickup());counter.GetComponent<ServerAttachStation>().Item=chopped;
+        var catalog=(Json.Record)w.Navigation.Available(w.Chef);w.Tasks.Decorate(catalog,w.Chef);
+        string rootId,label;LogisticsInventory.IngredientIdentity(root,out rootId,out label);
+        var flags=System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic;
+        var source=typeof(TaskActions).GetMethod("PreparationSource",flags);
+        foreach(string state in new[] {"chopped","cooked","mixed"})
+        {
+            var selected=(LogisticsItem)source.Invoke(w.Tasks,new object[] {new PreparationRequest {Selector=rootId,Preparation=state}});
+            Check(selected!=null && selected.Item==chopped,"processed preparation recognizes and prefers native work output for "+state);
+        }
+        var raw=(LogisticsItem)source.Invoke(w.Tasks,new object[] {new PreparationRequest {Selector=rootId,Preparation="raw"}});
+        Check(raw!=null && raw.Supply,"raw preparation retains the exact dispenser identity instead of substituting chopped food");
+        var delivered=(HashSet<GameObject>)typeof(TaskActions).GetField("deliveredItems",flags).GetValue(w.Tasks);delivered.Add(chopped);
+        var fresh=(LogisticsItem)source.Invoke(w.Tasks,new object[] {new PreparationRequest {Selector=rootId,Preparation="cooked"}});
+        Check(fresh!=null && fresh.Supply,"later-stage matching preserves the human's delivered ingredients");
+        delivered.Clear();counter.GetComponent<ServerAttachStation>().Item=w.Ingredient("unrelated processed food");
+        var different=(LogisticsItem)source.Invoke(w.Tasks,new object[] {new PreparationRequest {Selector=rootId,Preparation="chopped"}});
+        Check(different!=null && different.Supply,"unrelated processed food never matches a preparation root");
+        var intermediate=new GameObject("intermediate prefab");intermediate.Add(new WorkableItem {Next=chopped});root.GetComponent<WorkableItem>().Next=intermediate;
+        var work=typeof(TaskActions).GetMethod("PreparationWork",System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.NonPublic);
+        Check((int)work.Invoke(null,new object[] {root})==2,"preparation follows every native work stage");
+    }
     private static void MixerReadiness()
     {
         var w=new World(t=>t.Add(new MixingStation()));
@@ -1100,6 +1127,6 @@ internal static class Program
         w.Colliders[0].gameObject.Add(new RespawnCollider());Check(!received.Received(item,human.GetComponent<PlayerControls>()),"a newly hazardous floor cannot count as a verified ground receipt");
         Check(planner.Prepare(w.Chef,item,human,groundHandoff:true)=="no_nearby_ground","hazardous receiving ground cannot authorize a throw");
     }
-    private static void Main() { CounterForecasts();PersistentTasks();HumanSinkEligibility();NativeUtensilDefinitions();PreparationEquipmentDiscovery();MixerReadiness();ReadyFoodTasks();PauseTimers();MovingPickups();Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();GroundThrows();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
+    private static void Main() { CounterForecasts();PersistentTasks();HumanSinkEligibility();NativeUtensilDefinitions();PreparationEquipmentDiscovery();PreparedIngredientSources();MixerReadiness();ReadyFoodTasks();PauseTimers();MovingPickups();Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();GroundThrows();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
     private static ClientInteractable GetCurrentlyInteractingForTest(this PlayerControls chef) { return chef.GetComponent<ClientPlayerControlsImpl_Default>().Current; }
 }

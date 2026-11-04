@@ -179,14 +179,15 @@ namespace SousChef.Plugin.Actions
                 excluded.Add(destination); rejectedAt = Time.realtimeSinceStartup;
             }
         }
-        private LogisticsItem Source(string selector, bool utensil = false)
+        private LogisticsItem Source(string selector, bool utensil = false, bool processed = false)
         {
-            inventory.Refresh(chef); LogisticsItem best = null; float score = Single.MaxValue;
+            inventory.Refresh(chef); LogisticsItem best = null; float score = Single.MaxValue; int bestWork = Int32.MaxValue;
             string utensilType = LogisticsInventory.CanonicalUtensil(selector); bool plate = utensilType == "plate";
             foreach (LogisticsItem entry in inventory.Items)
             {
                 if (!entry.Supply && deliveredItems.Contains(entry.Item)) continue;
-                bool match = utensil ? plate ? entry.CleanPlate : entry.Empty && entry.UtensilType == utensilType : LogisticsInventory.IngredientMatches(entry, selector);
+                bool match = utensil ? plate ? entry.CleanPlate : entry.Empty && entry.UtensilType == utensilType :
+                    LogisticsInventory.IngredientMatches(entry, selector) || processed && PreparedIngredientMatches(entry, selector);
                 if (!match) continue;
                 string collect = LogisticsChecks.Collect(chef, entry, plate ? "get_plate" : "move_item");
                 float approach = ApproachCost(entry.Source);
@@ -196,9 +197,10 @@ namespace SousChef.Plugin.Actions
                 // A moving raft can continually invalidate a distant catalogue
                 // frontier. Let the pickup's bounded active planner try a local
                 // source on the same native support; this is not a route proof.
-                // Certified sources always win over these provisional choices.
+                // For equivalent preparation stages, prefer certified sources.
                 float candidate = (provisional ? approach : entry.Distance) + (entry.Supply ? 10000 : 0);
-                if (candidate < score) { best = entry; score = candidate; }
+                int work = processed ? PreparationWork(entry.Item) : 0;
+                if (work < bestWork || work == bestWork && candidate < score) { best = entry; score = candidate; bestWork = work; }
             }
             return best;
         }

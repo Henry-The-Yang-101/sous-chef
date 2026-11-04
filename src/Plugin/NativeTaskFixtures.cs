@@ -19,7 +19,9 @@ namespace SousChef.Plugin
             {
                 // Explicit supplied-food initial conditions for separated chefs.
                 bool loose = args[0] == "loose-ingredient";
-                if (args.Length != (loose ? 5 : 3)) throw new ArgumentException("invalid_ingredient_fixture");
+                int required = loose ? 5 : 3;
+                bool chopped = args.Length == required + 1 && args[required] == "chopped";
+                if (args.Length != required && !chopped) throw new ArgumentException("invalid_ingredient_fixture");
                 GameObject source = FixtureObject(Int32.Parse(args[1]));
                 var supply = source.GetComponent<PickupItemSpawner>();
                 if (supply == null || supply.m_itemPrefab == null) throw new ArgumentException("fixture_requires_ingredient_supply");
@@ -36,8 +38,16 @@ namespace SousChef.Plugin
                         if (Single.IsNaN(value) || Single.IsInfinity(value) || Math.Abs(value) > 1000) throw new ArgumentException("invalid_fixture_position");
                         point[n] = value;
                     }
-                NetworkUtils.RegisterSpawnablePrefab(source, supply.m_itemPrefab);
-                GameObject food = NetworkUtils.ServerSpawnPrefab(source, supply.m_itemPrefab);
+                GameObject prefab = supply.m_itemPrefab;
+                if (chopped)
+                {
+                    var seen = new HashSet<GameObject>();
+                    while (prefab != null && prefab.GetComponent<WorkableItem>() != null && seen.Add(prefab))
+                        prefab = prefab.GetComponent<WorkableItem>().GetNextPrefab();
+                    if (prefab == null || prefab.GetComponent<WorkableItem>() != null) throw new ArgumentException("fixture_requires_finished_work_output");
+                }
+                NetworkUtils.RegisterSpawnablePrefab(source, prefab);
+                GameObject food = NetworkUtils.ServerSpawnPrefab(source, prefab);
                 if (loose)
                 {
                     food.transform.position = point;
@@ -48,6 +58,7 @@ namespace SousChef.Plugin
                 else if (station != null) station.AddItem(food, Vector2.up, new PlacementContext(PlacementContext.Source.Player));
                 else carrier.CarryItem(food);
                 result["itemInstanceId"] = food.GetInstanceID(); result["sourceInstanceId"] = source.GetInstanceID();
+                result["preparation"] = chopped ? "chopped" : "raw";
                 result["targetInstanceId"] = loose ? null : (object)target.GetInstanceID();
             }
             else if (args[0] == "collect")
