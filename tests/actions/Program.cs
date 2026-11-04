@@ -186,6 +186,10 @@ internal static class Program
         for(int i=0;i<5;i++)w.Tick(.25f);w.Tick(1000);
         Check(w.Tasks.Run.Running && !w.Skills.Run.Running && !w.Inputs.Contains(1),"heat task waits indefinitely without picking up uncooked food");
         w.Tasks.Cancel("stopped");
+        var occupied=w.Delivery();var recipient=new GameObject("empty plate");recipient.Add(new ServerIngredientContainer());recipient.Add(new ServerPlate());occupied.GetComponent<ServerAttachStation>().Item=recipient;
+        var parking=typeof(TaskActions).GetMethod("Parking",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic);
+        var selected=(GameObject)parking.Invoke(w.Tasks,new object[] {pan,null,false,null});
+        Check(selected!=null && selected!=occupied,"parking excludes an empty plate on a counter: native placement there would transfer food rather than park the held object");
         cooking.m_ServerData.m_cookingState=ProcessingState.Completed;
         var plate=new GameObject("plate");var contents=plate.Add(new ServerIngredientContainer());plate.Add(new ServerPlate {m_ingredientContainer=contents});w.Hold(plate);
         Check(w.Start("collect_contents")==null,"compatible held plate can collect cooked pot contents");w.Arrive();
@@ -219,6 +223,15 @@ internal static class Program
         w=new World();w.Hold(w.Ingredient("tomato"));Check(w.Start("pick_up")=="hands_full","pickup never silently parks held food");
         w=new World();w.Hold(w.Ingredient("tomato"));w.Start("place_at");w.Arrive();w.Verify();w.Tick(3);
         Check(w.Skills.Run.Reason=="outcome_not_observed","no native effect times out without another placement tap");
+
+        w=new World();item=w.Ingredient("tomato");w.Hold(item);
+        Check(w.Skills.Start(w.Chef,1,new ControlCommand {Operation="place_at",Destination=w.Id,Indefinite=true})==null,"task placement starts with persistent recovery");
+        w.Arrive();w.Verify();w.Tick(3);
+        Check(w.Skills.Run.State=="blocked" && w.Skills.Run.Reason=="placement_not_applied" && w.Skills.CanRetry,"unchanged authoritative cargo and destination permit safe task replanning after a suppressed placement");
+        Check(w.Inputs.Count(i=>i==1)<=2,"proven no-effect placement returns control without silently pressing twice");
+        w=new World();item=w.Ingredient("tomato");var bowl=item.Add(new ServerIngredientContainer());bowl.Contents.Add(new AssembledDefinitionNode("rice"));w.Hold(item);
+        w.Skills.Start(w.Chef,1,new ControlCommand {Operation="place_at",Destination=w.Id,Indefinite=true});w.Arrive();w.Verify();bowl.Contents.Clear();w.Tick(3);
+        Check(w.Skills.Run.Reason=="outcome_not_observed" && !w.Skills.CanRetry,"a changed held container cannot authorize replay of a possibly applied transfer");
 
         w=new World(t=>{t.Add(new PlateStackBase());t.Add(new ServerStack());});
         var plate=new GameObject("last clean plate");plate.Add(new ServerPlate());w.Target.GetComponent<ServerStack>().m_stackItems.Add(plate);

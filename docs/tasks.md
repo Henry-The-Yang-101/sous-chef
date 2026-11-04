@@ -37,6 +37,18 @@ from the catalogue also work. Chopping follows the native output prefab;
 cooking/mixing uses compatible empty containers on equipment, or stages the
 ingredient while retrieving and installing an empty compatible container.
 
+The localhost ingredient chooser is a dropdown populated from
+`catalog.preparationOptions`: native dispenser roots for this kitchen, or observed
+utensil types when `empty` is selected. The executor remembers exact objects it
+successfully handed off until the round resets; later preparation requests and
+repetitions leave those objects for the human and fetch a new dispenser item.
+This reservation does not alter the explicit low-level pickup commands.
+
+Storage/handoff destinations must have an empty native holder. An empty plate on
+a counter is occupied: placing food there may transfer contents while retaining
+the carried object. A movement stall before any button press selects an alternate
+destination; if all alternatives are blocked, the same task waits and retries.
+
 The scheduler starts passive processing before short deliveries, performs other
 requested preparation while equipment runs, and collects completed containers
 before starting more work. Processing remains native and uses native progress/time.

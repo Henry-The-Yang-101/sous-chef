@@ -25,26 +25,27 @@ namespace SousChef.Plugin.Actions
             pendingHandoffThrow |= (string)((Json.Record)description)["state"] == "pending";
             return feasible;
         }
-        private Handoff FindHandoff(GameObject item, int player, List<Vector3> excluded)
+        private Handoff FindHandoff(GameObject item, int player, List<Vector3> excluded, HashSet<GameObject> blockedTargets)
         {
             if (!System.Object.ReferenceEquals(ActionObservations.Held(chef), item)) throw new InvalidOperationException("task_cargo_changed");
             handoffThrows.Begin(chef); pendingHandoffThrow = false;
             try
             {
-                Handoff choice = FindHandoffCore(item, player, excluded);
+                Handoff choice = FindHandoffCore(item, player, excluded, blockedTargets);
                 // Give higher-priority counter/pass proofs their bounded Update
                 // slices before committing cargo to a lower-priority transport.
                 return pendingHandoffThrow && choice != null && (choice.Player != 0 || choice.Transport) ? null : choice;
             }
             finally { handoffThrows.End(); }
         }
-        private Handoff FindHandoffCore(GameObject item, int player, List<Vector3> excluded)
+        private Handoff FindHandoffCore(GameObject item, int player, List<Vector3> excluded, HashSet<GameObject> blockedTargets)
         {
             RefreshWorld(player); PlayerControls human = Human(player); if (human == null || item == null) return null;
             GameObject best = null; bool throwItem = false; float score = Single.MaxValue;
             foreach (GameObject target in navigation.Targets())
             {
-                if (!Counter(target) || HumanDistance(target) > 5 || TaskNative.Component(target, "ServerConveyorStation") != null) continue;
+                if (blockedTargets.Contains(target) || !Counter(target) || ActionObservations.Occupant(target) != null ||
+                    HumanDistance(target) > 5 || TaskNative.Component(target, "ServerConveyorStation") != null) continue;
                 bool walk = Reachable(target) && CanDeliver(item, target);
                 if (!walk && !ThrowPossible(item, target)) continue;
                 float candidate = HumanDistance(target) * 100 + (walk ? inventory.DistanceTo(target) : 50);
@@ -69,7 +70,7 @@ namespace SousChef.Plugin.Actions
             // reverse belts and cycles never masquerade as a delivery path.
             foreach (GameObject target in navigation.Targets())
             {
-                if (!Reachable(target) || !CanDeliver(item, target)) continue;
+                if (blockedTargets.Contains(target) || !Reachable(target) || !CanDeliver(item, target)) continue;
                 if (ConveyorReachesHuman(target, item)) return new Handoff { Target = target, Transport = true, Mode = "conveyor_to_player" };
                 float seconds = CounterArrival(target, player);
                 if (seconds != Single.MaxValue) return new Handoff { Target = target, Transport = true, Mode = "moving_counter_to_player", ArrivalSeconds = seconds };
@@ -108,14 +109,15 @@ namespace SousChef.Plugin.Actions
         private IEnumerable<TaskStep> Give(GameObject item, int player = 1)
         {
             var excluded = new List<Vector3>();
+            var blockedTargets = new HashSet<GameObject>();
             float rejectedAt = Time.realtimeSinceStartup;
             Action<Vector3> reject = delegate(Vector3 point) { excluded.Add(point); rejectedAt = Time.realtimeSinceStartup; };
             while (true)
             {
                 Handoff choice = null;
                 yield return Until("waiting_for_player_handoff", delegate {
-                    choice = FindHandoff(item, player, excluded);
-                    if (choice == null && excluded.Count > 0 && Time.realtimeSinceStartup - rejectedAt > 2) excluded.Clear();
+                    choice = FindHandoff(item, player, excluded, blockedTargets);
+                    if (choice == null && Time.realtimeSinceStartup - rejectedAt > 5) { excluded.Clear(); blockedTargets.Clear(); }
                     return choice != null;
                 });
                 handoffEvidence = Json.Object("mode", choice.Mode, "itemInstanceId", item.GetInstanceID(), "player", player,
@@ -138,7 +140,7 @@ namespace SousChef.Plugin.Actions
                 }
                 else delivery = Do(choice.Throw ? "throw_to" : "place_at", choice.Target);
                 delivery.ReplanOnBlock = true; yield return delivery;
-                if (!delivery.Succeeded) continue;
+                if (!delivery.Succeeded) { if (choice.Target != null) blockedTargets.Add(choice.Target); rejectedAt = Time.realtimeSinceStartup; continue; }
                 if (choice.Transport) yield return Until("waiting_for_transport_delivery", delegate { return HumanCanCollect(item, player); });
                 deliveredItems.Add(item);
                 yield break;

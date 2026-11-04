@@ -142,7 +142,8 @@ namespace SousChef.Plugin.Actions
             foreach (GameObject target in navigation.Targets())
             {
                 if (excluded != null && excluded.Contains(target)) continue;
-                if ((!Counter(target) && !(burners && target.GetComponent<CookingStation>() != null)) || !Reachable(target) || !CanDeliver(item, target)) continue;
+                if ((!Counter(target) && !(burners && target.GetComponent<CookingStation>() != null)) ||
+                    ActionObservations.Occupant(target) != null || !Reachable(target) || !CanDeliver(item, target)) continue;
                 // A conveyor is a transport, not stable storage for a hot pot.
                 if (TaskNative.Component(target, "ServerConveyorStation") != null) continue;
                 float score = inventory.DistanceTo(target) + (target == preferred ? 0 : burners && target.GetComponent<CookingStation>() != null ? 1000 : 2000);

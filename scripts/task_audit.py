@@ -144,6 +144,58 @@ class Audit:
         assert any(a['phase'] == 'collect_contents' for a in receipts)
         return {'originalPotEmptied': pot['unityInstanceId'], 'servingTransferObserved': True}
 
+    def repeated_heat(self):
+        catalog = self.load('s_sushi_1_2')
+        ingredient = next(i['id'] for i in catalog['ingredients'] if i['label'] == 'SushiRice')
+        cookers = [t for t in catalog['targets'] if t['kind'] == 'cooking_station']
+        for n, cooker in enumerate(cookers):
+            self.client.fetch_ingredient(ingredient, cooker['id']); self.observe('setup-' + str(n))
+        before = self.snap('before')
+        original = {}
+        for cooker in cookers:
+            station = next(o for o in before['objects'] if o['unityInstanceId'] == cooker['objectInstanceId'])
+            original[cooker['objectInstanceId']] = fields(station, 'ServerAttachStation')['m_item']['objectId']
+        self.request_when_available('take_ready', None)
+        request = self.client.last_response['control']['action']['requestId']
+        end = time.monotonic() + 120
+        with (self.directory / 'task.ndjson').open('w') as trace:
+            while time.monotonic() < end:
+                self.client.available_actions(); control = self.client.last_response['control']; action = control['action']
+                trace.write(json.dumps(control) + '\n')
+                if action['requestId'] != request or action['state'] != 'running':
+                    self.snap('failure'); raise AssertionError(action)
+                assert control['ownedByYou']
+                if action['details']['completedRepetitions'] >= len(cookers):
+                    break
+                time.sleep(.1)
+            else:
+                self.client.stop(); raise TimeoutError('Repeated heat removal did not clear all three burners')
+        after = self.snap('after')
+        for instance, item in original.items():
+            station = next(o for o in after['objects'] if o['unityInstanceId'] == instance)
+            food = next(o for o in after['objects'] if o['id'] == item)
+            assert not fields(food, 'ServerIngredientContainer')['m_contents'] or fields(station, 'ServerAttachStation').get('m_item', {}).get('objectId') != item
+            data = fields(food, 'ServerCookingHandler').get('m_ServerData', {}).get('fields', {})
+            assert data.get('CookingStateMessage.m_cookingState') != 'Ruined'
+        plates = [o for o in after['objects'] if fields(o, 'ServerPlate') and fields(o, 'ServerIngredientContainer').get('m_contents')]
+        assert len(plates) == len(cookers), 'All three rescued batches should be plated when clean plates are available'
+        self.client.stop()
+        return {'completedRepetitions': len(cookers), 'platedBatches': len(plates), 'singleRequest': request}
+
+    def repeated_prepare(self):
+        catalog = self.load('s_wizard_3_2')  # Story 3-3 (native Level15).
+        cheese = next(i['id'] for i in catalog['preparationOptions'] if 'cheese' in i['label'].lower())
+        self.request_when_available('prepare_near_player', 3, items=[{'ingredient': cheese, 'preparation': 'raw'}])
+        deliveries = set()
+        def record(action):
+            handoff = action['details'].get('handoff')
+            if handoff:
+                deliveries.add(handoff['itemInstanceId'])
+        self.observe('task', on_poll=record)
+        self.snap('after')
+        assert len(deliveries) == 3, 'Repeated preparation must deliver three distinct native ingredients'
+        return {'distinctCheeseDeliveries': sorted(deliveries)}
+
     def fire(self):
         catalog = self.load('s_sushi_1_2')
         cooker = next(t for t in catalog['targets'] if t['kind'] == 'cooking_station')
@@ -283,8 +335,9 @@ def main():
     parser.add_argument('--runtime', type=Path, required=True)
     parser.add_argument('--port-base', type=int, required=True)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--case', action='append', choices=('prepare', 'take_ready', 'fire', 'burnt', 'wash', 'repetitions', 'monitor', 'mixer', 'utensil', 'dirty_delivery'))
+    parser.add_argument('--case', action='append', choices=('prepare', 'take_ready', 'repeated_heat', 'repeated_prepare', 'fire', 'burnt', 'wash', 'repetitions', 'monitor', 'mixer', 'utensil', 'dirty_delivery'))
     args = parser.parse_args(); args.output.mkdir(parents=True, exist_ok=True)
+    sim.wait_ready(args.runtime)
     runtime_dll = args.runtime / 'BepInEx/plugins/SousChef.Bridge.dll'
     report = {'bridgeSha256': hashlib.sha256(runtime_dll.read_bytes()).hexdigest(), 'cases': []}
     audit = Audit(args)

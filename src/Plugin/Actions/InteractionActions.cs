@@ -359,7 +359,20 @@ namespace SousChef.Plugin.Actions
                 {
                     input(0);
                     if (Outcome()) { Finish("succeeded", "outcome_observed"); return; }
-                    if (Time.realtimeSinceStartup - phaseStarted > 2) Finish("failed", "outcome_not_observed");
+                    if (Time.realtimeSinceStartup - phaseStarted > 2)
+                    {
+                        // A local placement edge can be suppressed after arrival
+                        // (e.g. a contact/selection change). Only retry when both
+                        // authoritative sides prove that nothing was transferred.
+                        var contents = held == null ? null : held.GetComponent<ServerIngredientContainer>();
+                        if (command.Indefinite && command.Operation == "place_at" && held != null &&
+                            System.Object.ReferenceEquals(ActionObservations.Held(chef), held) &&
+                            System.Object.ReferenceEquals(ActionObservations.Occupant(target), initialOccupant) &&
+                            (contents == null ? initialContents == 0 : contents.GetContentsCount() == initialContents) &&
+                            ActionObservations.DirtyCount(target) == initialDirty && ActionObservations.StackCount(ActionObservations.Receiver(target)) == initialStack)
+                        { pressed = false; Finish("blocked", "placement_not_applied"); }
+                        else Finish("failed", "outcome_not_observed");
+                    }
                 }
             }
             catch (Exception) { Finish("failed", "observation_unavailable"); }

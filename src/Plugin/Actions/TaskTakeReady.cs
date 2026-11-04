@@ -20,7 +20,7 @@ namespace SousChef.Plugin.Actions
                 if (TaskNative.Burnt(item) || TaskNative.State(item, mixer) == null) continue;
                 if (LogisticsInventory.Empty(item) && ActionObservations.Container(station) != null) continue;
                 if (readyOnly && !TaskNative.Ready(item, mixer)) continue;
-                float cost = (TaskNative.Ready(item, mixer) ? 0 : 10000) + inventory.DistanceTo(station);
+                float cost = (TaskNative.Ready(item, mixer) ? TaskNative.Remaining(item, mixer, true) * 100 : 100000) + inventory.DistanceTo(station);
                 if (cost < score) { best = station; score = cost; }
             }
             return best;
@@ -73,11 +73,16 @@ namespace SousChef.Plugin.Actions
                 // Rescue urgent cookware first, then plate its contents safely
                 // off the heat. A short spoil window must not permanently skip plating.
                 yield return Until("checking_serving_utensils", delegate { RefreshWorld(); return botSearchComplete; });
-                plate = ServingUtensil(item, item, true);
+                // Approach the authoritative holder, not the small/elevated pot
+                // collider. Its item-only stance may lie behind the counter.
+                GameObject holder = null;
+                foreach (LogisticsItem candidate in inventory.Items)
+                    if (System.Object.ReferenceEquals(candidate.Item, item)) { holder = candidate.Holder; break; }
+                plate = holder == null ? null : ServingUtensil(item, holder, true);
                 if (plate != null)
                 {
                     yield return Do("pick_up", plate.Source);
-                    yield return Do("collect_contents", item);
+                    yield return Do("collect_contents", holder);
                     foreach (TaskStep park in Park(ActionObservations.Held(chef))) yield return park;
                 }
             }
@@ -85,7 +90,9 @@ namespace SousChef.Plugin.Actions
         private IEnumerable<TaskStep> TakeReady()
         {
             GameObject station = null;
-            yield return Until("waiting_for_accessible_heat", delegate { station = ProcessingStation(false); return station != null; });
+            // Observe all burners until one becomes ready. Binding to the nearest
+            // unfinished pot could leave earlier batches burning on other stoves.
+            yield return Until("waiting_for_accessible_heat", delegate { station = ProcessingStation(false, true); return station != null; });
             GameObject item = ActionObservations.Receiver(station);
             foreach (TaskStep step in RemoveReady(station, item)) yield return step;
         }
