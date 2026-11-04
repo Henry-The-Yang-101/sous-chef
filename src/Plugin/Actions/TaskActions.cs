@@ -42,6 +42,7 @@ namespace SousChef.Plugin.Actions
         public TaskActions(NavigationActions nav, InteractionActions primitive, Action<int> buttons, Action finished)
         {
             navigation = nav; child = primitive; inventory = new LogisticsInventory(nav); input = buttons; release = finished;
+            handoffThrows = new ThrowOptions(nav);
             RegisterPreparation(); RegisterTakeReady(); RegisterWashing(); RegisterDirtyDelivery(); RegisterFire(); RegisterBurnt(); RegisterMonitor();
         }
         partial void RegisterPreparation(); partial void RegisterTakeReady(); partial void RegisterWashing();
@@ -71,6 +72,7 @@ namespace SousChef.Plugin.Actions
             if (!Run.Running) return;
             try
             {
+                if (!child.Run.Running && navigation.Action.State == "idle") handoffThrows.Tick(chef);
                 if (childStarted)
                 {
                     if (child.Run.Running) return;
@@ -137,6 +139,7 @@ namespace SousChef.Plugin.Actions
             // Keep the parent running during child cleanup so its callback cannot
             // release the lease before all owned input has been neutralized.
             child.Cancel(reason); input(0); Run.Finish(state, reason);
+            handoffThrows.Reset();
             if (navigation.Action.State == "navigating") navigation.Stop(reason);
             if (plan != null) plan.Dispose(); plan = null; step = null; release();
         }

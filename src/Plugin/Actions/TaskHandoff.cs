@@ -17,13 +17,28 @@ namespace SousChef.Plugin.Actions
             public float? ArrivalSeconds;
         }
         private object handoffEvidence;
+        private readonly ThrowOptions handoffThrows;
+        private bool pendingHandoffThrow;
         private bool ThrowPossible(GameObject item, GameObject target)
         {
-            // Reuse native arc/throwability and supported release-stance search.
-            var planner = new ThrowPlanner(); ThrowPlan proof;
-            return planner.Prepare(chef, item, target) == null && planner.Find(navigation, out proof) == null;
+            object description; bool feasible = handoffThrows.Check(target, out description);
+            pendingHandoffThrow |= (string)((Json.Record)description)["state"] == "pending";
+            return feasible;
         }
         private Handoff FindHandoff(GameObject item, int player, List<Vector3> excluded)
+        {
+            if (!System.Object.ReferenceEquals(ActionObservations.Held(chef), item)) throw new InvalidOperationException("task_cargo_changed");
+            handoffThrows.Begin(chef); pendingHandoffThrow = false;
+            try
+            {
+                Handoff choice = FindHandoffCore(item, player, excluded);
+                // Give higher-priority counter/pass proofs their bounded Update
+                // slices before committing cargo to a lower-priority transport.
+                return pendingHandoffThrow && choice != null && (choice.Player != 0 || choice.Transport) ? null : choice;
+            }
+            finally { handoffThrows.End(); }
+        }
+        private Handoff FindHandoffCore(GameObject item, int player, List<Vector3> excluded)
         {
             RefreshWorld(player); PlayerControls human = Human(player); if (human == null || item == null) return null;
             GameObject best = null; bool throwItem = false; float score = Single.MaxValue;
@@ -43,7 +58,7 @@ namespace SousChef.Plugin.Actions
             for (int i = 0; i < 12; i++)
             {
                 float angle = i * Mathf.PI / 6; Vector3 stance;
-                Vector3 near = human.transform.position + new Vector3(Mathf.Cos(angle), 0, Mathf.Sin(angle)) * 1.15f;
+                Vector3 near = human.transform.position + new Vector3(Mathf.Cos(angle), 0, Mathf.Sin(angle)) * 1.45f;
                 bool skip = false; foreach (Vector3 tried in excluded) if (Vector3.Distance(tried, near) < .4f) skip = true;
                 if (skip) continue;
                 if (navigation.TryStance(near, out stance) && navigation.RouteCost(stance) != Single.MaxValue)
@@ -92,10 +107,16 @@ namespace SousChef.Plugin.Actions
         private IEnumerable<TaskStep> Give(GameObject item, int player = 1)
         {
             var excluded = new List<Vector3>();
+            float rejectedAt = Time.realtimeSinceStartup;
+            Action<Vector3> reject = delegate(Vector3 point) { excluded.Add(point); rejectedAt = Time.realtimeSinceStartup; };
             while (true)
             {
                 Handoff choice = null;
-                yield return Until("waiting_for_player_handoff", delegate { choice = FindHandoff(item, player, excluded); return choice != null; });
+                yield return Until("waiting_for_player_handoff", delegate {
+                    choice = FindHandoff(item, player, excluded);
+                    if (choice == null && excluded.Count > 0 && Time.realtimeSinceStartup - rejectedAt > 2) excluded.Clear();
+                    return choice != null;
+                });
                 handoffEvidence = Json.Object("mode", choice.Mode, "itemInstanceId", item.GetInstanceID(), "player", player,
                     "predictedArrivalSeconds", choice.ArrivalSeconds,
                     "targetInstanceId", choice.Target == null ? null : (object)choice.Target.GetInstanceID());
@@ -104,11 +125,13 @@ namespace SousChef.Plugin.Actions
                 {
                     if (choice.Approach.HasValue)
                     {
-                        yield return WalkTo(Human(player).gameObject, choice.Approach.Value);
+                        TaskStep approach = WalkTo(Human(player).gameObject, choice.Approach.Value, true);
+                        yield return approach;
+                        if (!approach.Succeeded) { reject(choice.Approach.Value); continue; }
                         float settle = Time.realtimeSinceStartup + .3f;
                         yield return Until("settling_for_handoff", delegate { return Time.realtimeSinceStartup >= settle; });
                         DropPlan proof;
-                        if (!new DropHandoff().Plan(chef, item, Human(player), out proof)) { excluded.Add(choice.Approach.Value); continue; }
+                        if (!new DropHandoff().Plan(chef, item, Human(player), out proof)) { reject(choice.Approach.Value); continue; }
                     }
                     delivery = new TaskStep { Phase = "giving_to_player", Command = delegate { return new ControlCommand { Operation = "throw_to_player", Destination = player.ToString() }; } };
                 }

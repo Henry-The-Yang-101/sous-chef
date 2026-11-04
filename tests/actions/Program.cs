@@ -130,6 +130,30 @@ internal static class Program
         w.Logistics.Decorate(busy,w.Chef,true);w.Tasks.Decorate(busy,w.Chef,true);
         Check(((List<object>)busy["taskOptions"]).Count==0,"catalogue polling during a parent wait withholds jobs without casting the busy action array");
     }
+    private static void HumanSinkEligibility()
+    {
+        var w=new World();
+        var dirty=new GameObject("dirty");dirty.Add(new ServerDirtyPlateStack());dirty.Add(new ServerStack());dirty.Add(new PhysicalAttachment());
+        w.Target.GetComponent<ServerAttachStation>().Item=dirty;
+        var otherFloor=new GameObject("other floor").Add(new BoxCollider {size=new Vector3(16,.1f,16),center=new Vector3(30,-.05f,0)});otherFloor.gameObject.layer=9;w.Colliders.Add(otherFloor);
+        var sink=new GameObject("human sink");sink.transform.position=new Vector3(30,0,0);sink.Add(new WashingStation());sink.Add(new ServerWashingStation());sink.Add(new ServerAttachStation());sink.Add(new ClientInteractable());sink.Add(new Placement());w.Colliders.Add(sink.Add(new BoxCollider {center=new Vector3(0,.5f,0),size=new Vector3(.8f,1,.8f)}));
+        var actor=new GameObject("human");actor.Add(new PlayerIDProvider {Id=0});actor.Add(new PlayerControls {GroundCollider=otherFloor});actor.Add(new CapsuleCollider());actor.Add(new GroundCast());actor.Add(new ClientPlayerAttachmentCarrier());actor.Add(new ServerPlayerAttachmentCarrier());actor.transform.position=new Vector3(30,0,-2);
+        var firstFloor=w.Chef.GroundCollider;
+        Physics.Ray=(point,direction,length,mask)=> {
+            if(direction.y>-.9f || point.y<0 || point.y>length)return new RaycastHit[0];
+            Collider support=point.x>=22 && point.x<=38 ? otherFloor : point.x>=-10 && point.x<=10 ? firstFloor : null;
+            return support==null ? new RaycastHit[0] : new[] {new RaycastHit {collider=support,point=new Vector3(point.x,0,point.z),normal=Vector3.up,distance=point.y}};
+        };
+        bool offered=false;
+        for(int i=0;i<120 && !offered;i++)
+        {
+            var catalog=(Json.Record)w.Navigation.Available(w.Chef);w.Tasks.Decorate(catalog,w.Chef);
+            var names=((List<object>)catalog["taskOptions"]).Cast<Json.Record>().Select(row=>(string)row["name"]).ToList();
+            Check(!names.Contains("wash_dishes"),"washing is withheld without a bot route to the human's sink");offered=names.Contains("deliver_dirty_dishes");
+            Time.realtimeSinceStartup+=.1f;Time.frameCount++;
+        }
+        Check(offered,"human-only sink delivery uses the same navigator with an independent human origin");
+    }
     private static void ReadyFoodTasks()
     {
         var w=new World(t=>t.Add(new CookingStation()));w.Delivery();
@@ -937,6 +961,6 @@ internal static class Program
         Check(!drops.Plan(w.Chef,item,player,out drop),"nearby horizontal position on a different deck is not a valid drop handoff");
         Physics.Sphere=(p,r,d,length)=>new RaycastHit[0];
     }
-    private static void Main() { CounterForecasts();PersistentTasks();ReadyFoodTasks();Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
+    private static void Main() { CounterForecasts();PersistentTasks();HumanSinkEligibility();ReadyFoodTasks();Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
     private static ClientInteractable GetCurrentlyInteractingForTest(this PlayerControls chef) { return chef.GetComponent<ClientPlayerControlsImpl_Default>().Current; }
 }

@@ -96,15 +96,17 @@ namespace SousChef.Plugin.Actions
         private float HumanDistance(GameObject go)
         { float d; return go != null && humanDistances.TryGetValue(go.GetInstanceID(), out d) ? d : Single.MaxValue; }
         private bool Reachable(GameObject go) { return go != null && inventory.DistanceTo(go) != Single.MaxValue; }
-        private TaskStep WalkTo(GameObject aim, Vector3 stance)
+        private TaskStep WalkTo(GameObject aim, Vector3 stance, bool alternatives = false)
         {
             bool started = false; float retry = 0;
-            return new TaskStep { Phase = "approaching", Progress = delegate {
+            var step = new TaskStep { Phase = "approaching" };
+            step.Progress = delegate {
                 if (navigation.Action.State == "navigating") return false;
-                if (started && (navigation.Action.Reason == "arrived" || navigation.Action.Reason == "positioned_no_action")) return true;
+                if (started && (navigation.Action.Reason == "arrived" || navigation.Action.Reason == "positioned_no_action")) { step.Succeeded = true; return true; }
+                if (started && alternatives && navigation.Action.Reason != "planning_in_progress" && navigation.Action.Reason != "planning_budget_exceeded") return true;
                 input(0); if (Time.realtimeSinceStartup < retry) return false; retry = Time.realtimeSinceStartup + .2f;
                 started = navigation.StartPosition(chef, Run.Owner, aim, stance, true) == null; return false;
-            } };
+            }; return step;
         }
         private static bool Counter(GameObject go)
         {

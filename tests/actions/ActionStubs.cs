@@ -139,3 +139,5 @@ public class ServerFlammable : MonoBehaviour
     public bool OnFire() { return Burning; }
     public static IEnumerable<ServerFlammable> GetAllOnFire() { foreach(var fire in UnityEngine.Object.FindObjectsOfType<ServerFlammable>()) if(fire.Burning) yield return fire; }
 }
+
+public class ServerDirtyPlateStack : MonoBehaviour { }
