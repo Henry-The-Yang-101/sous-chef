@@ -189,6 +189,10 @@ namespace SousChef.Plugin.Actions
             launchCallback = delegate(GameObject launched)
             {
                 if (!System.Object.ReferenceEquals(launched, held)) return;
+                // Native input expiry can release the throw before our next
+                // Update. The launch event is the irreversible boundary even
+                // when the executor still believes it is holding the button.
+                throwReleased = true;
                 var physical = launched.GetComponent<PhysicalAttachment>();
                 if (physical != null && physical.m_motion != null) { observedLaunchVelocity = physical.m_motion.GetVelocity(); sawLaunch = true; }
             };
@@ -265,6 +269,7 @@ namespace SousChef.Plugin.Actions
                 float elapsed = Time.realtimeSinceStartup - lastTick; lastTick = Time.realtimeSinceStartup;
                 if (recovery.Active) { Run.Delay(elapsed); lastProgressTime += elapsed; }
                 if (Run.Expired(Time.realtimeSinceStartup)) { Finish("failed", "action_timeout"); return; }
+                if (throwReleased && Run.Phase == "throw_hold") { input(0); SetPhase("flight"); }
                 // The last plate can destroy its own source stack. Verify the
                 // surviving carried identity before requiring a live source.
                 if (pressed && command.Operation == "pick_up" && Outcome()) { Finish("succeeded", "outcome_observed"); return; }
@@ -371,8 +376,13 @@ namespace SousChef.Plugin.Actions
                     if (!System.Object.ReferenceEquals(ActionObservations.Held(chef), held)) { Finish("blocked", "held_item_changed"); return; }
                     if (Time.frameCount <= pressFrame + 1 || Time.realtimeSinceStartup - phaseStarted < .08f) { input(2); return; }
                     ThrowPlan fresh; string error = PrepareThrow();
-                    if (error != null || !throws.From(Foot(), true, out fresh)) { evidence = throws.Diagnostics; Finish("blocked", error ?? "throw_became_invalid"); return; }
-                    throwPlan = fresh; evidence = fresh.Describe(); throwReleased = true; input(0); SetPhase("flight"); return;
+                    if (error == null && throws.From(Foot(), true, out fresh)) { throwPlan = fresh; evidence = fresh.Describe(); }
+                    else evidence = Json.Object("releaseRevalidation", error ?? "throw_became_invalid", "throw", throwPlan.Describe(), "diagnostics", throws.Diagnostics);
+                    // Releasing an armed native use button launches the item,
+                    // including during cleanup after a failed final proof. Keep
+                    // observing the original cargo instead of retrying a throw
+                    // whose input has already committed it.
+                    throwReleased = true; input(0); SetPhase("flight"); return;
                 }
                 if (Run.Phase == "flight")
                 {
@@ -621,7 +631,7 @@ namespace SousChef.Plugin.Actions
             if (chef.Motion.GetVelocityXZ().magnitude > .1f || Vector3.Angle(chef.transform.forward, current.Direction) > .5f)
             { if (Time.realtimeSinceStartup - phaseStarted > 2) Finish("failed", "throw_alignment_failed"); return; }
             if (!throws.From(Foot(), true, out current)) return;
-            throwPlan = current; evidence = current.Describe(); SetPhase("throw_hold"); pressFrame = Time.frameCount; input(2);
+            throwPlan = current; evidence = current.Describe(); SetPhase("throw_hold"); pressFrame = Time.frameCount; pressed = true; input(2);
         }
         private bool ThrowReceived()
         {

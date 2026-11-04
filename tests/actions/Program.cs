@@ -565,14 +565,31 @@ internal static class Program
         w.Target.GetComponent<Catcher>().Allowed=false;
         Check(!planner.From(w.Chef.transform.position,false,out plan),"native catcher veto rejects incompatible receipt");w.Target.GetComponent<Catcher>().Allowed=true;
         w.Chef.CurrentInteractionObjects.m_interactable=null;
-        Check(w.Start("throw_to")==null,"targeted throw starts with a planned release stance");w.Arrive();w.Tick();w.Tick();w.Tick();
-        Check(w.Skills.Run.Phase=="flight" && w.Skills.Run.State=="running","release is tracked separately from successful receipt");
+        Check(w.Start("throw_to")==null,"targeted throw starts with a planned release stance");w.Arrive();
+        for(int i=0;i<10 && w.Skills.Run.Phase=="aiming";i++)w.Tick();
+        Check(w.Skills.Run.Phase=="throw_hold","targeted throw first holds the native use button");
+        Check(!w.Skills.CanRetry,"arming the native use button commits a throw before its eventual release");
+        w.Chef.GetComponent<ServerAttachmentThrower>().Launched(new GameObject("unrelated item"));
+        w.Tick(.001f);Check(w.Skills.Run.Phase=="throw_hold","another object's launch cannot release this throw");
         body.m_motion=new RigidbodyMotion {Velocity=new Vector3(1,2,3)};w.Chef.GetComponent<ServerAttachmentThrower>().Launched(item);
         var observed=(float[])((Json.Record)((Json.Record)w.Skills.Describe())["details"])["observedLaunchVelocity"];
         Check(observed[0]==1 && observed[1]==2 && observed[2]==3,"native throw callback records actual launch velocity rather than reusing a prediction");
-        w.Hold(null);w.Target.GetComponent<ServerAttachStation>().Item=item;w.Tick();
+        w.Hold(null);w.Tick();
+        Check(w.Skills.Run.Phase=="flight" && !w.Skills.CanRetry,"an early native launch enters verification instead of retrying cargo that already left the chef");
+        w.Target.GetComponent<ServerAttachStation>().Item=item;w.Tick();
         Check(w.Skills.Run.State=="succeeded" && w.Skills.Run.Reason=="throw_received","native holder edge confirms throw receipt");
         Check(w.Chef.GetComponent<ServerAttachmentThrower>().Launched==null,"throw observation callback is removed after completion");
+
+        w.Target.GetComponent<ServerAttachStation>().Item=null;w.Hold(item);
+        Check(w.Start("throw_to")==null,"late revalidation fixture starts a checked throw");w.Arrive();
+        for(int i=0;i<10 && w.Skills.Run.Phase=="aiming";i++)w.Tick();
+        Check(w.Skills.Run.Phase=="throw_hold","late revalidation fixture arms the native button");
+        w.Target.GetComponent<Catcher>().Allowed=false;
+        for(int i=0;i<10 && w.Skills.Run.Phase=="throw_hold";i++)w.Tick();
+        Check(w.Skills.Run.Phase=="flight" && !w.Skills.CanRetry,"failed release revalidation verifies the committed throw instead of treating cleanup as a safe retry");
+        w.Hold(null);w.Target.GetComponent<ServerAttachStation>().Item=item;w.Tick();
+        Check(w.Skills.Run.State=="succeeded","exact observed receipt resolves a committed throw after its release proof changed");
+        w.Target.GetComponent<Catcher>().Allowed=true;
 
         var human=new GameObject("human");var player=human.Add(new PlayerControls());human.Add(new PlayerIDProvider {Id=0});
         human.Add(new AttachmentCatcher());human.Add(new ServerPlayerAttachmentCarrier());human.transform.yaw=Mathf.PI;
