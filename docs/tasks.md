@@ -77,3 +77,14 @@ An incomplete P2 search cannot authorize this option. It shares batch collection
 with washing and the same player/conveyor/moving-counter delivery planner with
 ingredient preparation. Dirty stacks use native drop/placement; they are never
 treated as throwable ingredients.
+
+## Put out fires
+
+`put_out_fire` requires an observed native fire and obtainable extinguisher.
+It picks up the tool, searches supported walking stances within the native spray
+range, faces each fire, and holds normal use input while the native spray predicate
+confirms coverage. It observes `ServerFlammable.OnFire()` to finish spraying.
+It rescans after each fire, including newly spread fires, and finishes when no
+remaining fire has a certified reachable spray stance. A selected fire blocked
+during approach/spraying is retained and retried indefinitely. The tool returns
+to its observed holder or an available counter when possible.

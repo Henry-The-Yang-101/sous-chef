@@ -132,3 +132,10 @@ public class ServerMixingHandler : MonoBehaviour
     public float AccessMixingTime { get { return 10; } }
     public float GetMixingProgress() { return m_serverData.m_mixingProgress; }
 }
+
+public class ServerFlammable : MonoBehaviour
+{
+    public bool Burning;
+    public bool OnFire() { return Burning; }
+    public static IEnumerable<ServerFlammable> GetAllOnFire() { foreach(var fire in UnityEngine.Object.FindObjectsOfType<ServerFlammable>()) if(fire.Burning) yield return fire; }
+}
