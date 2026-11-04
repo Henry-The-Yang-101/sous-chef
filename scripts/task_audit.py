@@ -93,9 +93,22 @@ class Audit:
         self.client.run_task('prepare_near_player', items=[
             {'ingredient': 'SushiRice', 'preparation': 'cooked'},
             {'ingredient': 'SushiFish', 'preparation': 'chopped'}])
-        receipts = self.observe('task')
+        simultaneous = False
+
+        def check_concurrency(action):
+            nonlocal simultaneous
+            if action['phase'] != 'work_at' or simultaneous:
+                return
+            observed = self.snap('concurrent-chopping-and-cooking')
+            for item in observed['objects']:
+                data = fields(item, 'ServerCookingHandler').get('m_ServerData', {}).get('fields', {})
+                if data.get('CookingStateMessage.m_cookingState') == 'Progressing' and data.get('CookingStateMessage.m_cookingProgress', 0) > 0:
+                    simultaneous = True
+
+        receipts = self.observe('task', on_poll=check_concurrency)
         phases = [a['phase'] for a in receipts]
         assert phases.index('add_ingredient') < phases.index('work_at'), 'Cooking must start before chopping'
+        assert simultaneous, 'Native cooking must still be progressing while P2 chops'
         after = self.snap('after')
         handoff = receipts[-1]['details']['handoff']
         assert any(o['unityInstanceId'] == handoff['itemInstanceId'] for o in after['objects'])

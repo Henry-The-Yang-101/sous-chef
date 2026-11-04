@@ -144,9 +144,14 @@ namespace SousChef.Plugin.Actions
         }
         private IEnumerable<TaskStep> Park(GameObject item, GameObject preferred = null, bool burners = false)
         {
-            GameObject destination = null;
-            yield return Until("waiting_for_safe_counter", delegate { destination = Parking(item, preferred, burners); return destination != null; });
-            yield return Do("place_at", destination);
+            while (true)
+            {
+                GameObject destination = null;
+                yield return Until("waiting_for_safe_counter", delegate { destination = Parking(item, preferred, burners); return destination != null; });
+                TaskStep placement = Do("place_at", destination); placement.ReplanOnBlock = true;
+                yield return placement;
+                if (placement.Succeeded) yield break;
+            }
         }
         private LogisticsItem Source(string selector, bool utensil = false)
         {

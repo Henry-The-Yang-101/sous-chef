@@ -231,8 +231,10 @@ function render() {
   el('connection').textContent = live ? 'Bridge connected' : state?.connected ? 'State stale' : 'Bridge disconnected';
   el('light').className = 'light ' + (live ? 'live' : 'offline');
   el('freshness').textContent = live ? `Updated ${Math.max(0, Math.round((state.ageMs || 0) + performance.now() - receivedAt))} ms ago` : 'Waiting for a fresh sample';
-  el('action').textContent = acting ? `${actionNames[receipt.operation] || receipt.operation} · ${phaseNames[receipt.phase] || receipt.phase.replaceAll('_', ' ')}` : moving ? `${nav.phase === 'aligning' ? 'Aligning with' : 'Walking to'} ${active ? nameOf(active) : nav.destinationId}` : live ? 'Player 2 is idle' : 'Waiting for the bridge';
-  el('target').textContent = active
+  el('action').textContent = acting ? `${receipt.operation === 'task' ? taskLabels[receipt.details?.taskAction] || 'Task' : actionNames[receipt.operation] || receipt.operation} · ${phaseNames[receipt.phase] || receipt.phase.replaceAll('_', ' ')}` : moving ? `${nav.phase === 'aligning' ? 'Aligning with' : 'Walking to'} ${active ? nameOf(active) : nav.destinationId}` : live ? 'Player 2 is idle' : 'Waiting for the bridge';
+  el('target').textContent = receipt.operation === 'task'
+    ? `${receipt.details?.completedRepetitions || 0} repetitions completed${receipt.details?.infinite ? ' · until stopped' : ` of ${receipt.details?.repetitions || 1}`}`
+    : active
     ? `${active.label}${contentsOf(active) ? ` · Contents: ${contentsOf(active)}` : ''} · ${active.id} · object ${active.objectInstanceId} · x ${number(active.position?.[0])}, z ${number(active.position?.[2])}${Number.isFinite(active.routeDistance) ? ` · ${number(active.routeDistance)} units to walk` : ''}`
     : 'Join Player 2 with Split Controller, then enter an unpaused Arcade → Couch kitchen.';
   const ready = nav.arrival;
@@ -472,15 +474,17 @@ function addTaskItem() {
   row.append(ingredient, preparation, quantity, remove); el('task-items').append(row);
 }
 function renderTasks(catalog, busy, live) {
-  const choices = catalog.taskOptions || [];
+  const task = state.control?.action;
+  const choices = [...(catalog.taskOptions || [])];
+  if (task?.operation === 'task' && task.state === 'running' && !choices.some(t => t.name === task.details?.taskAction)) choices.push({name: task.details.taskAction});
   setJobOptions(el('task-kind'), choices.map(t => ({value: t.name, label: taskLabels[t.name] || t.name})));
+  if (task?.operation === 'task' && task.state === 'running') { el('task-kind').value = task.details.taskAction; el('task-repeat').value = task.details.infinite ? 'forever' : String(task.details.repetitions); }
   el('task-preparation').hidden = el('task-kind').value !== 'prepare_near_player';
   const blocked = !live || pending || busy || (!state.control?.available && state.control?.reason !== 'game_unfocused');
   el('task-run').disabled = blocked || !choices.length || !el('task-kind').value;
   for (const field of el('task-form').querySelectorAll('input, select, button')) if (field.id !== 'task-run') field.disabled = blocked;
   for (const field of el('task-preparation').querySelectorAll('input, select, button')) field.disabled = blocked || el('task-kind').value !== 'prepare_near_player';
-  const task = state.control?.action;
-  el('task-status').textContent = task?.operation === 'task' ? `${taskLabels[task.details?.taskAction] || 'Task'}: ${task.state} · ${task.phase.replaceAll('_', ' ')} · ${task.details?.completedRepetitions || 0} repetitions completed${task.details?.waitingReason ? ' · waiting: ' + explain(task.details.waitingReason) : ''}`
+  el('task-status').textContent = task?.operation === 'task' ? `${taskLabels[task.details?.taskAction] || 'Task'}: ${task.state} · ${task.phase.replaceAll('_', ' ')} · ${task.details?.completedRepetitions || 0} repetitions completed${task.state === 'running' && task.details?.waitingReason ? ' · waiting: ' + explain(task.details.waitingReason) : ''}`
     : !choices.length ? 'No tasks currently available. Options update with the kitchen.' : '';
 }
 el('task-kind').addEventListener('change', render);

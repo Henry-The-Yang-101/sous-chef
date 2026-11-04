@@ -57,7 +57,7 @@ public class ServerWashingStation : MonoBehaviour { public int m_plateCount; pub
 public class ClientTriggerToggleOnAnimator : MonoBehaviour { public bool CurrentState; }
 public class ClientToggleSwitchCosmeticDecisions : MonoBehaviour { public ClientTriggerToggleOnAnimator m_toggleOnAnimator; }
 public class ServerWorkableItem : MonoBehaviour { public bool Finished; public int m_subProgress; public float Progress; public bool HasFinished() { return Finished; } public float GetProgress() { return Progress; } }
-public class WorkableItem : MonoBehaviour { public GameObject Next; public GameObject GetNextPrefab() { return Next; } }
+public class WorkableItem : MonoBehaviour { public int m_stages=3; public GameObject Next; public GameObject GetNextPrefab() { return Next; } }
 public class ServerRubbishBin : MonoBehaviour { }
 public class ServerInteractable : MonoBehaviour
 {

@@ -193,7 +193,9 @@ namespace SousChef.Plugin.Actions
             // Chopping is an estimate (animation/collaboration can change it),
             // while equipment readiness uses exact native progress and duration.
             float travel = source.Distance / Math.Max(.1f, chef.Movement.RunSpeed);
-            float chopping = unit.Request.Preparation != "raw" && unit.Request.Preparation != "empty" && source.Item.GetComponent<WorkableItem>() != null ? 8 : 0;
+            var workable = source.Item.GetComponent<WorkableItem>();
+            float chopping = unit.Request.Preparation != "raw" && unit.Request.Preparation != "empty" && workable != null
+                ? Math.Max(1, ActionObservations.Read<int>(workable, "m_stages")) * .9f : 0;
             return travel * 2 + chopping + 4;
         }
     }
