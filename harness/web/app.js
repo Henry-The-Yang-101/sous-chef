@@ -53,7 +53,7 @@ const kindName = kind => (kind || 'destination').replaceAll('_', ' ');
 const number = value => Number.isFinite(value) ? value.toFixed(1) : '—';
 const contentsOf = d => d.contents?.summary || '';
 const actionNames = {navigate_to: 'Navigate', pick_up: 'Pick up', place_at: 'Place held item', add_ingredient: 'Add held ingredient',
-  work_at: 'Work', activate: 'Activate', discard: 'Discard held item', wait_until: 'Wait', throw_to: 'Throw held item', throw_to_player: 'Pass held item',
+  collect_contents: 'Collect ready contents', work_at: 'Work', activate: 'Activate', discard: 'Discard held item', wait_until: 'Wait', throw_to: 'Throw held item', throw_to_player: 'Pass held item',
   move_item: 'Move item', fetch_ingredient: 'Fetch ingredient', get_plate: 'Get clean plate', get_utensil: 'Get empty utensil', stage_item: 'Stage item', return_utensil: 'Return utensil', clear_station: 'Clear station'};
 const phaseNames = {picking_up: 'collecting', drop_press: 'placing nearby', dropping: 'checking nearby handoff', throw_hold: 'aiming', flight: 'checking arrival'};
 const throwIdentity = target => JSON.stringify([state?.sessionId, target.id, target.objectInstanceId]);

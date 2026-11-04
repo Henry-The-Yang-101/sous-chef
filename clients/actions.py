@@ -102,6 +102,10 @@ class ActionClient(ControlClient):
         """Add the held single ingredient; container transfers are a higher layer."""
         return self._target('add_ingredient', target_id)
 
+    def collect_contents(self, target_id):
+        """Collect ready contents into the held compatible plate/container."""
+        return self._target('collect_contents', target_id)
+
     def discard(self, bin_id):
         """Dispose of the held item/contents at the specified native rubbish bin."""
         return self._target('discard', bin_id)
@@ -153,7 +157,7 @@ if __name__ == '__main__':
     task.add_argument('--repeat', default='1', help='1..10 or forever')
     task.add_argument('--items', type=json.loads, help='JSON preparation list')
     task.add_argument('--player', type=int, default=1)
-    for operation in ('navigate_to', 'pick_up', 'place_at', 'add_ingredient', 'discard', 'throw_to', 'get_plate', 'return_utensil'):
+    for operation in ('navigate_to', 'pick_up', 'place_at', 'add_ingredient', 'collect_contents', 'discard', 'throw_to', 'get_plate', 'return_utensil'):
         commands.add_parser(operation).add_argument('target_id')
     for operation in ('move_item', 'stage_item', 'clear_station', 'fetch_ingredient', 'get_utensil'):
         job = commands.add_parser(operation)

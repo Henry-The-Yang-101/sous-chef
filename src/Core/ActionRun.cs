@@ -6,7 +6,7 @@ namespace SousChef.Core
     // success until the executor supplies observed outcome evidence.
     public sealed class ActionRun
     {
-        public static readonly string[] Names = { "navigate_to", "pick_up", "place_at", "add_ingredient", "work_at", "activate", "discard", "wait_until", "throw_to", "throw_to_player", "stop" };
+        public static readonly string[] Names = { "navigate_to", "pick_up", "place_at", "add_ingredient", "collect_contents", "work_at", "activate", "discard", "wait_until", "throw_to", "throw_to_player", "stop" };
         public static readonly string[] LogisticsNames = { "move_item", "fetch_ingredient", "get_plate", "get_utensil", "stage_item", "return_utensil", "clear_station" };
         public static string[] AllNames
         { get { var result = new string[Names.Length + LogisticsNames.Length]; Names.CopyTo(result, 0); LogisticsNames.CopyTo(result, Names.Length); return result; } }

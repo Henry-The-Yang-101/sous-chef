@@ -50,3 +50,13 @@ Moving-counter fallback requires an observed human-accessible stop in this round
 unknown motion waits for evidence. Transport delivery completes only after the
 exact item reaches a human-accessible holder or the human's hands. Safe empty
 countertops are used when putting equipment down; conveyor belts are not storage.
+
+## Take ready food off heat
+
+`take_ready` is offered only for accessible, nonempty heat equipment with
+observable native cooking state. It waits for the selected food to finish, then
+prefers a compatible clean plate or empty utensil. The new `collect_contents`
+primitive uses the normal native placement button and verifies both source
+decrease and recipient increase while retaining their identities. If no serving
+utensil is available, P2 removes the original pot/pan/food and parks it on a safe
+counter. Completed/overdoing food is ready; ruined contents are excluded.

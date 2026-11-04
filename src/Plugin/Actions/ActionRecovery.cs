@@ -40,6 +40,7 @@ namespace SousChef.Plugin.Actions
                 case "unsafe_alignment_stance": case "flow_prevents_walking":
                 case "no_progress": case "alignment_failed": case "navigation_timeout": case "ground_contact_timeout":
                 case "pickup_unavailable": case "placement_unavailable": case "interaction_unavailable":
+                case "processing_not_ready":
                     return true;
                 default: return false;
             }

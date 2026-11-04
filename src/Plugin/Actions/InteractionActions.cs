@@ -25,6 +25,7 @@ namespace SousChef.Plugin.Actions
         private ServerInteractable interactable;
         private ServerInteractable.BeginInteractCallback triggered;
         private int initialDirty, initialClean, initialStack, initialMatches, initialContents, pressFrame, planningFrame;
+        private int initialSourceContents;
         private float phaseStarted, lastProgressTime, lastProgress;
         private bool triggeredByChef, pressed, throwReleased;
         private ThrowPlan throwPlan;
@@ -79,6 +80,10 @@ namespace SousChef.Plugin.Actions
                 var composition = ActionObservations.Composition(held);
                 if (canPlace && held.GetComponent<IngredientPropertiesComponent>() != null && container != null && transfer != null && composition != null &&
                     transfer.CanTransferToContainer(container) && container.CanAddIngredient(composition)) options.Add("add_ingredient");
+                var recipient = held.GetComponent<ServerIngredientContainer>();
+                var sourceTransfer = GameObjectUtils.RequestInterface<IContainerTransferBehaviour>(receiver);
+                if (canPlace && recipient != null && container != null && sourceTransfer != null && TaskNative.Ready(receiver) &&
+                    sourceTransfer.CanTransferToContainer(recipient)) options.Add("collect_contents");
                 if (GameObjectUtils.RequestInterface<IClientThrowable>(held) != null && GameObjectUtils.RequestInterface<IHandleCatch>(receiver) != null && go.GetComponent<ServerRubbishBin>() == null) options.Add("throw_to");
             }
             return options.ToArray();
@@ -122,6 +127,7 @@ namespace SousChef.Plugin.Actions
             var stack = receiver == null ? null : receiver.GetComponent<ServerStack>();
             expectedTopPlate = stack == null ? null : stack.InspectTopOfStack();
             initialContents = held == null || held.GetComponent<ServerIngredientContainer>() == null ? 0 : held.GetComponent<ServerIngredientContainer>().GetContentsCount();
+            initialSourceContents = container == null ? 0 : container.GetContentsCount();
             pressed = throwReleased = triggeredByChef = sawLaunch = false; evidence = null; throwPlan = null; dropPlan = null; dropStableSince = -1; workable = null;
             string error = ValidateRequest();
             if (error != null) return error;
@@ -177,7 +183,7 @@ namespace SousChef.Plugin.Actions
                 if (expectedPickup == null && target.GetComponent<PickupItemSpawner>() == null && target.GetComponent<PlateStackBase>() == null)
                     return "nothing_to_pick_up";
             }
-            if (op == "place_at" || op == "add_ingredient" || op == "discard" || op == "throw_to" || op == "throw_to_player")
+            if (op == "place_at" || op == "add_ingredient" || op == "collect_contents" || op == "discard" || op == "throw_to" || op == "throw_to_player")
                 if (held == null) return "hands_empty";
             if (op == "place_at" && target.GetComponent<ServerRubbishBin>() != null) return "use_discard";
             if (op == "add_ingredient")
@@ -191,6 +197,13 @@ namespace SousChef.Plugin.Actions
                 initialMatches = ActionObservations.MatchingCount(container, ingredient);
             }
             if (op == "discard" && target.GetComponent<ServerRubbishBin>() == null) return "target_is_not_disposal";
+            if (op == "collect_contents")
+            {
+                var recipient = held.GetComponent<ServerIngredientContainer>();
+                var transfer = GameObjectUtils.RequestInterface<IContainerTransferBehaviour>(receiver);
+                if (recipient == null || container == null || transfer == null || !transfer.CanTransferToContainer(recipient)) return "incompatible_contents_transfer";
+                if (!TaskNative.Ready(receiver)) return "processing_not_ready";
+            }
             if (op == "throw_to" || op == "throw_to_player")
             {
                 ingredient = ActionObservations.Composition(held);
@@ -395,6 +408,11 @@ namespace SousChef.Plugin.Actions
             {
                 if (!System.Object.ReferenceEquals(ActionObservations.Held(chef), held)) { Finish("blocked", "held_item_changed"); return false; }
                 if (op == "add_ingredient" && ActionObservations.Container(target) != container) { Finish("blocked", "container_changed"); return false; }
+                if (op == "collect_contents")
+                {
+                    if (ActionObservations.Container(target) != container) { Finish("blocked", "container_changed"); return false; }
+                    if (!TaskNative.Ready(receiver)) { WaitFor("processing_not_ready"); return false; }
+                }
                 if (op == "place_at" && initialOccupant != ActionObservations.Occupant(target)) { Finish("blocked", "station_contents_changed"); return false; }
                 if (op == "place_at" && initialOccupant != null && initialStack == 0) { Finish("blocked", "station_occupied_use_add_ingredient"); return false; }
                 if (!ActionObservations.CanPlace(chef, target)) { WaitFor("placement_unavailable"); return false; }
@@ -440,6 +458,14 @@ namespace SousChef.Plugin.Actions
                     ActionObservations.MatchingCount(container, ingredient) > initialMatches;
                 if (added) evidence = Json.Object("containerInstanceId", container.gameObject.GetInstanceID(), "matchingIngredients", ActionObservations.MatchingCount(container, ingredient));
                 return added && !System.Object.ReferenceEquals(carrying, held);
+            }
+            if (op == "collect_contents")
+            {
+                var recipient = held == null ? null : held.GetComponent<ServerIngredientContainer>();
+                bool collected = System.Object.ReferenceEquals(carrying, held) && recipient != null && recipient.GetContentsCount() > initialContents &&
+                    container != null && ActionObservations.Container(target) == container && container.GetContentsCount() < initialSourceContents;
+                if (collected) evidence = Json.Object("sourceRemaining", container.GetContentsCount(), "recipientCount", recipient.GetContentsCount(), "heldItem", ItemEvidence(held));
+                return collected;
             }
             if (op == "place_at")
             {

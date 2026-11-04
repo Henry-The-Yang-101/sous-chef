@@ -114,6 +114,24 @@ internal static class Program
         Check(w.Tasks.Run.Running && w.Releases==1,"infinite task survives long environmental wait");
         w.Tasks.Cancel("stopped");Check(!w.Tasks.Run.Running && !w.Skills.Run.Running && w.Releases==2,"stop cancels complete task and releases once");
     }
+    private static void ReadyFoodTasks()
+    {
+        var w=new World(t=>t.Add(new CookingStation()));w.Delivery();
+        var pan=new GameObject("pan");pan.Add(new ItemPropertiesComponent {m_itemDefinition=new Definition {name="pan"}});pan.Add(new PhysicalAttachment());
+        var food=pan.Add(new ServerIngredientContainer());food.Contents.Add(new AssembledDefinitionNode("rice"));pan.Add(new IngredientTransfer());var cooking=pan.Add(new ServerCookingHandler());
+        w.Target.GetComponent<ServerAttachStation>().Item=pan;
+        Check(w.Tasks.Start(w.Chef,1,new ControlCommand {Id="heat",Operation="task",Task=new TaskRequest {Action="take_ready"}})==null,"take-ready is offered for accessible food before it completes");
+        for(int i=0;i<5;i++)w.Tick(.25f);w.Tick(1000);
+        Check(w.Tasks.Run.Running && !w.Skills.Run.Running && !w.Inputs.Contains(1),"heat task waits indefinitely without picking up uncooked food");
+        w.Tasks.Cancel("stopped");
+        cooking.m_ServerData.m_cookingState=ProcessingState.Completed;
+        var plate=new GameObject("plate");var contents=plate.Add(new ServerIngredientContainer());plate.Add(new ServerPlate {m_ingredientContainer=contents});w.Hold(plate);
+        Check(w.Start("collect_contents")==null,"compatible held plate can collect cooked pot contents");w.Arrive();
+        contents.Contents.Add(new AssembledDefinitionNode("rice"));food.Contents.Clear();w.Verify();
+        Check(w.Skills.Run.State=="succeeded" && w.Carrier.Item==plate && w.Target.GetComponent<ServerAttachStation>().Item==pan,"collection requires observed transfer, retains plate and original pot");
+        cooking.m_ServerData.m_cookingState=ProcessingState.Ruined;food.Contents.Add(new AssembledDefinitionNode("burnt"));
+        Check(w.Start("collect_contents")=="processing_not_ready","burnt contents are never treated as ready food");
+    }
     private static void Transactions()
     {
         var w=new World();var item=w.Ingredient("tomato");w.Target.GetComponent<ServerAttachStation>().Item=item;
@@ -899,6 +917,6 @@ internal static class Program
         Check(!drops.Plan(w.Chef,item,player,out drop),"nearby horizontal position on a different deck is not a valid drop handoff");
         Physics.Sphere=(p,r,d,length)=>new RaycastHit[0];
     }
-    private static void Main() { PersistentTasks();Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
+    private static void Main() { PersistentTasks();ReadyFoodTasks();Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
     private static ClientInteractable GetCurrentlyInteractingForTest(this PlayerControls chef) { return chef.GetComponent<ClientPlayerControlsImpl_Default>().Current; }
 }

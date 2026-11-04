@@ -144,7 +144,7 @@ class HarnessBridge:
         return self.act(viewer, session, destination, instance, 'navigate_to')
 
     def act(self, viewer, session, destination, instance, operation, arguments=None):
-        allowed = {'navigate_to', 'pick_up', 'place_at', 'add_ingredient', 'work_at',
+        allowed = {'navigate_to', 'pick_up', 'place_at', 'add_ingredient', 'collect_contents', 'work_at',
                    'activate', 'discard', 'wait_until', 'throw_to', 'throw_to_player',
                    'move_item', 'fetch_ingredient', 'get_plate', 'get_utensil', 'stage_item', 'return_utensil', 'clear_station', 'task'}
         jobs = {'move_item', 'fetch_ingredient', 'get_plate', 'get_utensil', 'stage_item', 'return_utensil', 'clear_station'}

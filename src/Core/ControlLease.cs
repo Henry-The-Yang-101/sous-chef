@@ -44,7 +44,7 @@ namespace SousChef.Core
                 return result;
             }
             if (p[0] == "navigate_to" || p[0] == "pick_up" || p[0] == "place_at" ||
-                p[0] == "add_ingredient" || p[0] == "discard" || p[0] == "throw_to" ||
+                p[0] == "add_ingredient" || p[0] == "collect_contents" || p[0] == "discard" || p[0] == "throw_to" ||
                 p[0] == "work_at" || p[0] == "activate" || p[0] == "wait_until")
             {
                 int count = p[0] == "work_at" || p[0] == "wait_until" ? 5 : p[0] == "activate" ? 4 : 3;

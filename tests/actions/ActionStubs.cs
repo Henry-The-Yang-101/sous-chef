@@ -116,3 +116,19 @@ namespace Team17.Online.Multiplayer.Messaging
 }
 
 public class PlacementLayerSwapper : MonoBehaviour { public int m_defaultLayerId=14; }
+
+public enum ProcessingState { Idle, Progressing, Completed, OverDoing, Ruined }
+public class CookingStateMessage { public ProcessingState m_cookingState; public float m_cookingProgress; }
+public class MixingStateMessage { public ProcessingState m_mixingState; public float m_mixingProgress; }
+public class ServerCookingHandler : MonoBehaviour
+{
+    public CookingStateMessage m_ServerData = new CookingStateMessage();
+    public float AccessCookingTime { get { return 10; } }
+    public float GetCookingProgress() { return m_ServerData.m_cookingProgress; }
+}
+public class ServerMixingHandler : MonoBehaviour
+{
+    public MixingStateMessage m_serverData = new MixingStateMessage();
+    public float AccessMixingTime { get { return 10; } }
+    public float GetMixingProgress() { return m_serverData.m_mixingProgress; }
+}
