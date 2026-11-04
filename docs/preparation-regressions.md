@@ -4,6 +4,10 @@ Story **4-2** is native scene `s_rapids_4_2A` (`Text.Menu.Level20`). These
 changes use native ingredient identities, work outputs, placement predicates and
 route proofs, without kitchen-specific production branches.
 
+The subsequent [raft regression pass](raft-handoff-regressions.md) reruns all four
+preparation cases on `89ec25e` and extends repeated chopped-food handoffs to three
+whole pairs without human collection.
+
 ## Fixes
 
 | Commit | Failure and correction |

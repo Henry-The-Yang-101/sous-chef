@@ -3,6 +3,11 @@
 The native story catalogue identifies level 2-1 as `s_rapids_2_1`
 (`Text.Menu.Level07`). P2's chopping raft moves separately from P1's supplies.
 
+The later [raft regression pass](raft-handoff-regressions.md) expands floor
+targets across the receiving support, fixes moving release poses and repeat
+stalls, and removes repeated arrival settling before work. The audit below
+records the earlier 0.8.3 behavior and its bounded near-player landing policy.
+
 ## Changes
 
 Handoff ranks currently usable choices: a counter accessible near the human,

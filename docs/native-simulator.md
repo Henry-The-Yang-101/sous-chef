@@ -14,6 +14,11 @@ checks in all four world directions, repeated native mine/sushi traversal, the
 drifting-arrival regression, and remaining contact failures, including at 20 FPS.
 Run `scripts/conveyor_audit.py` against an isolated runtime to repeat those checks.
 
+The [raft regression audit](raft-handoff-regressions.md) covers repeated food
+preparation, floor-wide handoffs, native chopping latency, moving support and
+open-edge release rejection. Use `scripts/raft_handoff_audit.py` for its focused
+2-1 and 4-2 cases.
+
 The [teleporter coverage report](teleporter-audit.md) records all 28 entrances
 across the nine installed two-player portal kitchens, including explicit setup
 fixtures and the remaining spawn-access limitation.
