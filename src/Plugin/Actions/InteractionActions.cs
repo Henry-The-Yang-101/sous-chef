@@ -83,7 +83,7 @@ namespace SousChef.Plugin.Actions
                     transfer.CanTransferToContainer(container) && container.CanAddIngredient(composition)) options.Add("add_ingredient");
                 var recipient = held.GetComponent<ServerIngredientContainer>();
                 var sourceTransfer = GameObjectUtils.RequestInterface<IContainerTransferBehaviour>(receiver);
-                if (canPlace && recipient != null && container != null && sourceTransfer != null && TaskNative.Ready(receiver) &&
+                if (canPlace && recipient != null && container != null && sourceTransfer != null && TaskNative.ReadyAt(go) &&
                     sourceTransfer.CanTransferToContainer(recipient)) options.Add("collect_contents");
                 if (GameObjectUtils.RequestInterface<IClientThrowable>(held) != null && GameObjectUtils.RequestInterface<IHandleCatch>(receiver) != null && go.GetComponent<ServerRubbishBin>() == null) options.Add("throw_to");
             }
@@ -203,7 +203,7 @@ namespace SousChef.Plugin.Actions
                 var recipient = held.GetComponent<ServerIngredientContainer>();
                 var transfer = GameObjectUtils.RequestInterface<IContainerTransferBehaviour>(receiver);
                 if (recipient == null || container == null || transfer == null || !transfer.CanTransferToContainer(recipient)) return "incompatible_contents_transfer";
-                if (!TaskNative.Ready(receiver)) return "processing_not_ready";
+                if (!TaskNative.ReadyAt(target)) return "processing_not_ready";
             }
             if (op == "throw_to" || op == "throw_to_player")
             {
@@ -412,7 +412,7 @@ namespace SousChef.Plugin.Actions
                 if (op == "collect_contents")
                 {
                     if (ActionObservations.Container(target) != container) { Finish("blocked", "container_changed"); return false; }
-                    if (!TaskNative.Ready(receiver)) { WaitFor("processing_not_ready"); return false; }
+                    if (!TaskNative.ReadyAt(target)) { WaitFor("processing_not_ready"); return false; }
                 }
                 if (op == "place_at" && initialOccupant != ActionObservations.Occupant(target)) { Finish("blocked", "station_contents_changed"); return false; }
                 if (op == "place_at" && initialOccupant != null && initialStack == 0) { Finish("blocked", "station_occupied_use_add_ingredient"); return false; }

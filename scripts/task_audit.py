@@ -178,18 +178,46 @@ class Audit:
         assert final['action']['state'] == 'cancelled' and duration < .5
         return {'infiniteWaitRetained': True, 'stopSeconds': duration}
 
+    def mixer(self):
+        catalog = self.load('s_wizard_school_3_4')
+        mixer = next(t for t in catalog['targets'] if t['kind'] != 'item' and 'mixed' in t.get('waitConditions', [])
+                     and any(t['id'] in r['destinationIds'] for r in catalog['jobOptions']['fetch_ingredient']))
+        for ingredient in ('Flour', 'Egg'):
+            self.client.fetch_ingredient(ingredient, mixer['id']); self.observe('setup-' + ingredient)
+        before = self.snap('before')
+        holder = next(o for o in before['objects'] if o['unityInstanceId'] == mixer['objectInstanceId'])
+        original = fields(holder, 'ServerAttachStation')['m_item']['objectId']
+        self.client.run_task('monitor_equipment'); self.observe('task')
+        after = self.snap('after')
+        holder = next(o for o in after['objects'] if o['unityInstanceId'] == mixer['objectInstanceId'])
+        bowl = next(o for o in after['objects'] if o['id'] == original)
+        current = fields(holder, 'ServerAttachStation').get('m_item')
+        assert not current or current['objectId'] != original or fields(bowl, 'ServerIngredientContainer')['m_contents'] == []
+        return {'mixedContentsRemoved': True, 'originalBowl': bowl['unityInstanceId']}
+
+    def utensil(self):
+        self.load('s_sushi_1_2')
+        before = self.snap('before')
+        self.client.run_task('prepare_near_player', items=[{'ingredient': 'pot', 'preparation': 'empty'}])
+        receipts = self.observe('task')
+        identity = receipts[-1]['details']['handoff']['itemInstanceId']
+        pot = next(o for o in before['objects'] if o['unityInstanceId'] == identity)
+        assert fields(pot, 'ServerIngredientContainer')['m_contents'] == []
+        self.snap('after')
+        return {'nativeEmptyPotDelivered': identity}
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--runtime', type=Path, required=True)
     parser.add_argument('--port-base', type=int, required=True)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--case', action='append', choices=('prepare', 'take_ready', 'fire', 'burnt', 'wash', 'repetitions', 'monitor'))
+    parser.add_argument('--case', action='append', choices=('prepare', 'take_ready', 'fire', 'burnt', 'wash', 'repetitions', 'monitor', 'mixer', 'utensil'))
     args = parser.parse_args(); args.output.mkdir(parents=True, exist_ok=True)
     runtime_dll = args.runtime / 'BepInEx/plugins/SousChef.Bridge.dll'
     report = {'bridgeSha256': hashlib.sha256(runtime_dll.read_bytes()).hexdigest(), 'cases': []}
     audit = Audit(args)
-    for case in args.case or ['prepare', 'take_ready', 'fire', 'burnt', 'wash', 'repetitions', 'monitor']:
+    for case in args.case or ['prepare', 'take_ready', 'fire', 'burnt', 'wash', 'repetitions', 'monitor', 'mixer', 'utensil']:
         audit.directory = args.output / case; audit.directory.mkdir(exist_ok=True)
         try:
             details = getattr(audit, case)()

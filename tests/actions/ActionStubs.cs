@@ -141,3 +141,10 @@ public class ServerFlammable : MonoBehaviour
 }
 
 public class ServerDirtyPlateStack : MonoBehaviour { }
+
+public class MixingStation : MonoBehaviour { }
+
+public class CookingHandler : MonoBehaviour { public UnityEngine.Object m_cookingType; }
+public class MixingHandler : MonoBehaviour { public UnityEngine.Object m_mixingType; }
+public class CookableContainer : MonoBehaviour { }
+public class MixableContainer : MonoBehaviour { }

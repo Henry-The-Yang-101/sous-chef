@@ -154,6 +154,29 @@ internal static class Program
         }
         Check(offered,"human-only sink delivery uses the same navigator with an independent human origin");
     }
+    private static void NativeUtensilDefinitions()
+    {
+        var w=new World();var pot=new GameObject("arbitrary native prefab name");pot.Add(new ServerIngredientContainer());pot.Add(new CookableContainer());pot.Add(new CookingHandler {m_cookingType=new Definition {name="Pot"}});
+        Check(LogisticsInventory.UtensilType(pot)=="pot","native cooking step identifies a pot without item properties or object-name guesses");
+        pot.GetComponent<CookingHandler>().m_cookingType.name="FryingPan";
+        Check(LogisticsInventory.UtensilType(pot)=="pan","native frying step identifies pan capability");
+        pot.Add(new MixableContainer());pot.Add(new MixingHandler {m_mixingType=new Definition {name="MixingBowl"}});
+        Check(LogisticsInventory.UtensilType(pot)=="bowl","mixing bowl uses its mixing definition even when it also supports cooking");
+        pot.Add(new PreparationContainer());Check(LogisticsInventory.UtensilType(pot)==null,"an assembly base cannot be classified as an empty utensil");
+    }
+    private static void MixerReadiness()
+    {
+        var w=new World(t=>t.Add(new MixingStation()));
+        var bowl=new GameObject("bowl");bowl.Add(new ServerIngredientContainer()).Contents.Add(new AssembledDefinitionNode("batter"));
+        var cooking=bowl.Add(new ServerCookingHandler());cooking.m_ServerData.m_cookingState=ProcessingState.Progressing;
+        var mixing=bowl.Add(new ServerMixingHandler());mixing.m_serverData.m_mixingState=ProcessingState.Completed;
+        w.Target.GetComponent<ServerAttachStation>().Item=bowl;
+        Check(TaskNative.ReadyAt(w.Target) && TaskNative.ReadyAt(bowl),"a mixer and its item target use mixing completion despite the unused cooking handler");
+        var cat=(Json.Record)w.Navigation.Available(w.Chef);w.Tasks.Decorate(cat,w.Chef);
+        Check(!((List<object>)cat["taskOptions"]).Cast<Json.Record>().Any(row=>(string)row["name"]=="take_ready"),"heat-only task excludes a ready mixer bowl");
+        mixing.m_serverData.m_mixingState=ProcessingState.Ruined;
+        Check(!TaskNative.ReadyAt(w.Target),"ruined mixed contents are not ready");
+    }
     private static void ReadyFoodTasks()
     {
         var w=new World(t=>t.Add(new CookingStation()));w.Delivery();
@@ -961,6 +984,6 @@ internal static class Program
         Check(!drops.Plan(w.Chef,item,player,out drop),"nearby horizontal position on a different deck is not a valid drop handoff");
         Physics.Sphere=(p,r,d,length)=>new RaycastHit[0];
     }
-    private static void Main() { CounterForecasts();PersistentTasks();HumanSinkEligibility();ReadyFoodTasks();Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
+    private static void Main() { CounterForecasts();PersistentTasks();HumanSinkEligibility();NativeUtensilDefinitions();MixerReadiness();ReadyFoodTasks();Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
     private static ClientInteractable GetCurrentlyInteractingForTest(this PlayerControls chef) { return chef.GetComponent<ClientPlayerControlsImpl_Default>().Current; }
 }

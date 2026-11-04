@@ -40,6 +40,18 @@ namespace SousChef.Plugin.Actions
         }
         public static bool Ready(GameObject item, bool mixing)
         { return !Burnt(item) && Complete(State(item, mixing)); }
+        public static bool IsMixer(GameObject station) { return Component(station, "MixingStation") != null; }
+        public static bool ReadyAt(GameObject target)
+        {
+            GameObject item = ActionObservations.Receiver(target);
+            if (Equipment(target)) return Ready(item, IsMixer(target));
+            // Item targets and their parent station use the same observed holder
+            // relationship. A bowl's unused cooking handler can say Progressing
+            // at zero even while its mixing handler completes normally.
+            foreach (ServerAttachStation holder in UnityEngine.Object.FindObjectsOfType<ServerAttachStation>())
+                if (System.Object.ReferenceEquals(holder.InspectItem(), item) && Equipment(holder.gameObject)) return Ready(item, IsMixer(holder.gameObject));
+            return Ready(item);
+        }
         private static bool Complete(string state) { return state == "Completed" || state == "OverDoing"; }
         public static bool Burnt(GameObject item) { return State(item) == "Ruined" || State(item, true) == "Ruined"; }
         public static float Remaining(GameObject item, bool mixing = false)

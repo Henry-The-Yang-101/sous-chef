@@ -14,11 +14,13 @@ namespace SousChef.Plugin.Actions
             foreach (GameObject station in navigation.Targets())
             {
                 if (!TaskNative.Equipment(station) || !Reachable(station)) continue;
+                bool mixer = TaskNative.IsMixer(station);
+                if (mixer && !includeMixing) continue;
                 GameObject item = ActionObservations.Receiver(station);
-                if (TaskNative.Burnt(item) || (TaskNative.State(item) == null && (!includeMixing || TaskNative.State(item, true) == null))) continue;
+                if (TaskNative.Burnt(item) || TaskNative.State(item, mixer) == null) continue;
                 if (LogisticsInventory.Empty(item) && ActionObservations.Container(station) != null) continue;
-                if (readyOnly && !TaskNative.Ready(item)) continue;
-                float cost = (TaskNative.Ready(item) ? 0 : 10000) + inventory.DistanceTo(station);
+                if (readyOnly && !TaskNative.Ready(item, mixer)) continue;
+                float cost = (TaskNative.Ready(item, mixer) ? 0 : 10000) + inventory.DistanceTo(station);
                 if (cost < score) { best = station; score = cost; }
             }
             return best;
@@ -46,7 +48,7 @@ namespace SousChef.Plugin.Actions
             // The wait observes the originally selected food/container. It never
             // takes uncooked food just because a walking action has arrived.
             yield return Until("waiting_until_food_ready", delegate {
-                return station != null && station.activeInHierarchy && System.Object.ReferenceEquals(ActionObservations.Receiver(station), item) && TaskNative.Ready(item);
+                return station != null && station.activeInHierarchy && System.Object.ReferenceEquals(ActionObservations.Receiver(station), item) && TaskNative.ReadyAt(station);
             });
             LogisticsItem plate = ServingUtensil(item);
             if (plate != null)

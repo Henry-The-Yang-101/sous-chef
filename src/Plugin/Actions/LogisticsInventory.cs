@@ -50,7 +50,8 @@ namespace SousChef.Plugin.Actions
                 case "cookingpot": case "saucepan": case "pot": return "pot";
                 case "fryingpan": case "pan": return "pan";
                 case "mixingbowl": case "bowl": return "bowl";
-                case "bakingtray": case "tray": return "tray";
+                case "bakingtray": case "oventray": case "tray": return "tray";
+                case "ovencaketin": case "caketin": return "caketin";
                 case "fireextinguisher": case "extinguisher": return "extinguisher";
                 default: return value;
             }
@@ -59,8 +60,17 @@ namespace SousChef.Plugin.Actions
         {
             if (item == null || item.GetComponent<ServerPlate>() != null || item.GetComponent<IngredientPropertiesComponent>() != null) return null;
             var properties = item.GetComponent<ItemPropertiesComponent>();
-            if (properties == null) return null;
-            var definition = ActionObservations.Read<UnityEngine.Object>(properties, "m_itemDefinition");
+            var definition = properties == null ? null : ActionObservations.Read<UnityEngine.Object>(properties, "m_itemDefinition");
+            // Native pots, pans and mixer bowls often lack item properties.
+            // Their processing-step assets supply the actual utensil definition;
+            // object names and level-specific prefab guesses are unnecessary.
+            if (definition == null && TaskNative.Component(item, "ServerFireExtinguishSpray") != null) return "extinguisher";
+            if (definition == null && item.GetComponent<PreparationContainer>() == null && item.GetComponent<ServerIngredientContainer>() != null)
+            {
+                Component mixing = TaskNative.Component(item, "MixingHandler"), cooking = TaskNative.Component(item, "CookingHandler");
+                if (mixing != null && TaskNative.Component(item, "MixableContainer") != null) definition = ActionObservations.Read<UnityEngine.Object>(mixing, "m_mixingType");
+                else if (cooking != null && TaskNative.Component(item, "CookableContainer") != null) definition = ActionObservations.Read<UnityEngine.Object>(cooking, "m_cookingType");
+            }
             return definition == null || String.IsNullOrEmpty(definition.name) ? null : CanonicalUtensil(definition.name);
         }
         public static bool IngredientIdentity(GameObject item, out string id, out string name)
