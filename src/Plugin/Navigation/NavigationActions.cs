@@ -17,6 +17,7 @@ namespace SousChef.Plugin.Navigation
             public Vector3 Approach, LocalApproach;
             public float Distance;
             public bool IsPoint, StrictPointArrival;
+            public Collider PointSupport;
         }
         private readonly WalkPhysics physics = new WalkPhysics();
         public readonly ChefActionState Action = new ChefActionState();
@@ -106,11 +107,16 @@ namespace SousChef.Plugin.Navigation
         {
             if (Action.State != "idle") return "action_in_progress";
             chef = player;
-            var chosen = new Destination { Id = "throw_stance", Object = aim, Kind = "throw_stance", IsPoint = true, StrictPointArrival = strictArrival, Approach = position };
+            string error = physics.Refresh(player); if (error != null) return error;
+            Vector3 supported; Collider ground;
+            bool valid = strictArrival ? physics.StationaryStand(position, out supported, out ground) : physics.Stand(position, out supported, out ground);
+            if (!valid || Vector3.Distance(supported, position) > .04f) return strictArrival ? "unsafe_release_stance" : "destination_unreachable";
+            var chosen = new Destination { Id = "throw_stance", Object = aim, Kind = "throw_stance", IsPoint = true, StrictPointArrival = strictArrival,
+                Approach = supported, PointSupport = ground, LocalApproach = ground.transform.InverseTransformPoint(supported) };
             if (!Action.Start(owner, chosen.Id, true)) return "action_in_progress";
             settlingSince = -1; teleportsCompleted = 0; target = chosen; started = lastProgress = Time.realtimeSinceStartup; progressPosition = player.transform.position;
             arrivalDetails = null; arrival.Reset(); facingSince = -1; haveMotion = motionSampleValid = false;
-            Refresh(player, true);
+            Refresh(player, true, true);
             if (!ApplyPlan()) return Action.Reason;
             return null;
         }
@@ -118,7 +124,7 @@ namespace SousChef.Plugin.Navigation
         public bool SharesCurrentSupport(GameObject target)
         { return target != null && physics.SharesCurrentSupport(target.transform.position); }
         public bool TryStance(Vector3 point, out Vector3 stance)
-        { Collider ground; return physics.Stand(point, out stance, out ground); }
+        { Collider ground; return physics.StationaryStand(point, out stance, out ground); }
         public float RouteCost(Vector3 stance)
         {
             float best = Single.MaxValue;
@@ -523,7 +529,11 @@ namespace SousChef.Plugin.Navigation
             if (target.IsPoint)
             {
                 Vector3 point; Collider support;
-                return !physics.Stand(target.Approach, out point, out support) || Vector3.Distance(point, target.Approach) > .04f;
+                if (target.PointSupport == null || !target.PointSupport.enabled || !target.PointSupport.gameObject.activeInHierarchy) return true;
+                Vector3 current = target.PointSupport.transform.TransformPoint(target.LocalApproach);
+                return Vector3.Distance(current, target.Approach) > .001f ||
+                    !(target.StrictPointArrival ? physics.StationaryStand(current, out point, out support) : physics.Stand(current, out point, out support)) ||
+                    Vector3.Distance(point, current) > .04f;
             }
             foreach (Collider c in target.Colliders)
             {
@@ -541,13 +551,15 @@ namespace SousChef.Plugin.Navigation
                 // Transport the previous chef pose with the destination. This
                 // measures translation/rotation of a shared moving platform
                 // without mistaking it for movement past the target.
-                Vector3 transported = target.IsPoint ? motionPosition : target.Object.transform.TransformPoint(motionLocalPosition);
+                Transform anchor = target.IsPoint ? target.PointSupport.transform : target.Object.transform;
+                Vector3 transported = anchor.TransformPoint(motionLocalPosition);
                 targetVelocity = (transported - motionPosition) / elapsed; targetVelocity.y = 0;
                 Vector3 relative = position - transported; relative.y = 0;
                 observedRelativeSpeed = relative.magnitude / elapsed;
             }
             else { targetVelocity = Vector3.zero; observedRelativeSpeed = Single.PositiveInfinity; }
-            motionPosition = position; motionLocalPosition = target.Object.transform.InverseTransformPoint(position);
+            Transform support = target.IsPoint ? target.PointSupport.transform : target.Object.transform;
+            motionPosition = position; motionLocalPosition = support.InverseTransformPoint(position);
             motionTime = now; haveMotion = true;
         }
         private void Align(Vector3 position, int commandMilliseconds)
@@ -580,7 +592,7 @@ namespace SousChef.Plugin.Navigation
             Readiness(out canPickup, out canPlace, out canUse);
             bool ready = target.IsPoint || canPickup || canPlace || canUse;
             Vector3 relativeVelocity = velocity + drift - targetVelocity; relativeVelocity.y = 0;
-            float relativeSpeed = Mathf.Max(observedRelativeSpeed, relativeVelocity.magnitude);
+            float relativeSpeed = target.IsPoint && motionSampleValid ? observedRelativeSpeed : Mathf.Max(observedRelativeSpeed, relativeVelocity.magnitude);
             // Throw certification reserves PositionTolerance, not the wider
             // station-settling hysteresis. Refine an overshot generated stance.
             if (target.StrictPointArrival && distance > ArrivalCheck.PositionTolerance) arrival.Reset();
@@ -689,6 +701,15 @@ namespace SousChef.Plugin.Navigation
                 available.Clear(); chef = player;
                 string error = alreadyRefreshed ? null : physics.Refresh(player);
                 if (error != null) { ClearRemote(); incrementalSearch = fastWarm = false; unavailable = error; return; }
+                if (target != null && target.IsPoint)
+                {
+                    if (target.PointSupport == null || !target.PointSupport.enabled || !target.PointSupport.gameObject.activeInHierarchy)
+                    { unavailable = "release_support_unavailable"; return; }
+                    target.Approach = target.PointSupport.transform.TransformPoint(target.LocalApproach);
+                    Vector3 checkedPoint; Collider support;
+                    bool supported = target.StrictPointArrival ? physics.StationaryStand(target.Approach, out checkedPoint, out support) : physics.Stand(target.Approach, out checkedPoint, out support);
+                    if (!supported || Vector3.Distance(checkedPoint, target.Approach) > .04f) { unavailable = "unsafe_release_stance"; return; }
+                }
                 observationError = null;
                 List<Destination> candidates = target != null && target.IsPoint ? new List<Destination> { target } : Discover(player); candidateCount = candidates.Count;
                 bool hadIncremental = incrementalSearch;
@@ -768,7 +789,7 @@ namespace SousChef.Plugin.Navigation
                             if (cost < pointBest && physics.Segment(point, d.Approach, ref surfaceHistory)) { pointBest = cost; pointGoal = cell; }
                         }
                         if (pointBest < Single.MaxValue)
-                        { d.Goal = pointGoal; d.Distance = pointBest; d.LocalApproach = d.Object.transform.InverseTransformPoint(d.Approach); available[d.Id] = d; }
+                        { d.Goal = pointGoal; d.Distance = pointBest; available[d.Id] = d; }
                         continue;
                     }
                     float best = Single.MaxValue; WalkCell goal = new WalkCell(); Vector3 bestApproach = Vector3.zero;

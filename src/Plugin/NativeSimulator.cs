@@ -28,6 +28,8 @@ namespace SousChef.Plugin
         private Harmony patches;
         private static ServerDynamicFlowController advanceFlow;
         private static bool unfocusedFixture;
+        private static GameObject fixtureStanceAim;
+        private static Vector3 fixtureStancePoint;
         private bool interruptingTarget;
         internal static bool InputFocused { get { return Application.isFocused && !unfocusedFixture; } }
         private const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
@@ -189,6 +191,11 @@ namespace SousChef.Plugin
             // only in the opt-in simulator; the wire protocol stays unchanged.
             uint encoded;
             if (!UInt32.TryParse(destination.Substring(4), out encoded)) { reason = "invalid_fixture_portal"; return true; }
+            if (encoded == 0 && fixtureStanceAim != null)
+            {
+                reason = navigation.StartPosition(chef, owner, fixtureStanceAim, fixtureStancePoint, true);
+                return true;
+            }
             var physics = new Navigation.WalkPhysics();
             reason = physics.Refresh(chef);
             if (reason != null) return true;

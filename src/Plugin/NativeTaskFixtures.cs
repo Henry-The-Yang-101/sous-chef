@@ -61,6 +61,21 @@ namespace SousChef.Plugin
                 result["preparation"] = chopped ? "chopped" : "raw";
                 result["targetInstanceId"] = loose ? null : (object)target.GetInstanceID();
             }
+            else if (args[0] == "stance")
+            {
+                // Exercise the production throw-approach navigator without
+                // replacing its route, collision or support predicates.
+                if (args.Length != 5) throw new ArgumentException("invalid_stance_fixture");
+                fixtureStanceAim = FixtureObject(Int32.Parse(args[1]));
+                for (int n = 0; n < 3; n++)
+                {
+                    float value = Single.Parse(args[n + 2], System.Globalization.CultureInfo.InvariantCulture);
+                    if (Single.IsNaN(value) || Single.IsInfinity(value) || Math.Abs(value) > 1000) throw new ArgumentException("invalid_fixture_position");
+                    fixtureStancePoint[n] = value;
+                }
+                result["point"] = Values.Vector(fixtureStancePoint);
+                result["destination"] = "d0000";
+            }
             else if (args[0] == "collect")
             {
                 // External human pickup checkpoint, never a P2 task mutation.

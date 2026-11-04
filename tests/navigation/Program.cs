@@ -1015,10 +1015,29 @@ internal static class Program
         Check(!physics.Stand(Vector3.zero,out point,out support),"ordinary geometry without a pickup attachment still blocks navigation");
         Check(physics.SharesCurrentSupport(Vector3.zero),"a shared floor is only a planning hint and cannot bypass the obstructed walking proof");
     }
+    private static void StationaryThrowStances()
+    {
+        var w=new World();float shift=0;
+        var floor=w.AddFloor((x,z)=>Math.Abs(x-shift)<2 && Math.Abs(z)<2 ? 0 : (float?)null);
+        floor.testBounds=new Bounds(new Vector3(0,-.05f,0),new Vector3(4,.1f,4));
+        var nav=new NavigationActions((direction,ms)=>{w.LastInput=direction;w.LastMilliseconds=ms;},()=>{w.LastInput=Vector3.zero;});nav.PrepareStances(w.Chef);Vector3 stance;
+        Check(!nav.TryStance(new Vector3(1.9f,0,0),out stance),"a stationary throw needs footprint support at an open flat edge, beyond rounded walking contact");
+        Check(nav.TryStance(new Vector3(1.3f,0,0),out stance),"a fully supported stationary throw remains available");
+        var aim=new GameObject("human on another platform");aim.transform.position=new Vector3(0,0,8);
+        Check(nav.StartPosition(w.Chef,1,aim,new Vector3(1,0,0),true)==null,"checked release approach starts");
+        shift=-2;floor.transform.position=new Vector3(shift,0,0);floor.testBounds=new Bounds(new Vector3(shift,-.05f,0),new Vector3(4,.1f,4));w.Chef.transform.position+=Vector3.right*shift;
+        Time.realtimeSinceStartup+=.05f;Time.frameCount++;nav.Tick(w.Chef);
+        var flags=System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Public;
+        var target=typeof(NavigationActions).GetField("target",flags).GetValue(nav);
+        Check(nav.Action.State=="navigating" && target!=null && Math.Abs(((Vector3)target.GetType().GetField("Approach",flags).GetValue(target)).x+1)<.01f,
+            "release stance follows its certified support rather than staying over the water in world space");
+        floor.enabled=false;Time.realtimeSinceStartup+=.05f;Time.frameCount++;nav.Tick(w.Chef);
+        Check(nav.Action.State=="idle" && w.LastInput.sqrMagnitude<.001f,"lost release support neutralizes motion before another walking input");
+    }
     private static void Main()
     {
         SearchContinuity(); ShallowCeilingContacts(); EquivalentVerticalStarts(); ConveyorSearchContinuity(); CertifiedStart(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); DirectedConveyors(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
-        WorkerStartingStateChanges(); LoosePickupBodies();
+        WorkerStartingStateChanges(); LoosePickupBodies(); StationaryThrowStances();
         Console.WriteLine("PASS: " + checks + " navigator integration checks (analytical geometry; not PhysX)");
     }
 }
