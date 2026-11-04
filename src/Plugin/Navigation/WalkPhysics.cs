@@ -379,7 +379,9 @@ namespace SousChef.Plugin.Navigation
         public bool StationaryStand(Vector3 guess, out Vector3 point, out Collider support)
         {
             RaycastHit contact;
-            if (!Stand(guess, out point, out support, radius, out contact)) return false;
+            bool current = Vector3.Distance(guess, Position) < .02f;
+            float footprint = current ? nativeRadius + .01f : radius;
+            if (!Stand(guess, out point, out support, current ? ContactRadius : radius, out contact)) return false;
             if (NativeStep(support)) return true;
             var box = support as BoxCollider;
             bool flatBox = box != null && Mathf.Abs(box.transform.up.y) > .9999f;
@@ -390,8 +392,8 @@ namespace SousChef.Plugin.Navigation
                 Vector3 local = box.transform.InverseTransformPoint(point) - box.center;
                 float x = box.transform.TransformVector(Vector3.right).magnitude;
                 float z = box.transform.TransformVector(Vector3.forward).magnitude;
-                if (x > 0 && z > 0 && Mathf.Abs(local.x) + radius / x <= box.size.x * .5f &&
-                    Mathf.Abs(local.z) + radius / z <= box.size.z * .5f) return true;
+                if (x > 0 && z > 0 && Mathf.Abs(local.x) + footprint / x <= box.size.x * .5f &&
+                    Mathf.Abs(local.z) + footprint / z <= box.size.z * .5f) return true;
             }
             else if (contact.normal.y < .99f) return true;
             // Rounded capsule contact is useful for walking across stair seams,
@@ -399,7 +401,7 @@ namespace SousChef.Plugin.Navigation
             for (int n = 0; n < 8; n++)
             {
                 float angle = n * Mathf.PI / 4;
-                Vector3 sample = point + new Vector3(Mathf.Cos(angle), 0, Mathf.Sin(angle)) * radius;
+                Vector3 sample = point + new Vector3(Mathf.Cos(angle), 0, Mathf.Sin(angle)) * footprint;
                 int count = Physics.RaycastNonAlloc(sample + Vector3.up * .08f, Vector3.down, hits, .16f, groundMask, QueryTriggerInteraction.Ignore); Queries++;
                 if (count == hits.Length) { Overflow = true; return false; }
                 bool found = false;

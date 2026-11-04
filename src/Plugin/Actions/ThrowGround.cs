@@ -105,7 +105,7 @@ namespace SousChef.Plugin.Actions
             // whole raft on the game thread. Find continues the remaining seeds.
             UseGround(groundSpots[0]);
             for (int n = 0; n < Math.Min(16, groundSpots.Count); n++)
-                if (UseGround(groundSpots[n]) && GroundSupported(receiving.center, -toward, ArrivalCheck.PositionTolerance + .02f)) break;
+                if (UseGround(groundSpots[n]) && GroundSupported(receiving.center, -toward, 0)) break;
             return null;
         }
         private bool RefreshGround()

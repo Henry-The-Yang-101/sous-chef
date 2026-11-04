@@ -198,7 +198,7 @@ namespace SousChef.Plugin.Actions
             };
             launchObserver.RegisterThrowCallback(launchCallback);
             evidence = throwPlan.Describe(); Run.Advance("navigating");
-            return navigation.StartPosition(chef, owner, target, throwPlan.Stance, true);
+            return navigation.StartPosition(chef, owner, target, throwPlan.CurrentStance, true);
         }
         private string ValidateRequest()
         {
@@ -307,7 +307,7 @@ namespace SousChef.Plugin.Actions
                     // a bounded recovery planning budget, rather than an idle
                     // catalogue slice that may repeatedly stop short of the goal.
                     string error = throwPlan == null ? navigation.Start(chef, Run.Owner, WalkDestination(), true) :
-                        navigation.StartPosition(chef, Run.Owner, target, throwPlan.Stance, true);
+                        navigation.StartPosition(chef, Run.Owner, target, throwPlan.CurrentStance, true);
                     if (error != null) { RecoverNavigation(error); return; }
                     Run.Advance("navigating"); return;
                 }

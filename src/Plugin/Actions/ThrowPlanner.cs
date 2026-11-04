@@ -16,6 +16,11 @@ namespace SousChef.Plugin.Actions
         public Collider GroundSupport;
         public Vector3 GroundLocalPoint;
         public float LandingDistance;
+        public Collider StanceSupport;
+        public Vector3 StanceLocalPoint;
+        public Vector3 CurrentStance { get { return StanceSupport == null ? Stance : StanceSupport.transform.TransformPoint(StanceLocalPoint); } }
+        public void AnchorStance(Collider support)
+        { StanceSupport = support; StanceLocalPoint = support.transform.InverseTransformPoint(Stance); }
         public object Describe()
         {
             return Json.Object("releasePosition", Values.Vector(Stance), "direction", Values.Vector(Direction),
@@ -181,7 +186,7 @@ namespace SousChef.Plugin.Actions
             return surface == null ? Vector3.zero : surface.GetVelocity();
         }
         private bool offloadCandidates;
-        public string Find(NavigationActions navigation, out ThrowPlan plan, float sliceMilliseconds = 25, bool firstFeasible = false, bool prepareNavigation = true)
+        public string Find(NavigationActions navigation, out ThrowPlan plan, float sliceMilliseconds = 4, bool firstFeasible = false, bool prepareNavigation = true)
         {
             plan = null;
             if (candidates == null)
@@ -199,14 +204,14 @@ namespace SousChef.Plugin.Actions
                 if (!candidates.MoveNext()) return CompletePlanning(out plan);
                 // A pending worker batch yields without consuming a candidate.
                 if (Single.IsNaN(candidates.Current.x)) return Pending;
-                Vector3 stance; ThrowPlan possible;
-                if (!navigation.TryStance(candidates.Current, out stance)) { Reject("unsupported_stance"); continue; }
+                Vector3 stance; Collider support; ThrowPlan possible;
+                if (!navigation.TryStance(candidates.Current, out stance, out support)) { Reject("unsupported_stance"); continue; }
                 float uncertainty = Vector3.Distance(stance, chef.transform.position - Vector3.up * pivot) < .02f ? 0 : ArrivalCheck.PositionTolerance + .02f;
                 if (!From(stance, false, out possible, uncertainty)) continue;
                 float cost = navigation.RouteCost(stance);
                 if (cost == Single.MaxValue) { Reject("unreachable_stance"); continue; }
                 if (bestPlan != null && cost >= bestPlan.WalkDistance) continue;
-                possible.WalkDistance = cost; bestPlan = possible;
+                possible.WalkDistance = cost; possible.AnchorStance(support); bestPlan = possible;
                 if (ground || firstFeasible || cost < .01f) return CompletePlanning(out plan);
             }
             // Count work, rather than time between Updates: read-only option
@@ -240,6 +245,14 @@ namespace SousChef.Plugin.Actions
         private IEnumerable<Vector3> CandidatePositions(NavigationActions navigation)
         {
             if (!ground) { foreach (Vector3 stance in ReceiverCandidates(navigation)) yield return stance; yield break; }
+            // Prefer the best supported landing available from our current
+            // pose. Walking-arrival uncertainty does not apply to that pose;
+            // inflating it can reject every remaining space among prior cargo.
+            foreach (GroundSpot spot in groundSpots)
+            {
+                if (!UseGround(spot) || !GroundSupported(receiving.center, chef.transform.forward, 0)) continue;
+                yield return chef.transform.position - Vector3.up * pivot;
+            }
             foreach (GroundSpot spot in groundSpots)
             {
                 if (!UseGround(spot) || !GroundSupported(receiving.center, chef.transform.forward, ArrivalCheck.PositionTolerance + .02f)) continue;
@@ -249,7 +262,7 @@ namespace SousChef.Plugin.Actions
         private IEnumerable<Vector3> ReceiverCandidates(NavigationActions navigation)
         {
             Vector3 center = receiving.center;
-            yield return chef.transform.position - Vector3.up * pivot;
+            if (!ground) yield return chef.transform.position - Vector3.up * pivot;
             foreach (float height in navigation.ReleaseHeights(center, speed * 4))
                 foreach (float flight in ReleaseTimes(height, center))
                 {

@@ -1213,6 +1213,25 @@ internal static class Program
         clutter.transform.position+=Vector3.right*2;w.Target.transform.position+=Vector3.right*2;
         Check(planner.Prepare(w.Chef,item,human,groundHandoff:true)==null && planner.RestoreGround(plan) && plan.GroundLocalPoint.Equals(local),"a selected landing follows its moving raft while preserving its local position");
     }
-    private static void Main() { CounterForecasts();PersistentTasks();HumanSinkEligibility();NativeUtensilDefinitions();PreparationEquipmentDiscovery();PreparedIngredientSources();AvailablePreparationWork();ReconciledHandoffs();MixerReadiness();ReadyFoodTasks();PauseTimers();MovingPickups();Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();GroundThrows();RaftLandingFallback();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
+    private static void CurrentPoseLandingClearance()
+    {
+        var w=new World();var floor=w.Colliders[0];floor.GetComponent<BoxCollider>().size=new Vector3(.96f,.1f,20);
+        var ray=Physics.Ray;Physics.Ray=(p,d,length,mask)=>Math.Abs(p.x)<.48f ? ray(p,d,length,mask) : new RaycastHit[0];
+        var item=w.Ingredient("potato");item.Add(new Throwable());item.Add(new PhysicalAttachment {m_motion=new RigidbodyMotion()});item.Add(new ServerPhysicalAttachment {Attached=true});
+        item.Add(new BoxCollider {center=new Vector3(0,.15f,0),size=new Vector3(.76f,.3f,.77f)});
+        w.Chef.gameObject.Add(new AttachmentThrower());w.Chef.gameObject.Add(new ClientAttachmentThrower());w.Chef.gameObject.Add(new ServerAttachmentThrower());
+        var human=new GameObject("human on narrow receiving deck");human.Add(new PlayerControls {GroundCollider=floor});human.Add(new PlayerIDProvider {Id=0});human.Add(new GroundCast());w.Colliders.Add(human.Add(new CapsuleCollider()));
+        human.Add(new ServerPlayerAttachmentCarrier {Item=new GameObject("busy hands")});
+        float flight;ThrowTrajectory.FlightTime(-1,8*Mathf.Tan(15*Mathf.Deg2Rad),-9.81f,0,.02f,out flight);
+        w.Chef.transform.position=new Vector3(0,0,-1.25f-8*flight-.4f);item.transform.position=w.Chef.transform.position+new Vector3(0,1,.4f);w.Hold(item);
+        Physics.Nearby=(p,r)=>w.Colliders.Where(c=>Vector3.Distance(p,c.bounds.ClosestPoint(p))<=r).ToArray();
+        var planner=new ThrowPlanner();ThrowPlan plan=null;
+        Check(planner.Prepare(w.Chef,item,human,groundHandoff:true)==null && FindPlan(planner,w.Navigation,out plan)==null && plan.WalkDistance<.01f,
+            "a checked current-pose throw can use space too narrow for walking-arrival uncertainty");
+        Vector3 local=plan.StanceLocalPoint;w.Colliders[0].transform.position+=Vector3.right;
+        Check(Vector3.Distance(plan.CurrentStance,plan.Stance+Vector3.right)<.01f && plan.StanceLocalPoint.Equals(local),
+            "cached release poses follow their support instead of gaining fictitious walking uncertainty as a raft moves");
+    }
+    private static void Main() { CounterForecasts();PersistentTasks();HumanSinkEligibility();NativeUtensilDefinitions();PreparationEquipmentDiscovery();PreparedIngredientSources();AvailablePreparationWork();ReconciledHandoffs();MixerReadiness();ReadyFoodTasks();PauseTimers();MovingPickups();Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();GroundThrows();RaftLandingFallback();CurrentPoseLandingClearance();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
     private static ClientInteractable GetCurrentlyInteractingForTest(this PlayerControls chef) { return chef.GetComponent<ClientPlayerControlsImpl_Default>().Current; }
 }

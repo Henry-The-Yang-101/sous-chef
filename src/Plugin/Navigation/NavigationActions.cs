@@ -125,6 +125,8 @@ namespace SousChef.Plugin.Navigation
         { return target != null && physics.SharesCurrentSupport(target.transform.position); }
         public bool TryStance(Vector3 point, out Vector3 stance)
         { Collider ground; return physics.StationaryStand(point, out stance, out ground); }
+        public bool TryStance(Vector3 point, out Vector3 stance, out Collider support)
+        { return physics.StationaryStand(point, out stance, out support); }
         public float RouteCost(Vector3 stance)
         {
             float best = Single.MaxValue;
