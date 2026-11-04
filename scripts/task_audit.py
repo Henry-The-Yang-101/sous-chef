@@ -7,6 +7,7 @@ Measured execution uses only the production ActionClient and logical inputs.
 import argparse
 import hashlib
 import json
+import math
 from pathlib import Path
 import sys
 import time
@@ -16,6 +17,7 @@ from throw_audit import snapshot, fields, write
 
 sys.path.insert(0, str(sim.ROOT))
 from clients.actions import ActionClient
+from clients.control import ControlError
 
 
 class Audit:
@@ -76,6 +78,25 @@ class Audit:
         write(self.directory / ('fixture-' + str(time.time_ns()) + '.json'), record)
         return record
 
+    def request_when_available(self, action, *args, **kwargs):
+        # Geometry/client readiness can change between a catalogue and dispatch.
+        # Retry only a rejected precondition: accepted task requests are never
+        # replayed, and observe() checks their single identity through completion.
+        deadline = time.monotonic() + 15
+        rejected = 0
+        while time.monotonic() < deadline:
+            catalog = self.client.available_actions()
+            if any(t['name'] == action for t in catalog.get('taskOptions', [])):
+                try:
+                    self.client.run_task(action, *args, **kwargs)
+                    return rejected
+                except ControlError as error:
+                    if str(error) != 'task_not_available':
+                        raise
+                    rejected += 1
+            time.sleep(.1)
+        raise TimeoutError('Task did not become available: ' + action)
+
     def rice(self):
         catalog = self.catalog()
         ingredient = next(i['id'] for i in catalog['ingredients'] if i['label'] == 'SushiRice')
@@ -90,7 +111,7 @@ class Audit:
 
     def prepare(self):
         self.load('s_sushi_1_2')
-        self.client.run_task('prepare_near_player', items=[
+        self.request_when_available('prepare_near_player', items=[
             {'ingredient': 'SushiRice', 'preparation': 'cooked'},
             {'ingredient': 'SushiFish', 'preparation': 'chopped'}])
         simultaneous = False
@@ -116,7 +137,7 @@ class Audit:
 
     def take_ready(self):
         self.load('s_sushi_1_2'); cooker, pot = self.rice()
-        self.client.run_task('take_ready'); receipts = self.observe('task')
+        self.request_when_available('take_ready'); receipts = self.observe('task')
         after = self.snap('after')
         original = next(o for o in after['objects'] if o['unityInstanceId'] == pot['unityInstanceId'])
         assert fields(original, 'ServerIngredientContainer')['m_contents'] == []
@@ -127,7 +148,7 @@ class Audit:
         catalog = self.load('s_sushi_1_2')
         cooker = next(t for t in catalog['targets'] if t['kind'] == 'cooking_station')
         self.fixture('ignite ' + str(cooker['objectInstanceId']))
-        self.client.run_task('put_out_fire'); receipts = self.observe('task')
+        self.request_when_available('put_out_fire'); receipts = self.observe('task')
         after = self.snap('after')
         burning = [o for o in after['objects'] if fields(o, 'ServerFlammable').get('m_onFire')]
         assert not burning
@@ -141,14 +162,14 @@ class Audit:
         # ruined food. Clear that independently before testing disposal.
         options = [t['name'] for t in self.catalog()['taskOptions']]
         if 'put_out_fire' in options:
-            self.client.run_task('put_out_fire'); self.observe('extinguish-setup')
-        self.client.run_task('toss_burnt_food'); self.observe('task')
+            self.request_when_available('put_out_fire'); self.observe('extinguish-setup')
+        rejected = self.request_when_available('toss_burnt_food'); self.observe('task')
         after = self.snap('after')
         original = next(o for o in after['objects'] if o['unityInstanceId'] == pot['unityInstanceId'])
         holder = next(o for o in after['objects'] if o['unityInstanceId'] == cooker['objectInstanceId'])
         assert fields(original, 'ServerIngredientContainer')['m_contents'] == []
         assert fields(holder, 'ServerAttachStation')['m_item']['objectId'] == original['id']
-        return {'exactPotReturnedToOriginalBurner': pot['unityInstanceId']}
+        return {'exactPotReturnedToOriginalBurner': pot['unityInstanceId'], 'rejectedStartPreconditions': rejected}
 
     def wash(self):
         catalog = self.load('s_sushi_1_4')
@@ -156,7 +177,7 @@ class Audit:
         # Use a different reachable empty counter for a second native stack.
         counter = next(d for d in catalog['deliveryDestinations'] if d['kind'] == 'counter')
         other = self.fixture('dirty 1 ' + str(counter['objectInstanceId']))
-        self.client.run_task('wash_dishes'); self.observe('task')
+        self.request_when_available('wash_dishes'); self.observe('task')
         after = self.snap('after')
         assert all(fields(o, 'ServerWashingStation').get('m_plateCount', 0) == 0 for o in after['objects'])
         assert not any(o['unityInstanceId'] in (dirty['stackInstanceId'], other['stackInstanceId']) for o in after['objects'])
@@ -164,7 +185,7 @@ class Audit:
 
     def repetitions(self):
         self.load('s_sushi_1_4'); self.fixture('dirty 1')
-        self.client.run_task('wash_dishes', 2)
+        self.request_when_available('wash_dishes', 2)
         injected = False
 
         def next_batch(action):
@@ -178,8 +199,8 @@ class Audit:
 
     def monitor(self):
         self.load('s_sushi_1_2'); self.rice()
-        self.client.run_task('monitor_equipment'); self.observe('task'); self.snap('after')
-        self.client.run_task('monitor_equipment', None)
+        self.request_when_available('monitor_equipment'); self.observe('task'); self.snap('after')
+        self.request_when_available('monitor_equipment', None)
         request = self.client.last_response['control']['action']['requestId']
         for _ in range(20):
             self.client.available_actions(); control = self.client.last_response['control']
@@ -200,7 +221,7 @@ class Audit:
         before = self.snap('before')
         holder = next(o for o in before['objects'] if o['unityInstanceId'] == mixer['objectInstanceId'])
         original = fields(holder, 'ServerAttachStation')['m_item']['objectId']
-        self.client.run_task('monitor_equipment'); self.observe('task')
+        self.request_when_available('monitor_equipment'); self.observe('task')
         after = self.snap('after')
         holder = next(o for o in after['objects'] if o['unityInstanceId'] == mixer['objectInstanceId'])
         bowl = next(o for o in after['objects'] if o['id'] == original)
@@ -211,7 +232,7 @@ class Audit:
     def utensil(self):
         self.load('s_sushi_1_2')
         before = self.snap('before')
-        self.client.run_task('prepare_near_player', items=[{'ingredient': 'pot', 'preparation': 'empty'}])
+        self.request_when_available('prepare_near_player', items=[{'ingredient': 'pot', 'preparation': 'empty'}])
         receipts = self.observe('task')
         identity = receipts[-1]['details']['handoff']['itemInstanceId']
         pot = next(o for o in before['objects'] if o['unityInstanceId'] == identity)
@@ -219,18 +240,55 @@ class Audit:
         self.snap('after')
         return {'nativeEmptyPotDelivered': identity}
 
+    def dirty_delivery(self):
+        self.load('MovingPlatform4')
+        status = sim.read_status(self.args.runtime)
+        p1 = next(p['position'] for p in status['players'] if p['name'] == 'Player 1')
+        p2 = next(p['position'] for p in status['players'] if p['name'] == 'Player 2')
+        # Explicit supported initial poses swap roles between the native islands.
+        # P1 inputs remain untouched throughout measured task execution.
+        buffer = None
+        for n in range(12):
+            point = [p1[0] + 1.6 * math.cos(n * math.pi / 6), p1[1], p1[2] + 1.6 * math.sin(n * math.pi / 6)]
+            try:
+                sim.command(self.args.runtime, 'stage-player 2 ' + ' '.join(map(str, (*point, 0))))
+                buffer = point
+                break
+            except RuntimeError:
+                continue
+        if buffer is None:
+            raise RuntimeError('No supported role-swap buffer pose')
+        sim.command(self.args.runtime, 'stage-player 1 ' + ' '.join(map(str, (*p2, 0))))
+        sim.command(self.args.runtime, 'stage-player 2 ' + ' '.join(map(str, (*p1, 0))))
+        write(self.directory / 'role-swap.json', {'player1Before': p1, 'player2Before': p2, 'buffer': buffer,
+              'after': sim.read_status(self.args.runtime)['players'], 'kind': 'explicit_supported_initial_poses'})
+        catalog = self.catalog()
+        counter = next(d for d in catalog['deliveryDestinations'] if d['kind'] == 'counter')
+        dirty = self.fixture('dirty 2 ' + str(counter['objectInstanceId']))
+        self.request_when_available('deliver_dirty_dishes')
+        receipts = self.observe('task')
+        after = self.snap('after')
+        handoff = receipts[-1]['details']['handoff']
+        assert handoff['itemInstanceId'] == dirty['stackInstanceId']
+        assert any(o['unityInstanceId'] == dirty['stackInstanceId'] for o in after['objects'])
+        if handoff['targetInstanceId'] is not None:
+            target = next(o for o in after['objects'] if o['unityInstanceId'] == handoff['targetInstanceId'])
+            cargo = fields(target, 'ServerAttachStation')['m_item']['objectId']
+            assert next(o for o in after['objects'] if o['id'] == cargo)['unityInstanceId'] == dirty['stackInstanceId']
+        return {'humanOnlySinkDelivery': True, 'exactDirtyStackDelivered': dirty['stackInstanceId'], 'handoff': handoff}
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--runtime', type=Path, required=True)
     parser.add_argument('--port-base', type=int, required=True)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--case', action='append', choices=('prepare', 'take_ready', 'fire', 'burnt', 'wash', 'repetitions', 'monitor', 'mixer', 'utensil'))
+    parser.add_argument('--case', action='append', choices=('prepare', 'take_ready', 'fire', 'burnt', 'wash', 'repetitions', 'monitor', 'mixer', 'utensil', 'dirty_delivery'))
     args = parser.parse_args(); args.output.mkdir(parents=True, exist_ok=True)
     runtime_dll = args.runtime / 'BepInEx/plugins/SousChef.Bridge.dll'
     report = {'bridgeSha256': hashlib.sha256(runtime_dll.read_bytes()).hexdigest(), 'cases': []}
     audit = Audit(args)
-    for case in args.case or ['prepare', 'take_ready', 'fire', 'burnt', 'wash', 'repetitions', 'monitor', 'mixer', 'utensil']:
+    for case in args.case or ['prepare', 'take_ready', 'fire', 'burnt', 'wash', 'repetitions', 'monitor', 'mixer', 'utensil', 'dirty_delivery']:
         audit.directory = args.output / case; audit.directory.mkdir(exist_ok=True)
         try:
             details = getattr(audit, case)()

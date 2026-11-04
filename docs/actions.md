@@ -139,7 +139,9 @@ can still block an already-started job safely.
 Use a catalogue ingredient ID such as `i42` for an exact definition, or its
 observed name. A raw name such as `tomato` also matches `Tomato_Raw`; it does not
 silently substitute chopped/cooked states. Ambiguous names require the catalogue
-ID. Utensil types come from native item definitions, not guessed object names.
+ID. Utensil types come from native item definitions or the utensil’s cooking/mixing
+step asset. Pots, pans and mixer bowls without `ItemPropertiesComponent` remain
+discoverable; object names do not determine their type.
 Home locations are observed holder relationships, retained only within the round.
 Ingredient identity includes `PreparationContainer.m_ingredientOrderNode` for
 assembly bases such as buns. A bun with fillings cannot substitute for an empty

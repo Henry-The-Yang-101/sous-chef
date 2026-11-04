@@ -205,6 +205,13 @@ holding cheese. That separate stall was not resolved by this change. The matrix
 uses the counter at `[22.8, 0, -2.4]` to isolate interruption recovery. Evidence
 for the first route is in `.local/job-recovery-results/baseline/`.
 
+## Autonomous task audits (bridge 0.8)
+
+See [task verification](task-verification.md) for preparation, utensils, ready-food
+serving, mixer monitoring, dishes, firefighting, disposal and repetition tests.
+The opt-in task fixtures create native initial conditions; measured actions still
+use normal logical inputs. The previous 500 ms recovery window is now indefinite.
+
 ## Isolation and implementation
 
 The simulator has its own BepInEx core/config/plugin copy and save directory under

@@ -51,8 +51,9 @@ then a checked pass/drop at the human, then a directed conveyor or returning
 counter. Both chefs use the same navigator implementation in independent read-only
 observers. Throw plans check actual throwability. Conveyor traversal follows the
 native next receiver, including rotation/direction, and rejects loops/dead ends.
-Moving-counter fallback requires an observed human-accessible stop in this round;
-unknown motion waits for evidence. Transport delivery completes only after the
+Moving-counter forecasts require an observed human-accessible stop, then motion
+toward that stop or an observed complete return cycle. Unknown/one-way motion
+waits for evidence. Forecasts never replace the final accessibility check. Transport delivery completes only after the
 exact item reaches a human-accessible holder or the human's hands. Safe empty
 countertops are used when putting equipment down; conveyor belts are not storage.
 
@@ -99,13 +100,32 @@ to its observed holder or an available counter when possible.
 `toss_burnt_food` requires obtainable food in the native ruined state. It captures
 the current burner, picks up the exact food/utensil, and uses native disposal.
 A surviving empty utensil returns to that burner, otherwise another compatible
-available burner, otherwise an available counter. Occupied burners are never
-cleared. If no disposal/return route exists, it waits holding the original cargo.
+available burner, otherwise an available counter. Incomplete route discovery cannot prematurely
+select the countertop fallback. Occupied burners are never cleared; an unpressed
+placement blocked by changed contents can select another allowed destination. If no disposal/return route exists, it waits holding the original cargo.
 
 ## Monitor equipment
 
 `monitor_equipment` waits for any accessible native cooker, heated station, or
 mixer/blender to finish. It uses shared ready-food collection and serving/parking,
-then completes one repetition. Use unlimited repetitions for ongoing monitoring,
+then completes one repetition. Serving-tool travel is bounded by the native
+remaining spoil window; a distant plate cannot delay removing a ready container. Use unlimited repetitions for ongoing monitoring,
 including idle periods when equipment is empty. Cooking station variants use the
 same native cooking handler instead of recipe/name-specific timing guesses.
+
+## Examples
+
+```python
+chef.run_task('wash_dishes', repetitions=3)
+chef.run_task('monitor_equipment', repetitions=None)  # Stop cancels the loop.
+chef.run_task('prepare_near_player', items=[
+    {'ingredient': 'chicken', 'preparation': 'chopped', 'quantity': 2},
+    {'ingredient': 'pot', 'preparation': 'empty', 'quantity': 1},
+])
+```
+
+The integer/null repetition parameter is ready for a future caller to choose;
+there is no Score primitive or Jev dependency in these actions.
+
+See [native verification and reproduction steps](task-verification.md) for tested
+scenarios, fixture boundaries, evidence paths and remaining map coverage.
