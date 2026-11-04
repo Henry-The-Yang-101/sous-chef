@@ -10,7 +10,7 @@ namespace SousChef.Plugin.Actions
         {
             GameObject held = ActionObservations.Held(chef);
             if (held != null && !TaskNative.Dirty(held)) return false;
-            return Sink(true) != null && (TaskNative.Dirty(held) || DirtySources().Count > 0);
+            return (TaskNative.Dirty(held) || DirtySources().Count > 0) && Sink(true) != null;
         }
         private IEnumerable<TaskStep> DeliverDirtyDishes()
         {

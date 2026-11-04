@@ -31,10 +31,10 @@ namespace SousChef.Plugin.Actions
             var transfer = GameObjectUtils.RequestInterface<IContainerTransferBehaviour>(source);
             return transfer != null && transfer.CanTransferToContainer(recipient.GetComponent<ServerIngredientContainer>());
         }
-        private LogisticsItem ServingUtensil(GameObject source, GameObject station)
+        private LogisticsItem ServingUtensil(GameObject source, GameObject station, bool offHeat = false)
         {
             inventory.Refresh(chef); LogisticsItem best = null; float cost = Single.MaxValue;
-            float margin = TaskNative.Remaining(source, TaskNative.IsMixer(station), true);
+            float margin = offHeat ? Single.MaxValue : TaskNative.Remaining(source, TaskNative.IsMixer(station), true);
             float stationDistance = inventory.DistanceTo(station);
             foreach (LogisticsItem candidate in inventory.Items)
             {
@@ -57,6 +57,8 @@ namespace SousChef.Plugin.Actions
             yield return Until("waiting_until_food_ready", delegate {
                 return station != null && station.activeInHierarchy && System.Object.ReferenceEquals(ActionObservations.Receiver(station), item) && TaskNative.ReadyAt(station);
             });
+            // An incomplete route slice is not evidence that plates are absent.
+            yield return Until("checking_serving_utensils", delegate { RefreshWorld(); return botSearchComplete; });
             LogisticsItem plate = ServingUtensil(item, station);
             if (plate != null)
             {
@@ -68,6 +70,16 @@ namespace SousChef.Plugin.Actions
             {
                 yield return Do("pick_up", station);
                 foreach (TaskStep park in Park(item)) yield return park;
+                // Rescue urgent cookware first, then plate its contents safely
+                // off the heat. A short spoil window must not permanently skip plating.
+                yield return Until("checking_serving_utensils", delegate { RefreshWorld(); return botSearchComplete; });
+                plate = ServingUtensil(item, item, true);
+                if (plate != null)
+                {
+                    yield return Do("pick_up", plate.Source);
+                    yield return Do("collect_contents", item);
+                    foreach (TaskStep park in Park(ActionObservations.Held(chef))) yield return park;
+                }
             }
         }
         private IEnumerable<TaskStep> TakeReady()

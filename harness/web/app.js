@@ -465,10 +465,11 @@ const taskLabels = {prepare_near_player: 'Prepare and give to player', take_read
 function addTaskItem() {
   if (el('task-items').children.length >= 10) return;
   const row = document.createElement('div'); row.className = 'task-item';
-  const ingredient = document.createElement('input'); ingredient.placeholder = 'Ingredient or utensil'; ingredient.required = true; ingredient.maxLength = 64;
+  const ingredient = document.createElement('select'); ingredient.required = true;
   ingredient.setAttribute('aria-label', 'Ingredient or utensil');
   const preparation = document.createElement('select'); preparation.setAttribute('aria-label', 'Preparation');
   for (const kind of ['raw', 'chopped', 'cooked', 'mixed', 'empty']) preparation.add(new Option(kind === 'empty' ? 'Empty utensil / plate' : kind, kind));
+  preparation.addEventListener('change', render);
   const quantity = document.createElement('input'); quantity.type = 'number'; quantity.min = '1'; quantity.max = '10'; quantity.value = '1'; quantity.required = true; quantity.setAttribute('aria-label', 'Quantity');
   const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Remove'; remove.onclick = () => row.remove();
   row.append(ingredient, preparation, quantity, remove); el('task-items').append(row);
@@ -480,6 +481,14 @@ function renderTasks(catalog, busy, live) {
   setJobOptions(el('task-kind'), choices.map(t => ({value: t.name, label: taskLabels[t.name] || t.name})));
   if (task?.operation === 'task' && task.state === 'running') { el('task-kind').value = task.details.taskAction; el('task-repeat').value = task.details.infinite ? 'forever' : String(task.details.repetitions); }
   el('task-preparation').hidden = el('task-kind').value !== 'prepare_near_player';
+  for (const row of el('task-items').children) {
+    const utensil = row.children[1].value === 'empty';
+    if (catalog.preparationOptions) {
+      const options = catalog.preparationOptions.filter(option => option.utensil === utensil)
+        .map(option => ({value: option.id, label: option.label.replaceAll('_', ' ')}));
+      setJobOptions(row.children[0], options);
+    }
+  }
   const blocked = !live || pending || busy || (!state.control?.available && state.control?.reason !== 'game_unfocused');
   el('task-run').disabled = blocked || !choices.length || !el('task-kind').value;
   for (const field of el('task-form').querySelectorAll('input, select, button')) if (field.id !== 'task-run') field.disabled = blocked;

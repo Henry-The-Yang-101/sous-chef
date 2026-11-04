@@ -31,6 +31,10 @@ namespace SousChef.Plugin.Actions
         private readonly NavigationActions navigation;
         private readonly Dictionary<string, float> distances = new Dictionary<string, float>();
         private readonly List<GameObject> otherHeldItems = new List<GameObject>();
+        private bool snapshot, refreshed;
+        public Json.Record Catalog { get; private set; }
+        public void BeginObservation() { snapshot = true; refreshed = false; }
+        public void EndObservation() { snapshot = false; }
         public LogisticsInventory(NavigationActions nav) { navigation = nav; }
         public void Reset() { Items.Clear(); Errors.Clear(); homes.Clear(); homeItems.Clear(); distances.Clear(); otherHeldItems.Clear(); }
         public float DistanceTo(GameObject target)
@@ -121,8 +125,10 @@ namespace SousChef.Plugin.Actions
         }
         public void Refresh(PlayerControls chef, Json.Record currentCatalog = null)
         {
+            if (snapshot && refreshed) return;
             Items.Clear(); Errors.Clear(); distances.Clear();
             var catalog = currentCatalog ?? (Json.Record)navigation.Available(chef);
+            Catalog = catalog; refreshed = true;
             // One synchronous observation pass: discover carriers once, rather
             // than scanning all Unity objects again for each inventory item.
             otherHeldItems.Clear();

@@ -140,6 +140,7 @@ namespace SousChef.Plugin.Actions
                 delivery.ReplanOnBlock = true; yield return delivery;
                 if (!delivery.Succeeded) continue;
                 if (choice.Transport) yield return Until("waiting_for_transport_delivery", delegate { return HumanCanCollect(item, player); });
+                deliveredItems.Add(item);
                 yield break;
             }
         }

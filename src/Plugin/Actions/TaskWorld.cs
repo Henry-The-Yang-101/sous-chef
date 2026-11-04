@@ -78,6 +78,7 @@ namespace SousChef.Plugin.Actions
         private readonly Dictionary<int, float> humanDistances = new Dictionary<int, float>();
         private readonly Dictionary<string, CounterMotion> counterMotion = new Dictionary<string, CounterMotion>();
         private bool botSearchComplete, humanSearchComplete;
+        private readonly HashSet<GameObject> deliveredItems = new HashSet<GameObject>();
         private PlayerControls Human(int player = 1)
         {
             PlayerControls found = null;
@@ -86,10 +87,10 @@ namespace SousChef.Plugin.Actions
                 { if (found != null) return null; found = p; }
             return found;
         }
-        private void RefreshWorld(int player = 1)
+        private void RefreshWorld(int player = 0)
         {
-            var catalog = (Json.Record)navigation.Available(chef); botSearchComplete = (bool)catalog["complete"];
-            inventory.Refresh(chef, catalog); RefreshHuman(player);
+            inventory.Refresh(chef); botSearchComplete = (bool)inventory.Catalog["complete"];
+            if (player != 0) RefreshHuman(player);
         }
         private void RefreshHuman(int player)
         {
@@ -135,11 +136,12 @@ namespace SousChef.Plugin.Actions
         }
         private bool CanDeliver(GameObject item, GameObject target)
         { string op; return LogisticsChecks.Delivery(chef, "stage_item", item, target, out op) == null; }
-        private GameObject Parking(GameObject item, GameObject preferred = null, bool burners = false)
+        private GameObject Parking(GameObject item, GameObject preferred = null, bool burners = false, HashSet<GameObject> excluded = null)
         {
             RefreshWorld(); GameObject best = null; float cost = Single.MaxValue;
             foreach (GameObject target in navigation.Targets())
             {
+                if (excluded != null && excluded.Contains(target)) continue;
                 if ((!Counter(target) && !(burners && target.GetComponent<CookingStation>() != null)) || !Reachable(target) || !CanDeliver(item, target)) continue;
                 // A conveyor is a transport, not stable storage for a hot pot.
                 if (TaskNative.Component(target, "ServerConveyorStation") != null) continue;
@@ -151,13 +153,19 @@ namespace SousChef.Plugin.Actions
         }
         private IEnumerable<TaskStep> Park(GameObject item, GameObject preferred = null, bool burners = false)
         {
+            var excluded = new HashSet<GameObject>(); float rejectedAt = 0;
             while (true)
             {
                 GameObject destination = null;
-                yield return Until("waiting_for_safe_counter", delegate { destination = Parking(item, preferred, burners); return destination != null; });
+                yield return Until("waiting_for_safe_counter", delegate {
+                    destination = Parking(item, preferred, burners, excluded);
+                    if (destination == null && Time.realtimeSinceStartup - rejectedAt > 5) excluded.Clear();
+                    return destination != null;
+                });
                 TaskStep placement = Do("place_at", destination); placement.ReplanOnBlock = true;
                 yield return placement;
                 if (placement.Succeeded) yield break;
+                excluded.Add(destination); rejectedAt = Time.realtimeSinceStartup;
             }
         }
         private LogisticsItem Source(string selector, bool utensil = false)
@@ -166,6 +174,7 @@ namespace SousChef.Plugin.Actions
             string utensilType = LogisticsInventory.CanonicalUtensil(selector); bool plate = utensilType == "plate";
             foreach (LogisticsItem entry in inventory.Items)
             {
+                if (!entry.Supply && deliveredItems.Contains(entry.Item)) continue;
                 bool match = utensil ? plate ? entry.CleanPlate : entry.Empty && entry.UtensilType == utensilType : LogisticsInventory.IngredientMatches(entry, selector);
                 if (!match || LogisticsChecks.Collect(chef, entry, plate ? "get_plate" : "move_item") != null) continue;
                 if (!utensil && TaskNative.Equipment(entry.Holder ?? entry.Source)) continue;

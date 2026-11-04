@@ -38,6 +38,7 @@ namespace SousChef.Plugin.Actions
         private bool childStarted;
         private long completed, completedSteps;
         private string waitingReason;
+        private string observationError;
         private float retryAt;
         public TaskActions(NavigationActions nav, InteractionActions primitive, Action<int> buttons, Action finished)
         {
@@ -54,7 +55,7 @@ namespace SousChef.Plugin.Actions
             return Run.Describe(Json.Object("taskAction", request == null ? null : request.Action,
                 "repetitions", request == null ? 1 : request.Repetitions, "infinite", request != null && request.Repetitions == 0,
                 "completedRepetitions", completed, "completedSteps", completedSteps, "waitingReason", waitingReason,
-                "handoff", handoffEvidence,
+                "handoff", handoffEvidence, "observationError", observationError,
                 "child", childStarted ? child.Describe() : null));
         }
         public string Start(PlayerControls actor, int owner, ControlCommand command)
@@ -64,17 +65,25 @@ namespace SousChef.Plugin.Actions
             if (command.Task == null || !definitions.TryGetValue(command.Task.Action, out definition)) return "unsupported_task";
             chef = actor; request = command.Task; inventory.Refresh(chef);
             if (!definition.Available()) return "task_not_available";
-            completed = completedSteps = 0; childStarted = false; waitingReason = null; handoffEvidence = null; step = null; plan = null; retryAt = 0;
+            completed = completedSteps = 0; childStarted = false; waitingReason = null; observationError = null; handoffEvidence = null; step = null; plan = null; retryAt = 0;
             command.Indefinite = true; Run.Start(owner, command, Time.realtimeSinceStartup); input(0); return null;
         }
         public void Tick()
         {
             if (!Run.Running) return;
+            inventory.BeginObservation();
             try
             {
                 if (!child.Run.Running && navigation.Action.State == "idle") handoffThrows.Tick(chef);
                 if (childStarted)
                 {
+                    if (child.Run.Running && step.ReplanOnBlock && child.CanRetry && child.NavigationStalled)
+                    {
+                        // No native button has been pressed: storage/handoff may
+                        // choose another checked destination without replaying cargo.
+                        child.Cancel("task_replan_before_press"); childStarted = false;
+                        step = null; Wait("waiting_for_alternative_destination"); return;
+                    }
                     if (child.Run.Running) return;
                     childStarted = false;
                     if (child.Run.State != "succeeded")
@@ -125,13 +134,14 @@ namespace SousChef.Plugin.Actions
                 }
                 childStarted = true;
             }
-            catch (Exception) { Finish("failed", "task_observation_unavailable"); }
+            catch (Exception e) { observationError = e.ToString(); Finish("failed", "task_observation_unavailable"); }
+            finally { inventory.EndObservation(); }
         }
         private void Wait(string reason) { waitingReason = reason; input(0); retryAt = Time.realtimeSinceStartup + .2f; }
         public void Cancel(string reason) { if (Run.Running) Finish("cancelled", reason); }
         public void Reset(string reason)
         {
-            Cancel(reason); inventory.Reset(); counterMotion.Clear(); humanDistances.Clear();
+            Cancel(reason); inventory.Reset(); counterMotion.Clear(); humanDistances.Clear(); deliveredItems.Clear();
             foreach (NavigationActions observer in observers.Values) observer.Dispose(); observers.Clear();
         }
         private void Finish(string state, string reason)
@@ -162,10 +172,28 @@ namespace SousChef.Plugin.Actions
         private static TaskStep Until(string phase, Func<bool> ready) { return new TaskStep { Phase = phase, Ready = ready }; }
         public void Decorate(Json.Record catalog, PlayerControls actor, bool parentBusy = false)
         {
+            inventory.BeginObservation();
+            try { DecorateSnapshot(catalog, actor, parentBusy); }
+            finally { inventory.EndObservation(); }
+        }
+        private void DecorateSnapshot(Json.Record catalog, PlayerControls actor, bool parentBusy)
+        {
             var choices = new List<object>(); catalog["taskOptions"] = choices;
             catalog["task"] = Describe();
             if (parentBusy || Run.Running || child.Run.Running || navigation.Action.State != "idle") return;
             chef = actor; inventory.Refresh(chef, catalog);
+            var preparation = new List<object>(); var selectors = new HashSet<string>();
+            // Dispenser prefabs are the roots of the level's ingredient trees.
+            // Loose processed food must not change the set of selectable roots.
+            foreach (LogisticsItem item in inventory.Items)
+            {
+                if (item.Supply && item.IngredientId != null && selectors.Add(item.IngredientId))
+                    preparation.Add(Json.Object("id", item.IngredientId, "label", item.IngredientName, "utensil", false));
+                string type = item.CleanPlate ? "plate" : item.UtensilType;
+                if (type != null && selectors.Add("utensil:" + type))
+                    preparation.Add(Json.Object("id", type, "label", type, "utensil", true));
+            }
+            catalog["preparationOptions"] = preparation;
             foreach (var pair in definitions)
             {
                 try { if (pair.Value.Available()) choices.Add(Json.Object("name", pair.Key)); }

@@ -17,7 +17,7 @@ namespace SousChef.Plugin.Actions
         }
         private GameObject Sink(bool humanOnly = false)
         {
-            RefreshWorld(); GameObject chosen = null; float distance = Single.MaxValue;
+            RefreshWorld(humanOnly ? 1 : 0); GameObject chosen = null; float distance = Single.MaxValue;
             foreach (GameObject target in navigation.Targets())
             {
                 if (target.GetComponent<ServerWashingStation>() == null) continue;

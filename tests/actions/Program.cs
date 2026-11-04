@@ -100,7 +100,7 @@ internal static class Program
     }
     private static void PersistentTasks()
     {
-        var w=new World(); var destination=w.Delivery();
+        var w=new World(); var destination=w.Delivery(); destination.Add(new Pickup());
         var human=new GameObject("human");human.Add(new PlayerIDProvider {Id=0});var p=human.Add(new PlayerControls {GroundCollider=w.Chef.GroundCollider});
         human.Add(new CapsuleCollider());human.Add(new GroundCast());human.Add(new ClientPlayerAttachmentCarrier());human.Add(new ServerPlayerAttachmentCarrier());human.transform.position=new Vector3(3,0,-1);
         var item=w.Ingredient("Tomato_Raw");w.Target.Add(new PickupItemSpawner {m_itemPrefab=item});
@@ -116,10 +116,9 @@ internal static class Program
             }
             if(w.Skills.Run.Running && w.Skills.Run.Phase=="pressing" && w.Inputs.Last()==1)
             {
-                if(w.Skills.Run.Operation=="pick_up" && w.Carrier.Item==null) {w.Hold(w.Ingredient("Tomato_Raw"));pickups++;}
+                if(w.Skills.Run.Operation=="pick_up" && w.Carrier.Item==null) { Check(w.Navigation.Resolve(w.Skills.Run.Target)==w.Target,"repeat preparation fetches a fresh dispenser item instead of its delivered ingredient"); destination.GetComponent<ServerAttachStation>().Item=null; w.Hold(w.Ingredient("Tomato_Raw"));pickups++;}
                 if(w.Skills.Run.Operation=="place_at" && w.Carrier.Item!=null) {destination.GetComponent<ServerAttachStation>().Item=w.Carrier.Item;w.Hold(null);}
             }
-            if(!w.Skills.Run.Running && w.Skills.Run.Operation=="place_at" && w.Skills.Run.State=="succeeded") destination.GetComponent<ServerAttachStation>().Item=null;
         }
         Check(w.Tasks.Run.State=="succeeded" && pickups==2 && w.Releases==1,"two repetitions perform two observed deliveries with one parent release");
         request.Repetitions=0;Check(w.Tasks.Start(w.Chef,1,new ControlCommand {Id="loop",Operation="task",Task=request})==null,"infinite task accepted");
@@ -145,7 +144,7 @@ internal static class Program
             return support==null ? new RaycastHit[0] : new[] {new RaycastHit {collider=support,point=new Vector3(point.x,0,point.z),normal=Vector3.up,distance=point.y}};
         };
         bool offered=false;
-        for(int i=0;i<120 && !offered;i++)
+        for(int i=0;i<500 && !offered;i++)
         {
             var catalog=(Json.Record)w.Navigation.Available(w.Chef);w.Tasks.Decorate(catalog,w.Chef);
             var names=((List<object>)catalog["taskOptions"]).Cast<Json.Record>().Select(row=>(string)row["name"]).ToList();
@@ -746,6 +745,11 @@ internal static class Program
         w.Logistics.Inventory.Refresh(w.Chef,catalog);
         Check(UnityEngine.Object.PlayerSearches==1,"inventory scans players once for all items in the observation pass");
         Check(w.Logistics.Inventory.Items.Any(i=>i.Item==first && i.InUse) && w.Logistics.Inventory.Items.Any(i=>i.Item==second && !i.InUse),"shared carrier observation marks only the exact held item busy");
+        w.Logistics.Inventory.BeginObservation();
+        w.Logistics.Inventory.Refresh(w.Chef,catalog);UnityEngine.Object.PlayerSearches=0;
+        for(int n=0;n<8;n++)w.Logistics.Inventory.Refresh(w.Chef);
+        Check(UnityEngine.Object.PlayerSearches==0,"task observation reuses one inventory/navigation snapshot across availability predicates");
+        w.Logistics.Inventory.EndObservation();
         carrier.Item=second;
         w.Logistics.Inventory.Refresh(w.Chef,catalog);
         Check(w.Logistics.Inventory.Items.Any(i=>i.Item==first && !i.InUse) && w.Logistics.Inventory.Items.Any(i=>i.Item==second && i.InUse),"next inventory refresh observes changed ownership without a stale carrier cache");

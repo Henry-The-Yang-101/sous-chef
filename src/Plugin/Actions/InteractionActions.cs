@@ -51,6 +51,8 @@ namespace SousChef.Plugin.Actions
         public static bool Handles(string operation)
         { return Array.IndexOf(ActionRun.Names, operation) >= 0 && operation != "navigate_to" && operation != "stop"; }
         public bool CanRetry { get { return !pressed && !throwReleased && Run.State != "cancelled"; } }
+        public bool NavigationStalled { get { return Run.Phase == "recovering_navigation" &&
+            (recoveryReason == "no_progress" || recoveryReason == "alignment_failed" || recoveryReason == "navigation_timeout"); } }
         public void ContinueRecovery(ActionRecovery previous)
         { if (Run.Phase == "recovering_navigation") recovery.ContinueFrom(previous); }
         public static string[] Offered(PlayerControls chef, GameObject go)
