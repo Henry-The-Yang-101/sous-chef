@@ -28,6 +28,16 @@ def reply(n, **fields):
 
 
 class ActionsTests(unittest.TestCase):
+    def test_task_wrapper_validates_and_encodes_finite_infinite_and_mixed_items(self):
+        c = client(reply(1), reply(2), reply(3))
+        c.run_task('wash_dishes'); c.run_task('monitor_equipment', None)
+        c.run_task('prepare_near_player', 2, items=[{'ingredient': 'chicken', 'preparation': 'chopped', 'quantity': 2}, {'ingredient': 'pot', 'preparation': 'empty'}])
+        self.assertEqual(c.socket.sent, [b'task 1 wash_dishes 1\n', b'task 2 monitor_equipment forever\n', b'task 3 prepare_near_player 2 1 sY2hpY2tlbg chopped 2 scG90 empty 1\n'])
+        for count in (0, 11, True, 'forever', 1.5):
+            with self.assertRaises(ValueError): c.run_task('wash_dishes', count)
+        for items in ([], [{'ingredient': 'chicken', 'quantity': 11}], [{'ingredient': 'chicken', 'preparation': 'invented'}]):
+            with self.assertRaises(ValueError): c.run_task('prepare_near_player', items=items)
+
     def test_logistics_actions_encode_exact_sources_destinations_and_selectors(self):
         c = client(*(reply(i) for i in range(1, 8)))
         c.move_item('d1', 'd2'); c.fetch_ingredient('tomato', 'd2'); c.get_plate('d3')

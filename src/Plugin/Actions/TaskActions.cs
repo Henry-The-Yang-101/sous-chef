@@ -11,6 +11,7 @@ namespace SousChef.Plugin.Actions
         public string Phase;
         public Func<ControlCommand> Command;
         public Func<bool> Ready;
+        public Func<bool> Progress;
     }
     internal sealed class TaskDefinition
     {
@@ -51,6 +52,7 @@ namespace SousChef.Plugin.Actions
             return Run.Describe(Json.Object("taskAction", request == null ? null : request.Action,
                 "repetitions", request == null ? 1 : request.Repetitions, "infinite", request != null && request.Repetitions == 0,
                 "completedRepetitions", completed, "completedSteps", completedSteps, "waitingReason", waitingReason,
+                "handoff", handoffEvidence,
                 "child", childStarted ? child.Describe() : null));
         }
         public string Start(PlayerControls actor, int owner, ControlCommand command)
@@ -79,6 +81,8 @@ namespace SousChef.Plugin.Actions
                     }
                     completedSteps++; step = null;
                 }
+                if (step != null && step.Progress != null)
+                { if (step.Progress()) { input(0); completedSteps++; step = null; } return; }
                 input(0);
                 if (Time.realtimeSinceStartup < retryAt) return;
                 if (plan == null)
@@ -99,6 +103,7 @@ namespace SousChef.Plugin.Actions
                     step = plan.Current;
                 }
                 Run.Advance(step.Phase); waitingReason = null;
+                if (step.Progress != null) return;
                 if (step.Ready != null && !step.Ready()) { Wait(step.Phase); return; }
                 if (step.Command == null) { completedSteps++; step = null; return; }
                 ControlCommand command = step.Command();
@@ -117,12 +122,17 @@ namespace SousChef.Plugin.Actions
         }
         private void Wait(string reason) { waitingReason = reason; input(0); retryAt = Time.realtimeSinceStartup + .2f; }
         public void Cancel(string reason) { if (Run.Running) Finish("cancelled", reason); }
-        public void Reset(string reason) { Cancel(reason); inventory.Reset(); }
+        public void Reset(string reason)
+        {
+            Cancel(reason); inventory.Reset(); humanCounterVisits.Clear();
+            foreach (NavigationActions observer in observers.Values) observer.Dispose(); observers.Clear();
+        }
         private void Finish(string state, string reason)
         {
             // Keep the parent running during child cleanup so its callback cannot
             // release the lease before all owned input has been neutralized.
             child.Cancel(reason); input(0); Run.Finish(state, reason);
+            if (navigation.Action.State == "navigating") navigation.Stop(reason);
             if (plan != null) plan.Dispose(); plan = null; step = null; release();
         }
         private TaskStep Do(string operation, GameObject target, string condition = null)

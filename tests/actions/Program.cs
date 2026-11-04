@@ -21,6 +21,7 @@ internal static class Program
         public readonly NavigationActions Navigation;
         public readonly InteractionActions Skills;
         public readonly LogisticsActions Logistics;
+        public readonly TaskActions Tasks;
         public readonly ServerPlayerAttachmentCarrier Carrier;
         public readonly List<int> Inputs = new List<int>();
         public readonly List<Collider> Colliders = new List<Collider>();
@@ -51,8 +52,9 @@ internal static class Program
             Chef.CurrentInteractionObjects.m_iHandlePlacement=Target.GetComponent<IPlacement>();
             Chef.CurrentInteractionObjects.m_interactable=use;
             Navigation=new NavigationActions((d,ms)=>{},()=>{});
-            Skills=new InteractionActions(Navigation,b=>Inputs.Add(b),()=>{if(Logistics!=null && Logistics.Run.Running) Inputs.Add(0); else Releases++;});
+            Skills=new InteractionActions(Navigation,b=>Inputs.Add(b),()=>{if((Logistics!=null && Logistics.Run.Running) || (Tasks!=null && Tasks.Run.Running)) Inputs.Add(0); else Releases++;});
             Logistics=new LogisticsActions(Navigation,Skills,b=>Inputs.Add(b),()=>Releases++);
+            Tasks=new TaskActions(Navigation,Skills,b=>Inputs.Add(b),()=>Releases++);
             for(int i=0;i<10 && Id==null;i++)
             {
                 var catalog=(Json.Record)Navigation.Available(Chef);
@@ -68,7 +70,7 @@ internal static class Program
         public string Start(string op,string condition=null,string state=null,int ms=10000)
         { return Skills.Start(Chef,1,new ControlCommand {Operation=op,Destination=Id,Condition=condition,DesiredState=state,Milliseconds=ms}); }
         public void Arrive() { Navigation.Stop("arrived");Tick(); }
-        public void Tick(float delta=.05f) { Time.realtimeSinceStartup+=delta;Time.frameCount++;Skills.Tick();Logistics.Tick(); }
+        public void Tick(float delta=.05f) { Time.realtimeSinceStartup+=delta;Time.frameCount++;Skills.Tick();Logistics.Tick();Tasks.Tick(); }
         public void Verify() { Tick();Tick();Tick(); }
         public GameObject Delivery()
         {
@@ -82,6 +84,35 @@ internal static class Program
             Chef.CurrentInteractionObjects.m_TheOriginalHandlePickup=go;Chef.CurrentInteractionObjects.m_iHandlePickup=go.GetComponent<IPickup>();
             Chef.CurrentInteractionObjects.m_iHandlePlacement=go.GetComponent<IPlacement>();Chef.CurrentInteractionObjects.m_interactable=go.GetComponent<ClientInteractable>();Arrive();
         }
+    }
+    private static void PersistentTasks()
+    {
+        var w=new World(); var destination=w.Delivery();
+        var human=new GameObject("human");human.Add(new PlayerIDProvider {Id=0});var p=human.Add(new PlayerControls {GroundCollider=w.Chef.GroundCollider});
+        human.Add(new CapsuleCollider());human.Add(new GroundCast());human.Add(new ClientPlayerAttachmentCarrier());human.Add(new ServerPlayerAttachmentCarrier());human.transform.position=new Vector3(3,0,-1);
+        var item=w.Ingredient("Tomato_Raw");w.Target.Add(new PickupItemSpawner {m_itemPrefab=item});
+        var request=new TaskRequest {Action="prepare_near_player",Repetitions=2};request.Items.Add(new PreparationRequest {Selector="tomato",Preparation="raw",Quantity=1});
+        Check(w.Tasks.Start(w.Chef,1,new ControlCommand {Id="two-batches",Operation="task",Task=request})==null,"finite preparation task accepted");
+        int pickups=0;
+        for(int n=0;n<150 && w.Tasks.Run.Running;n++)
+        {
+            w.Tick(.25f);
+            if(w.Skills.Run.Running && w.Skills.Run.Phase=="navigating")
+            {
+                var target=w.Navigation.Resolve(w.Skills.Run.Target);w.ArriveAt(target);
+            }
+            if(w.Skills.Run.Running && w.Skills.Run.Phase=="pressing" && w.Inputs.Last()==1)
+            {
+                if(w.Skills.Run.Operation=="pick_up" && w.Carrier.Item==null) {w.Hold(w.Ingredient("Tomato_Raw"));pickups++;}
+                if(w.Skills.Run.Operation=="place_at" && w.Carrier.Item!=null) {destination.GetComponent<ServerAttachStation>().Item=w.Carrier.Item;w.Hold(null);}
+            }
+            if(!w.Skills.Run.Running && w.Skills.Run.Operation=="place_at" && w.Skills.Run.State=="succeeded") destination.GetComponent<ServerAttachStation>().Item=null;
+        }
+        Check(w.Tasks.Run.State=="succeeded" && pickups==2 && w.Releases==1,"two repetitions perform two observed deliveries with one parent release");
+        request.Repetitions=0;Check(w.Tasks.Start(w.Chef,1,new ControlCommand {Id="loop",Operation="task",Task=request})==null,"infinite task accepted");
+        w.Target.GetComponent<BoxCollider>().enabled=false;w.Tick(1000);w.Tick(1000);
+        Check(w.Tasks.Run.Running && w.Releases==1,"infinite task survives long environmental wait");
+        w.Tasks.Cancel("stopped");Check(!w.Tasks.Run.Running && !w.Skills.Run.Running && w.Releases==2,"stop cancels complete task and releases once");
     }
     private static void Transactions()
     {
@@ -868,6 +899,6 @@ internal static class Program
         Check(!drops.Plan(w.Chef,item,player,out drop),"nearby horizontal position on a different deck is not a valid drop handoff");
         Physics.Sphere=(p,r,d,length)=>new RaycastHit[0];
     }
-    private static void Main() { Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
+    private static void Main() { PersistentTasks();Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
     private static ClientInteractable GetCurrentlyInteractingForTest(this PlayerControls chef) { return chef.GetComponent<ClientPlayerControlsImpl_Default>().Current; }
 }

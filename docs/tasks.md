@@ -26,3 +26,27 @@ Wire: `task REQUEST ACTION 1..10|forever`; preparation additionally takes player
 `1|3|4`, followed by 1–10 triples of base64url selector, preparation state and
 quantity `1..10`. Task lines are bounded to 2048 ASCII bytes; legacy commands keep
 their 256-byte parser bound.
+
+## Prepare and give
+
+`prepare_near_player` takes `items=[{'ingredient': 'chicken', 'preparation':
+'chopped', 'quantity': 2}, {'ingredient': 'pot', 'preparation': 'empty'}]`.
+Preparation states are `raw`, `chopped`, `cooked`, `mixed`, and `empty` (utensils
+and plates). Each repetition prepares the entire list. Native ingredient IDs
+from the catalogue also work. Chopping follows the native output prefab;
+cooking/mixing uses compatible empty containers already on equipment.
+
+The scheduler starts passive processing before short deliveries, performs other
+requested preparation while equipment runs, and collects completed containers
+before starting more work. Processing remains native and uses native progress/time.
+It retains exact containers and stations between visits.
+
+Delivery preference: a compatible counter within five walking units of the human,
+then a checked pass/drop at the human, then a directed conveyor or returning
+counter. Both chefs use the same navigator implementation in independent read-only
+observers. Throw plans check actual throwability. Conveyor traversal follows the
+native next receiver, including rotation/direction, and rejects loops/dead ends.
+Moving-counter fallback requires an observed human-accessible stop in this round;
+unknown motion waits for evidence. Transport delivery completes only after the
+exact item reaches a human-accessible holder or the human's hands. Safe empty
+countertops are used when putting equipment down; conveyor belts are not storage.
