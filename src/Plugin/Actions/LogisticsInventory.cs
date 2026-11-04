@@ -9,7 +9,7 @@ namespace SousChef.Plugin.Actions
 {
     internal sealed class LogisticsItem
     {
-        public GameObject Item, Source;
+        public GameObject Item, Source, Holder;
         public string ItemId, SourceId, IngredientId, IngredientName, UtensilType;
         public bool Supply, CleanPlate, Empty, InUse;
         public float Distance = Single.MaxValue;
@@ -149,7 +149,7 @@ namespace SousChef.Plugin.Actions
         private void Add(PlayerControls chef, GameObject item, GameObject source, bool supply, Dictionary<string, float> distances, HashSet<int> seen)
         {
             if (!supply && !seen.Add(item.GetInstanceID())) return;
-            var entry = new LogisticsItem { Item = item, Source = source, Supply = supply, Empty = Empty(item),
+            var entry = new LogisticsItem { Item = item, Source = source, Holder = source != item && !supply ? source : null, Supply = supply, Empty = Empty(item),
                 SourceId = Id(source), ItemId = supply ? Id(source) : navigation.RegisterItem(item), UtensilType = UtensilType(item) };
             GameObject plateItem = item;
             var stack = item.GetComponent<ServerStack>();

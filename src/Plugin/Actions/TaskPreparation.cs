@@ -36,7 +36,7 @@ namespace SousChef.Plugin.Actions
             inventory.Refresh(chef); GameObject best = null; float cost = Single.MaxValue;
             foreach (LogisticsItem candidate in inventory.Items)
             {
-                if (!candidate.Empty || candidate.InUse || !TaskNative.Equipment(candidate.Source) || !Reachable(candidate.Source) ||
+                if (!candidate.Empty || candidate.InUse || !TaskNative.Equipment(candidate.Holder ?? candidate.Source) || !Reachable(candidate.Source) ||
                     TaskNative.Component(candidate.Item, mixing ? "ServerMixingHandler" : "ServerCookingHandler") == null) continue;
                 string operation;
                 if (LogisticsChecks.Delivery(chef, "fetch_ingredient", item, candidate.Source, out operation) != null) continue;
@@ -44,6 +44,21 @@ namespace SousChef.Plugin.Actions
                 if (distance < cost) { cost = distance; best = candidate.Source; }
             }
             return best;
+        }
+        private bool EquipmentPair(GameObject food, bool mixing, out LogisticsItem container, out GameObject station)
+        {
+            inventory.Refresh(chef); container = null; station = null;
+            foreach (LogisticsItem item in inventory.Items)
+            {
+                if (!item.Empty || item.InUse || item.Distance == Single.MaxValue || !LogisticsChecks.CanCollectEmpty(chef, item.Source) ||
+                    TaskNative.Component(item.Item, mixing ? "ServerMixingHandler" : "ServerCookingHandler") == null) continue;
+                string operation;
+                if (LogisticsChecks.Delivery(chef, "fetch_ingredient", food, item.Item, out operation) != null) continue;
+                foreach (GameObject target in navigation.Targets())
+                    if (TaskNative.Equipment(target) && Reachable(target) && ActionObservations.Occupant(target) == null && CanDeliver(item.Item, target))
+                    { container = item; station = target; return true; }
+            }
+            return false;
         }
         private IEnumerable<TaskStep> PrepareNearPlayer()
         {
@@ -53,6 +68,8 @@ namespace SousChef.Plugin.Actions
             while (true)
             {
                 PreparationUnit next = null; float soonest = Single.MaxValue;
+                bool processing = false; foreach (PreparationUnit unit in units) if (unit.Processing && !unit.Delivered) processing = true;
+                bool emptyCooker = !processing || EmptyProcessor(false), emptyMixer = !processing || EmptyProcessor(true);
                 // Ready equipment has priority, ordered by remaining cooking
                 // margin. Otherwise start passive processing before short jobs.
                 foreach (PreparationUnit unit in units)
@@ -60,11 +77,12 @@ namespace SousChef.Plugin.Actions
                     if (unit.Delivered) continue;
                     if (unit.Processing)
                     {
-                        if (!TaskNative.Ready(unit.Item)) continue;
+                        if (!TaskNative.Ready(unit.Item, unit.Request.Preparation == "mixed")) continue;
                         float margin = TaskNative.Remaining(unit.Item, unit.Request.Preparation == "mixed");
                         if (next == null || !next.Processing || margin < soonest) { next = unit; soonest = margin; }
                     }
-                    else if (next == null || (!next.Processing && Passive(unit.Request) && !Passive(next.Request))) next = unit;
+                    else if ((!Passive(unit.Request) || (unit.Request.Preparation == "mixed" ? emptyMixer : emptyCooker)) &&
+                        (next == null || (!next.Processing && Passive(unit.Request) && !Passive(next.Request)))) next = unit;
                 }
                 // Avoid beginning an indivisible chopping/travel segment that
                 // would carry us past another pot's native completion time.
@@ -77,9 +95,13 @@ namespace SousChef.Plugin.Actions
                     if (availableTime != Single.MaxValue)
                     {
                         PreparationUnit fits = null;
+                        var estimates = new Dictionary<PreparationRequest, float>();
                         foreach (PreparationUnit unit in units)
-                            if (!unit.Processing && !unit.Delivered && PreparationSeconds(unit) + 2 < availableTime &&
-                                (fits == null || Passive(unit.Request) && !Passive(fits.Request))) fits = unit;
+                        {
+                            if (unit.Processing || unit.Delivered || (Passive(unit.Request) && !(unit.Request.Preparation == "mixed" ? emptyMixer : emptyCooker))) continue;
+                            float estimate; if (!estimates.TryGetValue(unit.Request, out estimate)) { estimate = PreparationSeconds(unit); estimates.Add(unit.Request, estimate); }
+                            if (estimate + 2 < availableTime && (fits == null || Passive(unit.Request) && !Passive(fits.Request))) fits = unit;
+                        }
                         next = fits;
                     }
                 }
@@ -88,7 +110,7 @@ namespace SousChef.Plugin.Actions
                     bool done = true; foreach (PreparationUnit unit in units) if (!unit.Delivered) done = false;
                     if (done) yield break;
                     yield return Until("waiting_for_prepared_ingredients", delegate {
-                        foreach (PreparationUnit unit in units) if (!unit.Delivered && unit.Processing && TaskNative.Ready(unit.Item)) return true;
+                        foreach (PreparationUnit unit in units) if (!unit.Delivered && unit.Processing && TaskNative.Ready(unit.Item, unit.Request.Preparation == "mixed")) return true;
                         return false;
                     });
                     continue;
@@ -98,9 +120,15 @@ namespace SousChef.Plugin.Actions
                     // Preserve the exact claimed container while another item
                     // was prepared; never silently collect a replacement meal.
                     PreparationUnit selected = next;
-                    yield return Until("waiting_for_original_preparation", delegate { return selected.Item != null && System.Object.ReferenceEquals(ActionObservations.Occupant(selected.Station), selected.Item); });
-                    yield return Do("pick_up", next.Station);
-                    foreach (TaskStep give in Give(next.Item, request.Player)) yield return give;
+                    yield return Until("waiting_for_original_preparation", delegate { return selected.Item != null && System.Object.ReferenceEquals(ActionObservations.Receiver(selected.Station), selected.Item); });
+                    LogisticsItem serving = ServingUtensil(next.Item);
+                    if (serving != null)
+                    {
+                        yield return Do("pick_up", serving.Source);
+                        yield return Do("collect_contents", next.Station);
+                    }
+                    else yield return Do("pick_up", next.Station);
+                    foreach (TaskStep give in Give(ActionObservations.Held(chef), request.Player)) yield return give;
                     next.Delivered = true; continue;
                 }
                 LogisticsItem source = null; bool utensil = next.Request.Preparation == "empty";
@@ -120,12 +148,27 @@ namespace SousChef.Plugin.Actions
                 if (Passive(next.Request))
                 {
                     GameObject processor = null;
-                    yield return Until("waiting_for_compatible_equipment", delegate { processor = Processor(current.Item, current.Request.Preparation == "mixed"); return processor != null; });
+                    LogisticsItem empty = null; GameObject equipment = null;
+                    yield return Until("waiting_for_compatible_equipment", delegate {
+                        processor = Processor(current.Item, current.Request.Preparation == "mixed");
+                        return processor != null || EquipmentPair(current.Item, current.Request.Preparation == "mixed", out empty, out equipment);
+                    });
+                    if (processor == null)
+                    {
+                        GameObject staging = null;
+                        yield return Until("waiting_for_ingredient_staging", delegate { staging = Parking(current.Item); return staging != null; });
+                        yield return Do("place_at", staging);
+                        yield return Do("pick_up", empty.Source);
+                        yield return Do("place_at", equipment);
+                        yield return Do("pick_up", staging); processor = equipment;
+                    }
                     yield return Do("add_ingredient", processor);
                     next.Station = processor; next.Item = ActionObservations.Receiver(processor); next.Processing = true;
                     // Native mixers/ovens may require an explicit activation.
                     Component mixer = TaskNative.Component(processor, "ServerMixingStation");
                     if (mixer != null && !ActionObservations.Read<bool>(mixer, "m_bMixerOn")) yield return Do("activate", processor);
+                    Component cooker = TaskNative.Component(processor, "ServerCookingStation") ?? TaskNative.Component(processor, "ServerHeatedCookingStation");
+                    if (cooker != null && !ActionObservations.Read<bool>(cooker, "m_isTurnedOn") && processor.GetComponent<ClientInteractable>() != null) yield return Do("activate", processor);
                     // No wait child occupies P2 while native time advances.
                     continue;
                 }
@@ -134,6 +177,14 @@ namespace SousChef.Plugin.Actions
             }
         }
         private static bool Passive(PreparationRequest request) { return request.Preparation == "cooked" || request.Preparation == "mixed"; }
+        private bool EmptyProcessor(bool mixing)
+        {
+            inventory.Refresh(chef);
+            foreach (LogisticsItem item in inventory.Items)
+                if (item.Empty && !item.InUse && TaskNative.Equipment(item.Holder ?? item.Source) && item.Distance != Single.MaxValue &&
+                    TaskNative.Component(item.Item, mixing ? "ServerMixingHandler" : "ServerCookingHandler") != null) return true;
+            return false;
+        }
         private float PreparationSeconds(PreparationUnit unit)
         {
             LogisticsItem source = Source(unit.Request.Selector, unit.Request.Preparation == "empty");

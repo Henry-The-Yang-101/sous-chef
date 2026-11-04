@@ -85,6 +85,19 @@ internal static class Program
             Chef.CurrentInteractionObjects.m_iHandlePlacement=go.GetComponent<IPlacement>();Chef.CurrentInteractionObjects.m_interactable=go.GetComponent<ClientInteractable>();Arrive();
         }
     }
+    private static void CounterForecasts()
+    {
+        var motion=new CounterMotion();motion.Observe(new Vector3(0,0,0),0,true);
+        motion.Observe(new Vector3(4,0,0),2,false);
+        Check(motion.ArrivalSeconds(2)==Single.MaxValue,"one-way motion away from a human is not promised to return");
+        motion.Observe(new Vector3(3,0,0),3,false);
+        Check(Math.Abs(motion.ArrivalSeconds(3)-3)<.01f,"motion toward an observed human stop predicts arrival");
+        motion.Observe(new Vector3(0,0,0),6,true);motion.Observe(new Vector3(4,0,0),8,false);
+        motion.Observe(new Vector3(4,0,0),9,false);
+        Check(Math.Abs(motion.ArrivalSeconds(9)-3)<.01f,"observed full cycles predict return from a stopped loading counter");
+        motion=new CounterMotion();motion.Observe(new Vector3(4,0,0),0,false);motion.Observe(new Vector3(3,0,0),1,false);
+        Check(motion.ArrivalSeconds(1)==Single.MaxValue,"unknown motion cannot authorize a transport handoff");
+    }
     private static void PersistentTasks()
     {
         var w=new World(); var destination=w.Delivery();
@@ -132,7 +145,11 @@ internal static class Program
         Check(w.Start("collect_contents")==null,"compatible held plate can collect cooked pot contents");w.Arrive();
         contents.Contents.Add(new AssembledDefinitionNode("rice"));food.Contents.Clear();w.Verify();
         Check(w.Skills.Run.State=="succeeded" && w.Carrier.Item==plate && w.Target.GetComponent<ServerAttachStation>().Item==pan,"collection requires observed transfer, retains plate and original pot");
+        var mixing=pan.Add(new ServerMixingHandler());mixing.m_serverData.m_mixingState=ProcessingState.Completed;
+        cooking.m_ServerData.m_cookingState=ProcessingState.Progressing;
+        Check(!TaskNative.Ready(pan) && !TaskNative.Ready(pan,false) && TaskNative.Ready(pan,true),"completed mixing cannot prematurely finish an active cooking stage");
         cooking.m_ServerData.m_cookingState=ProcessingState.Ruined;food.Contents.Add(new AssembledDefinitionNode("burnt"));
+        Check(!TaskNative.Ready(pan),"ruined cooking overrides an earlier completed mixing stage");
         Check(w.Start("collect_contents")=="processing_not_ready","burnt contents are never treated as ready food");
     }
     private static void Transactions()
@@ -920,6 +937,6 @@ internal static class Program
         Check(!drops.Plan(w.Chef,item,player,out drop),"nearby horizontal position on a different deck is not a valid drop handoff");
         Physics.Sphere=(p,r,d,length)=>new RaycastHit[0];
     }
-    private static void Main() { PersistentTasks();ReadyFoodTasks();Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
+    private static void Main() { CounterForecasts();PersistentTasks();ReadyFoodTasks();Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
     private static ClientInteractable GetCurrentlyInteractingForTest(this PlayerControls chef) { return chef.GetComponent<ClientPlayerControlsImpl_Default>().Current; }
 }

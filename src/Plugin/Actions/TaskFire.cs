@@ -63,7 +63,9 @@ namespace SousChef.Plugin.Actions
         }
         private IEnumerable<TaskStep> PutOutFire()
         {
-            LogisticsItem source = Extinguisher(); GameObject tool = source.Item;
+            LogisticsItem source = null;
+            yield return Until("waiting_for_extinguisher", delegate { source = Extinguisher(); return source != null; });
+            GameObject tool = source.Item;
             if (!System.Object.ReferenceEquals(ActionObservations.Held(chef), tool)) yield return Do("pick_up", source.Source);
             while (true)
             {

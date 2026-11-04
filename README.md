@@ -180,3 +180,8 @@ freshness, discovery delay and recovery semantics.
 The profiler includes average rendering FPS from Unity frame counters. This
 average can hide stutters; compare capture p95/max as well, in the same kitchen
 and with the same clients connected.
+
+Autonomous multi-step tasks, repeat counts, and indefinite environmental waiting
+are documented in [docs/tasks.md](docs/tasks.md). The localhost **Tasks** panel
+uses the same production task executor; voice/Jev integration is intentionally
+separate.

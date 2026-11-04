@@ -476,8 +476,9 @@ function renderTasks(catalog, busy, live) {
   setJobOptions(el('task-kind'), choices.map(t => ({value: t.name, label: taskLabels[t.name] || t.name})));
   el('task-preparation').hidden = el('task-kind').value !== 'prepare_near_player';
   const blocked = !live || pending || busy || (!state.control?.available && state.control?.reason !== 'game_unfocused');
-  el('task-run').disabled = blocked || !choices.length;
+  el('task-run').disabled = blocked || !choices.length || !el('task-kind').value;
   for (const field of el('task-form').querySelectorAll('input, select, button')) if (field.id !== 'task-run') field.disabled = blocked;
+  for (const field of el('task-preparation').querySelectorAll('input, select, button')) field.disabled = blocked || el('task-kind').value !== 'prepare_near_player';
   const task = state.control?.action;
   el('task-status').textContent = task?.operation === 'task' ? `${taskLabels[task.details?.taskAction] || 'Task'}: ${task.state} · ${task.phase.replaceAll('_', ' ')} · ${task.details?.completedRepetitions || 0} repetitions completed${task.details?.waitingReason ? ' · waiting: ' + explain(task.details.waitingReason) : ''}`
     : !choices.length ? 'No tasks currently available. Options update with the kitchen.' : '';

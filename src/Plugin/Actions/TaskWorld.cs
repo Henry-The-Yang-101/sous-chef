@@ -31,7 +31,16 @@ namespace SousChef.Plugin.Actions
             return ActionObservations.Read<object>(data, mixing ? "m_mixingState" : "m_cookingState").ToString();
         }
         public static bool Ready(GameObject item)
-        { string c = State(item), m = State(item, true); return c == "Completed" || c == "OverDoing" || m == "Completed" || m == "OverDoing"; }
+        {
+            string c = State(item), m = State(item, true);
+            if (c == "Ruined" || m == "Ruined") return false;
+            // A mixed dough currently baking is not ready merely because its
+            // earlier mixing stage completed. Active cooking takes precedence.
+            return c != null && c != "Idle" ? Complete(c) : Complete(m);
+        }
+        public static bool Ready(GameObject item, bool mixing)
+        { return !Burnt(item) && Complete(State(item, mixing)); }
+        private static bool Complete(string state) { return state == "Completed" || state == "OverDoing"; }
         public static bool Burnt(GameObject item) { return State(item) == "Ruined" || State(item, true) == "Ruined"; }
         public static float Remaining(GameObject item, bool mixing = false)
         {
@@ -49,7 +58,7 @@ namespace SousChef.Plugin.Actions
     {
         private readonly Dictionary<int, NavigationActions> observers = new Dictionary<int, NavigationActions>();
         private readonly Dictionary<int, float> humanDistances = new Dictionary<int, float>();
-        private readonly Dictionary<string, Vector3> humanCounterVisits = new Dictionary<string, Vector3>();
+        private readonly Dictionary<string, CounterMotion> counterMotion = new Dictionary<string, CounterMotion>();
         private bool botSearchComplete;
         private PlayerControls Human(int player = 1)
         {
@@ -75,7 +84,13 @@ namespace SousChef.Plugin.Actions
             {
                 int instance = (int)identity["objectInstanceId"]; humanDistances[instance] = (float)identity["routeDistance"];
                 GameObject go = observer.Resolve((string)identity["id"]);
-                if (Counter(go)) humanCounterVisits[player + ":" + instance] = go.transform.position;
+            }
+            foreach (GameObject go in navigation.Targets())
+            {
+                if (!Counter(go)) continue;
+                string key = player + ":" + go.GetInstanceID(); CounterMotion track;
+                if (!counterMotion.TryGetValue(key, out track)) { track = new CounterMotion(); counterMotion.Add(key, track); }
+                track.Observe(go.transform.position, Time.realtimeSinceStartup, HumanDistance(go) != Single.MaxValue);
             }
         }
         private float HumanDistance(GameObject go)
@@ -110,6 +125,7 @@ namespace SousChef.Plugin.Actions
                 float score = inventory.DistanceTo(target) + (target == preferred ? 0 : burners && target.GetComponent<CookingStation>() != null ? 1000 : 2000);
                 if (score < cost) { cost = score; best = target; }
             }
+            if (burners && best != preferred && !botSearchComplete) return null;
             return best;
         }
         private IEnumerable<TaskStep> Park(GameObject item, GameObject preferred = null, bool burners = false)
@@ -121,11 +137,12 @@ namespace SousChef.Plugin.Actions
         private LogisticsItem Source(string selector, bool utensil = false)
         {
             inventory.Refresh(chef); LogisticsItem best = null; float score = Single.MaxValue;
+            string utensilType = LogisticsInventory.CanonicalUtensil(selector); bool plate = utensilType == "plate";
             foreach (LogisticsItem entry in inventory.Items)
             {
-                bool match = utensil ? selector == "plate" ? entry.CleanPlate : entry.Empty && entry.UtensilType == LogisticsInventory.CanonicalUtensil(selector) : LogisticsInventory.IngredientMatches(entry, selector);
-                if (!match || LogisticsChecks.Collect(chef, entry, selector == "plate" ? "get_plate" : "move_item") != null) continue;
-                if (TaskNative.Equipment(entry.Source)) continue;
+                bool match = utensil ? plate ? entry.CleanPlate : entry.Empty && entry.UtensilType == utensilType : LogisticsInventory.IngredientMatches(entry, selector);
+                if (!match || LogisticsChecks.Collect(chef, entry, plate ? "get_plate" : "move_item") != null) continue;
+                if (!utensil && TaskNative.Equipment(entry.Holder ?? entry.Source)) continue;
                 float candidate = entry.Distance + (entry.Supply ? 10000 : 0);
                 if (candidate < score) { best = entry; score = candidate; }
             }

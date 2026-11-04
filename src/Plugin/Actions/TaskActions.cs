@@ -63,7 +63,7 @@ namespace SousChef.Plugin.Actions
             if (command.Task == null || !definitions.TryGetValue(command.Task.Action, out definition)) return "unsupported_task";
             chef = actor; request = command.Task; inventory.Refresh(chef);
             if (!definition.Available()) return "task_not_available";
-            completed = completedSteps = 0; childStarted = false; waitingReason = null; step = null; plan = null; retryAt = 0;
+            completed = completedSteps = 0; childStarted = false; waitingReason = null; handoffEvidence = null; step = null; plan = null; retryAt = 0;
             command.Indefinite = true; Run.Start(owner, command, Time.realtimeSinceStartup); input(0); return null;
         }
         public void Tick()
@@ -129,7 +129,7 @@ namespace SousChef.Plugin.Actions
         public void Cancel(string reason) { if (Run.Running) Finish("cancelled", reason); }
         public void Reset(string reason)
         {
-            Cancel(reason); inventory.Reset(); humanCounterVisits.Clear();
+            Cancel(reason); inventory.Reset(); counterMotion.Clear(); humanDistances.Clear();
             foreach (NavigationActions observer in observers.Values) observer.Dispose(); observers.Clear();
         }
         private void Finish(string state, string reason)

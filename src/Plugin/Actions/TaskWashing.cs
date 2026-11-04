@@ -34,12 +34,15 @@ namespace SousChef.Plugin.Actions
             GameObject sink = Sink();
             return sink != null && (TaskNative.Dirty(held) || DirtySources().Count > 0 || ActionObservations.DirtyCount(sink) > 0);
         }
-        private IEnumerable<TaskStep> CollectDirtyBatch()
+        private IEnumerable<TaskStep> CollectDirtyBatch(bool allowEmpty = false)
         {
             // Freeze currently obtainable stacks. Native placement combines the
             // entire carried stack into the next, then pickup takes the aggregate.
             // New arrivals belong to a later repetition, not an expanding batch.
-            List<LogisticsItem> batch = DirtySources();
+            List<LogisticsItem> batch = null;
+            yield return Until("waiting_for_dirty_dishes", delegate {
+                batch = DirtySources(); return allowEmpty || batch.Count > 0 || TaskNative.Dirty(ActionObservations.Held(chef));
+            });
             foreach (LogisticsItem source in batch)
             {
                 if (System.Object.ReferenceEquals(ActionObservations.Held(chef), source.Item)) continue;
@@ -55,7 +58,7 @@ namespace SousChef.Plugin.Actions
         {
             GameObject sink = null;
             yield return Until("waiting_for_sink_access", delegate { sink = Sink(); return sink != null; });
-            foreach (TaskStep step in CollectDirtyBatch()) yield return step;
+            foreach (TaskStep step in CollectDirtyBatch(ActionObservations.DirtyCount(sink) > 0)) yield return step;
             if (ActionObservations.Held(chef) != null) yield return Do("place_at", sink);
             if (ActionObservations.DirtyCount(sink) > 0) yield return Do("work_at", sink, "sink_empty");
         }

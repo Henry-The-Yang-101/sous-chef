@@ -37,6 +37,7 @@ namespace SousChef.Plugin
                     var attach = target.GetComponent<ServerAttachStation>();
                     if (attach == null || attach.InspectItem() != null) throw new InvalidOperationException("dirty_fixture_requires_empty_counter");
                     PlateReturnStation definition = Actions.ActionObservations.Read<PlateReturnStation>(station, "m_returnStation");
+                    NetworkUtils.RegisterSpawnablePrefab(target, definition.m_stackPrefab);
                     stack = NetworkUtils.ServerSpawnPrefab(target, definition.m_stackPrefab);
                     var dirty = stack.GetComponent<ServerDirtyPlateStack>();
                     if (dirty == null) throw new InvalidOperationException("native_dirty_stack_missing");

@@ -4,14 +4,15 @@ Bridge 0.5 adds outcome-checked interactions on the existing control endpoint.
 These run inside Unity, including navigation and alignment. No Python heartbeat
 or model call drives their execution. Placement, ingredient addition, disposal
 and throwing use Player 2's **currently held** item. Bridge 0.6 adds the finite
-logistics jobs below. Container-to-container `transfer_contents` remains a
-separate higher-layer operation and is not implemented.
+logistics jobs below. Ready container contents can be collected into a compatible held plate/utensil
+with `collect_contents`; arbitrary container-to-container recipes remain separate.
 
 | Python call | Scope and success evidence |
 | --- | --- |
 | `navigate_to(destination_id)` | Existing walking action; see [navigation](navigation.md). |
 | `pick_up(target_id)` | Approach the specified source, tap pickup once, confirm the exact item, a plate removed from its stack, or the dispenser's ingredient composition in P2's hands. Requires empty hands. |
 | `place_at(target_id)` | Approach, tap placement once, confirm the target holds the item, its plate stack increased, or its sink accepted dirty dishes. Occupied non-stack surfaces require an explicit ingredient-add action. Disposal requires `discard`. |
+| `collect_contents(target_id)` | Collect ready contents into a held compatible plate/container using native placement. Verify recipient increase, source decrease and retained identities. |
 | `add_ingredient(target_id)` | Add the held single ingredient to the target or its explicitly attached container. Confirm matching contents increased and P2 no longer holds that ingredient. Refuses container-to-container transfer. |
 | `work_at(target_id, until='work_complete', timeout=60)` | Work until chopping completes, one plate is cleaned, or the sink empties. Detect expected replacement ingredient composition when chopping replaces an object. |
 | `activate(target_id, desired_state='trigger')` | Trigger a native interaction and observe its P2-specific acknowledgement; or request `on`/`off` where an associated native toggle state is observable. Unsupported toggle state is rejected. Already-satisfied states need no button press. |
@@ -86,24 +87,18 @@ causes `hands_full`. Failure preserves cargo and reports the completed delivery
 count, chosen source/destination and the child receipt. Stop, disconnect and all
 normal native control gates cancel the complete job.
 
-Accepted jobs and interaction actions allow **500 ms of continuous interruption**
-for a temporarily missing target, unavailable walking route, or native
-pickup/placement/use readiness. This includes the transition after a successful
-pickup: delivery can wait for its original destination to return. Input is neutral
-while waiting; navigation retries once per 100 ms, plus a final check at grace
-expiry, using fresh route checks with a bounded 25 ms recovery planning budget.
-Recovery retains the request, ownership lease, exact cargo and target identities,
-and original deadlines. Changing transient failure reasons does not restart the
-grace period. A persistent interruption blocks the job with cargo retained.
+Accepted jobs and interaction actions now wait **indefinitely** through a missing
+target, unavailable walking route, or native pickup/placement/use readiness.
+Input is neutral while blocked, with bounded route revalidation every 100 ms.
+Environmental waiting suspends finite watchdogs and retains the ownership lease,
+request, exact cargo and completed child steps. Recovery reports `graceSeconds:
+null`, `indefinite: true`, elapsed time and interruption count.
 
-The executor revalidates contents before interaction and never repeats a pickup,
-placement or toggle that has already been pressed. Changed cargo, source contents
-or container identities remain terminal errors, as do observation failures and
-expired action watchdogs. Explicit stop/release, disconnect, focus loss, pause,
-respawn, reassignment and round changes still cancel immediately.
-Interaction receipts include `recovery` (`reason`, `elapsedSeconds`,
-`graceSeconds`, `count`); logistics receipts include this in `details`, alongside
-the child's receipt. A child rebuilding its route has phase `recovering_navigation`.
+Standalone actions retain identity checks and bounded verification after a button
+press. Explicit stop/release, disconnect, focus loss, pause, respawn, reassignment
+and round changes cancel immediately. New [autonomous tasks](tasks.md) additionally
+compose these primitives, handle environmental changes before unpressed steps,
+and repeat 1–10 times or indefinitely without model calls.
 
 | Python call | Behavior |
 | --- | --- |

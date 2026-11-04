@@ -14,6 +14,7 @@ namespace SousChef.Plugin.Actions
             public int Player;
             public string Mode;
             public Vector3? Approach;
+            public float? ArrivalSeconds;
         }
         private object handoffEvidence;
         private bool ThrowPossible(GameObject item, GameObject target)
@@ -53,18 +54,17 @@ namespace SousChef.Plugin.Actions
             foreach (GameObject target in navigation.Targets())
             {
                 if (!Reachable(target) || !CanDeliver(item, target)) continue;
-                if (ConveyorReachesHuman(target, item) || ReturningCounter(target, player))
-                    return new Handoff { Target = target, Transport = true, Mode = "transport_to_player" };
+                if (ConveyorReachesHuman(target, item)) return new Handoff { Target = target, Transport = true, Mode = "conveyor_to_player" };
+                float seconds = CounterArrival(target, player);
+                if (seconds != Single.MaxValue) return new Handoff { Target = target, Transport = true, Mode = "moving_counter_to_player", ArrivalSeconds = seconds };
             }
             return null;
         }
-        private bool ReturningCounter(GameObject target, int player)
+        private float CounterArrival(GameObject target, int player)
         {
-            Vector3 visited;
-            // Observe an actual human-accessible stop in this round. Unknown
-            // motion is never treated as a promise about a future counter pose.
-            return Counter(target) && humanCounterVisits.TryGetValue(player + ":" + target.GetInstanceID(), out visited) &&
-                Vector3.Distance(visited, target.transform.position) > .5f;
+            CounterMotion track;
+            return Counter(target) && counterMotion.TryGetValue(player + ":" + target.GetInstanceID(), out track)
+                ? track.ArrivalSeconds(Time.realtimeSinceStartup) : Single.MaxValue;
         }
         private bool ConveyorReachesHuman(GameObject start, GameObject item)
         {
@@ -97,6 +97,7 @@ namespace SousChef.Plugin.Actions
                 Handoff choice = null;
                 yield return Until("waiting_for_player_handoff", delegate { choice = FindHandoff(item, player, excluded); return choice != null; });
                 handoffEvidence = Json.Object("mode", choice.Mode, "itemInstanceId", item.GetInstanceID(), "player", player,
+                    "predictedArrivalSeconds", choice.ArrivalSeconds,
                     "targetInstanceId", choice.Target == null ? null : (object)choice.Target.GetInstanceID());
                 TaskStep delivery;
                 if (choice.Player != 0)

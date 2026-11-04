@@ -28,8 +28,11 @@ namespace SousChef.Plugin.Actions
         }
         private IEnumerable<TaskStep> TossBurntFood()
         {
-            LogisticsItem source = BurntSource(); GameObject item = source.Item;
-            GameObject burner = source.Source.GetComponent<CookingStation>() != null ? source.Source : null;
+            LogisticsItem source = null;
+            yield return Until("waiting_for_burnt_food", delegate { source = BurntSource(); return source != null; });
+            GameObject item = source.Item;
+            GameObject previous = source.Holder ?? inventory.Home(item);
+            GameObject burner = previous != null && previous.GetComponent<CookingStation>() != null ? previous : null;
             if (!System.Object.ReferenceEquals(ActionObservations.Held(chef), item)) yield return Do("pick_up", source.Source);
             GameObject bin = null;
             yield return Until("waiting_for_rubbish_bin", delegate { bin = RubbishBin(); return bin != null; });

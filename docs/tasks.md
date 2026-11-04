@@ -8,8 +8,8 @@ Each repetition executes a complete batch. Completion leaves P2 idle.
 Environmental blocks wait indefinitely with neutral input and bounded periodic
 revalidation. Completed steps are retained. Explicit Stop, release, disconnect,
 pause, focus loss, reassignment, respawn and round changes still cancel and restore
-native input bindings. Identity changes and unverified button outcomes fail safely
-with cargo retained. Waiting does not replay a successful step or disposal.
+native input bindings. Changed source identities wait for the original source before an unpressed step.
+Changed cargo or unverified button outcomes fail safely with cargo retained. Waiting does not replay a successful step or disposal.
 
 The existing interaction/logistics recovery window is also indefinite; time spent
 recovering suspends finite watchdogs. Button outcome verification remains bounded.
@@ -34,12 +34,17 @@ their 256-byte parser bound.
 Preparation states are `raw`, `chopped`, `cooked`, `mixed`, and `empty` (utensils
 and plates). Each repetition prepares the entire list. Native ingredient IDs
 from the catalogue also work. Chopping follows the native output prefab;
-cooking/mixing uses compatible empty containers already on equipment.
+cooking/mixing uses compatible empty containers on equipment, or stages the
+ingredient while retrieving and installing an empty compatible container.
 
 The scheduler starts passive processing before short deliveries, performs other
 requested preparation while equipment runs, and collects completed containers
 before starting more work. Processing remains native and uses native progress/time.
-It retains exact containers and stations between visits.
+It retains exact containers and stations between visits. Native remaining cooking
+time and conservative estimates of travel/chopping prevent starting long work
+just before a pot finishes. Full equipment defers new cooking units instead of
+holding an ingredient that would prevent collecting an earlier unit. Ready
+contents prefer a serving plate/utensil, leaving the processor available.
 
 Delivery preference: a compatible counter within five walking units of the human,
 then a checked pass/drop at the human, then a directed conveyor or returning
