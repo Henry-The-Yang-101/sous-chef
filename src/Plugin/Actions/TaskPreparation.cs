@@ -109,10 +109,11 @@ namespace SousChef.Plugin.Actions
                 {
                     bool done = true; foreach (PreparationUnit unit in units) if (!unit.Delivered) done = false;
                     if (done) yield break;
-                    yield return Until("waiting_for_prepared_ingredients", delegate {
-                        foreach (PreparationUnit unit in units) if (!unit.Delivered && unit.Processing && TaskNative.Ready(unit.Item, unit.Request.Preparation == "mixed")) return true;
-                        return false;
-                    });
+                    // Revisit the scheduler as route discovery progresses. A
+                    // currently unconfirmed ingredient route must not occupy the
+                    // entire cooking window when it becomes available next frame.
+                    float retry = Time.realtimeSinceStartup + .2f;
+                    yield return Until("waiting_for_prepared_ingredients", delegate { return Time.realtimeSinceStartup >= retry; });
                     continue;
                 }
                 if (next.Processing)
@@ -121,7 +122,7 @@ namespace SousChef.Plugin.Actions
                     // was prepared; never silently collect a replacement meal.
                     PreparationUnit selected = next;
                     yield return Until("waiting_for_original_preparation", delegate { return selected.Item != null && System.Object.ReferenceEquals(ActionObservations.Receiver(selected.Station), selected.Item); });
-                    LogisticsItem serving = ServingUtensil(next.Item);
+                    LogisticsItem serving = ServingUtensil(next.Item, next.Station);
                     if (serving != null)
                     {
                         yield return Do("pick_up", serving.Source);
@@ -195,8 +196,8 @@ namespace SousChef.Plugin.Actions
             float travel = source.Distance / Math.Max(.1f, chef.Movement.RunSpeed);
             var workable = source.Item.GetComponent<WorkableItem>();
             float chopping = unit.Request.Preparation != "raw" && unit.Request.Preparation != "empty" && workable != null
-                ? Math.Max(1, ActionObservations.Read<int>(workable, "m_stages")) * .9f : 0;
-            return travel * 2 + chopping + 4;
+                ? Math.Max(1, ActionObservations.Read<int>(workable, "m_stages")) * .3f : 0;
+            return travel * 2 + chopping + 2;
         }
     }
 }

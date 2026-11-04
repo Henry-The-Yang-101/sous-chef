@@ -28,13 +28,14 @@ namespace SousChef.Plugin.Actions
             Component spray = TaskNative.Component(tool, "SprayingUtensil"); if (spray == null) return false;
             float range = ActionObservations.Read<float>(spray, "m_sprayDistance");
             float best = Single.MaxValue;
+            foreach (float height in navigation.ReleaseHeights(fire.transform.position, range + 1))
             for (int ring = 0; ring < 3; ring++)
                 for (int n = 0; n < 16; n++)
                 {
                     float distance = Math.Max(1.25f, range * (.45f + ring * .2f));
                     float angle = n * Mathf.PI / 8; Vector3 position;
                     Vector3 seed = fire.transform.position + new Vector3(Mathf.Cos(angle), 0, Mathf.Sin(angle)) * distance;
-                    seed.y = chef.transform.position.y;
+                    seed.y = height;
                     if (!navigation.TryStance(seed, out position)) continue;
                     if (Vector3.Distance(position, fire.transform.position) > range + .55f) continue;
                     float cost = navigation.RouteCost(position);
@@ -84,7 +85,10 @@ namespace SousChef.Plugin.Actions
                 // Re-scan after each extinguish: native fire can spread while
                 // walking/spraying. Completion includes newly reachable fires.
             }
-            GameObject home = Parking(tool, inventory.Home(tool));
+            GameObject home = null;
+            yield return Until("returning_extinguisher", delegate {
+                home = Parking(tool, inventory.Home(tool)); return home != null || botSearchComplete;
+            });
             if (home != null) yield return Do("place_at", home);
         }
     }

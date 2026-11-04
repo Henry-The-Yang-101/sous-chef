@@ -40,27 +40,33 @@ namespace SousChef.Plugin.Actions
         }
         public static bool Ready(GameObject item, bool mixing)
         { return !Burnt(item) && Complete(State(item, mixing)); }
-        public static bool IsMixer(GameObject station) { return Component(station, "MixingStation") != null; }
+        private static GameObject StationFor(GameObject target)
+        {
+            if (Equipment(target)) return target;
+            GameObject item = ActionObservations.Receiver(target);
+            foreach (ServerAttachStation holder in UnityEngine.Object.FindObjectsOfType<ServerAttachStation>())
+                if (System.Object.ReferenceEquals(holder.InspectItem(), item) && Equipment(holder.gameObject)) return holder.gameObject;
+            return null;
+        }
+        public static bool IsMixer(GameObject target) { return Component(StationFor(target), "MixingStation") != null; }
         public static bool ReadyAt(GameObject target)
         {
             GameObject item = ActionObservations.Receiver(target);
-            if (Equipment(target)) return Ready(item, IsMixer(target));
             // Item targets and their parent station use the same observed holder
             // relationship. A bowl's unused cooking handler can say Progressing
             // at zero even while its mixing handler completes normally.
-            foreach (ServerAttachStation holder in UnityEngine.Object.FindObjectsOfType<ServerAttachStation>())
-                if (System.Object.ReferenceEquals(holder.InspectItem(), item) && Equipment(holder.gameObject)) return Ready(item, IsMixer(holder.gameObject));
-            return Ready(item);
+            GameObject station = StationFor(target);
+            return station == null ? Ready(item) : Ready(item, IsMixer(station));
         }
         private static bool Complete(string state) { return state == "Completed" || state == "OverDoing"; }
         public static bool Burnt(GameObject item) { return State(item) == "Ruined" || State(item, true) == "Ruined"; }
-        public static float Remaining(GameObject item, bool mixing = false)
+        public static float Remaining(GameObject item, bool mixing = false, bool untilRuined = false)
         {
             Component h = Component(item, mixing ? "ServerMixingHandler" : "ServerCookingHandler");
             if (h == null) return Single.MaxValue;
             float progress = (float)Call(h, mixing ? "GetMixingProgress" : "GetCookingProgress");
             var property = h.GetType().GetProperty(mixing ? "AccessMixingTime" : "AccessCookingTime");
-            return Math.Max(0, (float)property.GetValue(h, null) - progress);
+            return Math.Max(0, (float)property.GetValue(h, null) * (untilRuined ? 2 : 1) - progress);
         }
         public static bool Equipment(GameObject go)
         { return go != null && (go.GetComponent<CookingStation>() != null || Component(go, "MixingStation") != null || Component(go, "HeatedCookingStation") != null || Component(go, "ServerCookingRegion") != null); }
@@ -71,7 +77,7 @@ namespace SousChef.Plugin.Actions
         private readonly Dictionary<int, NavigationActions> observers = new Dictionary<int, NavigationActions>();
         private readonly Dictionary<int, float> humanDistances = new Dictionary<int, float>();
         private readonly Dictionary<string, CounterMotion> counterMotion = new Dictionary<string, CounterMotion>();
-        private bool botSearchComplete;
+        private bool botSearchComplete, humanSearchComplete;
         private PlayerControls Human(int player = 1)
         {
             PlayerControls found = null;
@@ -87,11 +93,12 @@ namespace SousChef.Plugin.Actions
         }
         private void RefreshHuman(int player)
         {
-            humanDistances.Clear(); var human = Human(player); if (human == null) return;
+            humanDistances.Clear(); humanSearchComplete = false; var human = Human(player); if (human == null) return;
             NavigationActions observer;
             if (!observers.TryGetValue(player, out observer))
             { observer = new NavigationActions(delegate(Vector3 d, int ms) { }, delegate { }); observers.Add(player, observer); }
             var catalog = (Json.Record)observer.Available(human);
+            humanSearchComplete = (bool)catalog["complete"];
             foreach (Json.Record identity in (List<object>)catalog["destinations"])
             {
                 int instance = (int)identity["objectInstanceId"]; humanDistances[instance] = (float)identity["routeDistance"];

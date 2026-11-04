@@ -51,6 +51,7 @@ namespace SousChef.Plugin.Actions
                 if (candidate < score) { best = target; throwItem = !walk; score = candidate; }
             }
             if (best != null) return new Handoff { Target = best, Throw = throwItem, Mode = throwItem ? "throw_near_player" : "counter_near_player" };
+            if (!humanSearchComplete) return null;
             DropPlan drop;
             if (new DropHandoff().Plan(chef, item, human, out drop) || ThrowPossible(item, human.gameObject))
                 return new Handoff { Player = player, Mode = "at_player" };

@@ -31,13 +31,20 @@ namespace SousChef.Plugin.Actions
             var transfer = GameObjectUtils.RequestInterface<IContainerTransferBehaviour>(source);
             return transfer != null && transfer.CanTransferToContainer(recipient.GetComponent<ServerIngredientContainer>());
         }
-        private LogisticsItem ServingUtensil(GameObject source)
+        private LogisticsItem ServingUtensil(GameObject source, GameObject station)
         {
             inventory.Refresh(chef); LogisticsItem best = null; float cost = Single.MaxValue;
+            float margin = TaskNative.Remaining(source, TaskNative.IsMixer(station), true);
+            float stationDistance = inventory.DistanceTo(station);
             foreach (LogisticsItem candidate in inventory.Items)
             {
                 if ((!candidate.CleanPlate && candidate.UtensilType == null) || !candidate.Empty || candidate.InUse ||
                     !CanCollect(LogisticsChecks.Payload(candidate), source) || LogisticsChecks.Collect(chef, candidate, candidate.CleanPlate ? "get_plate" : "move_item") != null) continue;
+                // Fetching a plate across stairs/another island can consume the
+                // entire ready window. Prefer immediate utensil removal when a
+                // conservative round trip would let this batch become ruined.
+                float seconds = (candidate.Distance * 2 + stationDistance) / Math.Max(.1f, chef.Movement.RunSpeed) + 8;
+                if (seconds >= margin) continue;
                 float distance = candidate.Distance + (candidate.CleanPlate ? 0 : 1000);
                 if (distance < cost) { best = candidate; cost = distance; }
             }
@@ -50,7 +57,7 @@ namespace SousChef.Plugin.Actions
             yield return Until("waiting_until_food_ready", delegate {
                 return station != null && station.activeInHierarchy && System.Object.ReferenceEquals(ActionObservations.Receiver(station), item) && TaskNative.ReadyAt(station);
             });
-            LogisticsItem plate = ServingUtensil(item);
+            LogisticsItem plate = ServingUtensil(item, station);
             if (plate != null)
             {
                 yield return Do("pick_up", plate.Source);
