@@ -60,3 +60,11 @@ primitive uses the normal native placement button and verifies both source
 decrease and recipient increase while retaining their identities. If no serving
 utensil is available, P2 removes the original pot/pan/food and parks it on a safe
 counter. Completed/overdoing food is ready; ruined contents are excluded.
+
+## Wash dishes
+
+`wash_dishes` requires an accessible sink and obtainable dirty stacks (or plates
+already in that sink). It snapshots the currently obtainable stacks, merges them
+using native placement/pickup, carries the whole batch to the sink, and washes
+until the sink empties. New dirty stacks are handled by the next repetition.
+An already-held dirty stack can join the batch; unrelated cargo is never moved.
