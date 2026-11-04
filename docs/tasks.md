@@ -96,3 +96,11 @@ the current burner, picks up the exact food/utensil, and uses native disposal.
 A surviving empty utensil returns to that burner, otherwise another compatible
 available burner, otherwise an available counter. Occupied burners are never
 cleared. If no disposal/return route exists, it waits holding the original cargo.
+
+## Monitor equipment
+
+`monitor_equipment` waits for any accessible native cooker, heated station, or
+mixer/blender to finish. It uses shared ready-food collection and serving/parking,
+then completes one repetition. Use unlimited repetitions for ongoing monitoring,
+including idle periods when equipment is empty. Cooking station variants use the
+same native cooking handler instead of recipe/name-specific timing guesses.

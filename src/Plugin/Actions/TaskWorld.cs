@@ -38,7 +38,7 @@ namespace SousChef.Plugin.Actions
             return Math.Max(0, (float)property.GetValue(h, null) - progress);
         }
         public static bool Equipment(GameObject go)
-        { return go != null && (go.GetComponent<CookingStation>() != null || Component(go, "MixingStation") != null || Component(go, "ServerCookingRegion") != null); }
+        { return go != null && (go.GetComponent<CookingStation>() != null || Component(go, "MixingStation") != null || Component(go, "HeatedCookingStation") != null || Component(go, "ServerCookingRegion") != null); }
         public static bool Dirty(GameObject go) { return Component(go, "ServerDirtyPlateStack") != null; }
     }
     internal sealed partial class TaskActions
