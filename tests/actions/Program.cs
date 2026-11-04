@@ -456,6 +456,34 @@ internal static class Program
         w=new World();w.Start("wait_until","occupied",ms:100);w.Tick(.11f);
         Check(w.Skills.Run.Reason=="action_timeout" && w.Releases==1,"wait has bounded lifetime and releases ownership");
     }
+    private static void ImmediateNativeWork()
+    {
+        Func<World> board=()=>{
+            var w=new World();var raw=w.Ingredient("raw");var chopped=w.Ingredient("chopped");
+            raw.Add(new ServerWorkableItem());raw.Add(new WorkableItem {Next=chopped});
+            w.Target.GetComponent<ServerAttachStation>().Item=raw;return w;
+        };
+        var ready=board();
+        Check(ready.Start("work_at","work_complete")==null && ready.Skills.Run.Phase=="working" &&
+            ready.Navigation.Action.State=="idle" && ready.Inputs.Last()==2,
+            "a stopped chef at the natively selected board starts work immediately without another navigation action");
+        foreach(string unsafeState in new[] {"moving","distant","unselected","airborne","respawning"})
+        {
+            var w=board();
+            if(unsafeState=="moving") w.Chef.Motion.Velocity=Vector3.right;
+            if(unsafeState=="distant") w.Chef.transform.position=new Vector3(0,0,-4);
+            if(unsafeState=="unselected") w.Chef.CurrentInteractionObjects.m_interactable=null;
+            if(unsafeState=="airborne") w.Chef.GroundCollider=null;
+            if(unsafeState=="respawning") w.Chef.m_bRespawning=true;
+            w.Start("work_at","work_complete");
+            Check(!w.Inputs.Contains(2),"immediate work does not bypass native arrival checks when "+unsafeState);
+        }
+        var refreshed=board();refreshed.Chef.CurrentInteractionObjects.m_interactable=null;
+        refreshed.Start("work_at","work_complete");
+        refreshed.Chef.CurrentInteractionObjects.m_interactable=refreshed.Target.GetComponent<ClientInteractable>();refreshed.Tick();
+        Check(refreshed.Skills.Run.Phase=="working" && refreshed.Navigation.Action.State=="idle" && refreshed.Inputs.Last()==2,
+            "selection refreshing after placement starts work on that update without waiting for redundant arrival settling");
+    }
     private static void Activation()
     {
         var w=new World(t=>t.Add(new ClientTriggerToggleOnAnimator {CurrentState=true}));
@@ -1232,6 +1260,6 @@ internal static class Program
         Check(Vector3.Distance(plan.CurrentStance,plan.Stance+Vector3.right)<.01f && plan.StanceLocalPoint.Equals(local),
             "cached release poses follow their support instead of gaining fictitious walking uncertainty as a raft moves");
     }
-    private static void Main() { CounterForecasts();PersistentTasks();HumanSinkEligibility();NativeUtensilDefinitions();PreparationEquipmentDiscovery();PreparedIngredientSources();AvailablePreparationWork();ReconciledHandoffs();MixerReadiness();ReadyFoodTasks();PauseTimers();MovingPickups();Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();GroundThrows();RaftLandingFallback();CurrentPoseLandingClearance();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
+    private static void Main() { CounterForecasts();PersistentTasks();HumanSinkEligibility();NativeUtensilDefinitions();PreparationEquipmentDiscovery();PreparedIngredientSources();AvailablePreparationWork();ReconciledHandoffs();MixerReadiness();ReadyFoodTasks();PauseTimers();MovingPickups();Transactions();IngredientsAndDisposal();WorkAndWait();ImmediateNativeWork();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();GroundThrows();RaftLandingFallback();CurrentPoseLandingClearance();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
     private static ClientInteractable GetCurrentlyInteractingForTest(this PlayerControls chef) { return chef.GetComponent<ClientPlayerControlsImpl_Default>().Current; }
 }

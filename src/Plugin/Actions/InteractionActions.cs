@@ -158,6 +158,14 @@ namespace SousChef.Plugin.Actions
             try
             {
                 if (request.Operation == "wait_until") { Run.Advance("waiting"); input(0); return null; }
+                // A placement already leaves us stopped at the selected board.
+                // Use that native interaction opportunity without navigating
+                // and settling a second time. All work/identity checks remain.
+                if (request.Operation == "work_at" && CanWorkHere())
+                {
+                    if (BeforePress() && Run.Running) { SetPhase("working"); Work(); }
+                    return null;
+                }
                 if (request.Operation == "throw_to_player" && drops.Plan(chef, held, target.GetComponent<PlayerControls>(), out dropPlan))
                 { evidence = dropPlan.Describe(); SetPhase("drop_press"); return null; }
                 if (request.Operation == "throw_to" || request.Operation == "throw_to_player")
@@ -292,6 +300,13 @@ namespace SousChef.Plugin.Actions
                     if (navigation.Action.State == "navigating") navigation.Stop("arrived");
                     if (!BeforePress()) return;
                     SetPhase("pressing");
+                }
+                if (command.Operation == "work_at" && (Run.Phase == "navigating" || Run.Phase == "recovering_navigation") && CanWorkHere())
+                {
+                    // Native selection can refresh one frame after placement.
+                    if (navigation.Action.State == "navigating") navigation.Stop("arrived");
+                    if (!BeforePress()) return;
+                    SetPhase("working");
                 }
                 if (recoveryReason == "target_unavailable" && Run.Phase != "navigating" &&
                     Run.Phase != "recovering_navigation" && Run.Phase != "pressing" && Run.Phase != "working") recovery.Clear();
@@ -441,6 +456,11 @@ namespace SousChef.Plugin.Actions
         {
             if (command.Operation != "activate") return 1;
             var interact = target.GetComponent<ClientInteractable>(); return interact != null && interact.UsePlacementButton ? 1 : 2;
+        }
+        private bool CanWorkHere()
+        {
+            return chef.GroundCollider != null && !chef.m_bRespawning && chef.Motion.GetVelocityXZ().magnitude <= .1f &&
+                Vector3.Distance(chef.transform.position, target.transform.position) <= 1.6f && ActionObservations.CanUse(chef, target);
         }
         private bool BeforePress()
         {
