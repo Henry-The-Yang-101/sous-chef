@@ -92,14 +92,14 @@ namespace SousChef.Plugin.Actions
             }
             return false;
         }
-        private bool HumanCanCollect(GameObject item, int player, bool refresh = true)
+        private bool HumanCanCollect(GameObject item, int player, bool refresh = true, float maximumDistance = Single.MaxValue)
         {
             if (item == null) return false;
             if (refresh) RefreshHuman(player); var human = Human(player);
             if (human != null && System.Object.ReferenceEquals(ActionObservations.Held(human), item)) return true;
-            if (human != null && HumanDistance(item) != Single.MaxValue && LogisticsChecks.CanCollectEmpty(human, item)) return true;
+            if (human != null && HumanDistance(item) != Single.MaxValue && HumanDistance(item) <= maximumDistance && LogisticsChecks.CanCollectEmpty(human, item)) return true;
             foreach (GameObject target in navigation.Targets())
-                if (HumanDistance(target) != Single.MaxValue && System.Object.ReferenceEquals(ActionObservations.Occupant(target), item)) return true;
+                if (HumanDistance(target) != Single.MaxValue && HumanDistance(target) <= maximumDistance && System.Object.ReferenceEquals(ActionObservations.Occupant(target), item)) return true;
             return false;
         }
         private IEnumerable<TaskStep> Give(GameObject item, int player = 1, bool backgroundTransport = false)
@@ -135,6 +135,14 @@ namespace SousChef.Plugin.Actions
                     delivery = new TaskStep { Phase = "giving_to_player", Command = delegate { return new ControlCommand { Operation = "throw_to_player", Destination = player.ToString(), GroundHandoff = choice.Ground }; } };
                 }
                 else delivery = Do(choice.Throw ? "throw_to" : "place_at", choice.Target);
+                // A bouncing raw ingredient can miss the primitive's precise
+                // catch/drop window yet finish safely within the human's reach.
+                // Reconcile the task's actual goal before declaring failure;
+                // never replay an already released throw or replace its cargo.
+                if (!choice.Transport) delivery.Outcome = delegate {
+                    if (!HumanCanCollect(item, player, true, 5)) return false;
+                    ((Json.Record)handoffEvidence)["reconciledOutcome"] = child.Run.Reason; return true;
+                };
                 delivery.ReplanOnBlock = true; yield return delivery;
                 if (!delivery.Succeeded) { if (choice.Target != null) blockedTargets.Add(choice.Target); rejectedAt = Time.realtimeSinceStartup; continue; }
                 if (choice.Transport)

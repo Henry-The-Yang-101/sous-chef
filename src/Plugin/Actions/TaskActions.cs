@@ -12,6 +12,7 @@ namespace SousChef.Plugin.Actions
         public Func<ControlCommand> Command;
         public Func<bool> Ready;
         public Func<bool> Progress;
+        public Func<bool> Outcome;
         public bool ReplanOnBlock, Succeeded;
     }
     internal sealed class TaskDefinition
@@ -89,7 +90,7 @@ namespace SousChef.Plugin.Actions
                     }
                     if (child.Run.Running) return;
                     childStarted = false;
-                    if (child.Run.State != "succeeded")
+                    if (child.Run.State != "succeeded" && (step.Outcome == null || !step.Outcome()))
                     {
                         if (step.ReplanOnBlock && child.CanRetry) { step = null; Wait(child.Run.Reason); return; }
                         if (child.Run.State == "blocked" && child.CanRetry) { Wait(child.Run.Reason); return; }
