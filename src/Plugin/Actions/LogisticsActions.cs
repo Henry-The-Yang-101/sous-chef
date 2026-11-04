@@ -26,6 +26,7 @@ namespace SousChef.Plugin.Actions
         private bool supply;
         private bool spawnedChild;
         private bool pendingStart;
+        private float lastTick;
         private readonly ActionRecovery recovery = new ActionRecovery();
         private readonly Queue<GameObject> plates = new Queue<GameObject>();
         public LogisticsActions(NavigationActions nav, InteractionActions primitive, Action<int> buttons, Action finished)
@@ -44,6 +45,7 @@ namespace SousChef.Plugin.Actions
         {
             if (Run.Running || child.Run.Running || navigation.Action.State != "idle") return "action_in_progress";
             chef = actor; request = command; Inventory.Refresh(chef);
+            lastTick = Time.realtimeSinceStartup;
             selected = null; cargo = expected = originalSource = sourceStation = destination = null;
             sourceId = deliveryOperation = null; destinationId = command.Destination; delivered = 0; batchLimit = 1; spawnedChild = pendingStart = false; recovery.Reset(); plates.Clear();
             string error = Select(); if (error != null) return error;
@@ -163,7 +165,7 @@ namespace SousChef.Plugin.Actions
         private string StartPickup()
         {
             Run.Advance("picking_up");
-            string error = child.Start(chef, Run.Owner, new ControlCommand { Id = request.Id, Operation = "pick_up", Destination = sourceId });
+            string error = child.Start(chef, Run.Owner, new ControlCommand { Id = request.Id, Operation = "pick_up", Destination = sourceId, Indefinite = request.Indefinite });
             return ChildStarted(error);
         }
         private string StartDelivery()
@@ -172,7 +174,7 @@ namespace SousChef.Plugin.Actions
             string error = Delivery(cargo);
             if (error == null)
             {
-                error = child.Start(chef, Run.Owner, new ControlCommand { Id = request.Id, Operation = deliveryOperation, Destination = destinationId });
+                error = child.Start(chef, Run.Owner, new ControlCommand { Id = request.Id, Operation = deliveryOperation, Destination = destinationId, Indefinite = request.Indefinite });
             }
             return ChildStarted(error);
         }
@@ -189,6 +191,8 @@ namespace SousChef.Plugin.Actions
             if (!Run.Running) return;
             try
             {
+                float elapsed = Time.realtimeSinceStartup - lastTick; lastTick = Time.realtimeSinceStartup;
+                if (recovery.Active || (child.Run.Running && ((Json.Record)((Json.Record)child.Describe())["recovery"])["reason"] != null)) Run.Delay(elapsed);
                 if (Run.Expired(Time.realtimeSinceStartup)) { Finish("failed", "logistics_timeout"); return; }
                 if (pendingStart)
                 {

@@ -67,7 +67,7 @@ namespace SousChef.Core
                     var line = new StringBuilder(); int b;
                     while ((b = stream.ReadByte()) != -1 && b != 10)
                     {
-                        if (b < 32 || b > 126 || line.Length >= 256) throw new IOException("invalid line");
+                        if (b < 32 || b > 126 || line.Length >= 2048) throw new IOException("invalid line");
                         line.Append((char)b);
                     }
                     if (b == -1) break;

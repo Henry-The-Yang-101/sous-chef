@@ -146,13 +146,13 @@ class HarnessBridge:
     def act(self, viewer, session, destination, instance, operation, arguments=None):
         allowed = {'navigate_to', 'pick_up', 'place_at', 'add_ingredient', 'work_at',
                    'activate', 'discard', 'wait_until', 'throw_to', 'throw_to_player',
-                   'move_item', 'fetch_ingredient', 'get_plate', 'get_utensil', 'stage_item', 'return_utensil', 'clear_station'}
+                   'move_item', 'fetch_ingredient', 'get_plate', 'get_utensil', 'stage_item', 'return_utensil', 'clear_station', 'task'}
         jobs = {'move_item', 'fetch_ingredient', 'get_plate', 'get_utensil', 'stage_item', 'return_utensil', 'clear_station'}
         if not isinstance(operation, str):
             raise HarnessError('Unsupported action')
         arguments = {} if arguments is None else arguments
         keys = {'work_at': {'until', 'timeout'}, 'wait_until': {'condition', 'timeout'},
-                'activate': {'desired_state'}, 'move_item': {'item_id', 'source_instance_id'},
+                'activate': {'desired_state'}, 'task': {'action', 'repetitions', 'items', 'player_id'}, 'move_item': {'item_id', 'source_instance_id'},
                 'stage_item': {'item_id', 'source_instance_id'}, 'clear_station': {'station_id', 'source_instance_id'},
                 'fetch_ingredient': {'ingredient'}, 'get_utensil': {'utensil_type'}}.get(operation, set())
         if operation not in allowed or not isinstance(arguments, dict) or arguments.keys() - keys:
@@ -191,7 +191,10 @@ class HarnessBridge:
                     # before validating the exact target and issuing the sole command.
                     catalog = self.client.available_actions()
                     self._publish(catalog, self.client.last_response['control'])
-                options = catalog.get('destinations', []) if operation == 'navigate_to' else (
+                if operation == 'task':
+                    if arguments.get('action') not in [t.get('name') for t in catalog.get('taskOptions', [])]:
+                        raise HarnessError('That task is no longer available')
+                options = [{'id': 'task', 'objectInstanceId': 0, 'operations': ['task']}] if operation == 'task' else catalog.get('destinations', []) if operation == 'navigate_to' else (
                     catalog.get('players', []) if operation == 'throw_to_player' else
                     catalog.get('items', []) if operation == 'return_utensil' else
                     catalog.get('deliveryDestinations', []) if operation in jobs else catalog.get('targets', []))
@@ -234,7 +237,7 @@ class HarnessBridge:
                     if generation != self.generation:
                         raise HarnessError('Cancelled by Stop')
                 target = chosen['playerId'] if operation == 'throw_to_player' else destination
-                control = getattr(self.client, operation)(*job_args) if job_args is not None else getattr(self.client, operation)(target, **arguments)
+                control = self.client.run_task(**arguments) if operation == 'task' else (getattr(self.client, operation)(*job_args) if job_args is not None else getattr(self.client, operation)(target, **arguments))
                 with self.state_lock:
                     self.owner = viewer
                     self.owner_seen = self.clock()
@@ -375,6 +378,10 @@ class Handler(BaseHTTPRequestHandler):
                     if not isinstance(data.get('operation'), str):
                         raise ValueError('Missing action')
                     result = self.server.bridge.act(viewer, data['sessionId'], data['destinationId'], data['objectInstanceId'], data['operation'], data.get('arguments'))
+            elif path == '/api/task':
+                if not isinstance(data.get('sessionId'), str):
+                    raise ValueError('Missing game session')
+                result = self.server.bridge.act(viewer, data['sessionId'], 'task', 0, 'task', data.get('arguments'))
             elif path == '/api/stop':
                 result = self.server.bridge.stop()
             elif path == '/api/leave':

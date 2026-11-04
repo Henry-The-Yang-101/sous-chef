@@ -1,0 +1,147 @@
+using System;
+using System.Collections.Generic;
+using SousChef.Core;
+using SousChef.Plugin.Navigation;
+using UnityEngine;
+
+namespace SousChef.Plugin.Actions
+{
+    internal sealed class TaskStep
+    {
+        public string Phase;
+        public Func<ControlCommand> Command;
+        public Func<bool> Ready;
+    }
+    internal sealed class TaskDefinition
+    {
+        public string Name;
+        public Func<bool> Available;
+        public Func<IEnumerable<TaskStep>> Plan;
+    }
+    // One durable request and lease. Iterators advance only after observed child
+    // success, so waiting/repeating cannot replay an already completed pickup.
+    internal sealed partial class TaskActions
+    {
+        public readonly ActionRun Run = new ActionRun();
+        private readonly NavigationActions navigation;
+        private readonly InteractionActions child;
+        private readonly LogisticsInventory inventory;
+        private readonly Action<int> input;
+        private readonly Action release;
+        private readonly Dictionary<string, TaskDefinition> definitions = new Dictionary<string, TaskDefinition>();
+        private PlayerControls chef;
+        private TaskRequest request;
+        private IEnumerator<TaskStep> plan;
+        private TaskStep step;
+        private bool childStarted;
+        private long completed, completedSteps;
+        private string waitingReason;
+        private float retryAt;
+        public TaskActions(NavigationActions nav, InteractionActions primitive, Action<int> buttons, Action finished)
+        {
+            navigation = nav; child = primitive; inventory = new LogisticsInventory(nav); input = buttons; release = finished;
+            RegisterPreparation(); RegisterTakeReady(); RegisterWashing(); RegisterDirtyDelivery(); RegisterFire(); RegisterBurnt(); RegisterMonitor();
+        }
+        partial void RegisterPreparation(); partial void RegisterTakeReady(); partial void RegisterWashing();
+        partial void RegisterDirtyDelivery(); partial void RegisterFire(); partial void RegisterBurnt(); partial void RegisterMonitor();
+        private void Register(string name, Func<bool> available, Func<IEnumerable<TaskStep>> steps)
+        { definitions.Add(name, new TaskDefinition { Name = name, Available = available, Plan = steps }); }
+        public object Describe()
+        {
+            return Run.Describe(Json.Object("taskAction", request == null ? null : request.Action,
+                "repetitions", request == null ? 1 : request.Repetitions, "infinite", request != null && request.Repetitions == 0,
+                "completedRepetitions", completed, "completedSteps", completedSteps, "waitingReason", waitingReason,
+                "child", childStarted ? child.Describe() : null));
+        }
+        public string Start(PlayerControls actor, int owner, ControlCommand command)
+        {
+            if (Run.Running || child.Run.Running || navigation.Action.State != "idle") return "action_in_progress";
+            TaskDefinition definition;
+            if (command.Task == null || !definitions.TryGetValue(command.Task.Action, out definition)) return "unsupported_task";
+            chef = actor; request = command.Task; inventory.Refresh(chef);
+            if (!definition.Available()) return "task_not_available";
+            completed = completedSteps = 0; childStarted = false; waitingReason = null; step = null; plan = null; retryAt = 0;
+            command.Indefinite = true; Run.Start(owner, command, Time.realtimeSinceStartup); input(0); return null;
+        }
+        public void Tick()
+        {
+            if (!Run.Running) return;
+            try
+            {
+                if (childStarted)
+                {
+                    if (child.Run.Running) return;
+                    childStarted = false;
+                    if (child.Run.State != "succeeded")
+                    {
+                        if (!ActionRecovery.Transient(child.Run.Reason)) { Finish(child.Run.State == "cancelled" ? "cancelled" : "failed", child.Run.Reason); return; }
+                        Wait(child.Run.Reason); return;
+                    }
+                    completedSteps++; step = null;
+                }
+                input(0);
+                if (Time.realtimeSinceStartup < retryAt) return;
+                if (plan == null)
+                {
+                    inventory.Refresh(chef);
+                    var definition = definitions[request.Action];
+                    if (!definition.Available()) { Wait("waiting_for_" + request.Action); return; }
+                    plan = definition.Plan().GetEnumerator();
+                }
+                if (step == null)
+                {
+                    if (!plan.MoveNext())
+                    {
+                        plan.Dispose(); plan = null; completed++;
+                        if (request.Repetitions != 0 && completed >= request.Repetitions) { Finish("succeeded", "task_complete"); return; }
+                        retryAt = Time.realtimeSinceStartup + .2f; Run.Advance("next_repetition"); return;
+                    }
+                    step = plan.Current;
+                }
+                Run.Advance(step.Phase); waitingReason = null;
+                if (step.Ready != null && !step.Ready()) { Wait(step.Phase); return; }
+                if (step.Command == null) { completedSteps++; step = null; return; }
+                ControlCommand command = step.Command();
+                if (command == null) { Wait(step.Phase); return; }
+                command.Id = Run.RequestId; command.Indefinite = true;
+                string error = child.Start(chef, Run.Owner, command);
+                if (error != null)
+                {
+                    // A failed precondition has not pressed a button. Revalidate
+                    // the same step when the environment allows it again.
+                    Wait(error); return;
+                }
+                childStarted = true;
+            }
+            catch (Exception) { Finish("failed", "task_observation_unavailable"); }
+        }
+        private void Wait(string reason) { waitingReason = reason; input(0); retryAt = Time.realtimeSinceStartup + .2f; }
+        public void Cancel(string reason) { if (Run.Running) Finish("cancelled", reason); }
+        public void Reset(string reason) { Cancel(reason); inventory.Reset(); }
+        private void Finish(string state, string reason)
+        {
+            // Keep the parent running during child cleanup so its callback cannot
+            // release the lease before all owned input has been neutralized.
+            child.Cancel(reason); input(0); Run.Finish(state, reason);
+            if (plan != null) plan.Dispose(); plan = null; step = null; release();
+        }
+        private TaskStep Do(string operation, GameObject target, string condition = null)
+        {
+            return new TaskStep { Phase = operation, Command = delegate { return new ControlCommand {
+                Operation = operation, Destination = navigation.RegisterItem(target), Condition = condition, DesiredState = "trigger" }; } };
+        }
+        private static TaskStep Until(string phase, Func<bool> ready) { return new TaskStep { Phase = phase, Ready = ready }; }
+        public void Decorate(Json.Record catalog, PlayerControls actor)
+        {
+            var choices = new List<object>(); catalog["taskOptions"] = choices;
+            catalog["task"] = Describe();
+            if (Run.Running || child.Run.Running || navigation.Action.State != "idle") return;
+            chef = actor; inventory.Refresh(chef, catalog);
+            foreach (var pair in definitions)
+            {
+                try { if (pair.Value.Available()) choices.Add(Json.Object("name", pair.Key)); }
+                catch (Exception) { /* Incomplete observations never authorize work. */ }
+            }
+        }
+    }
+}

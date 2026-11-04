@@ -219,6 +219,7 @@ function render() {
   const catalog = live ? state.catalog || {} : {};
   renderThrows(catalog, busy, live);
   renderJobs(catalog, busy, live);
+  renderTasks(catalog, busy, live);
   const byId = new Map((catalog.destinations || []).map(d => [d.id, {...d, walkReachable: true}]));
   for (const d of [...(catalog.targets || []), ...(catalog.players || [])]) byId.set(d.id, {...byId.get(d.id), ...d});
   const destinations = Array.from(byId.values());
@@ -455,3 +456,45 @@ window.addEventListener('pagehide', () => {
 setInterval(() => { if (!fresh()) render(); }, 250);
 poll();
 pollSharing();
+
+const taskLabels = {prepare_near_player: 'Prepare and give to player', take_ready: 'Take ready food off heat',
+  wash_dishes: 'Wash dirty dishes', deliver_dirty_dishes: 'Deliver dirty dishes', put_out_fire: 'Put out fires',
+  toss_burnt_food: 'Toss burnt food', monitor_equipment: 'Monitor cooking and mixing'};
+function addTaskItem() {
+  if (el('task-items').children.length >= 10) return;
+  const row = document.createElement('div'); row.className = 'task-item';
+  const ingredient = document.createElement('input'); ingredient.placeholder = 'Ingredient or utensil'; ingredient.required = true; ingredient.maxLength = 64;
+  ingredient.setAttribute('aria-label', 'Ingredient or utensil');
+  const preparation = document.createElement('select'); preparation.setAttribute('aria-label', 'Preparation');
+  for (const kind of ['raw', 'chopped', 'cooked', 'mixed', 'empty']) preparation.add(new Option(kind === 'empty' ? 'Empty utensil / plate' : kind, kind));
+  const quantity = document.createElement('input'); quantity.type = 'number'; quantity.min = '1'; quantity.max = '10'; quantity.value = '1'; quantity.required = true; quantity.setAttribute('aria-label', 'Quantity');
+  const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Remove'; remove.onclick = () => row.remove();
+  row.append(ingredient, preparation, quantity, remove); el('task-items').append(row);
+}
+function renderTasks(catalog, busy, live) {
+  const choices = catalog.taskOptions || [];
+  setJobOptions(el('task-kind'), choices.map(t => ({value: t.name, label: taskLabels[t.name] || t.name})));
+  el('task-preparation').hidden = el('task-kind').value !== 'prepare_near_player';
+  const blocked = !live || pending || busy || (!state.control?.available && state.control?.reason !== 'game_unfocused');
+  el('task-run').disabled = blocked || !choices.length;
+  for (const field of el('task-form').querySelectorAll('input, select, button')) if (field.id !== 'task-run') field.disabled = blocked;
+  const task = state.control?.action;
+  el('task-status').textContent = task?.operation === 'task' ? `${taskLabels[task.details?.taskAction] || 'Task'}: ${task.state} · ${task.phase.replaceAll('_', ' ')} · ${task.details?.completedRepetitions || 0} repetitions completed${task.details?.waitingReason ? ' · waiting: ' + explain(task.details.waitingReason) : ''}`
+    : !choices.length ? 'No tasks currently available. Options update with the kitchen.' : '';
+}
+el('task-kind').addEventListener('change', render);
+el('task-add-item').addEventListener('click', addTaskItem);
+el('task-form').addEventListener('submit', async event => {
+  event.preventDefault(); if (el('task-run').disabled) return;
+  const action = el('task-kind').value;
+  const args = {action, repetitions: el('task-repeat').value === 'forever' ? null : Number(el('task-repeat').value)};
+  if (action === 'prepare_near_player') {
+    args.player_id = Number(el('task-player').value);
+    args.items = Array.from(el('task-items').children).map(row => ({ingredient: row.children[0].value, preparation: row.children[1].value, quantity: Number(row.children[2].value)}));
+  }
+  pending = true; lastError = ''; render();
+  try { state = await post('/api/task', {sessionId: state.sessionId, arguments: args}); receivedAt = performance.now(); }
+  catch (error) { lastError = error.message; }
+  finally { pending = false; render(); }
+});
+addTaskItem();

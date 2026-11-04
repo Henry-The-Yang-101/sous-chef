@@ -119,3 +119,10 @@ pre { font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; backgroun
   #map-action-controls { width: 100%; }
   #map-action { min-width: 0; flex: 1; }
 }
+
+#task-form { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+#task-form label { display: grid; gap: 6px; }
+#task-preparation { flex-basis: 100%; }
+.task-item { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.task-item input { min-width: 100px; max-width: 220px; }
+.task-item input[type=number] { width: 70px; min-width: 50px; }

@@ -22,11 +22,23 @@ internal static class Program
     {
         checks += NavigationTests.Run();
         checks += WorkerTests.Run();
-        TestSchedule(); TestJson(); TestNumericRecords(); TestUtf8Line(); TestIdentity(); TestStream(); TestStreamDemand(); TestControl();
+        TestTasks(); TestSchedule(); TestJson(); TestNumericRecords(); TestUtf8Line(); TestIdentity(); TestStream(); TestStreamDemand(); TestControl();
         if (args.Length > 0) Audit(args[0]);
         Console.WriteLine("PASS: " + checks + " assertions");
     }
 
+    private static void TestTasks()
+    {
+        Assert(ControlCommand.Parse("task once take_ready 1").Task.Repetitions == 1, "default finite task grammar");
+        Assert(ControlCommand.Parse("task loop monitor_equipment forever").Task.Repetitions == 0, "infinite task grammar");
+        var command = ControlCommand.Parse("task prep prepare_near_player 3 1 sY2hpY2tlbg chopped 2 scG90 empty 1");
+        Assert(command.Task.Items.Count == 2 && command.Task.Items[0].Selector == "chicken" && command.Task.Items[0].Quantity == 2, "mixed ingredient utensil task grammar");
+        foreach (string value in new[] {"0", "11", "-1", "nan", "1.5"})
+        { bool rejected=false; try { ControlCommand.Parse("task bad take_ready " + value); } catch(ArgumentException) { rejected=true; } Assert(rejected,"reject invalid repetitions " + value); }
+        var run = new ActionRun(); run.Start(1, command, 10);
+        Assert(!run.Expired(1000000) && Double.IsPositiveInfinity(run.Deadline), "tasks have no overall deadline");
+        run.Finish("cancelled", "stopped"); Assert(!run.Running, "infinite tasks remain explicitly cancellable");
+    }
     private static void TestSchedule()
     {
         float deadline = 0; int samples = 0;

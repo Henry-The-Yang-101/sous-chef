@@ -16,6 +16,37 @@ class ActionClient(ControlClient):
     WORK_CONDITIONS = ('work_complete', 'one_plate_clean', 'sink_empty')
     WAIT_CONDITIONS = (*WORK_CONDITIONS, 'occupied', 'empty', 'cooked', 'mixed', 'reachable', 'ready')
 
+    TASK_ACTIONS = ('prepare_near_player', 'take_ready', 'wash_dishes', 'deliver_dirty_dishes',
+                    'put_out_fire', 'toss_burnt_food', 'monitor_equipment')
+
+    def run_task(self, action, repetitions=1, *, items=None, player_id=1):
+        """Run one autonomous task; repetitions=None repeats until Stop/disconnect.
+
+        Preparation items: [{'ingredient': 'chicken', 'preparation': 'chopped', 'quantity': 2}].
+        Use preparation='empty' and ingredient='plate'/'pot' for utensils.
+        """
+        if action not in self.TASK_ACTIONS:
+            raise ValueError('Unknown task action')
+        if repetitions is not None and (type(repetitions) is not int or not 1 <= repetitions <= 10):
+            raise ValueError('repetitions must be 1..10 or None (infinite)')
+        args = [action, 'forever' if repetitions is None else repetitions]
+        if action == 'prepare_near_player':
+            if type(player_id) is not int or player_id not in (1, 3, 4):
+                raise ValueError('Choose another local player')
+            if not isinstance(items, list) or not 1 <= len(items) <= 10:
+                raise ValueError('Provide 1..10 preparation items')
+            args.append(player_id)
+            for item in items:
+                if not isinstance(item, dict) or item.keys() - {'ingredient', 'preparation', 'quantity'}:
+                    raise ValueError('Invalid preparation item')
+                preparation, quantity = item.get('preparation', 'raw'), item.get('quantity', 1)
+                if preparation not in ('raw', 'chopped', 'cooked', 'mixed', 'empty') or type(quantity) is not int or not 1 <= quantity <= 10:
+                    raise ValueError('Choose a preparation and quantity 1..10')
+                args.extend((self._selector(item.get('ingredient')), preparation, quantity))
+        elif items is not None or player_id != 1:
+            raise ValueError('Only preparation takes items/player_id')
+        return self._request('task', *args)
+
     def available_actions(self):
         self._request('actions')
         return self.last_response['availableActions']
@@ -117,6 +148,11 @@ if __name__ == '__main__':
     commands.add_parser('list')
     commands.add_parser('status')
     commands.add_parser('stop')
+    task = commands.add_parser('task')
+    task.add_argument('action', choices=ActionClient.TASK_ACTIONS)
+    task.add_argument('--repeat', default='1', help='1..10 or forever')
+    task.add_argument('--items', type=json.loads, help='JSON preparation list')
+    task.add_argument('--player', type=int, default=1)
     for operation in ('navigate_to', 'pick_up', 'place_at', 'add_ingredient', 'discard', 'throw_to', 'get_plate', 'return_utensil'):
         commands.add_parser(operation).add_argument('target_id')
     for operation in ('move_item', 'stage_item', 'clear_station', 'fetch_ingredient', 'get_utensil'):
@@ -142,7 +178,8 @@ if __name__ == '__main__':
             elif args.operation == 'stop': print(json.dumps(client.stop(), indent=2))
             elif args.operation == 'status': print(json.dumps(client.status(), indent=2))
             else:
-                if args.operation == 'work_at': result = client.work_at(args.target_id, args.until, args.timeout)
+                if args.operation == 'task': result = client.run_task(args.action, None if args.repeat == 'forever' else int(args.repeat), items=args.items, player_id=args.player)
+                elif args.operation == 'work_at': result = client.work_at(args.target_id, args.until, args.timeout)
                 elif args.operation == 'wait_until': result = client.wait_until(args.target_id, args.condition, args.timeout)
                 elif args.operation == 'activate': result = client.activate(args.target_id, args.desired_state)
                 elif args.operation == 'throw_to_player': result = client.throw_to_player(args.player_id)

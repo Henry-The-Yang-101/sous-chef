@@ -38,6 +38,7 @@ namespace SousChef.Plugin.Actions
         private object evidence;
         private readonly ActionRecovery recovery = new ActionRecovery();
         private float nextRecoveryAttempt;
+        private float lastTick;
 
         public InteractionActions(NavigationActions walking, Action<int> buttons, Action finished)
         { navigation = walking; input = buttons; release = finished; }
@@ -100,7 +101,7 @@ namespace SousChef.Plugin.Actions
         public string Start(PlayerControls player, int owner, ControlCommand request)
         {
             if (Run.Running || navigation.Action.State != "idle") return "action_in_progress";
-            recovery.Reset(); recoveryReason = null; nextRecoveryAttempt = 0;
+            recovery.Reset(); recoveryReason = null; nextRecoveryAttempt = 0; lastTick = Time.realtimeSinceStartup;
             chef = player; command = request; target = null;
             if (request.Operation == "throw_to_player")
             {
@@ -225,6 +226,8 @@ namespace SousChef.Plugin.Actions
             if (!Run.Running) return;
             try
             {
+                float elapsed = Time.realtimeSinceStartup - lastTick; lastTick = Time.realtimeSinceStartup;
+                if (recovery.Active) { Run.Delay(elapsed); lastProgressTime += elapsed; }
                 if (Run.Expired(Time.realtimeSinceStartup)) { Finish("failed", "action_timeout"); return; }
                 // The last plate can destroy its own source stack. Verify the
                 // surviving carried identity before requiring a live source.
@@ -245,11 +248,8 @@ namespace SousChef.Plugin.Actions
                     input(0);
                     if (held != null && !System.Object.ReferenceEquals(ActionObservations.Held(chef), held))
                     { Finish("blocked", "held_item_changed"); return; }
-                    bool withinGrace = recovery.Wait(recoveryReason);
-                    // Recheck once at expiry even if the next periodic retry is
-                    // later. A route restored near 500 ms must not lose solely
-                    // because the last poll happened just before it returned.
-                    if (withinGrace && Time.realtimeSinceStartup < nextRecoveryAttempt) return;
+                    recovery.Wait(recoveryReason);
+                    if (Time.realtimeSinceStartup < nextRecoveryAttempt) return;
                     nextRecoveryAttempt = Time.realtimeSinceStartup + .1f;
                     // Recovery has no usable route to retain. Give rebuilding
                     // a bounded recovery planning budget, rather than an idle

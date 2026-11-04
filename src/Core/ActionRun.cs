@@ -31,11 +31,12 @@ namespace SousChef.Core
             if (Running || owner <= 0) return false;
             Owner = owner; Operation = command.Operation; RequestId = command.Id; Target = command.Destination;
             Source = command.Source; Selector = command.Selector;
-            Started = now; Deadline = now + (command.Milliseconds > 0 ? command.Milliseconds / 1000.0 : 60);
+            Started = now; Deadline = command.Indefinite ? Double.PositiveInfinity : now + (command.Milliseconds > 0 ? command.Milliseconds / 1000.0 : 60);
             State = "running"; Phase = "starting"; Reason = null; Revision++; return true;
         }
         public void Advance(string phase) { if (Running && Phase != phase) { Phase = phase; Revision++; } }
         public bool Expired(double now) { return Running && now >= Deadline; }
+        public void Delay(double seconds) { if (Running && seconds > 0) Deadline += seconds; }
         public void Finish(string state, string reason)
         {
             if (!Running) return;

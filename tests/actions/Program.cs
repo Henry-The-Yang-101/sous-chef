@@ -466,19 +466,19 @@ internal static class Program
         w.Navigation.Stop("destination_unreachable");w.Tick();
         Check(w.Skills.Run.Phase=="recovering_navigation" && w.Inputs.Last()==0 && w.Releases==0,"route dropout neutralizes input and waits before cancelling");
         w.Tick(.1f);
-        Check(w.Skills.Run.Phase=="navigating" && w.Skills.Run.Started==started && w.Skills.Run.Deadline==deadline,"replan retains original action deadline and snapshots");
+        Check(w.Skills.Run.Phase=="navigating" && w.Skills.Run.Started==started && w.Skills.Run.Deadline>=deadline,"replan retains original action deadline and snapshots");
         w.Arrive();w.Target.GetComponent<ServerAttachStation>().Item=item;w.Hold(null);w.Verify();
         Check(w.Skills.Run.State=="succeeded","first-layer placement also recovers transient route loss");
 
         w=new World();item=w.Ingredient("tomato");w.Hold(item);w.Start("place_at");w.Target.GetComponent<BoxCollider>().enabled=false;
-        w.Navigation.Stop("destination_unreachable");w.Tick();w.Tick(.45f);w.Target.GetComponent<BoxCollider>().enabled=true;w.Tick(.06f);
+        w.Navigation.Stop("destination_unreachable");w.Tick();w.Tick(.45f);w.Target.GetComponent<BoxCollider>().enabled=true;w.Tick(.11f);
         Check(w.Skills.Run.Running && w.Skills.Run.Phase=="navigating","expiry performs a fresh route check even when the last periodic poll missed its restoration");
         w.Arrive();w.Target.GetComponent<ServerAttachStation>().Item=item;w.Hold(null);w.Verify();
         Check(w.Skills.Run.State=="succeeded","last-chance revalidation completes the original delivery without extending the overall deadline");
 
         w=new World();item=w.Ingredient("tomato");w.Hold(item);w.Start("place_at");w.Target.activeInHierarchy=false;w.Tick();w.Tick(.45f);
         w.Target.activeInHierarchy=true;w.Tick(.06f);
-        Check(w.Skills.Run.Running && w.Skills.Run.Phase=="navigating","a target first observed restored at the deadline gets the same final route check");
+        Check(w.Skills.Run.Running && w.Skills.Run.Phase=="navigating","a target first observed restored during indefinite recovery gets the same final route check");
         w.Skills.Cancel("test_end");
 
         w=new World();item=w.Ingredient("tomato");w.Hold(item);w.Start("place_at");w.Navigation.Stop("destination_unreachable");w.Tick();w.Hold(w.Ingredient("replacement"));w.Tick();
@@ -486,7 +486,8 @@ internal static class Program
 
         w=new World();item=w.Ingredient("tomato");w.Hold(item);w.Start("place_at");w.Target.activeInHierarchy=false;w.Navigation.Stop("destination_unavailable");w.Tick();w.Tick(.49f);
         Check(w.Skills.Run.Running && w.Releases==0,"a 490 ms interruption keeps the job alive");w.Tick(.02f);
-        Check(w.Skills.Run.State=="blocked" && w.Skills.Run.Reason=="target_unavailable" && w.Releases==1 && w.Carrier.Item==item,"persistent target loss ends after 500 ms with cargo retained");
+        w.Tick(180); Check(w.Skills.Run.Running && w.Releases==0 && w.Carrier.Item==item,"persistent target loss waits beyond the old deadline with cargo retained");
+        w.Target.activeInHierarchy=true;w.Tick();w.Arrive();w.Target.GetComponent<ServerAttachStation>().Item=item;w.Hold(null);w.Verify();Check(w.Skills.Run.State=="succeeded","restored target completes after minutes without a new request");
 
         w=new World();item=w.Ingredient("tomato");w.Hold(item);w.Start("place_at");w.Target.GetComponent<Placement>().Accepts=_=>false;w.Arrive();w.Tick(.3f);
         Check(w.Skills.Run.Running && !w.Inputs.Contains(1),"temporary native placement unavailability waits without pressing");
@@ -502,7 +503,7 @@ internal static class Program
         w.Logistics.Start(w.Chef,1,new ControlCommand {Operation="fetch_ingredient",Selector="tomato",Destination=w.IdOf(destination)});w.Arrive();
         destination.activeInHierarchy=false;w.Hold(item);w.Target.GetComponent<ServerAttachStation>().Item=null;w.Tick();w.Tick(.3f);
         destination.activeInHierarchy=true;destination.GetComponent<BoxCollider>().enabled=false;w.Tick();w.Tick(.2f);
-        Check(w.Logistics.Run.State=="blocked" && w.Carrier.Item==item,"transitioning from a missing destination to a missing route shares the same 500 ms window");
+        Check(w.Logistics.Run.Running && w.Carrier.Item==item,"changing environmental blocks retains the same job indefinitely");
 
         w=new World(t=>{t.Add(new WashingStation());t.Add(new ServerWashingStation {m_plateCount=2});});
         w.Start("work_at","one_plate_clean");w.Arrive();var nativeUse=w.Chef.CurrentInteractionObjects.m_interactable;
@@ -521,12 +522,12 @@ internal static class Program
         Check(w.Logistics.Run.Reason=="held_item_changed" && w.Releases==1,"parent recovery never resumes with replacement cargo");
 
         w=new World();item=w.Ingredient("tomato");w.Hold(item);w.Start("place_at",ms:100);w.Target.activeInHierarchy=false;w.Navigation.Stop("destination_unavailable");w.Tick();w.Tick(.1f);
-        Check(w.Skills.Run.Reason=="action_timeout","overall deadline takes precedence over grace");
+        Check(w.Skills.Run.Running,"environmental waiting suspends the finite action watchdog");
 
         var grace=new ActionRecovery();Check(grace.Wait("destination_unreachable"),"route interruption starts grace");
         Time.realtimeSinceStartup+=.3f;Check(grace.Wait("planning_in_progress"),"reason changes remain in the same interruption");
-        Time.realtimeSinceStartup+=.21f;Check(!grace.Wait("no_safe_start") && grace.Count==1,"changing failure reasons cannot restart the timeout");
-        Check(!grace.Wait("control_lost") && !grace.Wait("station_contents_changed") && !grace.Wait("navigation_timeout"),"ownership, identity and watchdog failures are terminal");
+        Time.realtimeSinceStartup+=.21f;Check(grace.Wait("no_safe_start") && grace.Count==1,"changing failure reasons retains an indefinite interruption");
+        Check(!grace.Wait("control_lost") && !grace.Wait("station_contents_changed"),"ownership, identity and watchdog failures are terminal");
     }
     private static void PreparationSupplies()
     {

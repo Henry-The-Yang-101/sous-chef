@@ -10,15 +10,18 @@ namespace SousChef.Core
         public long Sequence;
         public int Milliseconds, Buttons;
         public float X, Y;
+        public bool Indefinite;
+        public TaskRequest Task;
 
         // Small, bounded ASCII command grammar; replies are NDJSON.
         public static ControlCommand Parse(string line)
         {
-            if (line == null || line.Length > 256) throw new ArgumentException("command_too_long");
+            if (line == null || line.Length > (line.StartsWith("task ", StringComparison.Ordinal) ? 2048 : 256)) throw new ArgumentException("command_too_long");
             string[] p = line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
             if (p.Length < 2 || p[1].Length > 32) throw new ArgumentException("invalid_command");
             foreach (char c in p[1]) if (!Char.IsLetterOrDigit(c) && c != '-' && c != '_') throw new ArgumentException("invalid_id");
             var result = new ControlCommand { Operation = p[0], Id = p[1] };
+            if (p[0] == "task") { result.Task = TaskRequest.Parse(p); result.Indefinite = true; return result; }
             if (Array.IndexOf(ActionRun.LogisticsNames, p[0]) >= 0)
             {
                 if (p[0] == "get_plate" || p[0] == "return_utensil")
@@ -86,7 +89,7 @@ namespace SousChef.Core
             for (int i = 1; i < value.Length; i++) if (value[i] < '0' || value[i] > '9') return false;
             return true;
         }
-        private static string DecodeSelector(string token)
+        internal static string DecodeSelector(string token)
         {
             if (token.Length < 2 || token.Length > 129 || token[0] != 's') throw new ArgumentException("invalid_selector");
             string encoded = token.Substring(1);

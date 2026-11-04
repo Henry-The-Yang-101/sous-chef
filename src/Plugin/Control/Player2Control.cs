@@ -15,6 +15,8 @@ namespace SousChef.Plugin.Control
         private readonly InteractionActions interactions;
         private readonly LogisticsActions logistics;
         private readonly ThrowOptions throwOptions;
+        private readonly TaskActions tasks;
+        private bool lastWasTask;
         private bool lastWasLogistics;
         private long navigationSequence;
         private readonly ControlLease lease = new ControlLease();
@@ -41,6 +43,7 @@ namespace SousChef.Plugin.Control
             navigation = new NavigationActions(Walk, NeutralNavigation);
             interactions = new InteractionActions(navigation, Buttons, FinishInteraction);
             logistics = new LogisticsActions(navigation, interactions, Buttons, FinishLogistics);
+            tasks = new TaskActions(navigation, interactions, Buttons, FinishLogistics);
             throwOptions = new ThrowOptions(navigation);
             server = new ControlServer(port, Json.Object("type", "hello", "controlProtocolVersion", 1,
                 "sessionId", session, "bridgeVersion", "0.7.3", "player", 2, "mode", "direct_logical_input", "maxHoldMs", 1000, "actions", ActionRun.AllNames),
@@ -52,7 +55,7 @@ namespace SousChef.Plugin.Control
         {
             if (disposed) return;
             KitchenGate gate = KitchenGate.Inspect();
-            if (flow != gate.Flow) { Revoke("round_changed"); logistics.Reset("round_changed"); throwOptions.Reset(); navigation.Reset("round_changed"); flow = gate.Flow; nextScan = 0; }
+            if (flow != gate.Flow) { Revoke("round_changed"); logistics.Reset("round_changed"); tasks.Reset("round_changed"); throwOptions.Reset(); navigation.Reset("round_changed"); flow = gate.Flow; nextScan = 0; }
             if (Now >= nextScan) { Discover(); nextScan = Now + 0.25; }
             string reason = Check(gate);
             bool observationAllowed = reason == null || (reason == "game_unfocused" && Check(gate, true) == null);
@@ -68,14 +71,15 @@ namespace SousChef.Plugin.Control
             if (navigation.Action.State == "navigating" && lease.Owner(Now) != navigation.Action.Owner) navigation.Stop("control_lost");
             if (interactions.Run.Running && lease.Owner(Now) != interactions.Run.Owner) interactions.Cancel("control_lost");
             if (logistics.Run.Running && lease.Owner(Now) != logistics.Run.Owner) logistics.Cancel("control_lost");
+            if (tasks.Run.Running && lease.Owner(Now) != tasks.Run.Owner) tasks.Cancel("control_lost");
             server.Pump(Handle);
-            if (reason == null) { navigation.Tick(target); interactions.Tick(); logistics.Tick(); }
+            if (reason == null) { navigation.Tick(target); interactions.Tick(); logistics.Tick(); tasks.Tick(); }
             else if (observationAllowed) navigation.WarmCatalogue(target);
             // The browser may be in front while the catalogue is observed.
             // Advance read-only previews under the observation gates; never
             // advance input-owning actions without the normal input gates.
             if (observationAllowed &&
-                lease.Owner(Now) == 0 && navigation.Action.State == "idle" && !interactions.Run.Running && !logistics.Run.Running)
+                lease.Owner(Now) == 0 && navigation.Action.State == "idle" && !interactions.Run.Running && !logistics.Run.Running && !tasks.Run.Running)
                 throwOptions.Tick(target);
             else throwOptions.Reset();
         }
@@ -159,28 +163,30 @@ namespace SousChef.Plugin.Control
                 Discover(); KitchenGate gate = KitchenGate.Inspect(); unavailable = Check(gate);
                 string observationError = Check(gate, true);
                 if (observationError != null) { navigation.Invalidate(observationError); actions = Json.Object("actions", new[] { Json.Object("name", "stop") }, "destinations", new object[0], "navigation", navigation.Describe()); }
-                else if (lease.Owner(Now) != 0 && navigation.Action.State == "idle" && !interactions.Run.Running && !logistics.Run.Running)
+                else if (lease.Owner(Now) != 0 && navigation.Action.State == "idle" && !interactions.Run.Running && !logistics.Run.Running && !tasks.Run.Running)
                     actions = Json.Object("actions", new[] { Json.Object("name", "stop") }, "destinations", new object[0], "reason", "already_claimed", "navigation", navigation.Describe());
                 else actions = Catalog();
             }
-            else if (command.Operation == "navigate_to" || InteractionActions.Handles(command.Operation) || LogisticsActions.Handles(command.Operation))
+            else if (command.Operation == "task" || command.Operation == "navigate_to" || InteractionActions.Handles(command.Operation) || LogisticsActions.Handles(command.Operation))
             {
                 Discover(); unavailable = Check(KitchenGate.Inspect());
                 if (unavailable != null) error = unavailable;
-                else if (navigation.Action.State != "idle" || interactions.Run.Running || logistics.Run.Running) error = "action_in_progress";
+                else if (navigation.Action.State != "idle" || interactions.Run.Running || logistics.Run.Running || tasks.Run.Running) error = "action_in_progress";
                 else if (!lease.Claim(client, Now)) error = "already_claimed";
                 else
                 {
                     Restore(); Install(); navigationSequence = 0;
                     bool requestedLogistics = LogisticsActions.Handles(command.Operation);
-                    long priorRevision = requestedLogistics ? logistics.Run.Revision : interactions.Run.Revision;
+                    long priorRevision = command.Operation == "task" ? tasks.Run.Revision : requestedLogistics ? logistics.Run.Revision : interactions.Run.Revision;
                     if (command.Operation == "navigate_to")
                     {
                         if (!NativeSimulator.StartPortalPoint(navigation, target, client, command.Destination, out error))
                             error = navigation.Start(target, client, command.Destination);
                     }
+                    else if (command.Operation == "task") error = tasks.Start(target, client, command);
                     else error = requestedLogistics ? logistics.Start(target, client, command) : interactions.Start(target, client, command);
-                    if (error == null || (requestedLogistics ? logistics.Run.Revision : interactions.Run.Revision) != priorRevision) lastWasLogistics = requestedLogistics;
+                    if (error == null || (command.Operation == "task" ? tasks.Run.Revision : requestedLogistics ? logistics.Run.Revision : interactions.Run.Revision) != priorRevision)
+                    { lastWasLogistics = requestedLogistics; lastWasTask = command.Operation == "task"; }
                     if (error != null) Revoke(error);
                 }
             }
@@ -194,7 +200,7 @@ namespace SousChef.Plugin.Control
             else if (command.Operation == "input")
             {
                 unavailable = Check(KitchenGate.Inspect());
-                if (navigation.Action.State == "navigating" || interactions.Run.Running || logistics.Run.Running) error = "action_in_progress";
+                if (navigation.Action.State == "navigating" || interactions.Run.Running || logistics.Run.Running || tasks.Run.Running) error = "action_in_progress";
                 else if (unavailable != null) { Revoke(unavailable); error = unavailable; }
                 else error = lease.Set(client, command, Now);
             }
@@ -209,7 +215,7 @@ namespace SousChef.Plugin.Control
         public object Describe(int client)
         {
             int owner = lease.Owner(Now);
-            return Json.Object("player", 2, "navigation", navigation.Describe(), "action", lastWasLogistics ? logistics.Describe() : interactions.Describe(), "available", unavailable == null, "reason", unavailable,
+            return Json.Object("player", 2, "navigation", navigation.Describe(), "action", lastWasTask ? tasks.Describe() : lastWasLogistics ? logistics.Describe() : interactions.Describe(), "available", unavailable == null, "reason", unavailable,
                 "worker", WorkerHost.Current == null ? Json.Object("state", "disabled") : Json.Object("state", WorkerHost.Current.Ready ? "ready" : "fallback", "pid", WorkerHost.Current.ProcessId, "error", WorkerHost.Current.Error, "encodedMessages", WorkerHost.Current.EncodedMessages, "throwBatches", WorkerHost.Current.Flights == null ? 0L : WorkerHost.Current.Flights.CompletedBatches),
                 "claimed", owner != 0, "ownedByYou", client != 0 && owner == client,
                 "lastRelease", lease.LastRelease, "inputTrace", traceInput ? inputTrace.ToArray() : null,
@@ -232,17 +238,17 @@ namespace SousChef.Plugin.Control
         }
         private void NeutralNavigation()
         {
-            if (interactions.Run.Running || logistics.Run.Running) { Buttons(0); return; }
+            if (interactions.Run.Running || logistics.Run.Running || tasks.Run.Running) { Buttons(0); return; }
             int owner = navigation.Action.Owner;
             if (owner != 0 && lease.Release(owner, "action_finished")) Restore();
         }
         private void Buttons(int mask)
         {
-            int owner = interactions.Run.Running ? interactions.Run.Owner : logistics.Run.Owner;
+            int owner = interactions.Run.Running ? interactions.Run.Owner : tasks.Run.Running ? tasks.Run.Owner : logistics.Run.Owner;
             if (owner == 0 || lease.Owner(Now) != owner) return;
             lease.Set(owner, new ControlCommand { Sequence = ++navigationSequence, Milliseconds = 300, Buttons = mask }, Now);
         }
-        private void FinishInteraction() { if (logistics.Run.Running) Buttons(0); else FinishLogistics(); }
+        private void FinishInteraction() { if (logistics.Run.Running || tasks.Run.Running) Buttons(0); else FinishLogistics(); }
         private void FinishLogistics() { lease.Revoke("action_finished"); Restore(); }
         private object Catalog()
         {
@@ -291,7 +297,7 @@ namespace SousChef.Plugin.Control
                     "operations", canPass ? new[] { "throw_to_player" } : new string[0], "throw", preview));
             }
             var actions = (System.Collections.Generic.List<object>)catalog["actions"];
-            if (!interactions.Run.Running && !logistics.Run.Running && navigation.Action.State == "idle")
+            if (!interactions.Run.Running && !logistics.Run.Running && !tasks.Run.Running && navigation.Action.State == "idle")
                 foreach (string name in ActionRun.Names)
                 {
                     if (name == "navigate_to" || name == "stop") continue;
@@ -309,9 +315,9 @@ namespace SousChef.Plugin.Control
                     actions.Add(Json.Object("name", name, "parameters", parameters));
                 }
             else catalog["actions"] = new[] { Json.Object("name", "stop") };
-            catalog["targets"] = targets; catalog["players"] = players; catalog["action"] = lastWasLogistics ? logistics.Describe() : interactions.Describe();
+            catalog["targets"] = targets; catalog["players"] = players; catalog["action"] = lastWasTask ? tasks.Describe() : lastWasLogistics ? logistics.Describe() : interactions.Describe();
             catalog["throwOptionsComplete"] = throwOptions.End();
-            logistics.Decorate(catalog, target); return catalog;
+            logistics.Decorate(catalog, target); tasks.Decorate(catalog, target); return catalog;
         }
         private void Install()
         {
@@ -341,7 +347,7 @@ namespace SousChef.Plugin.Control
             if (scheme.m_dashButton == bridgeDash) scheme.m_dashButton = oldDash;
             scheme = null;
         }
-        private void Revoke(string reason) { logistics.Cancel(reason); interactions.Cancel(reason); if (navigation.Action.State == "navigating") navigation.Stop(reason); lease.Revoke(reason); Restore(); }
+        private void Revoke(string reason) { tasks.Cancel(reason); logistics.Cancel(reason); interactions.Cancel(reason); if (navigation.Action.State == "navigating") navigation.Stop(reason); lease.Revoke(reason); Restore(); }
         public void Dispose() { disposed = true; Revoke("shutdown"); navigation.Dispose(); server.Dispose(); }
 
         private sealed class Axis : ILogicalValue
