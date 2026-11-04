@@ -88,3 +88,11 @@ It rescans after each fire, including newly spread fires, and finishes when no
 remaining fire has a certified reachable spray stance. A selected fire blocked
 during approach/spraying is retained and retried indefinitely. The tool returns
 to its observed holder or an available counter when possible.
+
+## Toss burnt food
+
+`toss_burnt_food` requires obtainable food in the native ruined state. It captures
+the current burner, picks up the exact food/utensil, and uses native disposal.
+A surviving empty utensil returns to that burner, otherwise another compatible
+available burner, otherwise an available counter. Occupied burners are never
+cleared. If no disposal/return route exists, it waits holding the original cargo.
