@@ -162,7 +162,7 @@ namespace SousChef.Plugin.Actions
                 { evidence = dropPlan.Describe(); SetPhase("drop_press"); return null; }
                 if (request.Operation == "throw_to" || request.Operation == "throw_to_player")
                 {
-                    error = throws.Prepare(chef, held, target);
+                    error = throws.Prepare(chef, held, target, groundHandoff: command.GroundHandoff);
                     if (error == null) error = PlanThrow(owner);
                 }
                 else
@@ -370,7 +370,7 @@ namespace SousChef.Plugin.Actions
                 {
                     if (!System.Object.ReferenceEquals(ActionObservations.Held(chef), held)) { Finish("blocked", "held_item_changed"); return; }
                     if (Time.frameCount <= pressFrame + 1 || Time.realtimeSinceStartup - phaseStarted < .08f) { input(2); return; }
-                    ThrowPlan fresh; string error = throws.Prepare(chef, held, target);
+                    ThrowPlan fresh; string error = PrepareThrow();
                     if (error != null || !throws.From(Foot(), true, out fresh)) { evidence = throws.Diagnostics; Finish("blocked", error ?? "throw_became_invalid"); return; }
                     throwPlan = fresh; evidence = fresh.Describe(); throwReleased = true; input(0); SetPhase("flight"); return;
                 }
@@ -606,11 +606,16 @@ namespace SousChef.Plugin.Actions
         }
         private Vector3 Foot()
         { return chef.transform.position - Vector3.up * (chef.transform.position.y - chef.GetComponent<CapsuleCollider>().bounds.min.y); }
+        private string PrepareThrow()
+        {
+            string error = throws.Prepare(chef, held, target, groundHandoff: command.GroundHandoff);
+            return error ?? (throwPlan == null || throws.RestoreGround(throwPlan) ? null : "ground_landing_became_invalid");
+        }
         private void Aim()
         {
             input(0);
             if (!System.Object.ReferenceEquals(ActionObservations.Held(chef), held)) { Finish("blocked", "held_item_changed"); return; }
-            string error = throws.Prepare(chef, held, target); ThrowPlan current;
+            string error = PrepareThrow(); ThrowPlan current;
             if (error != null || !throws.From(Foot(), false, out current)) { evidence = throws.Diagnostics; Finish("blocked", error ?? "throw_became_invalid"); return; }
             PlayerControlsHelper.TurnTowardsDirection(chef.gameObject, current.Direction, chef.Movement.TurnSpeed, Mathf.Min(Time.deltaTime, .05f));
             if (chef.Motion.GetVelocityXZ().magnitude > .1f || Vector3.Angle(chef.transform.forward, current.Direction) > .5f)
@@ -623,6 +628,13 @@ namespace SousChef.Plugin.Actions
             var player = target.GetComponent<PlayerControls>();
             bool received = player != null ? held != null && System.Object.ReferenceEquals(ActionObservations.Held(player), held) :
                 (held != null && ActionObservations.Occupant(target) == held);
+            if (!received && player != null && throwPlan.Ground && drops.Received(held, player))
+            {
+                if (dropStableSince < 0 || Vector3.Distance(lastDropPosition, held.transform.position) > .03f) dropStableSince = Time.realtimeSinceStartup;
+                lastDropPosition = held.transform.position;
+                received = Time.realtimeSinceStartup - dropStableSince >= .1f;
+            }
+            else if (!received) dropStableSince = -1;
             if (!received && container != null && ingredient != null)
                 received = ActionObservations.MatchingCount(container, ingredient) > initialMatches && (held == null || !held.activeInHierarchy);
             if (received) evidence = Json.Object("throw", throwPlan.Describe(), "receivedByInstanceId", target.GetInstanceID(), "item", ItemEvidence(held));

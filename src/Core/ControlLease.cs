@@ -11,6 +11,8 @@ namespace SousChef.Core
         public int Milliseconds, Buttons;
         public float X, Y;
         public bool Indefinite;
+        // Internal task handoff mode; ordinary throw_to_player keeps catch semantics.
+        public bool GroundHandoff;
         public TaskRequest Task;
 
         // Small, bounded ASCII command grammar; replies are NDJSON.

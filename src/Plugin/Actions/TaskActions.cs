@@ -56,6 +56,7 @@ namespace SousChef.Plugin.Actions
                 "repetitions", request == null ? 1 : request.Repetitions, "infinite", request != null && request.Repetitions == 0,
                 "completedRepetitions", completed, "completedSteps", completedSteps, "waitingReason", waitingReason,
                 "handoff", handoffEvidence, "pendingDeliveries", pendingDeliveries.Count, "observationError", observationError,
+                "handoffPlanning", waitingReason == "waiting_for_player_handoff" ? handoffThrows.Describe() : null,
                 "child", childStarted ? child.Describe() : null));
         }
         public string Start(PlayerControls actor, int owner, ControlCommand command)

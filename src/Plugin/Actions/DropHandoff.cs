@@ -24,6 +24,8 @@ namespace SousChef.Plugin.Actions
         private int groundMask;
         private static float Foot(PlayerControls player)
         { var capsule = player.GetComponent<CapsuleCollider>(); return capsule == null ? player.transform.position.y : capsule.bounds.min.y; }
+        internal static bool GroundHazard(Collider c)
+        { return c.CompareTag("Hazard") || c.GetComponentInParent<RespawnCollider>() != null || c.GetComponentInParent<ServerFireHazard>() != null || c.GetComponentInParent<Teleportal>() != null; }
         public bool Plan(PlayerControls chef, GameObject item, PlayerControls player, out DropPlan plan)
         {
             plan = null;
@@ -66,7 +68,7 @@ namespace SousChef.Plugin.Actions
                 {
                     Collider c = hits[j].collider;
                     if (c == null || c.transform.IsChildOf(chef.transform) || c.transform.IsChildOf(item.transform)) continue;
-                    if (c.GetComponentInParent<ServerFireHazard>() != null || c.GetComponentInParent<RespawnCollider>() != null || c.GetComponentInParent<Teleportal>() != null) return false;
+                    if (GroundHazard(c)) return false;
                     if (c.isTrigger || Physics.GetIgnoreLayerCollision(detachedLayer, c.gameObject.layer)) continue;
                     if (hits[j].distance < closest) { closest = hits[j].distance; contact = hits[j]; }
                 }
@@ -78,20 +80,22 @@ namespace SousChef.Plugin.Actions
             }
             return false;
         }
-        public bool Received(GameObject item, PlayerControls player, DropPlan plan)
+        public bool Received(GameObject item, PlayerControls player, DropPlan plan = null)
         {
             if (item == null || !item.activeInHierarchy) return false;
             if (System.Object.ReferenceEquals(ActionObservations.Held(player), item)) return true;
-            if (plan.Counter != null) return Vector3.Distance(plan.Counter.transform.position, player.transform.position) <= 1.6f && System.Object.ReferenceEquals(ActionObservations.Occupant(plan.Counter), item);
+            if (plan != null && plan.Counter != null) return Vector3.Distance(plan.Counter.transform.position, player.transform.position) <= 1.6f && System.Object.ReferenceEquals(ActionObservations.Occupant(plan.Counter), item);
             var physical = item.GetComponent<PhysicalAttachment>(); var attachment = GameObjectUtils.RequestInterface<IAttachment>(item);
             if (attachment == null || attachment.IsAttached() || physical == null || physical.m_motion == null || physical.m_motion.GetVelocity().magnitude > .3f) return false;
             Vector3 offset = item.transform.position - player.transform.position; offset.y = 0;
             if (offset.magnitude > 1.5f) return false;
             var shape = item.GetComponent<Collider>();
             if (shape == null || Mathf.Abs(shape.bounds.min.y - Foot(player)) > .35f) return false;
-            int count = Physics.RaycastNonAlloc(shape.bounds.center + Vector3.up * .05f, Vector3.down, hits, 1, groundMask, QueryTriggerInteraction.Ignore);
+            var ground = player.GetComponent<GroundCast>(); if (ground == null) return false;
+            int receivingMask = ActionObservations.Read<LayerMask>(ground, "m_landscapeMask").value;
+            int count = Physics.RaycastNonAlloc(shape.bounds.center + Vector3.up * .05f, Vector3.down, hits, 1, receivingMask, QueryTriggerInteraction.Ignore);
             if (count >= hits.Length) return false;
-            for (int i = 0; i < count; i++) if (hits[i].normal.y > .6f && Mathf.Abs(hits[i].point.y - Foot(player)) < .35f) return true;
+            for (int i = 0; i < count; i++) if (hits[i].collider != null && !GroundHazard(hits[i].collider) && hits[i].normal.y > .6f && Mathf.Abs(hits[i].point.y - Foot(player)) < .35f) return true;
             return false;
         }
     }

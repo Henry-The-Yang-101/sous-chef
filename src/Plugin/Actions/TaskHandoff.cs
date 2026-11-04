@@ -10,7 +10,7 @@ namespace SousChef.Plugin.Actions
         private sealed class Handoff
         {
             public GameObject Target;
-            public bool Throw, Transport;
+            public bool Throw, Transport, Ground;
             public int Player;
             public string Mode;
             public Vector3? Approach;
@@ -18,24 +18,17 @@ namespace SousChef.Plugin.Actions
         }
         private object handoffEvidence;
         private readonly ThrowOptions handoffThrows;
-        private bool pendingHandoffThrow;
-        private bool ThrowPossible(GameObject item, GameObject target)
+        private bool ThrowPossible(GameObject item, GameObject target, bool ground = false)
         {
-            object description; bool feasible = handoffThrows.Check(target, out description);
-            pendingHandoffThrow |= (string)((Json.Record)description)["state"] == "pending";
-            return feasible;
+            object description; return handoffThrows.Check(target, out description, ground);
         }
         private Handoff FindHandoff(GameObject item, int player, List<Vector3> excluded, HashSet<GameObject> blockedTargets)
         {
             if (!System.Object.ReferenceEquals(ActionObservations.Held(chef), item)) throw new InvalidOperationException("task_cargo_changed");
-            handoffThrows.Begin(chef); pendingHandoffThrow = false;
-            try
-            {
-                Handoff choice = FindHandoffCore(item, player, excluded, blockedTargets);
-                // Give higher-priority counter/pass proofs their bounded Update
-                // slices before committing cargo to a lower-priority transport.
-                return pendingHandoffThrow && choice != null && (choice.Player != 0 || choice.Transport) ? null : choice;
-            }
+            handoffThrows.Begin(chef);
+            // Rank usable choices. An unfinished counter proof must not hold a
+            // feasible ground pass hostage on a continuously moving kitchen.
+            try { return FindHandoffCore(item, player, excluded, blockedTargets); }
             finally { handoffThrows.End(); }
         }
         private Handoff FindHandoffCore(GameObject item, int player, List<Vector3> excluded, HashSet<GameObject> blockedTargets)
@@ -52,10 +45,11 @@ namespace SousChef.Plugin.Actions
                 if (candidate < score) { best = target; throwItem = !walk; score = candidate; }
             }
             if (best != null) return new Handoff { Target = best, Throw = throwItem, Mode = throwItem ? "throw_near_player" : "counter_near_player" };
-            if (!humanSearchComplete) return null;
             DropPlan drop;
             if (new DropHandoff().Plan(chef, item, human, out drop) || ThrowPossible(item, human.gameObject))
                 return new Handoff { Player = player, Mode = "at_player" };
+            if (ThrowPossible(item, human.gameObject, true))
+                return new Handoff { Player = player, Ground = true, Mode = "throw_ground_near_player" };
             navigation.PrepareStances(chef);
             for (int i = 0; i < 12; i++)
             {
@@ -138,7 +132,7 @@ namespace SousChef.Plugin.Actions
                         DropPlan proof;
                         if (!new DropHandoff().Plan(chef, item, Human(player), out proof)) { reject(choice.Approach.Value); continue; }
                     }
-                    delivery = new TaskStep { Phase = "giving_to_player", Command = delegate { return new ControlCommand { Operation = "throw_to_player", Destination = player.ToString() }; } };
+                    delivery = new TaskStep { Phase = "giving_to_player", Command = delegate { return new ControlCommand { Operation = "throw_to_player", Destination = player.ToString(), GroundHandoff = choice.Ground }; } };
                 }
                 else delivery = Do(choice.Throw ? "throw_to" : "place_at", choice.Target);
                 delivery.ReplanOnBlock = true; yield return delivery;

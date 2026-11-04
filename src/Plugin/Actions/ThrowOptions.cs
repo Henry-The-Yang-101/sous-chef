@@ -19,14 +19,15 @@ namespace SousChef.Plugin.Actions
             public string Reason = ThrowPlanner.Pending;
             public float RetryAt;
             public bool Seen;
+            public bool Ground;
             public long LastSlice;
         }
         private readonly NavigationActions navigation;
         private readonly DropHandoff drops = new DropHandoff();
-        private readonly Dictionary<int, Option> options = new Dictionary<int, Option>();
+        private readonly Dictionary<long, Option> options = new Dictionary<long, Option>();
         private PlayerControls chef;
         private GameObject item;
-        private Vector3 position, forward, mount;
+        private Vector3 forward, mount;
         private float requestedAt;
         private long slices;
         private bool observing, observeWinds;
@@ -40,6 +41,14 @@ namespace SousChef.Plugin.Actions
         public void EndObservation() { observing = false; observedWinds = null; }
 
         public ThrowOptions(NavigationActions navigation) { this.navigation = navigation; }
+        public object Describe()
+        {
+            var result = new List<object>();
+            foreach (Option option in options.Values)
+                result.Add(Json.Object("targetInstanceId", option.Target == null ? 0 : option.Target.GetInstanceID(),
+                    "ground", option.Ground, "reason", option.Reason, "slices", option.LastSlice, "diagnostics", option.Planner.Diagnostics));
+            return result;
+        }
         public void Reset()
         {
             foreach (Option option in options.Values) option.Planner.CancelPlanning();
@@ -47,8 +56,11 @@ namespace SousChef.Plugin.Actions
         }
         private bool SameActor(PlayerControls actor)
         {
+            // Translation (including raft motion) does not change held geometry.
+            // Keep bounded candidate progress; Check revalidates every positive
+            // proof with current launch physics, obstacles and walking routes.
             return actor != null && actor == chef && item != null && item == ActionObservations.Held(actor) &&
-                Vector3.Distance(position, actor.transform.position) < .05f && Vector3.Angle(forward, actor.transform.forward) < 1 &&
+                Vector3.Angle(forward, actor.transform.forward) < 1 &&
                 Vector3.Distance(mount, actor.transform.InverseTransformPoint(item.transform.position)) < .02f;
         }
         public void Begin(PlayerControls actor)
@@ -56,7 +68,7 @@ namespace SousChef.Plugin.Actions
             if (!SameActor(actor))
             {
                 Reset(); chef = actor; item = actor == null ? null : ActionObservations.Held(actor);
-                if (actor != null) { position = actor.transform.position; forward = actor.transform.forward; }
+                if (actor != null) forward = actor.transform.forward;
                 if (item != null) mount = actor.transform.InverseTransformPoint(item.transform.position);
             }
             observing = true; observedWinds = null;
@@ -80,10 +92,10 @@ namespace SousChef.Plugin.Actions
             { option.Reason = "target_unavailable"; option.RetryAt = Time.realtimeSinceStartup + 2; return; }
             option.Position = option.Target.transform.position; option.Forward = option.Target.transform.forward;
             option.Occupant = Occupant(option.Target);
-            option.Reason = option.Planner.Prepare(chef, item, option.Target, Winds()) ?? ThrowPlanner.Pending;
+            option.Reason = option.Planner.Prepare(chef, item, option.Target, Winds(), option.Ground) ?? ThrowPlanner.Pending;
             option.RetryAt = Time.realtimeSinceStartup + 2;
         }
-        public bool Check(GameObject target, out object description)
+        public bool Check(GameObject target, out object description, bool ground = false)
         {
             description = Json.Object("state", "unavailable", "reason", "hands_empty");
             if (chef == null || item == null || target == null) return false;
@@ -91,8 +103,9 @@ namespace SousChef.Plugin.Actions
             if (player != null && drops.Plan(chef, item, player, out drop))
             { description = Json.Object("state", "feasible", "plan", drop.Describe()); return true; }
             Option option;
-            if (!options.TryGetValue(target.GetInstanceID(), out option))
-            { option = new Option { Target = target }; options[target.GetInstanceID()] = option; Prepare(option); }
+            long key = ((long)target.GetInstanceID() << 1) | (ground ? 1L : 0L);
+            if (!options.TryGetValue(key, out option))
+            { option = new Option { Target = target, Ground = ground }; options[key] = option; Prepare(option); }
             else if (!SameTarget(option) || (option.Reason != null && option.Reason != ThrowPlanner.Pending && Time.realtimeSinceStartup >= option.RetryAt)) Prepare(option);
             option.Seen = true;
             if (option.Plan != null)
@@ -102,7 +115,8 @@ namespace SousChef.Plugin.Actions
                 ThrowPlan checkedPlan = null; Vector3 stance; float routeCost = Single.MaxValue;
                 Vector3 foot = chef.transform.position; foot.y = chef.GetComponent<CapsuleCollider>().bounds.min.y;
                 float uncertainty = Vector3.Distance(option.Plan.Stance, foot) < .02f ? 0 : ArrivalCheck.PositionTolerance + .02f;
-                if (option.Planner.Prepare(chef, item, target, Winds()) != null ||
+                if (option.Planner.Prepare(chef, item, target, Winds(), option.Ground) != null ||
+                    !option.Planner.RestoreGround(option.Plan) ||
                     !navigation.TryStance(option.Plan.Stance, out stance) || Vector3.Distance(stance, option.Plan.Stance) > .02f ||
                     !option.Planner.From(stance, false, out checkedPlan, uncertainty) || (routeCost = navigation.RouteCost(stance)) == Single.MaxValue)
                     Prepare(option);
@@ -114,11 +128,11 @@ namespace SousChef.Plugin.Actions
         }
         public bool End()
         {
-            var removed = new List<int>(); bool complete = true;
+            var removed = new List<long>(); bool complete = true;
             foreach (var pair in options)
                 if (!pair.Value.Seen) { pair.Value.Planner.CancelPlanning(); removed.Add(pair.Key); }
                 else if (pair.Value.Reason == ThrowPlanner.Pending) complete = false;
-            foreach (int key in removed) options.Remove(key);
+            foreach (long key in removed) options.Remove(key);
             EndObservation(); return complete;
         }
         public void Tick(PlayerControls actor)

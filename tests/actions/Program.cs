@@ -1033,7 +1033,7 @@ internal static class Program
         Check(w.Skills.Run.State=="succeeded" && w.Skills.Run.Reason=="item_handed_off_nearby" && !w.Inputs.Contains(2),"nearby counter delivery uses pickup placement, not a charged throw");
 
         w=new World();item=w.Ingredient("tomato");var physical=item.Add(new PhysicalAttachment {m_motion=new RigidbodyMotion()});var attachment=item.Add(new ServerPhysicalAttachment {Attached=true});item.Add(new BoxCollider {size=Vector3.one*.2f});item.transform.position=new Vector3(0,1,-.6f);w.Hold(item);
-        human=new GameObject("human");player=human.Add(new PlayerControls());human.Add(new PlayerIDProvider {Id=0});human.Add(new CapsuleCollider());human.Add(new ServerPlayerAttachmentCarrier());human.transform.position=new Vector3(0,0,-.2f);
+        human=new GameObject("human");player=human.Add(new PlayerControls());human.Add(new PlayerIDProvider {Id=0});human.Add(new CapsuleCollider());human.Add(new GroundCast());human.Add(new ServerPlayerAttachmentCarrier());human.transform.position=new Vector3(0,0,-.2f);
         w.Chef.CurrentInteractionObjects.m_iHandlePlacement=null;w.Chef.CurrentInteractionObjects.m_TheOriginalHandlePickup=null;
         var floor=w.Colliders[0];
         Physics.Sphere=(p,r,d,length)=>d.y<-.001f && p.y-r>=0 && p.y+d.y*length-r<=0 ? new[] {new RaycastHit {collider=floor,point=new Vector3(p.x,0,p.z),normal=Vector3.up,distance=(p.y-r)/-d.y}} : new RaycastHit[0];
@@ -1049,6 +1049,39 @@ internal static class Program
         Check(!drops.Plan(w.Chef,item,player,out drop),"nearby horizontal position on a different deck is not a valid drop handoff");
         Physics.Sphere=(p,r,d,length)=>new RaycastHit[0];
     }
-    private static void Main() { CounterForecasts();PersistentTasks();HumanSinkEligibility();NativeUtensilDefinitions();MixerReadiness();ReadyFoodTasks();PauseTimers();MovingPickups();Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
+    private static void GroundThrows()
+    {
+        var w=new World();var item=w.Ingredient("tomato");item.Add(new Throwable());item.Add(new PhysicalAttachment {m_motion=new RigidbodyMotion()});item.Add(new ServerPhysicalAttachment {Attached=true});item.Add(new BoxCollider {size=Vector3.one*.2f});
+        w.Chef.gameObject.Add(new AttachmentThrower());w.Chef.gameObject.Add(new ClientAttachmentThrower());w.Chef.gameObject.Add(new ServerAttachmentThrower());
+        var human=new GameObject("busy human");human.Add(new PlayerControls());human.Add(new PlayerIDProvider {Id=0});human.Add(new ServerPlayerAttachmentCarrier {Item=new GameObject("held meal")});w.Colliders.Add(human.Add(new CapsuleCollider()));human.Add(new GroundCast());human.transform.yaw=Mathf.PI;
+        float flight;ThrowTrajectory.FlightTime(.1f-1,8*Mathf.Tan(15*Mathf.Deg2Rad),-9.81f,0,.02f,out flight);
+        w.Chef.transform.position=new Vector3(0,0,-1.25f-8*flight-.4f);item.transform.position=w.Chef.transform.position+new Vector3(0,1,.4f);w.Hold(item);
+        Physics.Nearby=(p,r)=>w.Colliders.Where(c=>Vector3.Distance(p,c.bounds.ClosestPoint(p))<=r).ToArray();
+        var planner=new ThrowPlanner();ThrowPlan plan;
+        Check(planner.Prepare(w.Chef,item,human)=="player_cannot_catch","ordinary player passes retain their native catch preconditions");
+        Check(planner.Prepare(w.Chef,item,human,groundHandoff:true)==null && planner.From(w.Chef.transform.position,false,out plan) && plan.Ground,"a checked floor throw works with full human hands and without a catcher");
+        var options=new ThrowOptions(w.Navigation);object preview;options.Begin(w.Chef);options.Check(human,out preview,true);options.End();
+        bool ready=false;
+        for(int n=0;n<20 && !ready;n++)
+        {
+            w.Chef.transform.position+=Vector3.right*.1f;item.transform.position+=Vector3.right*.1f;
+            w.Navigation.Available(w.Chef);options.Tick(w.Chef);options.Begin(w.Chef);ready=options.Check(human,out preview,true);options.End();
+        }
+        Check(ready,"bounded throw preview can make progress while a raft translates the chef");
+        var ray=Physics.Ray;
+        Physics.Ray=(p,d,length,mask)=>Math.Abs(p.x)>.05f ? new RaycastHit[0] : ray(p,d,length,mask);
+        w.Chef.transform.position.x=0;item.transform.position.x=0;
+        Check(planner.Prepare(w.Chef,item,human,groundHandoff:true)=="no_nearby_ground","a supported center cannot hide an unsupported edge of the landing footprint");
+        Physics.Ray=ray;
+        var wall=new GameObject("wall across throw").Add(new BoxCollider());Physics.Sphere=(p,r,d,length)=>new[] {new RaycastHit {collider=wall}};
+        Check(planner.Prepare(w.Chef,item,human,groundHandoff:true)==null && !planner.From(w.Chef.transform.position,false,out plan),"floor throws cannot bypass solid flight obstacles");
+        Physics.Sphere=(p,r,d,length)=>new RaycastHit[0];
+        item.transform.position=new Vector3(0,.1f,-1.25f);item.GetComponent<ServerPhysicalAttachment>().Attached=false;w.Hold(null);
+        Physics.Ray=(p,d,length,mask)=>mask==0 ? new RaycastHit[0] : ray(p,d,length,mask);
+        var received=new DropHandoff();Check(received.Received(item,human.GetComponent<PlayerControls>()),"a long floor throw verifies using the receiving player's mask without an earlier close-drop plan");
+        w.Colliders[0].gameObject.Add(new RespawnCollider());Check(!received.Received(item,human.GetComponent<PlayerControls>()),"a newly hazardous floor cannot count as a verified ground receipt");
+        Check(planner.Prepare(w.Chef,item,human,groundHandoff:true)=="no_nearby_ground","hazardous receiving ground cannot authorize a throw");
+    }
+    private static void Main() { CounterForecasts();PersistentTasks();HumanSinkEligibility();NativeUtensilDefinitions();MixerReadiness();ReadyFoodTasks();PauseTimers();MovingPickups();Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();GroundThrows();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
     private static ClientInteractable GetCurrentlyInteractingForTest(this PlayerControls chef) { return chef.GetComponent<ClientPlayerControlsImpl_Default>().Current; }
 }

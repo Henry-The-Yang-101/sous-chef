@@ -9,9 +9,10 @@ namespace SousChef.Plugin.Actions
 {
     internal sealed class ThrowPlan
     {
-        public Vector3 Stance, Direction, Origin, Arrival, InitialVelocity, WindDisplacement;
+        public Vector3 Stance, Direction, Origin, Arrival, InitialVelocity, WindDisplacement, GroundOffset;
         public float PeakHeight, Drag;
         public float FlightSeconds, WalkDistance;
+        public bool Ground;
         public object Describe()
         {
             return Json.Object("releasePosition", Values.Vector(Stance), "direction", Values.Vector(Direction),
@@ -20,11 +21,12 @@ namespace SousChef.Plugin.Actions
                 "launchVelocitySource", "ServerAttachmentThrower.CalculateThrowVelocity",
                 "windDisplacement", Values.Vector(WindDisplacement), "releaseHeight", Origin.y, "arrivalHeight", Arrival.y, "peakHeight", PeakHeight, "drag", Drag,
                 "flightSeconds", FlightSeconds, "walkDistance", WalkDistance,
+                "groundHandoff", Ground, "groundOffset", Ground ? Values.Vector(GroundOffset) : null,
                 "model", "native_launch_fixed_step_gravity_drag_wind_exit_velocity");
         }
     }
 
-    internal sealed class ThrowPlanner
+    internal sealed partial class ThrowPlanner
     {
         private readonly RaycastHit[] hits = new RaycastHit[128];
         private readonly Collider[] overlaps = new Collider[128];
@@ -50,15 +52,15 @@ namespace SousChef.Plugin.Actions
         private Vector3 lastArrival;
         private string lastObstruction;
         public int AimIterations { get; private set; }
-        public object Diagnostics { get { return Json.Object("rejected", rejected, "receivingCenter", Values.Vector(receiving.center), "receivingSize", Values.Vector(receiving.size), "lastArrival", Values.Vector(lastArrival), "lastObstruction", lastObstruction); } }
+        public object Diagnostics { get { return Json.Object("rejected", new Dictionary<string, object>(rejected), "receivingCenter", Values.Vector(receiving.center), "receivingSize", Values.Vector(receiving.size), "lastArrival", Values.Vector(lastArrival), "lastObstruction", lastObstruction); } }
         private bool Reject(string reason) { object count; rejected.TryGetValue(reason, out count); rejected[reason] = (count == null ? 0 : (int)count) + 1; return false; }
 
-        public string Prepare(PlayerControls actor, GameObject held, GameObject destination, WindVolume[] discoveredWinds = null)
+        public string Prepare(PlayerControls actor, GameObject held, GameObject destination, WindVolume[] discoveredWinds = null, bool groundHandoff = false)
         {
             CancelPlanning(); bestPlan = null;
             ingredientTriggers = null;
             rejected.Clear(); lastObstruction = null;
-            chef = actor; item = held; target = destination;
+            chef = actor; item = held; target = destination; ground = groundHandoff;
             if (item == null) return "hands_empty";
             var throwable = GameObjectUtils.RequestInterface<IClientThrowable>(item);
             var thrower = chef.GetComponent<ClientAttachmentThrower>();
@@ -94,10 +96,11 @@ namespace SousChef.Plugin.Actions
             player = target.GetComponent<PlayerControls>(); receiver = ActionObservations.Receiver(target);
             if (player != null)
             {
-                if (GameObjectUtils.RequestInterface<ICatchable>(item) == null) return "item_not_catchable";
                 var configuration = PlayerInputLookup.GetInputConfig();
                 var entry = configuration == null || player.PlayerIDProvider == null ? null : configuration.GetInputConfigEntry(player.PlayerIDProvider.GetID());
                 if (entry == null || !entry.IsLocal()) return "player_not_local";
+                if (ground) return PrepareGround();
+                if (GameObjectUtils.RequestInterface<ICatchable>(item) == null) return "item_not_catchable";
                 if (player == chef || player.m_bRespawning || !player.GetDirectlyUnderPlayerControl() ||
                     player.GetComponent<AttachmentCatcher>() == null || ActionObservations.Held(player) != null) return "player_cannot_catch";
                 if ((ActionObservations.Read<LayerMask>(player, "m_catchMask").value & (1 << detachedLayer)) == 0) return "player_cannot_catch";
@@ -107,6 +110,7 @@ namespace SousChef.Plugin.Actions
             }
             else
             {
+                if (ground) return "ground_handoff_requires_player";
                 var catcher = GameObjectUtils.RequestInterface<IHandleCatch>(receiver);
                 var catchable = GameObjectUtils.RequestInterface<ICatchable>(item);
                 if (catcher == null || catchable == null) return "target_cannot_catch";
@@ -218,7 +222,7 @@ namespace SousChef.Plugin.Actions
             float flight;
             if (ThrowTrajectory.FlightTime(center.y - (height + pivot + localRelease.y), vertical, Physics.gravity.y, drag, Time.fixedDeltaTime, out flight)) yield return flight;
             else if (wind.HasWind) yield return .5f;
-            if (player != null)
+            if (player != null && !ground)
             {
                 // A chef catches inside a volume before the projectile reaches
                 // their feet. Include earlier native flight positions, rather
@@ -227,6 +231,15 @@ namespace SousChef.Plugin.Actions
             }
         }
         private IEnumerable<Vector3> CandidatePositions(NavigationActions navigation)
+        {
+            if (!ground) { foreach (Vector3 stance in ReceiverCandidates(navigation)) yield return stance; yield break; }
+            foreach (GroundSpot spot in groundSpots)
+            {
+                UseGround(spot);
+                foreach (Vector3 stance in ReceiverCandidates(navigation)) yield return stance;
+            }
+        }
+        private IEnumerable<Vector3> ReceiverCandidates(NavigationActions navigation)
         {
             Vector3 center = receiving.center;
             yield return chef.transform.position - Vector3.up * pivot;
@@ -282,7 +295,7 @@ namespace SousChef.Plugin.Actions
                             sampled[6] == gravityNow.x && sampled[7] == gravityNow.y && sampled[8] == gravityNow.z &&
                             sampled[9] == drag && sampled[10] == flight && sampled[11] == Time.fixedDeltaTime;
                         if (sameInputs) { seedTime = flight; end = remoteEnds[i]; }
-                        else if (player != null)
+                        else if (player != null && !ground)
                         {
                             seedTime = flight;
                             end = ThrowFlight.Simulate(origin, direction, launch, Physics.gravity, drag, flight, Time.fixedDeltaTime, wind, seedFlight).End;
@@ -293,7 +306,7 @@ namespace SousChef.Plugin.Actions
                         {
                             Vector3 stance = candidate + correction + radial * (ring * .25f);
                             yield return stance;
-                            if (player == null)
+                            if (player == null || ground)
                             {
                                 // Narrow release corridors can fall between
                                 // angular samples. Search their lateral room as
@@ -343,9 +356,9 @@ namespace SousChef.Plugin.Actions
             for (int i = 0; i < 8; i++)
             {
                 Vector3 previousDirection = direction, previousCorrection = correction;
-                if (player == null) { receiving = Receiving(direction); destination = receiving.center; }
+                if (player == null || ground) { receiving = ground ? GroundReceiving(direction) : Receiving(direction); destination = receiving.center; }
                 origin = actualRelease ? item.transform.position : stance + Vector3.up * pivot + Quaternion.LookRotation(direction) * localRelease;
-                if (player != null)
+                if (player != null && !ground)
                 {
                     if (!ThrowTrajectory.Intercept(destination.x - origin.x - correction.x, destination.z - origin.z - correction.z,
                         velocity.x, velocity.z, speed, drag, Time.fixedDeltaTime, out time)) return Reject("horizontal_intercept");
@@ -379,7 +392,7 @@ namespace SousChef.Plugin.Actions
             path = ThrowFlight.Simulate(origin, direction, launch, Physics.gravity, drag, time, Time.fixedDeltaTime, wind, aimedFlight);
             Vector3 arrival = path.End, predicted = destination + velocity * time; lastArrival = arrival;
             int lastStep = path.Points.Count - 1;
-            if (player != null)
+            if (player != null && !ground)
             {
                 lastStep = -1;
                 for (int i = 1; i < path.Points.Count; i++)
@@ -405,9 +418,16 @@ namespace SousChef.Plugin.Actions
                     if (!shifted.Contains(arrival + rangeError) || !shifted.Contains(arrival - rangeError)) return Reject("receiving_range_uncertainty");
                     if (path.Points[path.Points.Count - 1].y >= path.Points[path.Points.Count - 2].y) return Reject("ascending_arrival");
                 }
-                var catcher = GameObjectUtils.RequestInterface<IHandleCatch>(receiver);
-                var catchable = GameObjectUtils.RequestInterface<ICatchable>(item);
-                if (catcher == null || catchable == null || !catcher.CanHandleCatch(catchable, new Vector2(direction.x, direction.z))) return Reject("native_catch_veto");
+                if (ground)
+                {
+                    if (!GroundSupported(arrival, direction, stanceUncertainty)) return Reject("unsupported_ground_landing");
+                }
+                else
+                {
+                    var catcher = GameObjectUtils.RequestInterface<IHandleCatch>(receiver);
+                    var catchable = GameObjectUtils.RequestInterface<ICatchable>(item);
+                    if (catcher == null || catchable == null || !catcher.CanHandleCatch(catchable, new Vector2(direction.x, direction.z))) return Reject("native_catch_veto");
+                }
             }
             var throwable = GameObjectUtils.RequestInterface<IClientThrowable>(item);
             if (throwable == null || !throwable.CanHandleThrow(chef.GetComponent<ClientAttachmentThrower>(), new Vector2(direction.x, direction.z))) return Reject("native_throw_veto");
@@ -415,7 +435,8 @@ namespace SousChef.Plugin.Actions
             Vector3 calm = origin + new Vector3(ThrowTrajectory.Displacement(launch.x, Physics.gravity.x, drag, time, Time.fixedDeltaTime),
                 ThrowTrajectory.Displacement(launch.y, Physics.gravity.y, drag, time, Time.fixedDeltaTime), ThrowTrajectory.Displacement(launch.z, Physics.gravity.z, drag, time, Time.fixedDeltaTime));
             plan = new ThrowPlan { Stance = stance, Origin = origin, Direction = direction, Arrival = arrival, FlightSeconds = time,
-                InitialVelocity = launch, WindDisplacement = arrival - calm, PeakHeight = path.PeakHeight, Drag = drag }; return true;
+                InitialVelocity = launch, WindDisplacement = arrival - calm, PeakHeight = path.PeakHeight, Drag = drag,
+                Ground = ground, GroundOffset = ground ? groundPoint - player.transform.position : Vector3.zero }; return true;
         }
         private bool PlayerCatchable(FlightPath path, int index, Vector3 direction, Vector3 receiverVelocity, float margin)
         {
@@ -452,7 +473,7 @@ namespace SousChef.Plugin.Actions
                 Vector3 uncertainty = PoseUncertainty(direction, path.Times[step - 1] / path.Times[lastStep], stanceUncertainty);
                 int n = itemBody.Cast(previous, direction, segment, hits, mask, .01f, uncertainty);
                 if (n >= hits.Length) return false;
-                bool receivingEnd = player == null ? step >= lastStep - 3 : PlayerCatchable(path, step, direction, receiverVelocity, 0);
+                bool receivingEnd = player == null || ground ? step >= lastStep - 3 : PlayerCatchable(path, step, direction, receiverVelocity, 0);
                 for (int i = 0; i < n; i++) if (Obstruction(hits[i].collider, receivingEnd)) return false;
             }
             return true;
@@ -460,7 +481,8 @@ namespace SousChef.Plugin.Actions
         private bool Obstruction(Collider c, bool receivingEnd)
         {
             if (c == null || !c.enabled || c.isTrigger || !c.gameObject.activeInHierarchy || c.transform.IsChildOf(chef.transform) || c.transform.IsChildOf(item.transform)) return false;
-            if (receivingEnd && (ActionObservations.Matches(c.gameObject, target) || ActionObservations.Matches(c.gameObject, receiver))) return false;
+            if (ground && receivingEnd && c == groundSupport) return false;
+            if (!ground && receivingEnd && (ActionObservations.Matches(c.gameObject, target) || ActionObservations.Matches(c.gameObject, receiver))) return false;
             lastObstruction = c.gameObject.name; return true;
         }
     }
