@@ -34,6 +34,7 @@ namespace SousChef.Plugin.Navigation
         private readonly Dictionary<int, float> speeds = new Dictionary<int, float>();
         private readonly Dictionary<int, IGridLocation> grids = new Dictionary<int, IGridLocation>();
         private readonly HashSet<int> ignoredChefColliders = new HashSet<int>();
+        private readonly HashSet<int> ignoredLooseColliders = new HashSet<int>();
         private PlayerControls chef;
         private CapsuleCollider capsule;
         private GameObject held;
@@ -71,7 +72,7 @@ namespace SousChef.Plugin.Navigation
         public void Reset()
         {
             ForgetSearch();
-            chef = null; probes.Clear(); edges.Clear(); stamps.Clear(); meshes.Clear(); dangers.Clear(); nativeSteps.Clear(); surfaces.Clear(); surfaceHistories.Clear(); properties.Clear(); grids.Clear(); ignoredChefColliders.Clear(); portals.Clear(); portalEntries.Clear(); portalExits.Clear(); exitPortal = null;
+            chef = null; probes.Clear(); edges.Clear(); stamps.Clear(); meshes.Clear(); dangers.Clear(); nativeSteps.Clear(); surfaces.Clear(); surfaceHistories.Clear(); properties.Clear(); grids.Clear(); ignoredChefColliders.Clear(); ignoredLooseColliders.Clear(); portals.Clear(); portalEntries.Clear(); portalExits.Clear(); exitPortal = null;
         }
         public string Refresh(PlayerControls player)
         {
@@ -109,16 +110,22 @@ namespace SousChef.Plugin.Navigation
             nearbyCount = Physics.OverlapSphereNonAlloc(chef.transform.position, Range, nearby, ~0, QueryTriggerInteraction.Collide); Queries++;
             if (nearbyCount == nearby.Length) { Overflow = true; return "physics_query_overflow"; }
             ignoredChefColliders.Clear();
+            ignoredLooseColliders.Clear();
             var inputConfig = PlayerInputLookup.GetInputConfig();
             for (int i = 0; i < nearbyCount; i++)
             {
                 Collider c = nearby[i];
                 if (c == null) continue;
                 var controls = c.GetComponentInParent<PlayerControls>();
-                if (controls == null) continue;
-                var provider = controls.PlayerIDProvider;
-                var entry = provider == null || inputConfig == null ? null : inputConfig.GetInputConfigEntry(provider.GetID());
-                if (controls == chef || (entry != null && entry.IsLocal())) ignoredChefColliders.Add(c.GetInstanceID());
+                if (controls != null)
+                {
+                    var provider = controls.PlayerIDProvider;
+                    var entry = provider == null || inputConfig == null ? null : inputConfig.GetInputConfigEntry(provider.GetID());
+                    if (controls == chef || (entry != null && entry.IsLocal())) ignoredChefColliders.Add(c.GetInstanceID());
+                }
+                var physical = c.GetComponentInParent<PhysicalAttachment>();
+                var attachment = physical == null ? null : physical.GetComponent<ServerPhysicalAttachment>();
+                if (attachment != null && !attachment.IsAttached()) ignoredLooseColliders.Add(c.GetInstanceID());
             }
             changed.Clear(); winds.Clear();
             geometryScan++;
@@ -239,7 +246,10 @@ namespace SousChef.Plugin.Navigation
             // Local chefs can be pushed. Their bodies and carried descendants do
             // not remove destinations or obstruct navigation. NPCs lack this component
             // and continue to participate in native collision and hazard queries.
-            return ignoredChefColliders.Contains(c.GetInstanceID()) || (held != null && c.transform.IsChildOf(held.transform));
+            // Loose pickup bodies are also passable. Exclude them from geometry
+            // stamps as well as sweeps so rolling food cannot restart discovery.
+            return ignoredChefColliders.Contains(c.GetInstanceID()) || (held != null && c.transform.IsChildOf(held.transform)) ||
+                (ignoredLooseColliders.Contains(c.GetInstanceID()) && !Dangerous(c));
         }
         private bool Dangerous(Collider c)
         {

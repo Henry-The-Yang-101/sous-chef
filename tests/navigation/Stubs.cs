@@ -290,6 +290,8 @@ public class CookingStation : UnityEngine.MonoBehaviour { }
 public class PlateReturnStation : UnityEngine.MonoBehaviour { }
 public class PlateStackBase : UnityEngine.MonoBehaviour { }
 public class PhysicalAttachment : UnityEngine.MonoBehaviour { public UnityEngine.Rigidbody m_container; public RigidbodyMotion m_motion; public RigidbodyParams m_rigidBodyParams = new RigidbodyParams(); public class RigidbodyParams { public float m_drag; public int m_constraints; public bool m_useGravity=true; } }
+public interface IAttachment { bool IsAttached(); }
+public class ServerPhysicalAttachment : UnityEngine.MonoBehaviour, IAttachment { public bool Attached; public bool IsAttached() { return Attached; } }
 public class AttachStation : UnityEngine.MonoBehaviour { }
 public interface ICarrier { UnityEngine.GameObject InspectCarriedItem(); }
 public delegate void VoidGeneric<T,U>(T first,U second);

@@ -991,10 +991,31 @@ internal static class Program
             finally {navigation.Dispose();WorkerHost.Current=null;}
         }
     }
+    private static void LoosePickupBodies()
+    {
+        var w=new World();var floor=w.AddFloor((x,z)=>Math.Abs(x)<4 && Math.Abs(z)<4 ? 0 : (float?)null);
+        var item=new GameObject("loose food");item.Add(new PhysicalAttachment());var attachment=item.Add(new ServerPhysicalAttachment());
+        var child=new GameObject("food collider");child.transform.parent=item.transform;
+        var shape=child.Add(new BoxCollider {center=new Vector3(0,.3f,0),size=new Vector3(.4f,.6f,.4f)});w.Colliders.Add(shape);
+        Physics.Overlap=(a,b,r)=>new Collider[] {shape};Physics.Cast=(a,b,r,d,length)=>new[] {new RaycastHit {collider=shape}};
+        var physics=w.Ready();Vector3 point;Collider support;
+        Check(physics.Stand(Vector3.zero,out point,out support) && support==floor,"loose pickup collider does not block or replace ground support");
+        Check(physics.Segment(Vector3.zero,new Vector3(1,0,0)),"execution sweeps also ignore passable loose pickup descendants");
+        physics.Starts().ToArray();Check(physics.RememberSearch(),"loose-object fixture retains its discovered graph");
+        item.transform.position+=Vector3.right*.2f;physics.Refresh(w.Chef);
+        Check(physics.CanContinueSearch(),"rolling food does not invalidate the walking discovery frontier");
+        attachment.Attached=true;physics.Refresh(w.Chef);
+        Check(!physics.Stand(Vector3.zero,out point,out support),"attaching an item restores conservative collision checks");
+        attachment.Attached=false;item.Add(new ServerFireHazard());Time.realtimeSinceStartup+=.21f;physics.Refresh(w.Chef);
+        Check(!physics.Stand(Vector3.zero,out point,out support),"hazards remain obstacles even when associated with a loose pickup");
+        w=new World();w.AddFloor((x,z)=>0);var obstacle=new GameObject("solid kitchen geometry").Add(new BoxCollider());w.Colliders.Add(obstacle);
+        Physics.Overlap=(a,b,r)=>new Collider[] {obstacle};physics=w.Ready();
+        Check(!physics.Stand(Vector3.zero,out point,out support),"ordinary geometry without a pickup attachment still blocks navigation");
+    }
     private static void Main()
     {
         SearchContinuity(); ShallowCeilingContacts(); EquivalentVerticalStarts(); ConveyorSearchContinuity(); CertifiedStart(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); DirectedConveyors(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
-        WorkerStartingStateChanges();
+        WorkerStartingStateChanges(); LoosePickupBodies();
         Console.WriteLine("PASS: " + checks + " navigator integration checks (analytical geometry; not PhysX)");
     }
 }

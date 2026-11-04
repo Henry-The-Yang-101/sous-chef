@@ -88,8 +88,6 @@ public class ServerAttachmentThrower : MonoBehaviour
 public delegate void GenericVoid<T>(T value);
 public class AttachmentWindReceiver : WindAccumulator { }
 public class ServerAttachmentWindReceiver : MonoBehaviour { }
-public interface IAttachment { bool IsAttached(); }
-public class ServerPhysicalAttachment : MonoBehaviour, IAttachment { public bool Attached;public bool IsAttached() { return Attached; } }
 public static class TimeManager { public static float Scale=1;public static float GetDeltaTime(GameObject item) { return Time.deltaTime*Scale; } }
 public class AttachmentCatcher : MonoBehaviour { public float m_catchDistance=.8f,m_catchAngleMax=60; }
 public interface ICatchable { }
