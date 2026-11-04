@@ -168,6 +168,24 @@ internal static class Program
         Check(LogisticsInventory.UtensilType(pot)=="bowl","mixing bowl uses its mixing definition even when it also supports cooking");
         pot.Add(new PreparationContainer());Check(LogisticsInventory.UtensilType(pot)==null,"an assembly base cannot be classified as an empty utensil");
     }
+    private static void PreparationEquipmentDiscovery()
+    {
+        var w=new World();var item=w.Ingredient("potato");w.Hold(item);
+        var catalog=(Json.Record)w.Navigation.Available(w.Chef);w.Tasks.Decorate(catalog,w.Chef);
+        var flags=System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic;
+        var inventory=(LogisticsInventory)typeof(TaskActions).GetField("inventory",flags).GetValue(w.Tasks);
+        var board=typeof(TaskActions).GetMethod("Board",flags);
+        catalog["complete"]=false;catalog["destinations"]=new List<object>();
+        inventory.BeginObservation();inventory.Refresh(w.Chef,catalog);
+        Check((GameObject)board.Invoke(w.Tasks,new object[] {item})==w.Target,"incomplete discovery may propose a compatible board on the current support for active route validation");
+        w.Target.GetComponent<Placement>().Accepts=cargo=>false;
+        Check(board.Invoke(w.Tasks,new object[] {item})==null,"provisional preparation still respects native placement vetoes");
+        w.Target.GetComponent<Placement>().Accepts=cargo=>true;catalog["complete"]=true;
+        Check(board.Invoke(w.Tasks,new object[] {item})==null,"complete discovery cannot propose a board without a certified route");
+        catalog["complete"]=false;w.Target.transform.position=new Vector3(0,3,0);
+        Check(board.Invoke(w.Tasks,new object[] {item})==null,"a board on another elevation is not a provisional local station");
+        inventory.EndObservation();
+    }
     private static void MixerReadiness()
     {
         var w=new World(t=>t.Add(new MixingStation()));
@@ -1082,6 +1100,6 @@ internal static class Program
         w.Colliders[0].gameObject.Add(new RespawnCollider());Check(!received.Received(item,human.GetComponent<PlayerControls>()),"a newly hazardous floor cannot count as a verified ground receipt");
         Check(planner.Prepare(w.Chef,item,human,groundHandoff:true)=="no_nearby_ground","hazardous receiving ground cannot authorize a throw");
     }
-    private static void Main() { CounterForecasts();PersistentTasks();HumanSinkEligibility();NativeUtensilDefinitions();MixerReadiness();ReadyFoodTasks();PauseTimers();MovingPickups();Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();GroundThrows();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
+    private static void Main() { CounterForecasts();PersistentTasks();HumanSinkEligibility();NativeUtensilDefinitions();PreparationEquipmentDiscovery();MixerReadiness();ReadyFoodTasks();PauseTimers();MovingPickups();Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();GroundThrows();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
     private static ClientInteractable GetCurrentlyInteractingForTest(this PlayerControls chef) { return chef.GetComponent<ClientPlayerControlsImpl_Default>().Current; }
 }

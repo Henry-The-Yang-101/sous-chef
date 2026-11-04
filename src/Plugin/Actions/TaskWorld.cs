@@ -116,6 +116,16 @@ namespace SousChef.Plugin.Actions
         private float HumanDistance(GameObject go)
         { float d; return go != null && humanDistances.TryGetValue(go.GetInstanceID(), out d) ? d : Single.MaxValue; }
         private bool Reachable(GameObject go) { return go != null && inventory.DistanceTo(go) != Single.MaxValue; }
+        private float ApproachCost(GameObject target)
+        {
+            float distance = inventory.DistanceTo(target);
+            if (distance != Single.MaxValue) return distance;
+            // Moving kitchens can invalidate the idle catalogue before its
+            // frontier reaches a local station. Let the active child planner
+            // prove the route on our current support before any interaction.
+            return !(bool)inventory.Catalog["complete"] && navigation.SharesCurrentSupport(target)
+                ? 20000 + Vector3.Distance(chef.transform.position, target.transform.position) : Single.MaxValue;
+        }
         private TaskStep WalkTo(GameObject aim, Vector3 stance, bool alternatives = false)
         {
             bool started = false; float retry = 0;
@@ -179,15 +189,15 @@ namespace SousChef.Plugin.Actions
                 bool match = utensil ? plate ? entry.CleanPlate : entry.Empty && entry.UtensilType == utensilType : LogisticsInventory.IngredientMatches(entry, selector);
                 if (!match) continue;
                 string collect = LogisticsChecks.Collect(chef, entry, plate ? "get_plate" : "move_item");
-                bool provisional = collect == "source_unreachable" && !(bool)inventory.Catalog["complete"] &&
-                    navigation.SharesCurrentSupport(entry.Source) && LogisticsChecks.CanCollectEmpty(chef, entry.Source);
+                float approach = ApproachCost(entry.Source);
+                bool provisional = collect == "source_unreachable" && approach != Single.MaxValue && LogisticsChecks.CanCollectEmpty(chef, entry.Source);
                 if (collect != null && !provisional) continue;
                 if (!utensil && TaskNative.Equipment(entry.Holder ?? entry.Source)) continue;
                 // A moving raft can continually invalidate a distant catalogue
                 // frontier. Let the pickup's bounded active planner try a local
                 // source on the same native support; this is not a route proof.
                 // Certified sources always win over these provisional choices.
-                float candidate = (provisional ? 20000 + Vector3.Distance(chef.transform.position, entry.Source.transform.position) : entry.Distance) + (entry.Supply ? 10000 : 0);
+                float candidate = (provisional ? approach : entry.Distance) + (entry.Supply ? 10000 : 0);
                 if (candidate < score) { best = entry; score = candidate; }
             }
             return best;

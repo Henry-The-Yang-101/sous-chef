@@ -27,8 +27,11 @@ namespace SousChef.Plugin.Actions
         {
             inventory.Refresh(chef); GameObject best = null; float score = Single.MaxValue;
             foreach (GameObject target in navigation.Targets())
-                if (target.GetComponent<ServerWorkstation>() != null && Reachable(target) && CanDeliver(item, target) && inventory.DistanceTo(target) < score)
-                { best = target; score = inventory.DistanceTo(target); }
+            {
+                if (target.GetComponent<ServerWorkstation>() == null || !CanDeliver(item, target)) continue;
+                float cost = ApproachCost(target);
+                if (cost < score) { best = target; score = cost; }
+            }
             return best;
         }
         private GameObject Processor(GameObject item, bool mixing)
@@ -36,11 +39,11 @@ namespace SousChef.Plugin.Actions
             inventory.Refresh(chef); GameObject best = null; float cost = Single.MaxValue;
             foreach (LogisticsItem candidate in inventory.Items)
             {
-                if (!candidate.Empty || candidate.InUse || !TaskNative.Equipment(candidate.Holder ?? candidate.Source) || !Reachable(candidate.Source) ||
+                if (!candidate.Empty || candidate.InUse || !TaskNative.Equipment(candidate.Holder ?? candidate.Source) ||
                     TaskNative.Component(candidate.Item, mixing ? "ServerMixingHandler" : "ServerCookingHandler") == null) continue;
                 string operation;
                 if (LogisticsChecks.Delivery(chef, "fetch_ingredient", item, candidate.Source, out operation) != null) continue;
-                float distance = inventory.DistanceTo(candidate.Source);
+                float distance = ApproachCost(candidate.Source);
                 if (distance < cost) { cost = distance; best = candidate.Source; }
             }
             return best;
@@ -50,12 +53,12 @@ namespace SousChef.Plugin.Actions
             inventory.Refresh(chef); container = null; station = null;
             foreach (LogisticsItem item in inventory.Items)
             {
-                if (!item.Empty || item.InUse || item.Distance == Single.MaxValue || !LogisticsChecks.CanCollectEmpty(chef, item.Source) ||
+                if (!item.Empty || item.InUse || ApproachCost(item.Source) == Single.MaxValue || !LogisticsChecks.CanCollectEmpty(chef, item.Source) ||
                     TaskNative.Component(item.Item, mixing ? "ServerMixingHandler" : "ServerCookingHandler") == null) continue;
                 string operation;
                 if (LogisticsChecks.Delivery(chef, "fetch_ingredient", food, item.Item, out operation) != null) continue;
                 foreach (GameObject target in navigation.Targets())
-                    if (TaskNative.Equipment(target) && Reachable(target) && ActionObservations.Occupant(target) == null && CanDeliver(item.Item, target))
+                    if (TaskNative.Equipment(target) && ApproachCost(target) != Single.MaxValue && ActionObservations.Occupant(target) == null && CanDeliver(item.Item, target))
                     { container = item; station = target; return true; }
             }
             return false;
@@ -184,7 +187,7 @@ namespace SousChef.Plugin.Actions
         {
             inventory.Refresh(chef);
             foreach (LogisticsItem item in inventory.Items)
-                if (item.Empty && !item.InUse && TaskNative.Equipment(item.Holder ?? item.Source) && item.Distance != Single.MaxValue &&
+                if (item.Empty && !item.InUse && TaskNative.Equipment(item.Holder ?? item.Source) && ApproachCost(item.Source) != Single.MaxValue &&
                     TaskNative.Component(item.Item, mixing ? "ServerMixingHandler" : "ServerCookingHandler") != null) return true;
             return false;
         }
