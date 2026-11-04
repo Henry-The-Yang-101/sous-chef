@@ -3,6 +3,9 @@
 A local observation and Player 2 control bridge for couch co-op in the native macOS Steam build of
 Overcooked! 2. The target is two separate local players, each controlling their
 own chef simultaneously. Online multiplayer is outside the supported scope.
+
+Bridge **0.8.4** includes the [preparation and repeat-handoff fixes](docs/preparation-regressions.md), covering supplied chopped ingredients, available-work scheduling, moving-raft equipment discovery, and native throw verification.
+
 Bridge 0.5 adds [first-layer interaction actions](docs/actions.md): pickup,
 placement, ingredient addition, work, activation, disposal, typed waits, and
 targeted throws to stations or another local player. Bridge 0.6 adds finite
