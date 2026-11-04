@@ -20,6 +20,7 @@ namespace SousChef.Plugin.Actions
             public float RetryAt;
             public bool Seen;
             public bool Ground;
+            public Collider Support;
             public long LastSlice;
         }
         private readonly NavigationActions navigation;
@@ -27,7 +28,7 @@ namespace SousChef.Plugin.Actions
         private readonly Dictionary<long, Option> options = new Dictionary<long, Option>();
         private PlayerControls chef;
         private GameObject item;
-        private Vector3 forward, mount;
+        private Vector3 mount;
         private float requestedAt;
         private long slices;
         private bool observing, observeWinds;
@@ -60,7 +61,6 @@ namespace SousChef.Plugin.Actions
             // Keep bounded candidate progress; Check revalidates every positive
             // proof with current launch physics, obstacles and walking routes.
             return actor != null && actor == chef && item != null && item == ActionObservations.Held(actor) &&
-                Vector3.Angle(forward, actor.transform.forward) < 1 &&
                 Vector3.Distance(mount, actor.transform.InverseTransformPoint(item.transform.position)) < .02f;
         }
         public void Begin(PlayerControls actor)
@@ -68,7 +68,6 @@ namespace SousChef.Plugin.Actions
             if (!SameActor(actor))
             {
                 Reset(); chef = actor; item = actor == null ? null : ActionObservations.Held(actor);
-                if (actor != null) forward = actor.transform.forward;
                 if (item != null) mount = actor.transform.InverseTransformPoint(item.transform.position);
             }
             observing = true; observedWinds = null;
@@ -78,6 +77,12 @@ namespace SousChef.Plugin.Actions
         }
         private static bool SameTarget(Option option)
         {
+            if (option.Ground && option.Support != null)
+            {
+                var player = option.Target == null ? null : option.Target.GetComponent<PlayerControls>();
+                return player != null && player.gameObject.activeInHierarchy && player.GroundCollider == option.Support &&
+                    Vector3.Distance(option.Position, option.Support.transform.InverseTransformPoint(player.transform.position)) < .2f;
+            }
             return option.Target != null && option.Target.activeInHierarchy &&
                 Vector3.Distance(option.Position, option.Target.transform.position) < .02f &&
                 Vector3.Angle(option.Forward, option.Target.transform.forward) < .5f &&
@@ -91,6 +96,9 @@ namespace SousChef.Plugin.Actions
             if (option.Target == null || !option.Target.activeInHierarchy)
             { option.Reason = "target_unavailable"; option.RetryAt = Time.realtimeSinceStartup + 2; return; }
             option.Position = option.Target.transform.position; option.Forward = option.Target.transform.forward;
+            var player = option.Ground ? option.Target.GetComponent<PlayerControls>() : null;
+            option.Support = player == null ? null : player.GroundCollider;
+            if (option.Support != null) option.Position = option.Support.transform.InverseTransformPoint(option.Position);
             option.Occupant = Occupant(option.Target);
             option.Reason = option.Planner.Prepare(chef, item, option.Target, Winds(), option.Ground) ?? ThrowPlanner.Pending;
             option.RetryAt = Time.realtimeSinceStartup + 2;

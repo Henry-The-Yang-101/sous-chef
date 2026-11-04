@@ -638,10 +638,11 @@ namespace SousChef.Plugin.Actions
             var player = target.GetComponent<PlayerControls>();
             bool received = player != null ? held != null && System.Object.ReferenceEquals(ActionObservations.Held(player), held) :
                 (held != null && ActionObservations.Occupant(target) == held);
-            if (!received && player != null && throwPlan.Ground && drops.Received(held, player))
+            if (!received && player != null && throwPlan.Ground && drops.Received(held, player, null, throwPlan.GroundSupport))
             {
-                if (dropStableSince < 0 || Vector3.Distance(lastDropPosition, held.transform.position) > .03f) dropStableSince = Time.realtimeSinceStartup;
-                lastDropPosition = held.transform.position;
+                Vector3 position = throwPlan.GroundSupport == null ? held.transform.position : throwPlan.GroundSupport.transform.InverseTransformPoint(held.transform.position);
+                if (dropStableSince < 0 || Vector3.Distance(lastDropPosition, position) > .03f)
+                { dropStableSince = Time.realtimeSinceStartup; lastDropPosition = position; }
                 received = Time.realtimeSinceStartup - dropStableSince >= .1f;
             }
             else if (!received) dropStableSince = -1;

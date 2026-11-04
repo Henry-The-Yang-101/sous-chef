@@ -13,6 +13,9 @@ namespace SousChef.Plugin.Actions
         public float PeakHeight, Drag;
         public float FlightSeconds, WalkDistance;
         public bool Ground;
+        public Collider GroundSupport;
+        public Vector3 GroundLocalPoint;
+        public float LandingDistance;
         public object Describe()
         {
             return Json.Object("releasePosition", Values.Vector(Stance), "direction", Values.Vector(Direction),
@@ -22,6 +25,9 @@ namespace SousChef.Plugin.Actions
                 "windDisplacement", Values.Vector(WindDisplacement), "releaseHeight", Origin.y, "arrivalHeight", Arrival.y, "peakHeight", PeakHeight, "drag", Drag,
                 "flightSeconds", FlightSeconds, "walkDistance", WalkDistance,
                 "groundHandoff", Ground, "groundOffset", Ground ? Values.Vector(GroundOffset) : null,
+                "landingSupportInstanceId", GroundSupport == null ? null : (object)GroundSupport.GetInstanceID(),
+                "landingPosition", GroundSupport == null ? null : Values.Vector(GroundSupport.transform.TransformPoint(GroundLocalPoint)),
+                "landingDistance", Ground ? (object)LandingDistance : null,
                 "model", "native_launch_fixed_step_gravity_drag_wind_exit_velocity");
         }
     }
@@ -163,6 +169,7 @@ namespace SousChef.Plugin.Actions
         }
         private Vector3 ReceiverVelocity()
         {
+            if (ground) return GroundVelocity();
             if (player != null)
             {
                 Vector3 v = player.Motion.GetVelocity();
@@ -200,7 +207,7 @@ namespace SousChef.Plugin.Actions
                 if (cost == Single.MaxValue) { Reject("unreachable_stance"); continue; }
                 if (bestPlan != null && cost >= bestPlan.WalkDistance) continue;
                 possible.WalkDistance = cost; bestPlan = possible;
-                if (firstFeasible || cost < .01f) return CompletePlanning(out plan);
+                if (ground || firstFeasible || cost < .01f) return CompletePlanning(out plan);
             }
             // Count work, rather than time between Updates: read-only option
             // previews use shorter slices and must not expire while waiting.
@@ -235,7 +242,7 @@ namespace SousChef.Plugin.Actions
             if (!ground) { foreach (Vector3 stance in ReceiverCandidates(navigation)) yield return stance; yield break; }
             foreach (GroundSpot spot in groundSpots)
             {
-                UseGround(spot);
+                if (!UseGround(spot) || !GroundSupported(receiving.center, chef.transform.forward, ArrivalCheck.PositionTolerance + .02f)) continue;
                 foreach (Vector3 stance in ReceiverCandidates(navigation)) yield return stance;
             }
         }
@@ -343,6 +350,7 @@ namespace SousChef.Plugin.Actions
         {
             AimIterations = 0;
             plan = null;
+            if (ground && !RefreshGround()) return Reject("ground_support_changed");
             if (actualRelease && chef.CurrentInteractionObjects.m_interactable != null && chef.CurrentInteractionObjects.m_interactable.CanInteract(chef.gameObject)) return Reject("interactable_selected");
             Vector3 velocity = ReceiverVelocity(), destination = receiving.center;
             if (velocity.magnitude > Mathf.Max(20, speed * 2)) return Reject("receiver_velocity");
@@ -420,7 +428,7 @@ namespace SousChef.Plugin.Actions
                 }
                 if (ground)
                 {
-                    if (!GroundSupported(arrival, direction, stanceUncertainty)) return Reject("unsupported_ground_landing");
+                    if (!GroundSupported(arrival - velocity * time, direction, stanceUncertainty)) return Reject("unsupported_ground_landing");
                 }
                 else
                 {
@@ -436,7 +444,9 @@ namespace SousChef.Plugin.Actions
                 ThrowTrajectory.Displacement(launch.y, Physics.gravity.y, drag, time, Time.fixedDeltaTime), ThrowTrajectory.Displacement(launch.z, Physics.gravity.z, drag, time, Time.fixedDeltaTime));
             plan = new ThrowPlan { Stance = stance, Origin = origin, Direction = direction, Arrival = arrival, FlightSeconds = time,
                 InitialVelocity = launch, WindDisplacement = arrival - calm, PeakHeight = path.PeakHeight, Drag = drag,
-                Ground = ground, GroundOffset = ground ? groundPoint - player.transform.position : Vector3.zero }; return true;
+                Ground = ground, GroundOffset = ground ? groundPoint - player.transform.position : Vector3.zero,
+                GroundSupport = ground ? receivingSupport : null, GroundLocalPoint = groundLocalPoint,
+                LandingDistance = ground ? Vector3.Distance(groundPoint, player.transform.position) : 0 }; return true;
         }
         private bool PlayerCatchable(FlightPath path, int index, Vector3 direction, Vector3 receiverVelocity, float margin)
         {

@@ -140,7 +140,7 @@ namespace SousChef.Plugin.Actions
                 // Reconcile the task's actual goal before declaring failure;
                 // never replay an already released throw or replace its cargo.
                 if (!choice.Transport) delivery.Outcome = delegate {
-                    if (!HumanCanCollect(item, player, true, 5)) return false;
+                    if (!HumanCanCollect(item, player, true, choice.Ground ? Single.MaxValue : 5)) return false;
                     ((Json.Record)handoffEvidence)["reconciledOutcome"] = child.Run.Reason; return true;
                 };
                 delivery.ReplanOnBlock = true; yield return delivery;
