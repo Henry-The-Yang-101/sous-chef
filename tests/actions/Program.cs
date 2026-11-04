@@ -213,6 +213,24 @@ internal static class Program
         var work=typeof(TaskActions).GetMethod("PreparationWork",System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.NonPublic);
         Check((int)work.Invoke(null,new object[] {root})==2,"preparation follows every native work stage");
     }
+    private static void AvailablePreparationWork()
+    {
+        foreach(string preparation in new[] {"raw","chopped","cooked"})
+        {
+            var w=new World();var human=new GameObject("human");human.Add(new PlayerIDProvider {Id=0});
+            human.Add(new PlayerControls {GroundCollider=w.Chef.GroundCollider});human.Add(new CapsuleCollider());human.Add(new GroundCast());
+            human.Add(new ServerPlayerAttachmentCarrier());human.Add(new ClientPlayerAttachmentCarrier());
+            var potato=w.Ingredient("potato");w.Target.Add(new PickupItemSpawner {m_itemPrefab=potato});
+            var request=new TaskRequest {Action="prepare_near_player"};
+            request.Items.Add(new PreparationRequest {Selector="missing chicken",Preparation="cooked",Quantity=1});
+            request.Items.Add(new PreparationRequest {Selector="potato",Preparation=preparation,Quantity=1});
+            Check(w.Tasks.Start(w.Chef,1,new ControlCommand {Id="available-work",Operation="task",Task=request})==null,"mixed preparation request accepted");
+            for(int i=0;i<10 && !w.Skills.Run.Running;i++)w.Tick(.25f);
+            Check(w.Skills.Run.Running && w.Skills.Run.Operation=="pick_up" && w.Navigation.Resolve(w.Skills.Run.Target)==w.Target,
+                "missing earlier chicken cannot block available potato requested "+preparation);
+            w.Tasks.Cancel("test_end");
+        }
+    }
     private static void MixerReadiness()
     {
         var w=new World(t=>t.Add(new MixingStation()));
@@ -1127,6 +1145,6 @@ internal static class Program
         w.Colliders[0].gameObject.Add(new RespawnCollider());Check(!received.Received(item,human.GetComponent<PlayerControls>()),"a newly hazardous floor cannot count as a verified ground receipt");
         Check(planner.Prepare(w.Chef,item,human,groundHandoff:true)=="no_nearby_ground","hazardous receiving ground cannot authorize a throw");
     }
-    private static void Main() { CounterForecasts();PersistentTasks();HumanSinkEligibility();NativeUtensilDefinitions();PreparationEquipmentDiscovery();PreparedIngredientSources();MixerReadiness();ReadyFoodTasks();PauseTimers();MovingPickups();Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();GroundThrows();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
+    private static void Main() { CounterForecasts();PersistentTasks();HumanSinkEligibility();NativeUtensilDefinitions();PreparationEquipmentDiscovery();PreparedIngredientSources();AvailablePreparationWork();MixerReadiness();ReadyFoodTasks();PauseTimers();MovingPickups();Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();GroundThrows();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
     private static ClientInteractable GetCurrentlyInteractingForTest(this PlayerControls chef) { return chef.GetComponent<ClientPlayerControlsImpl_Default>().Current; }
 }

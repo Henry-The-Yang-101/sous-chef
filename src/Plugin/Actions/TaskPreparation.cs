@@ -116,7 +116,8 @@ namespace SousChef.Plugin.Actions
                         float margin = TaskNative.Remaining(unit.Item, unit.Request.Preparation == "mixed");
                         if (next == null || !next.Processing || margin < soonest) { next = unit; soonest = margin; }
                     }
-                    else if ((!Passive(unit.Request) || (unit.Request.Preparation == "mixed" ? emptyMixer : emptyCooker)) &&
+                    else if (PreparationSource(unit.Request) != null &&
+                        (!Passive(unit.Request) || (unit.Request.Preparation == "mixed" ? emptyMixer : emptyCooker)) &&
                         (next == null || (!next.Processing && Passive(unit.Request) && !Passive(next.Request)))) next = unit;
                 }
                 // Avoid beginning an indivisible chopping/travel segment that
@@ -148,7 +149,7 @@ namespace SousChef.Plugin.Actions
                     // currently unconfirmed ingredient route must not occupy the
                     // entire cooking window when it becomes available next frame.
                     float retry = Time.realtimeSinceStartup + .2f;
-                    yield return Until("waiting_for_prepared_ingredients", delegate { return Time.realtimeSinceStartup >= retry; });
+                    yield return Until(processing ? "waiting_for_prepared_ingredients" : "waiting_for_ingredient", delegate { return Time.realtimeSinceStartup >= retry; });
                     continue;
                 }
                 if (next.Processing)
@@ -167,9 +168,9 @@ namespace SousChef.Plugin.Actions
                     foreach (TaskStep give in Give(ActionObservations.Held(chef), request.Player, true)) yield return give;
                     next.Delivered = true; continue;
                 }
-                LogisticsItem source = null; bool utensil = next.Request.Preparation == "empty";
+                LogisticsItem source = PreparationSource(next.Request); bool utensil = next.Request.Preparation == "empty";
                 PreparationUnit current = next;
-                yield return Until("waiting_for_ingredient", delegate { source = PreparationSource(current.Request); return source != null; });
+                if (source == null) continue;
                 TaskStep pickup = Do("pick_up", ActionObservations.PickupTarget(source.Source, source.Supply ? null : source.Item));
                 pickup.ReplanOnBlock = true; yield return pickup;
                 if (!pickup.Succeeded) continue;
