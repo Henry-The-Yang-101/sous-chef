@@ -135,7 +135,7 @@ namespace SousChef.Plugin.Actions
                 LogisticsItem source = null; bool utensil = next.Request.Preparation == "empty";
                 PreparationUnit current = next;
                 yield return Until("waiting_for_ingredient", delegate { source = Source(current.Request.Selector, utensil); return source != null; });
-                yield return Do("pick_up", source.Source);
+                yield return Do("pick_up", ActionObservations.PickupTarget(source.Source, source.Supply ? null : source.Item));
                 next.Item = ActionObservations.Held(chef);
                 if (!utensil && next.Request.Preparation != "raw" && next.Item.GetComponent<WorkableItem>() != null)
                 {

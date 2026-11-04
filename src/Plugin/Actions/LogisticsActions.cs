@@ -58,7 +58,7 @@ namespace SousChef.Plugin.Actions
             if (command.Milliseconds == 0) command.Milliseconds = 120000;
             if (!Run.Start(owner, command, Time.realtimeSinceStartup)) return "action_in_progress";
             if (selected == null) { Finish("succeeded", "station_already_empty"); return null; }
-            sourceId = selected.SourceId; sourceStation = selected.Source; originalSource = selected.Item;
+            sourceStation = ActionObservations.PickupTarget(selected.Source, selected.Supply ? null : selected.Item); sourceId = navigation.RegisterItem(sourceStation); originalSource = selected.Item;
             supply = selected.Supply; expected = selected.Item;
             bool cleanStack = selected.Item.GetComponent<CleanPlateStack>() != null;
             if (cleanStack && command.Operation != "get_plate" && command.Operation != "clear_station")

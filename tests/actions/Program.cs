@@ -217,6 +217,39 @@ internal static class Program
         w.Hold(null);w.Target.GetComponent<ServerAttachStation>().Item=item;w.Verify();
         Check(w.Skills.Run.State=="succeeded","the same issued placement can verify after resuming without another press");
     }
+    private static void MovingPickups()
+    {
+        var w=new World();var item=w.Ingredient("tomato");w.Target.GetComponent<ServerAttachStation>().Item=item;
+        Check(w.Start("pick_up")==null,"moving counter pickup starts");w.Target.transform.position+=new Vector3(.1f,0,0);w.Tick();
+        Check(w.Inputs.Contains(1) && w.Navigation.Action.State=="idle","a native moving pickup opportunity does not require relative settling");
+        w.Hold(item);w.Target.GetComponent<ServerAttachStation>().Item=null;w.Verify();Check(w.Skills.Run.State=="succeeded","moving counter pickup verifies the exact carried object");
+        w=new World();item=w.Ingredient("tomato");w.Target.GetComponent<ServerAttachStation>().Item=item;w.Start("pick_up");w.Target.transform.yaw+=.1f;w.Tick();
+        Check(w.Inputs.Contains(1),"a rotating platform pickup works even when its pivot position stays fixed");w.Skills.Cancel("stopped");
+        w=new World();var prefab=w.Ingredient("tomato");w.Target.Add(new PickupItemSpawner {m_itemPrefab=prefab});
+        Check(w.Start("pick_up")==null,"moving dispenser pickup starts");w.Target.transform.position+=new Vector3(.1f,0,0);w.Tick();
+        Check(w.Inputs.Contains(1),"native selection allows taking from a moving dispenser");w.Hold(w.Ingredient("tomato"));w.Verify();Check(w.Skills.Run.State=="succeeded","moving dispenser verifies the originally requested prefab");
+        w=new World();prefab=w.Ingredient("tomato");w.Target.Add(new PickupItemSpawner {m_itemPrefab=prefab});w.Start("pick_up");w.Target.transform.yaw+=.1f;w.Tick();
+        Check(w.Inputs.Contains(1),"a rotating dispenser can be collected without a stationary approach");w.Hold(w.Ingredient("tomato"));w.Verify();Check(w.Skills.Run.State=="succeeded","rotating dispenser verifies its original ingredient");
+        w=new World();prefab=w.Ingredient("tomato");var supply=w.Target.Add(new PickupItemSpawner {m_itemPrefab=prefab});w.Start("pick_up");
+        supply.m_itemPrefab=w.Ingredient("onion");w.Target.transform.position+=new Vector3(.1f,0,0);w.Tick();
+        Check(w.Skills.Run.State=="blocked" && !w.Inputs.Contains(1),"changing a moving dispenser's prefab cannot pick a substitute");
+        w=new World();item=w.Ingredient("tomato");item.Add(new PhysicalAttachment());item.transform.parent=w.Target.transform;w.Target.Add(new ServerConveyorStation());w.Target.GetComponent<ServerAttachStation>().Item=item;
+        Check(w.Start("pick_up")==null && w.Navigation.Action.Destination==w.Id,"attached conveyor cargo without a live collider uses its holder's walking stance");
+        var nextHolder=w.Delivery();nextHolder.Add(new Pickup());nextHolder.GetComponent<ServerAttachStation>().Item=item;w.Target.GetComponent<ServerAttachStation>().Item=null;item.transform.parent=nextHolder.transform;w.Tick();
+        Check(w.Navigation.Action.Destination==w.IdOf(nextHolder) && w.Navigation.Resolve(w.Skills.Run.Target)==item,"walking follows the current holder while the pickup request keeps exact cargo identity");w.Skills.Cancel("stopped");
+        w=new World();item=w.Ingredient("tomato");item.Add(new PhysicalAttachment());item.Add(new Pickup());
+        w.Colliders.Add(item.Add(new BoxCollider {center=new Vector3(0,.7f,0),size=new Vector3(.2f,.2f,.2f)}));
+        w.Target.Add(new ServerConveyorStation());w.Target.GetComponent<ServerAttachStation>().Item=item;
+        Check(w.Start("pick_up")==null,"conveyor pickup pins the original cargo");
+        Check(w.Navigation.Resolve(w.Skills.Run.Target)==item,"conveyor pickup follows item identity instead of its first belt station");
+        var receiver=w.Delivery();receiver.Add(new Pickup());receiver.GetComponent<ServerAttachStation>().Item=item;w.Target.GetComponent<ServerAttachStation>().Item=null;
+        item.transform.position+=new Vector3(.1f,0,0);w.Chef.CurrentInteractionObjects.m_TheOriginalHandlePickup=receiver;w.Chef.CurrentInteractionObjects.m_iHandlePickup=receiver.GetComponent<IPickup>();w.Tick();
+        receiver.GetComponent<ServerAttachStation>().Item=null;w.Chef.CurrentInteractionObjects.m_iHandlePickup=item.GetComponent<IPickup>();
+        Check(ActionObservations.CanPickUpExact(w.Chef,item,item),"native incoming-cargo referral proves identity even between attach-station ownership edges");
+        Check(!ActionObservations.CanPickUpExact(w.Chef,item,w.Ingredient("onion")),"incoming-cargo proof cannot authorize a different object");
+        Check(w.Inputs.Contains(1),"pickup remains valid after the exact item crosses to another native holder");
+        w.Hold(item);receiver.GetComponent<ServerAttachStation>().Item=null;w.Verify();Check(w.Skills.Run.State=="succeeded","conveyor handover cannot hide the exact pickup outcome");
+    }
     private static void Transactions()
     {
         var w=new World();var item=w.Ingredient("tomato");w.Target.GetComponent<ServerAttachStation>().Item=item;
@@ -1016,6 +1049,6 @@ internal static class Program
         Check(!drops.Plan(w.Chef,item,player,out drop),"nearby horizontal position on a different deck is not a valid drop handoff");
         Physics.Sphere=(p,r,d,length)=>new RaycastHit[0];
     }
-    private static void Main() { CounterForecasts();PersistentTasks();HumanSinkEligibility();NativeUtensilDefinitions();MixerReadiness();ReadyFoodTasks();PauseTimers();Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
+    private static void Main() { CounterForecasts();PersistentTasks();HumanSinkEligibility();NativeUtensilDefinitions();MixerReadiness();ReadyFoodTasks();PauseTimers();MovingPickups();Transactions();IngredientsAndDisposal();WorkAndWait();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
     private static ClientInteractable GetCurrentlyInteractingForTest(this PlayerControls chef) { return chef.GetComponent<ClientPlayerControlsImpl_Default>().Current; }
 }

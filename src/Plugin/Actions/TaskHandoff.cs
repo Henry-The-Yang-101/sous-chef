@@ -103,6 +103,7 @@ namespace SousChef.Plugin.Actions
             if (item == null) return false;
             if (refresh) RefreshHuman(player); var human = Human(player);
             if (human != null && System.Object.ReferenceEquals(ActionObservations.Held(human), item)) return true;
+            if (human != null && HumanDistance(item) != Single.MaxValue && LogisticsChecks.CanCollectEmpty(human, item)) return true;
             foreach (GameObject target in navigation.Targets())
                 if (HumanDistance(target) != Single.MaxValue && System.Object.ReferenceEquals(ActionObservations.Occupant(target), item)) return true;
             return false;

@@ -19,6 +19,8 @@ namespace SousChef.Plugin.Actions
         private PlayerControls chef;
         private ControlCommand command;
         private GameObject target, held, receiver, expectedPickup, expectedTopPlate, initialOccupant;
+        private GameObject pickupPrefab;
+        private Vector3 pickupOrigin, pickupForward;
         private ServerIngredientContainer container;
         private AssembledDefinitionNode ingredient, expectedOutput;
         private ServerWorkableItem workable;
@@ -62,6 +64,8 @@ namespace SousChef.Plugin.Actions
             nextRecoveryAttempt += seconds; if (dropStableSince >= 0) dropStableSince += seconds;
             lastTick = Time.realtimeSinceStartup;
         }
+        private string WalkDestination()
+        { return command.Operation == "pick_up" ? navigation.RegisterItem(ActionObservations.PickupApproach(target)) : command.Destination; }
         public static string[] Offered(PlayerControls chef, GameObject go)
         {
             var options = new List<string> { "wait_until" };
@@ -129,6 +133,15 @@ namespace SousChef.Plugin.Actions
             }
             else target = navigation.Resolve(request.Destination);
             if (target == null) return "target_unavailable";
+            if (request.Operation == "pick_up")
+            {
+                GameObject pickup = ActionObservations.PickupTarget(target);
+                if (pickup != target) { target = pickup; request.Destination = navigation.RegisterItem(target); }
+            }
+            pickupOrigin = target.transform.position;
+            pickupForward = target.transform.forward;
+            var pickupSupply = target.GetComponent<PickupItemSpawner>();
+            pickupPrefab = pickupSupply == null ? null : pickupSupply.m_itemPrefab;
             held = ActionObservations.Held(chef); receiver = ActionObservations.Receiver(target);
             initialOccupant = ActionObservations.Occupant(target); expectedPickup = initialOccupant;
             container = ActionObservations.Container(target); ingredient = expectedOutput = null;
@@ -155,7 +168,7 @@ namespace SousChef.Plugin.Actions
                 else
                 {
                     Run.Advance("navigating");
-                    error = navigation.Start(chef, owner, request.Destination);
+                    error = navigation.Start(chef, owner, WalkDestination());
                 }
                 if (error != null)
                 {
@@ -264,6 +277,17 @@ namespace SousChef.Plugin.Actions
                     }
                     WaitFor("target_unavailable"); return;
                 }
+                if (command.Operation == "pick_up" && !pressed && (Run.Phase == "navigating" || Run.Phase == "recovering_navigation") &&
+                    chef.GroundCollider != null && (Vector3.Distance(pickupOrigin, target.transform.position) > .02f || Vector3.Angle(pickupForward, target.transform.forward) > .5f) &&
+                    ActionObservations.CanPickUpExact(chef, target, expectedPickup))
+                {
+                    // Native selection/range is authoritative at a moving pickup
+                    // opportunity. A stationary stance relative to the moving
+                    // receiver is not required. Recheck identity before the edge.
+                    if (navigation.Action.State == "navigating") navigation.Stop("arrived");
+                    if (!BeforePress()) return;
+                    SetPhase("pressing");
+                }
                 if (recoveryReason == "target_unavailable" && Run.Phase != "navigating" &&
                     Run.Phase != "recovering_navigation" && Run.Phase != "pressing" && Run.Phase != "working") recovery.Clear();
                 if (Run.Phase == "recovering_navigation")
@@ -277,7 +301,7 @@ namespace SousChef.Plugin.Actions
                     // Recovery has no usable route to retain. Give rebuilding
                     // a bounded recovery planning budget, rather than an idle
                     // catalogue slice that may repeatedly stop short of the goal.
-                    string error = throwPlan == null ? navigation.Start(chef, Run.Owner, command.Destination, true) :
+                    string error = throwPlan == null ? navigation.Start(chef, Run.Owner, WalkDestination(), true) :
                         navigation.StartPosition(chef, Run.Owner, target, throwPlan.Stance, true);
                     if (error != null) { RecoverNavigation(error); return; }
                     Run.Advance("navigating"); return;
@@ -293,6 +317,12 @@ namespace SousChef.Plugin.Actions
                 }
                 if (Run.Phase == "navigating")
                 {
+                    if (command.Operation == "pick_up" && navigation.Action.State == "navigating" && navigation.Action.Destination != WalkDestination())
+                    {
+                        navigation.Stop("pickup_holder_changed");
+                        string error = navigation.Start(chef, Run.Owner, WalkDestination(), true);
+                        if (error != null) { RecoverNavigation(error); return; }
+                    }
                     if (navigation.Action.State == "navigating") { recovery.Clear(); return; }
                     input(0);
                     if (navigation.Action.Reason != "arrived" && navigation.Action.Reason != "positioned_no_action")
@@ -416,7 +446,10 @@ namespace SousChef.Plugin.Actions
                 { Finish("blocked", "pickup_target_changed"); return false; }
                 if (initialOccupant != ActionObservations.Occupant(target))
                 { Finish("blocked", "pickup_target_changed"); return false; }
-                if (!ActionObservations.CanPickUp(chef, target)) { WaitFor("pickup_unavailable"); return false; }
+                var supply = target.GetComponent<PickupItemSpawner>();
+                if (supply != null && !System.Object.ReferenceEquals(supply.m_itemPrefab, pickupPrefab))
+                { Finish("blocked", "pickup_target_changed"); return false; }
+                if (!ActionObservations.CanPickUpExact(chef, target, expectedPickup)) { WaitFor("pickup_unavailable"); return false; }
             }
             else if (op == "work_at" || op == "activate")
             {
@@ -464,12 +497,12 @@ namespace SousChef.Plugin.Actions
                 var supply = target.GetComponent<PickupItemSpawner>();
                 if (!matches && supply != null)
                 {
-                    AssembledDefinitionNode expected = ActionObservations.Composition(supply.m_itemPrefab), actual = ActionObservations.Composition(carrying);
+                    AssembledDefinitionNode expected = ActionObservations.Composition(pickupPrefab), actual = ActionObservations.Composition(carrying);
                     matches = expected != null && actual != null && AssembledDefinitionNode.Matching(expected, actual);
                     if (!matches)
                     {
                         string prefabId, prefabName, carriedId, carriedName;
-                        matches = LogisticsInventory.IngredientIdentity(supply.m_itemPrefab, out prefabId, out prefabName) &&
+                        matches = LogisticsInventory.IngredientIdentity(pickupPrefab, out prefabId, out prefabName) &&
                             LogisticsInventory.IngredientIdentity(carrying, out carriedId, out carriedName) && prefabId == carriedId;
                     }
                 }

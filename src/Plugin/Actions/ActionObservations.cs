@@ -48,6 +48,36 @@ namespace SousChef.Plugin.Actions
             GameObject occupant = Occupant(target);
             return occupant != null ? occupant : target;
         }
+        public static GameObject PickupTarget(GameObject source, GameObject expected = null)
+        {
+            if (source != null && source.GetComponent<PickupItemSpawner>() != null) return source;
+            GameObject item = expected ?? Occupant(source);
+            // Pin cargo crossing native belt ownership boundaries. Moving
+            // dispensers remain targets themselves, with their prefab identity.
+            return item != null && source != null && source.GetComponent<ServerConveyorStation>() != null ? item : source;
+        }
+        public static GameObject PickupApproach(GameObject item)
+        {
+            // Attached cargo can have disabled colliders and no independently
+            // navigable stance. Walk to its current authoritative holder, while
+            // keeping the interaction pinned to the exact item across handovers.
+            var holder = item == null ? null : item.GetComponentInParent<ServerAttachStation>();
+            return holder != null && System.Object.ReferenceEquals(holder.InspectItem(), item) ? holder.gameObject : item;
+        }
+        public static bool CanPickUpExact(PlayerControls chef, GameObject target, GameObject expected)
+        {
+            var observed = chef.CurrentInteractionObjects;
+            GameObject selected = observed.m_TheOriginalHandlePickup;
+            bool matches = expected == null ? Matches(selected, target) :
+                System.Object.ReferenceEquals(selected, expected) || (selected != null && selected.GetComponent<ServerAttachStation>() != null
+                    ? System.Object.ReferenceEquals(Occupant(selected), expected) : Matches(selected, expected));
+            // During conveyance the native pickup referral can already point to
+            // incoming cargo before the receiving attach station owns it.
+            var handler = observed.m_iHandlePickup as Component;
+            if (expected != null && handler != null && (handler.gameObject == expected || handler.transform.IsChildOf(expected.transform))) matches = true;
+            var carrier = chef.GetComponent<ClientPlayerAttachmentCarrier>();
+            return carrier != null && observed.m_iHandlePickup != null && matches && observed.m_iHandlePickup.CanHandlePickup(carrier);
+        }
         public static ServerIngredientContainer Container(GameObject target)
         {
             GameObject receiver = Receiver(target);

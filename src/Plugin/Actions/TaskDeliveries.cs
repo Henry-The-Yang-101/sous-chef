@@ -9,7 +9,7 @@ namespace SousChef.Plugin.Actions
         private sealed class PendingDelivery { public GameObject Item; public int Player; }
         private readonly List<PendingDelivery> pendingDeliveries = new List<PendingDelivery>();
         private float nextDeliveryCheck;
-        private void DispatchDelivery(GameObject item, int player)
+        internal void DispatchDelivery(GameObject item, int player)
         {
             deliveredItems.Add(item); // In transit is already allocated to the human.
             pendingDeliveries.Add(new PendingDelivery { Item = item, Player = player });

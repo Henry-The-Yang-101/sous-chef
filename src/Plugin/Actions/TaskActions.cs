@@ -168,6 +168,7 @@ namespace SousChef.Plugin.Actions
         }
         private TaskStep Do(string operation, GameObject target, string condition = null)
         {
+            if (operation == "pick_up") target = ActionObservations.PickupTarget(target);
             GameObject originalHeld = ActionObservations.Held(chef), originalOccupant = ActionObservations.Occupant(target);
             var supply = target == null ? null : target.GetComponent<PickupItemSpawner>();
             GameObject originalPrefab = supply == null ? null : supply.m_itemPrefab;
