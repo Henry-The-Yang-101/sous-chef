@@ -123,7 +123,7 @@ namespace SousChef.Plugin.Actions
                 ThrowPlan checkedPlan = null; Vector3 stance; Collider support; float routeCost = Single.MaxValue;
                 Vector3 foot = chef.transform.position; foot.y = chef.GetComponent<CapsuleCollider>().bounds.min.y;
                 Vector3 planned = option.Plan.CurrentStance;
-                float uncertainty = Vector3.Distance(planned, foot) < .02f ? 0 : ArrivalCheck.PositionTolerance + .02f;
+                float uncertainty = option.Ground || Vector3.Distance(planned, foot) < .02f ? 0 : ArrivalCheck.PositionTolerance + .02f;
                 if (option.Planner.Prepare(chef, item, target, Winds(), option.Ground) != null ||
                     !option.Planner.RestoreGround(option.Plan) ||
                     !navigation.TryStance(planned, out stance, out support) || Vector3.Distance(stance, planned) > .02f ||

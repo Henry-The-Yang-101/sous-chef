@@ -206,7 +206,10 @@ namespace SousChef.Plugin.Actions
                 if (Single.IsNaN(candidates.Current.x)) return Pending;
                 Vector3 stance; Collider support; ThrowPlan possible;
                 if (!navigation.TryStance(candidates.Current, out stance, out support)) { Reject("unsupported_stance"); continue; }
-                float uncertainty = Vector3.Distance(stance, chef.transform.position - Vector3.up * pivot) < .02f ? 0 : ArrivalCheck.PositionTolerance + .02f;
+                // Ground delivery certifies the actual stopped pose again before
+                // arming. Reserving walking error at every prospective landing
+                // can erase all usable floor space among previous deliveries.
+                float uncertainty = ground || Vector3.Distance(stance, chef.transform.position - Vector3.up * pivot) < .02f ? 0 : ArrivalCheck.PositionTolerance + .02f;
                 if (!From(stance, false, out possible, uncertainty)) continue;
                 float cost = navigation.RouteCost(stance);
                 if (cost == Single.MaxValue) { Reject("unreachable_stance"); continue; }
@@ -255,7 +258,7 @@ namespace SousChef.Plugin.Actions
             }
             foreach (GroundSpot spot in groundSpots)
             {
-                if (!UseGround(spot) || !GroundSupported(receiving.center, chef.transform.forward, ArrivalCheck.PositionTolerance + .02f)) continue;
+                if (!UseGround(spot) || !GroundSupported(receiving.center, chef.transform.forward, 0)) continue;
                 foreach (Vector3 stance in ReceiverCandidates(navigation)) yield return stance;
             }
         }
@@ -433,10 +436,16 @@ namespace SousChef.Plugin.Actions
                 }
                 else
                 {
-                    Bounds shifted = receiving; shifted.center = predicted;
-                    if (!shifted.Contains(arrival)) return Reject("receiving_volume");
-                    Vector3 rangeError = PoseUncertainty(direction, 1, stanceUncertainty);
-                    if (!shifted.Contains(arrival + rangeError) || !shifted.Contains(arrival - rangeError)) return Reject("receiving_range_uncertainty");
+                    // A floor seed guides aim; the supported floor is the goal.
+                    // Fixed launch speed need not hit an artificial tiny window
+                    // around that seed when the actual landing is safely usable.
+                    if (!ground)
+                    {
+                        Bounds shifted = receiving; shifted.center = predicted;
+                        if (!shifted.Contains(arrival)) return Reject("receiving_volume");
+                        Vector3 rangeError = PoseUncertainty(direction, 1, stanceUncertainty);
+                        if (!shifted.Contains(arrival + rangeError) || !shifted.Contains(arrival - rangeError)) return Reject("receiving_range_uncertainty");
+                    }
                     if (path.Points[path.Points.Count - 1].y >= path.Points[path.Points.Count - 2].y) return Reject("ascending_arrival");
                 }
                 if (ground)
@@ -455,11 +464,18 @@ namespace SousChef.Plugin.Actions
             if (!Clear(path, velocity, direction, lastStep, stanceUncertainty)) return Reject("obstructed");
             Vector3 calm = origin + new Vector3(ThrowTrajectory.Displacement(launch.x, Physics.gravity.x, drag, time, Time.fixedDeltaTime),
                 ThrowTrajectory.Displacement(launch.y, Physics.gravity.y, drag, time, Time.fixedDeltaTime), ThrowTrajectory.Displacement(launch.z, Physics.gravity.z, drag, time, Time.fixedDeltaTime));
+            Vector3 landing = groundPoint;
+            if (ground)
+            {
+                Bounds body = itemBody.BoundsAt(arrival - velocity * time, direction);
+                landing = body.center; landing.y = body.min.y;
+            }
             plan = new ThrowPlan { Stance = stance, Origin = origin, Direction = direction, Arrival = arrival, FlightSeconds = time,
                 InitialVelocity = launch, WindDisplacement = arrival - calm, PeakHeight = path.PeakHeight, Drag = drag,
-                Ground = ground, GroundOffset = ground ? groundPoint - player.transform.position : Vector3.zero,
-                GroundSupport = ground ? receivingSupport : null, GroundLocalPoint = groundLocalPoint,
-                LandingDistance = ground ? Vector3.Distance(groundPoint, player.transform.position) : 0 }; return true;
+                Ground = ground, GroundOffset = ground ? landing - player.transform.position : Vector3.zero,
+                GroundSupport = ground ? receivingSupport : null,
+                GroundLocalPoint = ground ? receivingSupport.transform.InverseTransformPoint(landing) : Vector3.zero,
+                LandingDistance = ground ? Vector3.Distance(landing, player.transform.position) : 0 }; return true;
         }
         private bool PlayerCatchable(FlightPath path, int index, Vector3 direction, Vector3 receiverVelocity, float margin)
         {

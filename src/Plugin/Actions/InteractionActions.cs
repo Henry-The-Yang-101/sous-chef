@@ -645,6 +645,9 @@ namespace SousChef.Plugin.Actions
         {
             input(0);
             if (!System.Object.ReferenceEquals(ActionObservations.Held(chef), held)) { Finish("blocked", "held_item_changed"); return; }
+            Vector3 supported;
+            if (!navigation.TryStance(Foot(), out supported) || Vector3.Distance(supported, Foot()) > .04f)
+            { Finish("blocked", "unsafe_release_stance"); return; }
             string error = PrepareThrow(); ThrowPlan current;
             if (error != null || !throws.From(Foot(), false, out current)) { evidence = throws.Diagnostics; Finish("blocked", error ?? "throw_became_invalid"); return; }
             PlayerControlsHelper.TurnTowardsDirection(chef.gameObject, current.Direction, chef.Movement.TurnSpeed, Mathf.Min(Time.deltaTime, .05f));

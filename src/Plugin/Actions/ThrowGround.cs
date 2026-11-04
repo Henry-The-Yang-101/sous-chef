@@ -150,6 +150,7 @@ namespace SousChef.Plugin.Actions
                     body.center.z + (n == 0 ? 0 : (n <= 2 ? z : -z)));
                 RaycastHit contact;
                 if (!GroundAt(point, out contact)) { lastObstruction = "ground_support:" + (contact.collider == null ? "missing" : contact.collider.gameObject.name); return Reject(lastObstruction); }
+                if (contact.collider != receivingSupport) return Reject("different_receiving_floor");
             }
             int count = itemBody.Overlap(arrival, direction, overlaps, ~0, .025f, uncertainty);
             if (count == overlaps.Length) return false;

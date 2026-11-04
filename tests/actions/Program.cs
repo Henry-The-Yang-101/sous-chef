@@ -1260,6 +1260,59 @@ internal static class Program
         Check(Vector3.Distance(plan.CurrentStance,plan.Stance+Vector3.right)<.01f && plan.StanceLocalPoint.Equals(local),
             "cached release poses follow their support instead of gaining fictitious walking uncertainty as a raft moves");
     }
-    private static void Main() { CounterForecasts();PersistentTasks();HumanSinkEligibility();NativeUtensilDefinitions();PreparationEquipmentDiscovery();PreparedIngredientSources();AvailablePreparationWork();ReconciledHandoffs();MixerReadiness();ReadyFoodTasks();PauseTimers();MovingPickups();Transactions();IngredientsAndDisposal();WorkAndWait();ImmediateNativeWork();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();GroundThrows();RaftLandingFallback();CurrentPoseLandingClearance();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
+    private static void SupportedLandingArea()
+    {
+        var w=new World();var floor=w.Colliders[0];
+        var item=w.Ingredient("potato");item.Add(new Throwable());item.Add(new PhysicalAttachment {m_motion=new RigidbodyMotion()});
+        item.Add(new BoxCollider {size=Vector3.one*.2f});
+        w.Chef.gameObject.Add(new AttachmentThrower());w.Chef.gameObject.Add(new ClientAttachmentThrower());w.Chef.gameObject.Add(new ServerAttachmentThrower());
+        var human=new GameObject("human");human.Add(new PlayerControls {GroundCollider=floor});human.Add(new PlayerIDProvider {Id=0});human.Add(new GroundCast());w.Colliders.Add(human.Add(new CapsuleCollider()));
+        float flight;ThrowTrajectory.FlightTime(.1f-1,8*Mathf.Tan(15*Mathf.Deg2Rad),-9.81f,0,.02f,out flight);
+        w.Chef.transform.position=new Vector3(0,0,-2.25f-8*flight-.4f);item.transform.position=w.Chef.transform.position+new Vector3(0,1,.4f);w.Hold(item);
+        Physics.Nearby=(p,r)=>w.Colliders.Where(c=>Vector3.Distance(p,c.bounds.ClosestPoint(p))<=r).ToArray();
+        var planner=new ThrowPlanner();ThrowPlan plan=null;
+        Check(planner.Prepare(w.Chef,item,human,groundHandoff:true)==null && planner.From(w.Chef.transform.position,false,out plan),
+            "a ground seed guides aim without excluding a fully supported landing elsewhere on the receiving floor");
+        Check(plan.LandingDistance>2 && Math.Abs(plan.GroundLocalPoint.z-plan.Arrival.z)<.01f,
+            "ground evidence and cached targets record the actual supported landing rather than the aim seed");
+        var ray=Physics.Ray;
+        Check(w.Skills.Start(w.Chef,1,new ControlCommand {Operation="throw_to_player",Destination="1",GroundHandoff=true})==null,"supported floor throw starts");
+        for(int n=0;n<200 && w.Skills.Run.Phase=="planning_throw";n++) w.Tick();
+        w.Arrive();
+        Vector3 floorSize=floor.GetComponent<BoxCollider>().size;floor.GetComponent<BoxCollider>().size=new Vector3(.08f,.1f,20);
+        Physics.Ray=(p,d,length,mask)=>Math.Abs(p.x)<.05f ? ray(p,d,length,mask) : new RaycastHit[0];w.Tick();
+        Check(w.Skills.Run.Reason=="unsafe_release_stance" && !w.Inputs.Contains(2),
+            "losing full foot support after arrival cannot arm the native throw button");
+        floor.GetComponent<BoxCollider>().size=floorSize;
+        var other=new GameObject("another disconnected platform").Add(new BoxCollider());
+        Physics.Ray=(p,d,length,mask)=>{
+            var contacts=ray(p,d,length,mask);
+            if(p.z < -1.8f) for(int n=0;n<contacts.Length;n++) contacts[n].collider=other;
+            return contacts;
+        };
+        Check(!planner.From(w.Chef.transform.position,false,out plan),"a supported landing on a different platform cannot satisfy the receiving-floor request");
+    }
+    private static void WalkingLandingClearance()
+    {
+        var w=new World();var local=w.Colliders[0];local.GetComponent<BoxCollider>().center=new Vector3(0,-.05f,-10);
+        local.GetComponent<BoxCollider>().size=new Vector3(12,.1f,12);
+        var floor=new GameObject("narrow receiving deck").Add(new BoxCollider {center=new Vector3(0,-.05f,0),size=new Vector3(.96f,.1f,4)});floor.gameObject.layer=9;w.Colliders.Add(floor);
+        Physics.Ray=(p,d,length,mask)=>{
+            Collider c=p.z < -4 && p.z > -16 && Math.Abs(p.x)<6 ? local : Math.Abs(p.x)<.48f && Math.Abs(p.z)<2 ? floor : null;
+            return c!=null && d.y<-.9f && p.y>=0 && p.y<=length ? new[] {new RaycastHit {collider=c,point=new Vector3(p.x,0,p.z),normal=Vector3.up,distance=p.y}} : new RaycastHit[0];
+        };
+        var item=w.Ingredient("potato");item.Add(new Throwable());item.Add(new PhysicalAttachment {m_motion=new RigidbodyMotion()});
+        item.Add(new BoxCollider {center=new Vector3(0,.15f,0),size=new Vector3(.76f,.3f,.77f)});
+        w.Chef.gameObject.Add(new AttachmentThrower());w.Chef.gameObject.Add(new ClientAttachmentThrower());w.Chef.gameObject.Add(new ServerAttachmentThrower());
+        w.Chef.transform.position=new Vector3(0,0,-14);item.transform.position=w.Chef.transform.position+new Vector3(0,1,.4f);w.Hold(item);
+        var human=new GameObject("human");human.Add(new PlayerControls {GroundCollider=floor});human.Add(new PlayerIDProvider {Id=0});human.Add(new GroundCast());w.Colliders.Add(human.Add(new CapsuleCollider()));
+        Physics.Nearby=(p,r)=>w.Colliders.Where(c=>Vector3.Distance(p,c.bounds.ClosestPoint(p))<=r).ToArray();
+        for(int n=0;n<40;n++) {Time.realtimeSinceStartup+=.11f;Time.frameCount++;w.Navigation.Available(w.Chef);}
+        var planner=new ThrowPlanner();ThrowPlan plan=null;
+        string prepared=planner.Prepare(w.Chef,item,human,groundHandoff:true);string found=prepared==null ? FindPlan(planner,w.Navigation,out plan) : prepared;
+        Check(found==null && plan.WalkDistance>1,
+            "walking can seek a safe release for a narrow floor landing that will be revalidated at the actual stopped pose");
+    }
+    private static void Main() { CounterForecasts();PersistentTasks();HumanSinkEligibility();NativeUtensilDefinitions();PreparationEquipmentDiscovery();PreparedIngredientSources();AvailablePreparationWork();ReconciledHandoffs();MixerReadiness();ReadyFoodTasks();PauseTimers();MovingPickups();Transactions();IngredientsAndDisposal();WorkAndWait();ImmediateNativeWork();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();GroundThrows();RaftLandingFallback();CurrentPoseLandingClearance();SupportedLandingArea();WalkingLandingClearance();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
     private static ClientInteractable GetCurrentlyInteractingForTest(this PlayerControls chef) { return chef.GetComponent<ClientPlayerControlsImpl_Default>().Current; }
 }
