@@ -177,9 +177,17 @@ namespace SousChef.Plugin.Actions
             {
                 if (!entry.Supply && deliveredItems.Contains(entry.Item)) continue;
                 bool match = utensil ? plate ? entry.CleanPlate : entry.Empty && entry.UtensilType == utensilType : LogisticsInventory.IngredientMatches(entry, selector);
-                if (!match || LogisticsChecks.Collect(chef, entry, plate ? "get_plate" : "move_item") != null) continue;
+                if (!match) continue;
+                string collect = LogisticsChecks.Collect(chef, entry, plate ? "get_plate" : "move_item");
+                bool provisional = collect == "source_unreachable" && !(bool)inventory.Catalog["complete"] &&
+                    navigation.SharesCurrentSupport(entry.Source) && LogisticsChecks.CanCollectEmpty(chef, entry.Source);
+                if (collect != null && !provisional) continue;
                 if (!utensil && TaskNative.Equipment(entry.Holder ?? entry.Source)) continue;
-                float candidate = entry.Distance + (entry.Supply ? 10000 : 0);
+                // A moving raft can continually invalidate a distant catalogue
+                // frontier. Let the pickup's bounded active planner try a local
+                // source on the same native support; this is not a route proof.
+                // Certified sources always win over these provisional choices.
+                float candidate = (provisional ? 20000 + Vector3.Distance(chef.transform.position, entry.Source.transform.position) : entry.Distance) + (entry.Supply ? 10000 : 0);
                 if (candidate < score) { best = entry; score = candidate; }
             }
             return best;

@@ -115,6 +115,8 @@ namespace SousChef.Plugin.Navigation
             return null;
         }
         public void PrepareStances(PlayerControls player) { Refresh(player, true); }
+        public bool SharesCurrentSupport(GameObject target)
+        { return target != null && physics.SharesCurrentSupport(target.transform.position); }
         public bool TryStance(Vector3 point, out Vector3 stance)
         { Collider ground; return physics.Stand(point, out stance, out ground); }
         public float RouteCost(Vector3 stance)

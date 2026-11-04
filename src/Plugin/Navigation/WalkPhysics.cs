@@ -61,6 +61,18 @@ namespace SousChef.Plugin.Navigation
         public float StepHeight { get { return Mathf.Min(.65f, chef.Movement.StepHeightMax); } }
         public Vector3 Position { get { Vector3 p = chef.transform.position; p.y -= pivotToFoot; return p; } }
         public IEnumerable<Collider> Colliders { get { for (int i = 0; i < nearbyCount; i++) yield return nearby[i]; } }
+        public bool SharesCurrentSupport(Vector3 target)
+        {
+            if (chef == null || chef.GroundCollider == null || Mathf.Abs(target.y - Position.y) > 1.5f) return false;
+            Vector3 origin = new Vector3(target.x, Position.y + .15f, target.z);
+            int count = Physics.RaycastNonAlloc(origin, Vector3.down, hits, .3f, groundMask, QueryTriggerInteraction.Ignore); Queries++;
+            if (count == hits.Length) return false;
+            Collider nearest = null; float distance = Single.MaxValue;
+            for (int i = 0; i < count; i++)
+                if (hits[i].collider != null && !Own(hits[i].collider) && hits[i].distance < distance)
+                { nearest = hits[i].collider; distance = hits[i].distance; }
+            return nearest == chef.GroundCollider && !Dangerous(nearest);
+        }
         private int nearbyCount;
         private int geometryScan, meshRevision;
         private sealed class Probe { public bool Valid; public Vector3 Point; public Collider Ground; }

@@ -15,7 +15,72 @@ namespace SousChef.Plugin
             string[] args = arguments.Split(' ');
             if (args.Length < 2) throw new ArgumentException("task-fixture dirty COUNT [COUNTER_ID] | ignite OBJECT_ID | burnt ITEM_ID | in-flight ITEM_ID PLAYER");
             var result = Json.Object("fixture", args[0], "realtime", Time.realtimeSinceStartup, "generation", generation);
-            if (args[0] == "in-flight")
+            if (args[0] == "ingredient" || args[0] == "loose-ingredient")
+            {
+                // Explicit supplied-food initial conditions for separated chefs.
+                bool loose = args[0] == "loose-ingredient";
+                if (args.Length != (loose ? 5 : 3)) throw new ArgumentException("invalid_ingredient_fixture");
+                GameObject source = FixtureObject(Int32.Parse(args[1]));
+                var supply = source.GetComponent<PickupItemSpawner>();
+                if (supply == null || supply.m_itemPrefab == null) throw new ArgumentException("fixture_requires_ingredient_supply");
+                GameObject target = loose ? source : FixtureObject(Int32.Parse(args[2]));
+                var station = target.GetComponent<ServerAttachStation>();
+                var carrier = target.GetComponent<ServerPlayerAttachmentCarrier>();
+                if (!loose && (station == null && carrier == null || station != null && station.InspectItem() != null || carrier != null && carrier.InspectCarriedItem() != null))
+                    throw new ArgumentException("fixture_requires_empty_holder");
+                Vector3 point = Vector3.zero;
+                if (loose)
+                    for (int n = 0; n < 3; n++)
+                    {
+                        float value = Single.Parse(args[n + 2], System.Globalization.CultureInfo.InvariantCulture);
+                        if (Single.IsNaN(value) || Single.IsInfinity(value) || Math.Abs(value) > 1000) throw new ArgumentException("invalid_fixture_position");
+                        point[n] = value;
+                    }
+                NetworkUtils.RegisterSpawnablePrefab(source, supply.m_itemPrefab);
+                GameObject food = NetworkUtils.ServerSpawnPrefab(source, supply.m_itemPrefab);
+                if (loose)
+                {
+                    food.transform.position = point;
+                    // Complete the native detach path: a bare spawned prefab's
+                    // body is initially kinematic until attached/detached.
+                    food.GetComponent<ServerPhysicalAttachment>().Detach();
+                }
+                else if (station != null) station.AddItem(food, Vector2.up, new PlacementContext(PlacementContext.Source.Player));
+                else carrier.CarryItem(food);
+                result["itemInstanceId"] = food.GetInstanceID(); result["sourceInstanceId"] = source.GetInstanceID();
+                result["targetInstanceId"] = loose ? null : (object)target.GetInstanceID();
+            }
+            else if (args[0] == "collect")
+            {
+                // External human pickup checkpoint, never a P2 task mutation.
+                if (args.Length != 3) throw new ArgumentException("invalid_collection_fixture");
+                GameObject food = FixtureObject(Int32.Parse(args[1])), target = FixtureObject(Int32.Parse(args[2]));
+                var player = target.GetComponent<PlayerControls>(); var carrier = target.GetComponent<ServerPlayerAttachmentCarrier>();
+                var attachment = food.GetComponent<ServerPhysicalAttachment>();
+                Vector3 delta = food.transform.position - target.transform.position; delta.y = 0;
+                if (player == null || player.PlayerIDProvider == null || player.PlayerIDProvider.GetID() == PlayerInputLookup.Player.Two ||
+                    carrier == null || carrier.InspectCarriedItem() != null || attachment == null || attachment.IsAttached() || delta.magnitude > 1.6f)
+                    throw new ArgumentException("fixture_requires_obtainable_loose_food_and_empty_human_hands");
+                carrier.CarryItem(food); result["itemInstanceId"] = food.GetInstanceID(); result["playerInstanceId"] = target.GetInstanceID();
+            }
+            else if (args[0] == "sources")
+            {
+                var task = FixtureTask();
+                var inventory = Actions.ActionObservations.Read<Actions.LogisticsInventory>(task, "inventory");
+                var actor = Actions.ActionObservations.Read<PlayerControls>(task, "chef");
+                var nav = Actions.ActionObservations.Read<Navigation.NavigationActions>(task, "navigation");
+                var request = Actions.ActionObservations.Read<TaskRequest>(task, "request");
+                var sources = new List<object>(); result["complete"] = inventory.Catalog["complete"];
+                foreach (var entry in inventory.Items)
+                {
+                    var row = (Json.Record)entry.Describe(); var matches = new List<bool>();
+                    foreach (var desired in request.Items) matches.Add(Actions.LogisticsInventory.IngredientMatches(entry, desired.Selector));
+                    row["matches"] = matches; row["collect"] = Actions.LogisticsChecks.Collect(actor, entry, "move_item");
+                    row["sameSupport"] = nav.SharesCurrentSupport(entry.Source); sources.Add(row);
+                }
+                result["sources"] = sources;
+            }
+            else if (args[0] == "in-flight")
             {
                 // Seed the post-dispatch checkpoint for scheduler integration
                 // tests. Cargo must already be travelling on a real native belt;
@@ -27,10 +92,7 @@ namespace SousChef.Plugin
                 foreach (var station in UnityEngine.Object.FindObjectsOfType<ServerAttachStation>())
                     if (station.GetComponent<ServerConveyorStation>() != null && System.Object.ReferenceEquals(station.InspectItem(), item)) onBelt = true;
                 if (!onBelt) throw new InvalidOperationException("fixture_requires_native_belt_cargo");
-                var bridges = Resources.FindObjectsOfTypeAll<BridgePlugin>();
-                if (bridges.Length != 1) throw new InvalidOperationException("fixture_bridge_ambiguous");
-                var control = Actions.ActionObservations.Read<Control.Player2Control>(bridges[0], "control");
-                var task = Actions.ActionObservations.Read<Actions.TaskActions>(control, "tasks");
+                var task = FixtureTask();
                 var request = Actions.ActionObservations.Read<TaskRequest>(task, "request");
                 if (!task.Run.Running || request.Action != "prepare_near_player") throw new InvalidOperationException("fixture_requires_running_preparation");
                 task.DispatchDelivery(item, player); result["requestId"] = task.Run.RequestId; result["itemInstanceId"] = item.GetInstanceID();
@@ -92,6 +154,13 @@ namespace SousChef.Plugin
         {
             foreach (Transform t in UnityEngine.Object.FindObjectsOfType<Transform>()) if (t.gameObject.GetInstanceID() == id) return t.gameObject;
             throw new ArgumentException("fixture_object_missing");
+        }
+        private static Actions.TaskActions FixtureTask()
+        {
+            var bridges = Resources.FindObjectsOfTypeAll<BridgePlugin>();
+            if (bridges.Length != 1) throw new InvalidOperationException("fixture_bridge_ambiguous");
+            var control = Actions.ActionObservations.Read<Control.Player2Control>(bridges[0], "control");
+            return Actions.ActionObservations.Read<Actions.TaskActions>(control, "tasks");
         }
     }
 }

@@ -999,6 +999,8 @@ internal static class Program
         var shape=child.Add(new BoxCollider {center=new Vector3(0,.3f,0),size=new Vector3(.4f,.6f,.4f)});w.Colliders.Add(shape);
         Physics.Overlap=(a,b,r)=>new Collider[] {shape};Physics.Cast=(a,b,r,d,length)=>new[] {new RaycastHit {collider=shape}};
         var physics=w.Ready();Vector3 point;Collider support;
+        Check(physics.SharesCurrentSupport(new Vector3(2,0,0)),"a distant source on the same native floor can request active planning before discovery completes");
+        Check(!physics.SharesCurrentSupport(new Vector3(6,0,0)) && !physics.SharesCurrentSupport(new Vector3(2,3,0)),"the local-floor hint does not cross missing support or different decks");
         Check(physics.Stand(Vector3.zero,out point,out support) && support==floor,"loose pickup collider does not block or replace ground support");
         Check(physics.Segment(Vector3.zero,new Vector3(1,0,0)),"execution sweeps also ignore passable loose pickup descendants");
         physics.Starts().ToArray();Check(physics.RememberSearch(),"loose-object fixture retains its discovered graph");
@@ -1011,6 +1013,7 @@ internal static class Program
         w=new World();w.AddFloor((x,z)=>0);var obstacle=new GameObject("solid kitchen geometry").Add(new BoxCollider());w.Colliders.Add(obstacle);
         Physics.Overlap=(a,b,r)=>new Collider[] {obstacle};physics=w.Ready();
         Check(!physics.Stand(Vector3.zero,out point,out support),"ordinary geometry without a pickup attachment still blocks navigation");
+        Check(physics.SharesCurrentSupport(Vector3.zero),"a shared floor is only a planning hint and cannot bypass the obstructed walking proof");
     }
     private static void Main()
     {
