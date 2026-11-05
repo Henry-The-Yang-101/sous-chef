@@ -9,7 +9,7 @@ using UnityEngine;
 
 namespace SousChef.Plugin
 {
-    [BepInPlugin("dev.souschef.observer", "Sous Chef Observer", "0.8.6")]
+    [BepInPlugin("dev.souschef.observer", "Sous Chef Observer", "0.8.7")]
     public sealed class BridgePlugin : BaseUnityPlugin
     {
         private StreamServer server, gameplayServer;
@@ -59,11 +59,11 @@ namespace SousChef.Plugin
                 if (controlPort < 1024 || controlPort > 65535 || controlPort == port || gameplayPort < 1024 || gameplayPort > 65535 || gameplayPort == port || gameplayPort == controlPort) throw new ArgumentException("Invalid control port");
                 control = new Player2Control(controlPort, session);
                 server = new StreamServer(port, Json.Object("type", "hello", "protocolVersion", 1,
-                    "bridgeVersion", "0.8.6", "sessionId", session, "unityVersion", Application.unityVersion,
+                    "bridgeVersion", "0.8.7", "sessionId", session, "unityVersion", Application.unityVersion,
                     "gameAssemblySha256", hash, "captureHz", hz, "gameplayPort", gameplayPort, "gameplayHz", gameplayHz, "readOnly", false, "controlPort", controlPort, "controlPlayer", 2), LogWorkerError);
                 server.Start();
                 gameplayServer = new StreamServer(gameplayPort, Json.Object("type", "hello", "protocolVersion", 1,
-                    "bridgeVersion", "0.8.6", "sessionId", session, "stream", "gameplay", "captureHz", gameplayHz,
+                    "bridgeVersion", "0.8.7", "sessionId", session, "stream", "gameplay", "captureHz", gameplayHz,
                     "fullSnapshotPort", port), LogWorkerError);
                 gameplayServer.Start();
                 Logger.LogInfo("Observer listening on 127.0.0.1:" + port + "; active rounds only; assembly=" + hash);

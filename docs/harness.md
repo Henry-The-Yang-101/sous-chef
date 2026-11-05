@@ -231,7 +231,7 @@ python3 scripts/check.py
 ```
 
 Tests cover live removal, staleness, identity/session mismatch, command rejection,
-disconnect/reconnect, browser ownership expiry, Stop, shutdown and the HTTP path.
+disconnect/reconnect, browser closure and inactivity, Stop, shutdown and the HTTP path.
 They also cover dispenser metadata, phone authentication, forwarded Host/Origin
 checks and phone command/heartbeat round trips. See
 [the validation record](validation.md) for actual Arcade Couch browser tests.
