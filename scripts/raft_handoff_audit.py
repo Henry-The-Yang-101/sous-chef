@@ -238,6 +238,108 @@ def run(audit):
     return result
 
 
+def thrown(audit):
+    """Infinite chopped potato/chicken while the human keeps supplying raw food.
+
+    Two raw ingredients are in play; each completed P2 handoff supplies the next,
+    whichever of potato and chicken has been supplied least. The native spawn fixture stands in for the
+    human's throw landing on P2's floor (`loose`), a standard counter (`counter`),
+    a free board (`board`), or every board at once before the request (`full`).
+    """
+    args = audit.args
+    catalog = load(audit)
+    supplies = {t['foodName']: t for t in catalog['targets'] if t['kind'] == 'ingredient_supply'}
+    names, fixtures, supplied = ['Potato', 'NuggetChicken'], [], {'Potato': 0, 'NuggetChicken': 0}
+
+    def supply(n, name=None, boards_only=False):
+        name = name or min(names, key=lambda m: (supplied[m], names.index(m)))
+        state = audit.snap('supply-' + str(len(fixtures)))
+        bot = next(o for o in state['objects'] if o['name'] == 'Player 2')
+        floor = next(o for o in state['objects'] if o['id'] == fields(bot, 'GroundCast')['m_groundCollider']['objectId'])
+        bounds = next(c['worldBounds'] for c in floor['colliders'] if not c['isTrigger'])
+        source, command = supplies[name]['objectInstanceId'], None
+        if args.layout == 'loose':
+            p, c = bot['transform']['position'], bounds['center']
+            point = (p[0] + (c[0] - p[0]) * .5 + (.8 if n % 2 else -.8), .4, p[2] + (c[2] - p[2]) * .5)
+            command = 'loose-ingredient %d %.3f %.3f %.3f' % (source, *point)
+        empty = {o['unityInstanceId']: o['transform']['position'] for o in state['objects'] if fields(o, 'ServerAttachStation') and
+                 fields(o, 'ServerAttachStation').get('m_item') is None and not fields(o, 'ServerConveyorStation')}
+        local = lambda t: t['objectInstanceId'] in empty and all(
+            abs(empty[t['objectInstanceId']][a] - bounds['center'][a]) <= bounds['size'][a] / 2 + 1 for a in (0, 2))
+        for boards in () if command else (True,) if boards_only else (True, False) if args.layout in ('board', 'full') and n else (False,):
+            holders = sorted((t for t in audit.client.available_actions()['targets'] if local(t) and
+                              (t['kind'] == 'workstation' if boards else t['kind'] == 'counter' and 'standard' in t['label'])),
+                             key=lambda t: math.dist(t['position'], bot['transform']['position']))
+            if holders:
+                command = 'ingredient %d %d' % (source, holders[0]['objectInstanceId']); break
+        if command is None:
+            if boards_only:
+                return None
+            raise AssertionError('No local holder for supplied ' + name)
+        supplied[name] += 1
+        return audit.fixture(command)
+
+    fixtures += [supply(0), supply(1)]
+    while args.layout == 'full' and fixtures[-1] is not None:
+        fixtures.append(supply(len(fixtures), 'NuggetChicken', boards_only=True))
+    fixtures = [f for f in fixtures if f]
+    samples = Samples(args.port_base + 2, audit.directory)
+    handoffs, transitions, waits = [], [], {}
+    started = time.monotonic(); end = started + args.timeout; waiting = None
+    try:
+        audit.request_when_available('prepare_near_player', None, items=[{'ingredient': n, 'preparation': 'chopped'} for n in names])
+        request = audit.client.last_response['control']['action']['requestId']
+        last = None
+        with (audit.directory / 'control.ndjson').open('w') as output:
+            while time.monotonic() < end:
+                begin = time.monotonic()
+                audit.client.available_actions()
+                control = audit.client.last_response['control']; action = control['action']; d = action['details']
+                output.write(json.dumps(control) + '\n'); output.flush()
+                assert action['requestId'] == request
+                if action['state'] != 'running':
+                    break
+                assert control['ownedByYou']
+                key = (action['phase'], d['completedRepetitions'])
+                if key != last:
+                    transitions.append({'elapsed': begin - started, 'phase': action['phase'], 'repetitions': d['completedRepetitions']}); last = key
+                # Longest stationary wait per step, excluding active child actions.
+                # A handoff step without a started child is still choosing a pass.
+                phase = action['phase'] or ''
+                reason = None if d.get('child') else 'waiting_for_player_handoff' if phase == 'giving_to_player' else \
+                    phase if phase.startswith('waiting_for') else None
+                if reason != (waiting or (None,))[0]:
+                    if waiting: waits[waiting[0]] = max(waits.get(waiting[0], 0), begin - waiting[1])
+                    waiting = (reason, begin) if reason else None
+                if d.get('handoff') and d['handoff']['itemInstanceId'] not in handoffs and action['phase'] != 'giving_to_player':
+                    handoffs.append(d['handoff']['itemInstanceId'])
+                    if len(fixtures) < 2 * args.cycles:
+                        fixtures.append(supply(len(fixtures)))
+                if d['completedRepetitions'] >= args.cycles:
+                    break
+                if samples.records and samples.records[-1]['bot'] and samples.records[-1]['bot']['respawning']:
+                    break
+                time.sleep(max(0, .2 - (time.monotonic() - begin)))
+        if waiting:
+            waits[waiting[0]] = max(waits.get(waiting[0], 0), time.monotonic() - waiting[1])
+        final = audit.client.status()
+        # A finished round has no further in-round snapshot to wait for.
+        final_snapshot = audit.snap('final') if sim.read_status(args.runtime).get('inRound') else {'objects': []}
+        audit.client.stop()
+    finally:
+        samples.close()
+    alive = {o['unityInstanceId'] for o in final_snapshot['objects'] if o.get('activeInHierarchy')}
+    result = {'case': 'thrown', 'layout': args.layout, 'level': args.level, 'requestedFps': args.fps, 'action': final['action'],
+              'fixtures': fixtures, 'handoffs': handoffs, 'survivingHandoffs': len([h for h in handoffs if h in alive]),
+              'longestWaits': waits, 'transitions': transitions, 'performance': samples.summary(), 'elapsed': time.monotonic() - started,
+              'bridgeSha256': hashlib.sha256((args.runtime / 'BepInEx/plugins/SousChef.Bridge.dll').read_bytes()).hexdigest()}
+    result['success'] = (final['action']['state'] == 'running' and final['action']['details']['completedRepetitions'] >= args.cycles and
+                         len(set(handoffs)) >= 2 * args.cycles and result['survivingHandoffs'] >= 2 * args.cycles and
+                         not result['performance']['respawnObserved'] and samples.error is None)
+    write(audit.directory / 'result.json', result)
+    return result
+
+
 def edge(audit):
     catalog = load(audit)
     # Freeze only initial fixture selection/staging. Measured execution below
@@ -329,7 +431,9 @@ def edge(audit):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('case', choices=('repeat', 'far', 'safety', 'latency', 'edge'))
+    parser.add_argument('case', choices=('repeat', 'far', 'safety', 'latency', 'edge', 'thrown'))
+    parser.add_argument('--layout', choices=('board', 'full', 'counter', 'loose'), default='board',
+                        help='Where the human supplies raw food for the thrown case')
     parser.add_argument('--runtime', type=Path, required=True)
     parser.add_argument('--port-base', type=int, required=True)
     parser.add_argument('--output', type=Path, required=True)
@@ -351,7 +455,7 @@ def main():
         sim.wait_ready(args.runtime)
     audit = Audit(args)
     try:
-        result = edge(audit) if args.case == 'edge' else run(audit)
+        result = edge(audit) if args.case == 'edge' else thrown(audit) if args.case == 'thrown' else run(audit)
         print(json.dumps({k: v for k, v in result.items() if k not in ('transitions', 'action')}), flush=True)
         return 0 if result['success'] else 2
     finally:
