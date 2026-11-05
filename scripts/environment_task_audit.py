@@ -218,6 +218,7 @@ def probe(args, level, directory, result):
                     time.sleep(.2)
                     control = client.status()
             result.update(seconds=round(elapsed, 2), final={k: v for k, v in row.items() if k not in ('decision','childDetails')})
+            write(directory / 'navigation.json', control['navigation'])
             native = sim.read_status(args.runtime)
             write(directory / 'end.json', native)
             if native['realtime'] > frame0['realtime']:

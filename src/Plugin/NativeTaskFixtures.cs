@@ -89,6 +89,33 @@ namespace SousChef.Plugin
                     throw new ArgumentException("fixture_requires_obtainable_loose_food_and_empty_human_hands");
                 carrier.CarryItem(food); result["itemInstanceId"] = food.GetInstanceID(); result["playerInstanceId"] = target.GetInstanceID();
             }
+            else if (args[0] == "wear-pack")
+            {
+                if (args.Length != 3) throw new ArgumentException("wear-pack PACK_ID HUMAN_ID");
+                var pack = FixtureObject(Int32.Parse(args[1])).GetComponent<ServerBackpack>();
+                var human = FixtureObject(Int32.Parse(args[2])).GetComponent<PlayerControls>();
+                if (pack == null || human == null || human.PlayerIDProvider.GetID() != PlayerInputLookup.Player.One)
+                    throw new InvalidOperationException("fixture_requires_backpack_and_human");
+                var carrier = human.GetComponent<ServerPlayerAttachmentCarrier>();
+                if (carrier.HasAttachment(pack.PlayerAttachTarget)) throw new InvalidOperationException("back_slot_occupied");
+                pack.HandlePickup(carrier, Vector2.up);
+                if (carrier.InspectCarriedItem(pack.PlayerAttachTarget) != pack.gameObject)
+                    throw new InvalidOperationException("backpack_not_equipped");
+                result["pack"] = pack.gameObject.GetInstanceID(); result["human"] = human.gameObject.GetInstanceID();
+            }
+            else if (args[0] == "lose-held")
+            {
+                // Reproduce a despawn during the walking portion of a handoff;
+                // never allow this fixture to remove unrelated or replacement cargo.
+                if (args.Length != 2) throw new ArgumentException("lose-held ITEM_ID");
+                var item = FixtureObject(Int32.Parse(args[1]));
+                var task = FixtureTask();
+                var chef = Actions.ActionObservations.Read<PlayerControls>(task, "chef");
+                if (!task.Run.Running || task.Run.Phase != "approaching" || Actions.ActionObservations.Held(chef) != item)
+                    throw new InvalidOperationException("fixture_requires_active_walk_with_exact_cargo");
+                chef.GetComponent<ServerPlayerAttachmentCarrier>().DestroyCarriedItem();
+                result["lost"] = Int32.Parse(args[1]); result["requestId"] = task.Run.RequestId;
+            }
             else if (args[0] == "sources")
             {
                 var task = FixtureTask();

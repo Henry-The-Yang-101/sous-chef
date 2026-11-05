@@ -13,7 +13,7 @@ import sys
 import time
 
 import native_simulator as sim
-from throw_audit import snapshot, fields, write
+from throw_audit import carrier_items, snapshot, fields, write
 
 sys.path.insert(0, str(sim.ROOT))
 from clients.actions import ActionClient
@@ -174,7 +174,7 @@ class Audit:
         for instance, item in original.items():
             station = next(o for o in after['objects'] if o['unityInstanceId'] == instance)
             food = next(o for o in after['objects'] if o['id'] == item)
-            assert not fields(food, 'ServerIngredientContainer')['m_contents'] or fields(station, 'ServerAttachStation').get('m_item', {}).get('objectId') != item
+            assert not fields(food, 'ServerIngredientContainer')['m_contents'] or (fields(station, 'ServerAttachStation').get('m_item') or {}).get('objectId') != item
             data = fields(food, 'ServerCookingHandler').get('m_ServerData', {}).get('fields', {})
             assert data.get('CookingStateMessage.m_cookingState') != 'Ruined'
         plates = [o for o in after['objects'] if fields(o, 'ServerPlate') and fields(o, 'ServerIngredientContainer').get('m_contents')]
@@ -234,6 +234,99 @@ class Audit:
         assert all(fields(o, 'ServerWashingStation').get('m_plateCount', 0) == 0 for o in after['objects'])
         assert not any(o['unityInstanceId'] in (dirty['stackInstanceId'], other['stackInstanceId']) for o in after['objects'])
         return {'originalDirtyStacksRemoved': 2, 'dirtyPlatesWashed': 3}
+
+    def water_gun(self):
+        catalog = self.load('s_resort_1_3')
+        before = self.snap('initial')
+        def clean_count(state):
+            return sum(len(fields(o, 'ServerStack').get('m_stackItems') or []) for o in state['objects']
+                       if any(c['type'] == 'CleanPlateStack' for c in o['components']))
+        # The default plate return is on the other island. Put one real dirty
+        # plate on the closest empty counter, without moving either chef or gun.
+        counter = next(d for d in sorted(catalog['deliveryDestinations'], key=lambda d: d['routeDistance'])
+                       if d['kind'] == 'counter')
+        dirty = self.fixture('dirty 1 ' + str(counter['objectInstanceId']))
+        self.request_when_available('wash_dishes'); self.observe('task')
+        after = self.snap('after')
+        assert not any(o['unityInstanceId'] == dirty['stackInstanceId'] for o in after['objects'])
+        assert clean_count(after) == clean_count(before) + 1
+        assert not carrier_items(after)
+        return {'dirtyStack': dirty['stackInstanceId'], 'cleanStackCountBefore': clean_count(before),
+                'cleanStackCountAfter': clean_count(after), 'gunParked': True}
+
+    def lost_handoff(self):
+        self.load('s_moonfestival_1_1')
+        self.request_when_available('prepare_near_player', items=[{'ingredient': 'Cucumber', 'preparation': 'raw'}])
+        lost = None
+        def lose(action):
+            nonlocal lost
+            handoff = action['details'].get('handoff')
+            if lost is None and handoff and action['phase'] == 'approaching':
+                lost = self.fixture('lose-held ' + str(handoff['itemInstanceId']))['lost']
+        receipts = self.observe('task', on_poll=lose)
+        delivered = receipts[-1]['details']['handoff']['itemInstanceId']
+        after = self.snap('after')
+        assert lost is not None and delivered != lost
+        assert any(o['unityInstanceId'] == delivered for o in after['objects'])
+        assert not any(o['unityInstanceId'] == lost for o in after['objects'])
+        assert receipts[-1]['details']['completedRepetitions'] == 1
+        return {'lost': lost, 'replacementDelivered': delivered, 'request': receipts[-1]['requestId']}
+
+    def backpack(self):
+        return self.fetch_from_pack('s_festivemashup_1_3', 'DLC09_DriedFruit')
+
+    def camp_backpacks(self):
+        results = []
+        root = self.directory
+        for level, ingredient in [('s_campsite_3_1', 'Flour'), ('s_treehouse_2_2', 'Sausage')]:
+            self.directory = root / level; self.directory.mkdir(exist_ok=True)
+            results.append(self.fetch_from_pack(level, ingredient))
+            self.client.close(); self.client = None
+        self.directory = root
+        return {'dispensers': results}
+
+    def fetch_from_pack(self, level, prefab):
+        catalog = self.load(level)
+        before = self.snap('initial')
+        pack = next(o for o in before['objects'] if
+                    (fields(o, 'PickupItemSpawner').get('m_itemPrefab') or {}).get('name') == prefab)
+        pack_id = pack['unityInstanceId']
+        def source(catalog):
+            return next((i for i in catalog['items'] if i.get('sourceInstanceId') == pack_id
+                         and i.get('supply') and i.get('routeDistance') is not None), None)
+        assert source(catalog) is None
+        human = catalog['players'][0]
+        # Bring the wearer to P2's island. Only P1 is staged; the fetch uses
+        # ordinary movement, selection, pickup and placement from P2's spawn.
+        chef = next(o for o in before['objects'] if o['name'] == 'Player 2' and fields(o, 'ServerPlayerAttachmentCarrier'))
+        x, y, z = chef['transform']['position']
+        for dx, dz, yaw in [(0, 2.4, 0), (2.4, 0, 90), (0, -2.4, 180), (-2.4, 0, 270)]:
+            try:
+                sim.command(self.args.runtime, f'stage-player 1 {x+dx} {y} {z+dz} {yaw}')
+                break
+            except RuntimeError as e:
+                if 'No supported clear staging stance' not in str(e): raise
+        else: raise AssertionError('No checked stance for backpack wearer')
+        self.fixture(f'wear-pack {pack_id} {human["objectInstanceId"]}')
+        end = time.monotonic() + 20
+        while True:
+            catalog = self.client.available_actions()
+            if source(catalog): break
+            if time.monotonic() >= end:
+                write(self.directory / 'worn-catalog.json', catalog)
+                self.snap('worn'); raise AssertionError('Worn backpack has no reachable dispensing stance')
+            time.sleep(.15)
+        ingredient = source(catalog)['ingredientId']
+        row = next(r for r in catalog['jobOptions']['fetch_ingredient'] if r['sourceId'] == ingredient)
+        counter = next(d for d in catalog['deliveryDestinations'] if d['kind'] == 'counter' and d['id'] in row['destinationIds'])
+        self.client.fetch_ingredient(ingredient, counter['id']); self.observe('task', timeout=45)
+        after = self.snap('after')
+        assert any(o['unityInstanceId'] == pack_id for o in carrier_items(after, 'Player 1'))
+        target = next(o for o in after['objects'] if o['unityInstanceId'] == counter['objectInstanceId'])
+        item = fields(target, 'ServerAttachStation')['m_item']['objectId']
+        food = next(o for o in after['objects'] if o['id'] == item)
+        assert prefab.lower() in food['name'].lower()
+        return {'wornBackpack': pack_id, 'dispensed': food['unityInstanceId'], 'counter': target['unityInstanceId']}
 
     def repetitions(self):
         self.load('s_sushi_1_4'); self.fixture('dirty 1')
@@ -335,7 +428,7 @@ def main():
     parser.add_argument('--runtime', type=Path, required=True)
     parser.add_argument('--port-base', type=int, required=True)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--case', action='append', choices=('prepare', 'take_ready', 'repeated_heat', 'repeated_prepare', 'fire', 'burnt', 'wash', 'repetitions', 'monitor', 'mixer', 'utensil', 'dirty_delivery'))
+    parser.add_argument('--case', action='append', choices=('camp_backpacks', 'backpack', 'lost_handoff', 'water_gun', 'prepare', 'take_ready', 'repeated_heat', 'repeated_prepare', 'fire', 'burnt', 'wash', 'repetitions', 'monitor', 'mixer', 'utensil', 'dirty_delivery'))
     args = parser.parse_args(); args.output.mkdir(parents=True, exist_ok=True)
     sim.wait_ready(args.runtime)
     runtime_dll = args.runtime / 'BepInEx/plugins/SousChef.Bridge.dll'
