@@ -273,7 +273,7 @@ class Audit:
         return {'lost': lost, 'replacementDelivered': delivered, 'request': receipts[-1]['requestId']}
 
     def backpack(self):
-        return self.fetch_from_pack('s_festivemashup_1_3', 'DLC09_DriedFruit')
+        return self.fetch_from_pack('s_festivemashup_1_3', 'DLC09_DriedFruit', to_counter=True)
 
     def camp_backpacks(self):
         results = []
@@ -285,7 +285,7 @@ class Audit:
         self.directory = root
         return {'dispensers': results}
 
-    def fetch_from_pack(self, level, prefab):
+    def fetch_from_pack(self, level, prefab, to_counter=False):
         catalog = self.load(level)
         before = self.snap('initial')
         pack = next(o for o in before['objects'] if
@@ -316,17 +316,27 @@ class Audit:
                 write(self.directory / 'worn-catalog.json', catalog)
                 self.snap('worn'); raise AssertionError('Worn backpack has no reachable dispensing stance')
             time.sleep(.15)
-        ingredient = source(catalog)['ingredientId']
-        row = next(r for r in catalog['jobOptions']['fetch_ingredient'] if r['sourceId'] == ingredient)
-        counter = next(d for d in catalog['deliveryDestinations'] if d['kind'] == 'counter' and d['id'] in row['destinationIds'])
-        self.client.fetch_ingredient(ingredient, counter['id']); self.observe('task', timeout=45)
+        counter = None
+        if to_counter:
+            ingredient = source(catalog)['ingredientId']
+            row = next(r for r in catalog['jobOptions']['fetch_ingredient'] if r['sourceId'] == ingredient)
+            counter = min((d for d in catalog['deliveryDestinations'] if d['kind'] == 'counter' and d['id'] in row['destinationIds']),
+                          key=lambda d: d['routeDistance'])
+            self.client.fetch_ingredient(ingredient, counter['id'])
+        else:
+            self.client.pick_up(source(catalog)['sourceId'])
+        self.observe('task', timeout=45)
         after = self.snap('after')
         assert any(o['unityInstanceId'] == pack_id for o in carrier_items(after, 'Player 1'))
-        target = next(o for o in after['objects'] if o['unityInstanceId'] == counter['objectInstanceId'])
-        item = fields(target, 'ServerAttachStation')['m_item']['objectId']
-        food = next(o for o in after['objects'] if o['id'] == item)
+        if counter:
+            target = next(o for o in after['objects'] if o['unityInstanceId'] == counter['objectInstanceId'])
+            item = fields(target, 'ServerAttachStation')['m_item']['objectId']
+            food = next(o for o in after['objects'] if o['id'] == item)
+        else:
+            food, = carrier_items(after)
         assert prefab.lower() in food['name'].lower()
-        return {'wornBackpack': pack_id, 'dispensed': food['unityInstanceId'], 'counter': target['unityInstanceId']}
+        return {'wornBackpack': pack_id, 'dispensed': food['unityInstanceId'], 'item': food['name'],
+                'destination': counter['objectInstanceId'] if counter else 'P2 hands'}
 
     def repetitions(self):
         self.load('s_sushi_1_4'); self.fixture('dirty 1')

@@ -83,7 +83,8 @@ requested preparation while equipment runs, and collects completed containers
 before starting more work. Processing remains native and uses native progress/time.
 Missing ingredients defer only their own units; other available requested food
 continues. On moving supports, an incomplete background catalogue may propose a
-local board or processor for the active action planner to verify before use.
+local processor. A board also needs a checked route to an interaction stance
+before P2 picks up food.
 It retains exact containers and stations between visits. Native remaining cooking
 time and conservative estimates of travel/chopping prevent starting long work
 just before a pot finishes. Full equipment defers new cooking units instead of
@@ -100,10 +101,8 @@ a board someone is using is left alone. If a board fills after a pickup or durin
 placement, P2 sets its cargo down on a counter and reschedules. Between
 repetitions, the task continues with the same local sources the scheduler accepts.
 
-Loose food in front of a station can take the game's interaction selection from
-it. If P2 is positioned at its target but the game selects a different loose
-object, waiting cannot help. Before any press, the task sets down P2's cargo,
-moves that object to a counter, and reschedules.
+An ingredient backpack is a supply only while worn by another chef. P2 approaches
+from the dispensing side and checks the native pickup handler before pressing.
 
 Loose food in front of a station can take the game's interaction selection from
 it. If P2 is positioned at its target but the game selects a different loose
@@ -117,7 +116,10 @@ observers. Throw plans check actual throwability. Conveyor traversal follows the
 native next receiver, including rotation/direction, and rejects loops/dead ends.
 Moving-counter forecasts require an observed human-accessible stop, then motion
 toward that stop or an observed complete return cycle. Unknown/one-way motion
-waits for evidence. Forecasts never replace the final accessibility check. Transport delivery completes only after the
+waits for evidence. A floor pass needs a walkable landing from the receiving
+chef’s side and a pickup route to the settled item. P2 skips a rejected release
+stance while the receiver and support stay in the same relative positions.
+Transport delivery completes only after the
 exact item reaches a human-accessible holder or the human's hands. Safe empty
 countertops are used when putting equipment down; conveyor belts are not storage.
 An armed native throw is committed: releasing its use button also launches during
@@ -127,27 +129,31 @@ when a fresh native route proves the exact item is collectible within five walki
 units of the human. This never replays the throw or takes another ingredient.
 In `prepare_near_player`, an unverified pass is never counted as delivered and
 does not end the task: cargo still in P2's hands is offered again, and lost cargo
-(for example, food that bounced into the river) is prepared again. Other tasks
+(including cargo lost while walking to a handoff) is prepared again. Other tasks
 still stop on an unverified pressed handoff.
 
 ## Take ready food off heat
 
 `take_ready` is offered only for accessible, nonempty heat equipment with
 observable native cooking state. It waits for the selected food to finish, then
-prefers a compatible clean plate or empty utensil. The new `collect_contents`
+prefers a compatible clean plate or empty utensil. The `collect_contents`
 primitive uses the normal native placement button and verifies both source
-decrease and recipient increase while retaining their identities. If no serving
-utensil is available, P2 removes the original pot/pan/food and parks it on a safe
-counter. Completed/overdoing food is ready; ruined contents are excluded.
+decrease and recipient increase while retaining their identities. If the station
+cannot accept an available serving utensil, or time runs short before the press,
+P2 removes the original cookware, parks it on a safe counter, and checks whether
+it can plate the food there. Completed/overdoing food is ready; ruined contents
+are excluded.
 
 ## Wash dishes
 
-`wash_dishes` requires an accessible sink and obtainable dirty stacks (or plates
-already in that sink). It snapshots the currently obtainable stacks, merges them
-using native placement/pickup, carries the whole batch to the sink, and washes
+With an accessible sink, `wash_dishes` snapshots the currently obtainable dirty
+stacks, merges them using native placement/pickup, carries them to the sink, and washes
 until the sink empties. New dirty stacks are handled by the next repetition.
 An already-held dirty stack can join the batch; unrelated cargo is parked before
-collecting dishes or using the sink.
+collecting dishes or using the sink. With no reachable sink, P2 can pick up a
+water gun, approach a checked spray position for each washable stack in the
+batch, hold Use while the target is in the native spray, and park the gun.
+A stack with no reachable spray position does not enable the task.
 
 ## Deliver dirty dishes
 

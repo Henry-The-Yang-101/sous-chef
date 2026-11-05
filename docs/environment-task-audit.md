@@ -2,6 +2,8 @@
 
 The highest-priority fixes are **rescuing food when plating fails** and **checking that a human can reach a floor delivery before marking it complete**. Both failures reproduce with ordinary task requests and native kitchen state. Three more environments expose concrete gaps in ingredient pickup, dishwashing and handoff planning. The audit changed no gameplay code.
 
+The [fixes and native replays](environment-task-fixes.md) are recorded separately from this baseline.
+
 ## What ran
 
 Eight isolated, windowless native Overcooked! 2 players were used over the audit. Six covered the installed two-player Party sessions, and two ran focused controls. All ran bridge 0.8.7 from gameplay source `b91e921`, with independent ports, saves and native physics. Each scene load waited for a new generation and a live round; the control session ID was checked before issuing input. P1 received no input in the sweep. Target rate was 60 FPS; the measured first-pass task windows ranged from 34.7 to 56.4 FPS. These are real-time observations, not lockstep trials.
