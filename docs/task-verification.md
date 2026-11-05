@@ -90,3 +90,54 @@ its kitchen and records control receipts and independent native observations.
 Fixtures are opt-in headless-only mailbox commands: `task-fixture dirty COUNT
 [COUNTER_ID]`, `task-fixture ignite OBJECT_ID`, and `task-fixture burnt ITEM_ID`.
 They are never invoked by production tasks.
+
+## Dish delivery — 2026-11-05
+
+`deliver_dishes` passed seven scenarios in the native Unity player on
+`s_sushi_1_1`, at requested 60 FPS. Implementation: `db43e24` (including `2bacd23`
+and `b66d209`). Tested DLL SHA-256:
+`bc36c0e5c3b2879ec75d5335117f00b7ec9d089e07e906bf931dd7ea5604f3da`.
+The committed [report](dish-delivery-audit.json) records all seven results; full
+receipts, fixture records and independent snapshots are under
+`.local/deliver-dishes-final-v3/`.
+
+| Scenario | Native evidence |
+| --- | --- |
+| Already-held ready dish | P2 serves its held plate with no additional pickup. |
+| Wait for a plated dish | The same accepted request waits with zero repetitions, then collects and serves a plate filled later. |
+| Unrelated held ingredient | P2 parks the exact ingredient on a nearby counter, then collects and serves the dish. |
+| Occupied counters, held ingredient | P2 drops the original ingredient away from the pickup route, then collects and serves the dish; the original cargo remains alive on the floor. |
+| Occupied counters, held empty plate | P2 keeps one child action while seeking a usable floor release, drops the original plate, and completes the dish pickup and serve. |
+| Two repetitions | P2 serves its initially held plate and a second map plate, counting exactly two native successful deliveries. |
+| Infinite idle monitor / Stop | The idle request retains its lease until explicit Stop cancels it and releases control. |
+
+Every delivery trace checks one task request identity and uninterrupted ownership.
+Fresh snapshots independently check the native server's successful-delivery count,
+P2's empty hands, and the exact parked or dropped cargo. Setup uses existing native
+ingredient/holder fixtures plus `task-fixture plate-food PLATE_ID SUPPLY_ID`, which
+fills an empty plate using the supply's finished native work-output definition.
+Measured walking, pickup, parking, floor placement and serving use production
+logical inputs. Production tasks never invoke fixtures.
+
+The counter case exposed a native placement opportunity just short of the
+navigator's conservative alignment proof. The primitive now accepts the exact
+native placement predicate while stopped and aligning at that station, retaining
+all cargo and occupant checks. Floor cases also verified that dropping toward the
+next pickup can obstruct walking, and that a counter's native placement selection
+can persist during turning. Floor placement now prefers an unobstructing landing
+and can take a short checked walk to open floor without neutralizing that walk.
+
+`python3 scripts/check.py` passed the installed-game build with warnings as errors,
+2,869 core/assembly assertions, 359 navigation checks, 845 action checks and 119
+Python tests. Regression coverage includes incomplete/empty/wrong-plate recipes,
+reserved or human-carried plates, source changes, a newly caught ready plate,
+ticket expiry, exact serving evidence, indefinite floor-release recovery and Stop
+during floor positioning. The localhost Tasks panel also displayed the new label,
+current phase and repetition count during a native job. The ordinary installed
+game was not reloaded or replaced for this verification.
+
+```sh
+python3 scripts/native_simulator.py --runtime .local/dish-check start --level s_sushi_1_1 --port-base 40032
+python3 scripts/dish_delivery_audit.py --runtime .local/dish-check --port-base 40032 --output .local/dish-check-results
+python3 scripts/native_simulator.py --runtime .local/dish-check stop
+```
