@@ -102,7 +102,12 @@ namespace SousChef.Core
         public override bool NodeLimitReached { get { return Distances.Count > maxNodes; } set { } }
         public override float MinimumPendingDistance { get { return heap.Count == 0 ? Single.PositiveInfinity : heap[0].Cost; } set { } }
         public WalkSearch(IEnumerable<WalkEdge> starts, Func<WalkCell, IEnumerable<WalkEdge>> expand,
-            int maxNodes, Func<bool> budgetAvailable)
+            int maxNodes, Func<bool> budgetAvailable) : this(starts, expand, maxNodes)
+        {
+            Continue(budgetAvailable);
+        }
+
+        public WalkSearch(IEnumerable<WalkEdge> starts, Func<WalkCell, IEnumerable<WalkEdge>> expand, int maxNodes)
         {
             this.expand = expand; this.maxNodes = maxNodes;
             foreach (WalkEdge start in starts)
@@ -112,12 +117,11 @@ namespace SousChef.Core
                 if (Distances.TryGetValue(start.Cell, out prior) && prior <= start.Distance) continue;
                 Distances[start.Cell] = start.Distance; Push(start.Cell, start.Distance);
             }
-            Continue(budgetAvailable);
         }
         // The caller must establish that the graph and starting costs have not
         // changed before resuming. A slice keeps its frontier and settled work;
         // it never restarts Dijkstra or publishes an unsettled route as proven.
-        public void Continue(Func<bool> budgetAvailable)
+        public void Continue(Func<bool> budgetAvailable, Action<WalkCell, float> onSettled = null)
         {
             while (heap.Count > 0)
             {
@@ -129,6 +133,7 @@ namespace SousChef.Core
                 IEnumerable<WalkEdge> outgoing = expand(next.Cell);
                 if (outgoing == null) return;
                 Pop(); Settled.Add(next.Cell);
+                if (onSettled != null) onSettled(next.Cell, next.Cost);
                 foreach (WalkEdge edge in outgoing)
                 {
                     if (!Valid(edge.Distance)) throw new ArgumentException("invalid_distance");

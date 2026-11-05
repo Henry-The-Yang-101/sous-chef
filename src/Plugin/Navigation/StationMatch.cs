@@ -1,0 +1,121 @@
+using System;
+using System.Collections.Generic;
+using SousChef.Core;
+using UnityEngine;
+
+namespace SousChef.Plugin.Navigation
+{
+    internal sealed partial class NavigationActions
+    {
+        // The catalogue visits indexed cells around each station. A focused walk
+        // feeds the same matcher cells in Dijkstra settlement order instead.
+        private sealed class StationMatch
+        {
+            private struct Region
+            {
+                public Collider Collider;
+                public int Left, Right, Bottom, Top;
+            }
+
+            private struct Choice
+            {
+                public float Cost;
+                public Vector3 Stance;
+                public WalkCell Cell;
+            }
+
+            private readonly NavigationActions nav;
+            private readonly Destination destination;
+            private readonly List<Region> regions = new List<Region>();
+            private readonly Vector3 retained;
+            private readonly bool preferRetained;
+            private Choice best = new Choice { Cost = Single.PositiveInfinity };
+            private Choice preferred = new Choice { Cost = Single.PositiveInfinity };
+
+            public StationMatch(NavigationActions nav, Destination destination)
+            {
+                this.nav = nav;
+                this.destination = destination;
+                retained = destination.Object.transform.TransformPoint(destination.LocalApproach);
+                foreach (Collider collider in destination.Colliders)
+                {
+                    Bounds bounds = collider.bounds;
+                    var area = new Region {
+                        Collider = collider,
+                        Left = Mathf.FloorToInt((bounds.min.x - 1) / WalkPhysics.Spacing),
+                        Right = Mathf.CeilToInt((bounds.max.x + 1) / WalkPhysics.Spacing),
+                        Bottom = Mathf.FloorToInt((bounds.min.z - 1) / WalkPhysics.Spacing),
+                        Top = Mathf.CeilToInt((bounds.max.z + 1) / WalkPhysics.Spacing)
+                    };
+                    if ((area.Right - area.Left) * (area.Top - area.Bottom) <= 900) regions.Add(area);
+                    Vector3 stance;
+                    if (destination == nav.target && !preferRetained && Vector3.Distance(nav.physics.Position, retained) < 1f &&
+                        nav.physics.Approach(retained, collider, out stance) && Vector3.Distance(stance, retained) < .04f)
+                        preferRetained = true;
+                }
+            }
+
+            public float CertificationCost { get { return preferRetained ? preferred.Cost : best.Cost; } }
+
+            public void Visit(WalkCell cell, float distance)
+            {
+                if (cell.Portal != 0) return;
+                foreach (Region r in regions)
+                    if (cell.X >= r.Left && cell.X <= r.Right && cell.Z >= r.Bottom && cell.Z <= r.Top)
+                        Consider(cell, distance, r.Collider);
+            }
+
+            public void VisitIndexed()
+            {
+                foreach (Region r in regions)
+                    for (int x = r.Left; x <= r.Right; x++)
+                        for (int z = r.Bottom; z <= r.Top; z++)
+                        {
+                            List<WalkCell> cells;
+                            if (nav.reachableByXZ.TryGetValue(((long)x << 32) ^ (uint)z, out cells))
+                                foreach (WalkCell cell in cells) Consider(cell, nav.search.Distances[cell], r.Collider);
+                        }
+            }
+
+            private void Consider(WalkCell cell, float distance, Collider collider)
+            {
+                if (distance >= CertificationCost) return;
+                Vector3 point = nav.physics.Point(cell), stance;
+                if (!nav.physics.Approach(point, collider, out stance, cell.SurfaceHistory)) return;
+                if (destination.Pack != null)
+                {
+                    // A backpack only dispenses from its rear cone.
+                    Vector3 offset = stance - destination.Object.transform.position;
+                    offset.y = 0;
+                    if (Vector3.Angle(-destination.Object.transform.forward, offset) >= destination.Pack.m_pickupAngle * .5f) return;
+                }
+                var choice = new Choice { Cost = distance + Vector3.Distance(point, stance), Stance = stance, Cell = cell };
+                if (choice.Cost < best.Cost) best = choice;
+                if (preferRetained && choice.Cost < preferred.Cost && Vector3.Distance(stance, retained) < .04f)
+                    preferred = choice;
+            }
+
+            public void Publish()
+            {
+                Choice chosen = best;
+                if (preferRetained && preferred.Cost < Single.PositiveInfinity && preferred.Cost <= nav.search.MinimumPendingDistance)
+                    chosen = preferred;
+                else if (preferRetained && !nav.search.Complete && nav.RemainingRouteClear()) return;
+
+                if (chosen.Cost == Single.PositiveInfinity || chosen.Cost > nav.search.MinimumPendingDistance) return;
+                Vector3 local = destination.Object.transform.InverseTransformPoint(chosen.Stance);
+                if (nav.target == destination && destination.Object.transform.TransformVector(local - destination.LocalApproach).magnitude >= .04f)
+                {
+                    nav.arrival.Reset();
+                    nav.facingSince = -1;
+                    nav.arrivalDetails = null;
+                }
+                destination.Goal = chosen.Cell;
+                destination.Approach = chosen.Stance;
+                destination.LocalApproach = local;
+                destination.Distance = chosen.Cost;
+                nav.available[destination.Id] = destination;
+            }
+        }
+    }
+}

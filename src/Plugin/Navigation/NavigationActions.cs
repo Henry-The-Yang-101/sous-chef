@@ -52,7 +52,7 @@ namespace SousChef.Plugin.Navigation
         private double planMilliseconds, prepareMilliseconds, searchMilliseconds, matchMilliseconds;
         private int nodeCount, candidateCount, startCount;
         private string observationError;
-        private bool planning;
+        private bool planning, focusedPlan, fullCatalogueRequested;
         private const double PlanningBudgetMilliseconds = 12;
         private const double RecoveryBudgetMilliseconds = 25;
         private const double IncrementalBudgetMilliseconds = 3;
@@ -185,7 +185,29 @@ namespace SousChef.Plugin.Navigation
             float cost = search.Distances[cell] + distance;
             return cost < best && physics.Segment(p, stance) ? cost : best;
         }
-        private void ClearReachableIndex() { reachableByXZ.Clear(); reachablePortals.Clear(); }
+        private WalkTree indexedTree;
+        private int indexedCount;
+        private void ClearReachableIndex()
+        {
+            indexedTree = null;
+            indexedCount = 0;
+            reachableByXZ.Clear();
+            reachablePortals.Clear();
+        }
+        private void IndexReachableCells()
+        {
+            if (indexedTree == search && indexedCount == search.Settled.Count) return;
+            ClearReachableIndex();
+            indexedTree = search;
+            indexedCount = search.Settled.Count;
+            foreach (WalkCell cell in search.Settled)
+            {
+                if (cell.Portal != 0) { reachablePortals.Add(cell); continue; }
+                long key = ((long)cell.X << 32) ^ (uint)cell.Z; List<WalkCell> bucket;
+                if (!reachableByXZ.TryGetValue(key, out bucket)) { bucket = new List<WalkCell>(); reachableByXZ[key] = bucket; }
+                bucket.Add(cell);
+            }
+        }
         public List<float> ReleaseHeights(Vector3 around, float range)
         {
             var values = new List<float> { physics.Position.y };
@@ -226,6 +248,7 @@ namespace SousChef.Plugin.Navigation
             // Neutral first; callers must not observe idle with stale movement input.
             neutral();
             if (target != null && target.Object != null) lastDestination = Identity(target);
+            fullCatalogueRequested = false;
             Action.Stop(reason); portalReplanUntil = 0; waitingPortalRoute = false; activePortal = null; portalSteps.Clear(); settlingSince = -1; target = null; route = null; facingSince = -1; arrival.Reset(); haveMotion = motionSampleValid = false;
         }
         public void Invalidate(string reason)
@@ -235,6 +258,11 @@ namespace SousChef.Plugin.Navigation
             available.Clear(); unavailable = reason;
             ClearReachableIndex();
         }
+        private string CatalogueReason
+        {
+            get { return focusedPlan && (unavailable == null || unavailable == "planning_in_progress") ? "active_target_only" : unavailable; }
+        }
+
         public object Describe()
         {
             return Json.Object("state", Action.State, "destinationId", Action.Destination, "reason", Action.Reason,
@@ -242,8 +270,8 @@ namespace SousChef.Plugin.Navigation
                 "phase", Action.State == "idle" ? "idle" : activePortal != null ? portalPhase : waitingPortalRoute ? "waiting_portal_route" : settlingSince >= 0 ? (followingSupport ? "following_support" : "settling_ground") : facingSince < 0 ? "walking" : "aligning", "arrival", arrivalDetails,
                 "teleportsCompleted", teleportsCompleted, "portal", DescribePortal(),
                 "executionTrace", physics.TraceEnabled ? executionTrace.ToArray() : null,
-                "revision", Action.Revision, "catalogRevision", revision, "catalogReason", unavailable,
-                "catalogComplete", unavailable == null && search != null && search.Complete,
+                "revision", Action.Revision, "catalogRevision", revision, "catalogReason", CatalogueReason,
+                "catalogComplete", CatalogueReason == null && search != null && search.Complete,
                 "catalogAgeSeconds", lastPlan < 0 ? null : (object)(Time.realtimeSinceStartup - lastPlan),
                 "diagnostics", Json.Object("planMilliseconds", planMilliseconds, "prepareMilliseconds", prepareMilliseconds,
                     "searchMilliseconds", searchMilliseconds, "matchMilliseconds", matchMilliseconds, "searchNodes", nodeCount,
@@ -278,6 +306,9 @@ namespace SousChef.Plugin.Navigation
             {
                 Refresh(player, true, false, true);
             }
+            // Observation never drives a replan during a stair hop or transport.
+            // Once a caller requests the full list, Tick maintains it for this walk.
+            else fullCatalogueRequested = true;
             var destinations = new List<object>();
             foreach (Destination d in available.Values)
             {
@@ -296,7 +327,7 @@ namespace SousChef.Plugin.Navigation
             if (destinations.Count > 0 && Action.State == "idle")
                 actions.Add(Json.Object("name", "navigate_to", "parameters", Json.Object("destination_id", Json.Object("type", "enum", "options", destinations))));
             return Json.Object("actions", actions, "navigation", Describe(), "destinations", destinations,
-                "complete", unavailable == null && search != null && search.Complete, "reason", unavailable);
+                "complete", CatalogueReason == null && search != null && search.Complete, "reason", CatalogueReason);
         }
         public string Start(PlayerControls player, int owner, string destination, bool recovering = false)
         {
@@ -715,17 +746,19 @@ namespace SousChef.Plugin.Navigation
             }
             return kind != null;
         }
-        private List<Destination> Discover(PlayerControls player)
+        private List<Destination> Discover(PlayerControls player, Destination only = null)
         {
             var found = new Dictionary<int, Destination>();
             foreach (Collider collider in physics.Colliders)
             {
                 if (collider == null || !collider.enabled || !collider.gameObject.activeInHierarchy) continue;
+                if (only != null && !collider.transform.IsChildOf(only.Object.transform)) continue;
                 Transform t = collider.transform;
                 for (int depth = 0; t != null && depth < 5; depth++, t = t.parent)
                 {
                     string kind;
                     if (!Eligible(t.gameObject, player, out kind, true)) continue;
+                    if (only != null && t.gameObject != only.Object) break;
                     int key = t.gameObject.GetInstanceID(); Destination d;
                     if (!found.TryGetValue(key, out d))
                     {
@@ -750,7 +783,7 @@ namespace SousChef.Plugin.Navigation
             nodeCount = candidateCount = startCount = 0;
             try
             {
-                available.Clear(); ClearReachableIndex(); chef = player;
+                available.Clear(); chef = player;
                 string error = alreadyRefreshed ? null : physics.Refresh(player);
                 if (error != null) { ClearRemote(); incrementalSearch = fastWarm = false; unavailable = error; return; }
                 if (target != null && target.IsPoint)
@@ -763,7 +796,10 @@ namespace SousChef.Plugin.Navigation
                     if (!supported || Vector3.Distance(checkedPoint, target.Approach) > .04f) { unavailable = "unsafe_release_stance"; return; }
                 }
                 observationError = null;
-                List<Destination> candidates = target != null && target.IsPoint ? new List<Destination> { target } : Discover(player); candidateCount = candidates.Count;
+                focusedPlan = target != null && !target.IsPoint && !fullCatalogueRequested;
+                var candidates = target != null && target.IsPoint ? new List<Destination> { target } : Discover(player, focusedPlan ? target : null);
+                candidateCount = candidates.Count;
+                StationMatch focused = focusedPlan && candidates.Count == 1 ? new StationMatch(this, target) : null;
                 bool hadIncremental = incrementalSearch;
                 searchReused = incremental && incrementalSearch && search != null && physics.CanContinueSearch();
                 List<WalkEdge> starts = null;
@@ -787,7 +823,10 @@ namespace SousChef.Plugin.Navigation
                     searchGeneration++; searchSlices = 0;
                     // A fresh native slice keeps immediate certified options when
                     // animation/held-object motion invalidates continuity each frame.
-                    search = new WalkSearch(starts, physics.Neighbours, 16000, hasBudget);
+                    var local = new WalkSearch(starts, physics.Neighbours, 16000);
+                    search = local;
+                    if (focused == null) local.Continue(hasBudget);
+                    else local.Continue(() => hasBudget() && local.MinimumPendingDistance < focused.CertificationCost, focused.Visit);
                 }
                 else if (remoteSearch == null)
                 {
@@ -817,15 +856,7 @@ namespace SousChef.Plugin.Navigation
                 searchMilliseconds = searchWatch.Elapsed.TotalMilliseconds;
                 nodeCount = search is WalkSearch ? search.Distances.Count : search.DiscoveredCount;
                 if (physics.Overflow) { incrementalSearch = fastWarm = false; unavailable = "physics_query_overflow"; return; }
-                // Index the reachable nodes once, then only inspect cells around each
-                // meaningful object. Never emit the lattice itself as available actions.
-                foreach (WalkCell cell in search.Settled)
-                {
-                    if (cell.Portal != 0) { reachablePortals.Add(cell); continue; }
-                    long key = ((long)cell.X << 32) ^ (uint)cell.Z; List<WalkCell> bucket;
-                    if (!reachableByXZ.TryGetValue(key, out bucket)) { bucket = new List<WalkCell>(); reachableByXZ[key] = bucket; }
-                    bucket.Add(cell);
-                }
+                IndexReachableCells();
                 foreach (Destination d in candidates)
                 {
                     if (d.IsPoint)
@@ -843,64 +874,10 @@ namespace SousChef.Plugin.Navigation
                         { d.Goal = pointGoal; d.Distance = pointBest; available[d.Id] = d; }
                         continue;
                     }
-                    float best = Single.MaxValue; WalkCell goal = new WalkCell(); Vector3 bestApproach = Vector3.zero;
-                    float preferred = Single.MaxValue; WalkCell preferredGoal = new WalkCell(); Vector3 preferredApproach = Vector3.zero;
-                    // Do not chase a newly cheapest side/stance on every refresh
-                    // while braking and turning. Retain the selected stance only
-                    // while native geometry still validates it.
-                    Vector3 retained = d.Object.transform.TransformPoint(d.LocalApproach);
-                    bool retainApproach = false;
-                    if (target == d && Vector3.Distance(physics.Position, retained) < 1f)
-                        foreach (Collider c in d.Colliders)
-                        {
-                            Vector3 checkedStance;
-                            if (physics.Approach(retained, c, out checkedStance) && Vector3.Distance(retained, checkedStance) < .04f)
-                            { retainApproach = true; break; }
-                        }
-                    foreach (Collider c in d.Colliders)
-                    {
-                        Bounds b = c.bounds;
-                        int minX = Mathf.FloorToInt((b.min.x - 1) / WalkPhysics.Spacing), maxX = Mathf.CeilToInt((b.max.x + 1) / WalkPhysics.Spacing);
-                        int minZ = Mathf.FloorToInt((b.min.z - 1) / WalkPhysics.Spacing), maxZ = Mathf.CeilToInt((b.max.z + 1) / WalkPhysics.Spacing);
-                        if ((maxX - minX) * (maxZ - minZ) > 900) continue;
-                        for (int x = minX; x <= maxX; x++) for (int z = minZ; z <= maxZ; z++)
-                        {
-                            List<WalkCell> bucket;
-                            if (!reachableByXZ.TryGetValue(((long)x << 32) ^ (uint)z, out bucket)) continue;
-                            foreach (WalkCell cell in bucket)
-                            {
-                                float distance = search.Distances[cell]; Vector3 stance, point = physics.Point(cell);
-                                if ((distance >= best && (!retainApproach || distance >= preferred)) || !physics.Approach(point, c, out stance, cell.SurfaceHistory)) continue;
-                                // A backpack dispenses only from its rear cone. Other
-                                // approaches select the wearable pack itself.
-                                if (d.Pack != null)
-                                {
-                                    Vector3 offset = stance - d.Object.transform.position; offset.y = 0;
-                                    if (Vector3.Angle(-d.Object.transform.forward, offset) >= d.Pack.m_pickupAngle * .5f) continue;
-                                }
-                                distance += Vector3.Distance(point, stance);
-                                if (distance < best) { best = distance; goal = cell; bestApproach = stance; }
-                                if (retainApproach && distance < preferred && Vector3.Distance(stance, retained) < .04f)
-                                { preferred = distance; preferredGoal = cell; preferredApproach = stance; }
-                            }
-                        }
-                    }
-                    // A valid stance is a preference, not evidence that its side
-                    // is reachable. Fall back to another certified approach when
-                    // the retained route is blocked. An incomplete search can
-                    // still preserve a freshly checked previous route.
-                    if (retainApproach && preferred != Single.MaxValue && preferred <= search.MinimumPendingDistance)
-                    { best = preferred; goal = preferredGoal; bestApproach = preferredApproach; }
-                    else if (retainApproach && !search.Complete && RemainingRouteClear()) continue;
-                    // Any unsettled approach costs at least the frontier distance.
-                    // Publish only when even an unseen approach cannot beat this one.
-                    if (best != Single.MaxValue && best <= search.MinimumPendingDistance)
-                    {
-                        Vector3 localApproach = d.Object.transform.InverseTransformPoint(bestApproach);
-                        if (target == d && d.Object.transform.TransformVector(localApproach - d.LocalApproach).magnitude >= .04f)
-                        { arrival.Reset(); facingSince = -1; arrivalDetails = null; }
-                        d.Goal = goal; d.Approach = bestApproach; d.LocalApproach = localApproach; d.Distance = best; available[d.Id] = d;
-                    }
+                    var match = focused ?? new StationMatch(this, d);
+                    if (focused == null) match.VisitIndexed();
+                    match.Publish();
+
                 }
                 if (physics.Overflow) { available.Clear(); ClearReachableIndex(); unavailable = "physics_query_overflow"; }
                 else unavailable = search.Complete ? null : "planning_in_progress";
@@ -914,7 +891,17 @@ namespace SousChef.Plugin.Navigation
                 ClearRemote(); incrementalSearch = fastWarm = false;
                 available.Clear(); ClearReachableIndex(); unavailable = "navigation_observation_error"; observationError = e.GetType().Name + ": " + e.Message;
             }
-            finally { watch.Stop(); planMilliseconds = watch.Elapsed.TotalMilliseconds; lastPlan = Time.realtimeSinceStartup; lastPlanFrame = Time.frameCount; revision++; planning = false; }
+            finally
+            {
+                if (unavailable != null && unavailable != "planning_in_progress")
+                    ClearReachableIndex();
+                watch.Stop();
+                planMilliseconds = watch.Elapsed.TotalMilliseconds;
+                lastPlan = Time.realtimeSinceStartup;
+                lastPlanFrame = Time.frameCount;
+                revision++;
+                planning = false;
+            }
         }
     }
 }

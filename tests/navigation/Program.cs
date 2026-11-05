@@ -835,6 +835,32 @@ internal static class Program
         Check(navigation.Action.State=="navigating" && (long)((Json.Record)navigation.Describe())["catalogRevision"]==currentRevision,
             "observation-only warming cannot tick, cancel, or replan an input-owning action");
     }
+    private static void FocusedPlanning()
+    {
+        var w = new World();
+        w.AddFloor((x,z) => Math.Abs(x)<2 && Math.Abs(z)<2 ? 0 : (float?)null);
+        w.Chef.transform.position = new Vector3(0,0,-1.5f);
+        var station = w.AddStation();
+        w.AddStation();
+        var nav = w.Navigate(station);
+        Time.realtimeSinceStartup += .2f;
+        nav.Tick(w.Chef);
+        var catalog = (Json.Record)nav.Available(w.Chef);
+        var options = (List<object>)catalog["destinations"];
+        Check(!(bool)catalog["complete"] && (string)catalog["reason"] == "active_target_only" && options.Count == 1,
+            "a focused search publishes only its certified target and labels the catalogue partial");
+        var focused = (Json.Record)options[0];
+        Check(!(bool)((Json.Record)((Json.Record)catalog["navigation"])["diagnostics"])["searchComplete"],
+            "the target can be certified before exhausting the lattice");
+        Time.realtimeSinceStartup += .2f;
+        nav.Tick(w.Chef);
+        catalog = (Json.Record)nav.Available(w.Chef);
+        options = (List<object>)catalog["destinations"];
+        Check(options.Count == 2 && (bool)catalog["complete"], "a catalogue poll restores full matching at the next active replan");
+        var matched = options.Cast<Json.Record>().Single(row => Equals(row["id"],focused["id"]));
+        Check(Equals(matched["routeDistance"],focused["routeDistance"]), "focused and unrestricted search certify the same route cost");
+    }
+
     private static void SearchContinuity()
     {
         var w=new World(); var floor=w.AddFloor((x,z)=>Math.Abs(x)<3 && Math.Abs(z)<3 ? 0 : (float?)null);
@@ -1054,7 +1080,7 @@ internal static class Program
     }
     private static void Main()
     {
-        SearchContinuity(); ShallowCeilingContacts(); EquivalentVerticalStarts(); ConveyorSearchContinuity(); CertifiedStart(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); DirectedConveyors(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
+        FocusedPlanning(); SearchContinuity(); ShallowCeilingContacts(); EquivalentVerticalStarts(); ConveyorSearchContinuity(); CertifiedStart(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); DirectedConveyors(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
         WorkerStartingStateChanges(); LoosePickupBodies(); StationaryThrowStances();
         Console.WriteLine("PASS: " + checks + " navigator integration checks (analytical geometry; not PhysX)");
     }
