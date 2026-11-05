@@ -175,6 +175,13 @@ namespace SousChef.Core
         {
             lock (sync) { if (owner != client || owner == 0) return false; Clear(reason); return true; }
         }
+        public void Disconnect(int client)
+        {
+            // Autonomous work renews its own bounded inputs on the game thread.
+            // Losing its observer must not cancel the accepted request. Manual
+            // input has no executor and must still neutralize immediately.
+            lock (sync) { if (owner == client && owner != 0 && !persistent) Clear("disconnected"); }
+        }
         public void Revoke(string reason) { lock (sync) { if (owner != 0) Clear(reason); } }
         public int Owner(double now) { lock (sync) { Expire(now); return owner; } }
         public ControlInput Read(double now)

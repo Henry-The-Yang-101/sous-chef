@@ -65,6 +65,12 @@ lease expires/disconnects; restoration occurs on the Unity update thread.
 Native physics momentum or a dash already started can continue after input stops.
 The bridge does not rewind or cancel those native actions.
 
+These timeouts and disconnect rules apply to raw manual input. Accepted
+autonomous actions instead retain ownership through client release/disconnect;
+focus loss, pause and temporary input suppression suspend them until the game
+accepts input again. Use `stop()` to cancel, including from another connection.
+Reassignment, round exit and plugin shutdown still clear the old request.
+
 The game retains its normal control gating. This includes focus and suppressed
 chef control; special modes that transfer input to a piloting/cannon control
 scheme are not promised by this first control adapter. A rejected command does

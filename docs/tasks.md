@@ -21,9 +21,12 @@ available. Task discovery only observes state; it never moves items. Explicit
 interaction and logistics commands retain their existing cargo preconditions.
 
 Environmental blocks wait indefinitely with neutral input and bounded periodic
-revalidation. Completed steps are retained. Explicit Stop, release, disconnect,
-focus loss, reassignment, respawn and round changes still cancel and restore
-native input bindings. Changed source identities wait for the original source before an unpressed step.
+revalidation. Completed steps are retained. Stop explicitly cancels the request
+and restores native input bindings. Focus loss, pause and temporary input
+suppression (including respawn) suspend it with neutral input. Closing/reloading
+the browser, a missing heartbeat, client release or socket disconnect does not
+cancel an accepted job. Player reassignment, round changes and plugin shutdown
+still clear work tied to the old chef/kitchen. Changed source identities wait for the original source before an unpressed step.
 Cargo identity checks still protect placements, transfers and disposal.
 Unverified button outcomes are never blindly replayed. Waiting does not replay a
 successful step or disposal.
@@ -31,17 +34,19 @@ successful step or disposal.
 The existing interaction/logistics recovery window is also indefinite; time spent
 recovering suspends finite watchdogs. Button outcome verification remains bounded.
 New tasks and their child actions have no overall deadline.
-Pausing suspends an active autonomous task/action with neutral input, preserving
-its request, cargo and ownership. Unpausing revalidates navigation and resumes
-with action watchdogs adjusted for the pause. Stop and disconnect still cancel
-while paused; raw manual input leases are not retained.
+Suspension preserves the active task/action's request, cargo and ownership.
+Returning to the focused, unpaused kitchen revalidates navigation and resumes
+with action watchdogs adjusted for the time away. The kitchen itself continues
+running while unfocused, so native cooking and moving objects can change.
+Stop still cancels while suspended; raw manual input leases are not retained.
 
 The localhost Tasks panel uses `/api/task`, with the current `sessionId` and
 `arguments` containing `action`, `repetitions` (integer or null), and preparation
 parameters where required. `catalog.taskOptions` contains only currently eligible
 tasks. The server and executor both revalidate before starting. Stop works while
-waiting, working or between repetitions. Browser disconnection closes ownership
-as before. There is no task queue or voice/Jev integration yet.
+waiting, working, suspended or between repetitions, including from a new tab
+or a reconnected client. Reconnection observes the original job without replaying
+its command. There is no task queue or voice/Jev integration yet.
 
 Wire: `task REQUEST ACTION 1..10|forever`; preparation additionally takes player
 `1|3|4`, followed by 1–10 triples of base64url selector, preparation state and

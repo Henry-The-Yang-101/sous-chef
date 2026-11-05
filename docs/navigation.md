@@ -229,7 +229,7 @@ this shares the portal timeout. `teleportsCompleted` counts
 confirmed transitions. A fresh search continues from the actual exit. If its
 budget expires, the checked route tail can be retained without trying to walk
 across the completed teleport. Lookahead never skips a pending portal.
-Stop/disconnect cancels further navigation; an already-started native animation
+Stop cancels further navigation; an already-started native animation
 may finish.
 Moving receivers with temporarily blocked landings hold entry neutrally. If their
 motion temporarily disconnects the planned onward route, navigation waits and
@@ -322,8 +322,10 @@ and use predicates: `arrived` means at least one is currently available;
 valid motion sample), selection, `positioned`, `canPickup`,
 `canPlace`, `canUse` and `readyForAction` at completion; these are historical once
 idle, not a promise that a moving target or its contents stay available. Failure to align,
-loss of progress, excess duration, query overflow, planning failure, focus loss,
-pause, respawn, ownership loss, disconnect or round change ends the action.
+loss of progress, excess duration, query overflow, planning failure, ownership
+loss or round change ends the action. Focus loss, pause and temporary input
+suppression (including respawn) suspend navigation with neutral input, retaining
+the request and adjusting watchdogs before resuming.
 `stop` clears action input before reporting idle and restores the original P2
 bindings. Native momentum, wind, conveyors and human input after restoration can
 still move the chef; stopping does not teleport or zero the game's physics.
@@ -355,8 +357,9 @@ other native round, pause, menu and player gates pass. Movement still requires
 game focus and reports `game_unfocused` otherwise. The browser harness focuses
 the game only after the user clicks Navigate, then revalidates the exact target.
 Sequences remain internal to the direct-input lease. An autonomous action renews
-its own short input lease; the decision maker does not issue keepalive inputs.
-Closing its owning connection cancels it. Idle connections may stay open (four
+its own bounded input commands under durable ownership; the decision maker does
+not issue keepalive inputs. Closing/releasing its owning connection leaves the
+accepted request intact; any client can Stop it. Idle connections may stay open (four
 maximum); input TTLs and bounded dispatch/write timeouts still apply.
 
 For execution diagnosis, launch the plugin with `SOUS_CHEF_NAV_TRACE=1`.

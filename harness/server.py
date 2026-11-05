@@ -37,12 +37,11 @@ def focus_game():
 class HarnessBridge:
     """One persistent action connection shared by all browser views.
 
-    Network requests are serialized, but state reads and browser heartbeats never
+    Network requests are serialized, but browser state reads never
     wait for game I/O. Reconnection observes only: commands are never replayed.
     """
     POLL_SECONDS = .2
     STALE_SECONDS = 1.5
-    VIEWER_TIMEOUT = 5.0
 
     def __init__(self, port=24703, factory=None, clock=time.monotonic, focus=focus_game, contents=None):
         self.factory = factory or (lambda: ActionClient(port, timeout=1.0))
@@ -55,7 +54,6 @@ class HarnessBridge:
         self.client = None
         self.thread = None
         self.owner = None
-        self.owner_seen = 0
         self.generation = 0
         self.observed = None
         self.value = {'connected': False, 'sessionId': None, 'catalog': {},
@@ -89,7 +87,7 @@ class HarnessBridge:
                 self.owner = None
 
     def _failed(self, error):
-        # Closing the owning socket also cancels navigation in the plugin.
+        # Accepted autonomous work stays in the plugin across reconnection.
         if self.client is not None:
             try:
                 self.client.close()
@@ -106,20 +104,6 @@ class HarnessBridge:
         with self.io_lock:
             try:
                 client = self._connect()
-                with self.state_lock:
-                    expired = self.owner is not None and self.clock() - self.owner_seen > self.VIEWER_TIMEOUT
-                if expired:
-                    # Release only our connection's lease; do not stop another API
-                    # client if our action completed and it took over in the meantime.
-                    try:
-                        client.release()
-                    except ControlError as error:
-                        if str(error) != 'not_owner':
-                            raise
-                    with self.state_lock:
-                        self.owner = None
-                        self.value['lastCommand'] = {'operation': 'stop', 'ok': True,
-                                                     'message': 'Browser disconnected; released Player 2'}
                 catalog = client.available_actions()
                 self._publish(catalog, client.last_response['control'])
             except (OSError, ControlError, ValueError, KeyError) as error:
@@ -127,8 +111,6 @@ class HarnessBridge:
 
     def state(self, viewer=None):
         with self.state_lock:
-            if viewer and viewer == self.owner:
-                self.owner_seen = self.clock()
             result = copy.deepcopy(self.value)
             age = None if self.observed is None else self.clock() - self.observed
             result['ageMs'] = None if age is None else round(age * 1000)
@@ -240,7 +222,6 @@ class HarnessBridge:
                 control = self.client.run_task(**arguments) if operation == 'task' else (getattr(self.client, operation)(*job_args) if job_args is not None else getattr(self.client, operation)(target, **arguments))
                 with self.state_lock:
                     self.owner = viewer
-                    self.owner_seen = self.clock()
                     self.value['lastCommand'] = {'operation': operation, 'ok': True,
                                                  'target': chosen, 'message': operation.replace('_', ' ') + ' requested'}
                 self._publish(catalog, control)
@@ -271,16 +252,10 @@ class HarnessBridge:
                 raise HarnessError('Bridge unavailable; owning connection closed') from error
 
     def leave(self, viewer):
-        with self.io_lock:
-            with self.state_lock:
-                if viewer != self.owner:
-                    return
-            if self.client is not None:
-                try:
-                    self.client.release()
-                except (OSError, ControlError):
-                    self._failed('Browser closed')
-            with self.state_lock:
+        # Page lifetime is independent of an accepted job. Stop is the explicit
+        # cancellation path, including from a new tab or a reconnected harness.
+        with self.state_lock:
+            if viewer == self.owner:
                 self.owner = None
 
     def close(self):
@@ -406,7 +381,7 @@ def serve(port=8765, bridge_port=24703, local_only=False, tunnel=False, public_u
                                 () if local_only else lan_addresses(), public_url)
     print(f'Sous Chef actions: http://127.0.0.1:{server.server_port}', flush=True)
     print('Scan the phone QR code on that page; keep your phone on the same Wi-Fi.', flush=True)
-    print('Player 2 only. Ctrl+C stops the harness and releases its action.', flush=True)
+    print('Player 2 only. Use Stop to cancel a job; Ctrl+C closes the harness.', flush=True)
     try:
         if threading.current_thread() is threading.main_thread():
             signal.signal(signal.SIGTERM, signal.default_int_handler)

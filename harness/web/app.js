@@ -239,7 +239,10 @@ function render() {
     : 'Join Player 2 with Split Controller, then enter an unpaused Arcade → Couch kitchen.';
   const ready = nav.arrival;
   const possible = ready ? [['canPickup', 'pickup'], ['canPlace', 'place'], ['canUse', 'use']].filter(([key]) => ready[key]).map(([,name]) => name).join(', ') : '';
-  el('result').textContent = useReceipt ? `${receipt.state}: ${explain(receipt.reason) || 'Checking the requested outcome.'}` : moving ? 'The plugin is navigating and checking final alignment. Stop interrupts it.'
+  el('result').textContent = busy && control.suspended
+    ? control.reason === 'game_unfocused' ? 'Suspended while the game is unfocused. Return to the game to resume, or press Stop to cancel.'
+      : 'Suspended while the game blocks input. The same job resumes when input is available. Stop cancels it.'
+    : useReceipt ? `${receipt.state}: ${explain(receipt.reason) || 'Checking the requested outcome.'}` : moving ? 'The plugin is navigating and checking final alignment. Stop interrupts it.'
     : live ? explain(nav.reason) + (nav.reason === 'arrived' && possible ? ` Available at arrival: ${possible}.` : '') : '';
   const error = lastError || (!live && state?.error) || '';
   el('error').hidden = !error;

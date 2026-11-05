@@ -198,9 +198,12 @@ release ownership or complete its parent action. Failed request preconditions
 return `ok: false`; the action receipt represents the last accepted action.
 For a standalone `navigate_to`, use the existing navigation receipt.
 
-Raw input cannot override a running action. Disconnect, focus loss, pause,
-reassignment, respawn, round change and explicit release cancel it. Target or
-contents changes can block it. Cancellation never parks or discards food.
+Raw input cannot override a running action. Focus loss, pause and temporary input
+suppression suspend it with neutral input; returning to the kitchen resumes the
+same request with watchdogs adjusted. Client release/disconnect and browser
+closure leave accepted autonomous work running or suspended. Stop cancels it;
+reassignment, round change and shutdown still clear work in the old kitchen.
+Target or contents changes can block it. Cancellation never parks or discards food.
 Native sticky work is ended using the normal client interaction-end message,
 only when P2's current interaction matches the action's station; then input
 bindings are restored. This narrow cleanup supplements logical-input execution

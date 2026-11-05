@@ -73,8 +73,8 @@ the raw supply and its spawned items; processed ingredients retain separate IDs.
 Assembly bases such as burger buns use their native `PreparationContainer`
 ingredient definition, even when they have no ordinary ingredient component or
 chopping output. Filled buns are distinct from empty supplies.
-Parent and child phases remain visible through pickup and delivery. Stop and
-browser-disconnect cleanup cancel the entire job.
+Parent and child phases remain visible through pickup and delivery. Stop cancels
+the entire job. Focus loss suspends it until the game is focused again.
 
 If the job fields are disabled, the message below the form explains whether the
 bridge needs an update, the game is paused, another action is running, or the
@@ -206,15 +206,16 @@ other non-player solid geometry still do. Discovery covers a 60-unit vicinity;
 the empty-list reason distinguishes missing/paused players, unsupported starting
 positions and unfinished planning rather than silently implying a distance cutoff.
 
-The owning browser tab sends heartbeats through its state requests. Closing or
-reloading it releases its lease; if the close notification is lost, five seconds
-without that tab's heartbeat releases it. Other tabs cannot keep its action alive.
-Severe browser timer throttling may therefore stop an action conservatively.
-Ctrl+C closes the harness's persistent socket, also cancelling its action. Losing
-the bridge clears all options; reconnection observes only and never resumes motion.
-The underlying plugin's input lease remains responsible for immediate socket-loss
-handling. Network delays and Unity updates bound stop latency; native momentum is
-not forcibly erased.
+Accepted jobs belong to the game until completion or Stop. Closing/reloading a
+tab, browser timer throttling, Ctrl+C in the harness, and socket disconnects do
+not cancel them. Reconnection observes the original request without replaying
+the command; any authenticated tab can Stop it. While the game is unfocused,
+paused or temporarily suppressing P2 input, the job is suspended with neutral
+input and resumes when the game accepts input again. Native cooking, physics
+and the round clock still run while unfocused. Reassignment, round exit and
+plugin shutdown clear work tied to the old chef/kitchen. Raw manual input
+still releases on socket loss. Network delays and Unity updates bound Stop
+latency; native momentum is not forcibly erased.
 
 The HTTP server validates the exact configured Host/Origin and requires a
 per-process page token for commands, plus authenticated reads for phone/tunnel

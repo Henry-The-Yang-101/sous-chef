@@ -325,15 +325,18 @@ class HarnessTests(unittest.TestCase):
         self.bridge.poll()
         self.assertEqual(self.native.calls.count(('navigate_to', 'd7')), 1)
 
-    def test_abandoned_browser_releases_only_its_lease(self):
+    def test_abandoned_browser_keeps_action_until_stop(self):
         self.navigate()
         self.now += 6
         self.bridge.state('another-tab')
         self.bridge.poll()
-        self.assertIn(('release',), self.native.calls)
+        self.assertNotIn(('release',), self.native.calls)
         self.assertNotIn(('stop',), self.native.calls)
+        self.assertEqual(self.bridge.state()['control']['navigation']['state'], 'navigating')
+        self.bridge.stop()
+        self.assertIn(('stop',), self.native.calls)
 
-    def test_owning_browser_heartbeat_keeps_action_alive(self):
+    def test_browser_state_reads_preserve_action(self):
         self.navigate()
         self.now += 4
         self.bridge.state('tab-a')
@@ -346,7 +349,9 @@ class HarnessTests(unittest.TestCase):
         self.bridge.leave('tab-b')
         self.assertNotIn(('release',), self.native.calls)
         self.bridge.leave('tab-a')
-        self.assertIn(('release',), self.native.calls)
+        self.bridge.poll()
+        self.assertNotIn(('release',), self.native.calls)
+        self.assertEqual(self.bridge.state()['control']['navigation']['state'], 'navigating')
 
     def test_stop_interrupts_and_clears_old_catalog(self):
         self.navigate()
