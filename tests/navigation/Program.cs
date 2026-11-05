@@ -891,6 +891,34 @@ internal static class Program
         Check(Equals(matched["routeDistance"],focused["routeDistance"]), "focused and unrestricted search certify the same route cost");
     }
 
+    private static void DoorwayChanges()
+    {
+        var w = new World();
+        w.AddFloor((x,z) => Math.Abs(x) < 3 && Math.Abs(z) < .65f ? 0 : (float?)null);
+        w.Chef.transform.position = Vector3.right * -2;
+        var wall = new GameObject("sliding door").Add(new BoxCollider { size = new Vector3(.4f, 2, 4) });
+        wall.transform.position = Vector3.forward * 10;
+        w.Colliders.Add(wall);
+        Physics.Overlap = (a,b,r) => Math.Abs(a.x - wall.transform.position.x) <= .2f + r &&
+            Math.Abs(a.z - wall.transform.position.z) <= 2 + r ? new Collider[] { wall } : new Collider[0];
+        var physics = w.Ready();
+        var goal = new WalkCell(5, 0, 0);
+        Func<WalkSearch> search = () => new WalkSearch(physics.Starts(), physics.Neighbours, 16000, () => true);
+        var open = search();
+        Check(open.Settled.Contains(goal) && physics.RememberSearch(), "the open doorway admits a certified route");
+        wall.transform.position += Vector3.forward;
+        physics.Refresh(w.Chef);
+        Check(physics.CanContinueSearch(), "moving the door outside the corridor preserves its route");
+        wall.transform.position = Vector3.zero;
+        physics.Refresh(w.Chef);
+        Check(!physics.CanContinueSearch() && !search().Settled.Contains(goal) && physics.RememberSearch(),
+            "closing the doorway removes the route immediately");
+        wall.transform.position = Vector3.forward * 10;
+        physics.Refresh(w.Chef);
+        Check(!physics.CanContinueSearch() && search().Distances[goal] == open.Distances[goal],
+            "opening the doorway restores the original shortest route through rejected cells");
+    }
+
     private static void SearchContinuity()
     {
         var w=new World(); var floor=w.AddFloor((x,z)=>Math.Abs(x)<3 && Math.Abs(z)<3 ? 0 : (float?)null);
@@ -1110,7 +1138,7 @@ internal static class Program
     }
     private static void Main()
     {
-        StationConnectorReuse(); FocusedPlanning(); SearchContinuity(); ShallowCeilingContacts(); EquivalentVerticalStarts(); ConveyorSearchContinuity(); CertifiedStart(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); DirectedConveyors(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
+        DoorwayChanges(); StationConnectorReuse(); FocusedPlanning(); SearchContinuity(); ShallowCeilingContacts(); EquivalentVerticalStarts(); ConveyorSearchContinuity(); CertifiedStart(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); DirectedConveyors(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
         WorkerStartingStateChanges(); LoosePickupBodies(); StationaryThrowStances();
         Console.WriteLine("PASS: " + checks + " navigator integration checks (analytical geometry; not PhysX)");
     }

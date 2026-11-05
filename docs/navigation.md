@@ -120,8 +120,25 @@ and connected neighbours, plus the chef's entering-surface history. Other moving
 surfaces and portal readiness retain fresh searches with paced idle warming.
 Starting an action can reuse a certified idle tree after those same live checks;
 a fresh command does not discard a distant route merely to rebuild it in one slice.
-Completed stable trees can serve fresh
-target/approach observations without another graph expansion. A persistently
+A collider moving outside the horizontal footprint of every sampled cell and
+edge can preserve the tree after the ordered starting connections and costs pass
+fresh checks. The footprint includes failed probes and outgoing edges, so opening
+a doorway can trigger a new search just as closing it can. Wind geometry remains
+conservatively invalidated.
+
+Completed stable trees also retain their spatial index. On a calm, single floor
+support, a lattice probe can remember one successful connector to an exact grid
+stance. Geometry revisions expire these connectors. Grid selection, occupancy,
+sight and support speed are checked on reuse.
+
+During an ordinary station walk the search visits candidate approaches as cells
+settle and can finish the replan when the pending frontier cannot improve the
+chosen approach. This includes the retained-side preference near the target.
+A catalogue poll during a focused replan returns the confirmed target with
+`complete: false` and `reason: active_target_only`. The next normal replan
+restores full catalogue matching for the rest of that walk. Status polling can
+observe the focused walk throughout. Generated point stances retain their
+separate matching rules. A persistently
 oversized graph reports incomplete coverage and does not cause unlimited background
 retries. Unchanged primitive
 colliders retain probes. Readable collision meshes compare their vertices and

@@ -927,3 +927,30 @@ Private evidence: `.local/no-safe-start-context.json`,
 `.local/safe-start-native-results.json` and `.local/safe-start-check.log`.
 This is native validation of the reported room and actions, not an all-kitchen
 reachability or FPS guarantee.
+
+## Station pathfinding — 2026-11-05
+
+The native headless simulator ran the same three kitchens, spawn positions and
+named targets at a requested 60 FPS before (`62df4d0`) and after (`0dfac46`).
+Each idle median uses the last 25 of 30 catalogue polls. Each walking median uses
+distinct observed planning revisions after the initial command sample, with
+status polling during a single walk. Times measure the plugin's navigation
+refresh. The pedestrian and frame timings vary between runs.
+
+| Kitchen | Idle refresh before → after | Walking replan before → after | Idle tree reuse before → after |
+| --- | ---: | ---: | ---: |
+| Sushi 1-1 | 2.52 → 2.12 ms | 5.88 → 3.07 ms | 25/25 → 25/25 |
+| Sushi 1-2 | 9.78 → 3.71 ms | 10.75 → 5.25 ms | 0/25 → 22/25 |
+| Wizard School 3-4 | 8.90 → 10.40 ms | 9.45 → 7.70 ms | 0/25 → 0/25 |
+
+All three targets had identical initial route distances and terminal outcomes on
+both builds, including positioning at the empty Sushi 1-1 chopping board. A
+separate Wizard 3-3 pan/Meat round trip completed four native teleports. Two
+Wizard 5-5 fetches recovered after the delivery colliders disappeared for 250 ms
+and 900 ms. Each delivered the original cheese exactly once after restoration.
+The navigation fixtures also exercise a sliding doorway that removes and then
+restores a route, and compare focused and unrestricted costs at the same pose.
+
+Local measurements are in `.local/nav-cost-investigation-1105/` and
+`.local/nav-speed-validation/`, including `portal/report.json` and
+`recovery/report.json` under the latter directory.
