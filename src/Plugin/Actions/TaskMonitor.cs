@@ -8,7 +8,6 @@ namespace SousChef.Plugin.Actions
         partial void RegisterMonitor() { Register("monitor_equipment", MonitorAvailable, MonitorEquipment); }
         private bool MonitorAvailable()
         {
-            if (ActionObservations.Held(chef) != null) return false;
             inventory.Refresh(chef);
             foreach (GameObject target in navigation.Targets()) if (TaskNative.Equipment(target) && Reachable(target)) return true;
             return false;

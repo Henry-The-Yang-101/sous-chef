@@ -196,12 +196,12 @@ namespace SousChef.Plugin.Actions
         // same native support; this is not a route proof.
         private bool Obtainable(LogisticsItem entry, string operation)
         {
-            string collect = LogisticsChecks.Collect(chef, entry, operation);
+            string collect = LogisticsChecks.Collect(chef, entry, operation, true);
             return collect == null || collect == "source_unreachable" && ApproachCost(entry.Source) != Single.MaxValue && LogisticsChecks.CanCollectEmpty(chef, entry.Source);
         }
         private LogisticsItem Source(string selector, bool utensil = false, bool processed = false)
         {
-            inventory.Refresh(chef); LogisticsItem best = null; float score = Single.MaxValue; int bestWork = Int32.MaxValue; bool bestPlaced = false;
+            inventory.Refresh(chef); LogisticsItem best = null; float score = Single.MaxValue; int bestWork = Int32.MaxValue; bool bestPlaced = false, bestHeld = false;
             string utensilType = LogisticsInventory.CanonicalUtensil(selector); bool plate = utensilType == "plate";
             foreach (LogisticsItem entry in inventory.Items)
             {
@@ -213,10 +213,11 @@ namespace SousChef.Plugin.Actions
                 // For equivalent preparation stages, prefer certified sources.
                 float candidate = (entry.Distance != Single.MaxValue ? entry.Distance : ApproachCost(entry.Source)) + (entry.Supply ? 10000 : 0);
                 int work = processed ? PreparationWork(entry.Item) : 0;
+                bool held = System.Object.ReferenceEquals(ActionObservations.Held(chef), entry.Item);
                 // Food already on a board needs no placement and frees that board.
                 bool placed = work > 0 && OnBoard(entry);
-                if (work < bestWork || work == bestWork && (placed && !bestPlaced || placed == bestPlaced && candidate < score))
-                { best = entry; score = candidate; bestWork = work; bestPlaced = placed; }
+                if (held && !bestHeld || held == bestHeld && (work < bestWork || work == bestWork && (placed && !bestPlaced || placed == bestPlaced && candidate < score)))
+                { best = entry; score = candidate; bestWork = work; bestPlaced = placed; bestHeld = held; }
             }
             return best;
         }

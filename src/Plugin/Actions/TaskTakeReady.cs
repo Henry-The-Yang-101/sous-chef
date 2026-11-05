@@ -7,7 +7,7 @@ namespace SousChef.Plugin.Actions
     internal sealed partial class TaskActions
     {
         partial void RegisterTakeReady()
-        { Register("take_ready", delegate { return ActionObservations.Held(chef) == null && ProcessingStation(false) != null; }, TakeReady); }
+        { Register("take_ready", delegate { return ProcessingStation(false) != null; }, TakeReady); }
         private GameObject ProcessingStation(bool includeMixing, bool readyOnly = false)
         {
             inventory.Refresh(chef); GameObject best = null; float score = Single.MaxValue;
@@ -39,7 +39,8 @@ namespace SousChef.Plugin.Actions
             foreach (LogisticsItem candidate in inventory.Items)
             {
                 if ((!candidate.CleanPlate && candidate.UtensilType == null) || !candidate.Empty || candidate.InUse ||
-                    !CanCollect(LogisticsChecks.Payload(candidate), source) || LogisticsChecks.Collect(chef, candidate, candidate.CleanPlate ? "get_plate" : "move_item") != null) continue;
+                    !CanCollect(LogisticsChecks.Payload(candidate), source) || LogisticsChecks.Collect(chef, candidate, candidate.CleanPlate ? "get_plate" : "move_item", true) != null) continue;
+                if (System.Object.ReferenceEquals(candidate.Item, ActionObservations.Held(chef))) return candidate;
                 // Fetching a plate across stairs/another island can consume the
                 // entire ready window. Prefer immediate utensil removal when a
                 // conservative round trip would let this batch become ruined.
@@ -50,6 +51,15 @@ namespace SousChef.Plugin.Actions
             }
             return best;
         }
+        private TaskStep GetServingUtensil(LogisticsItem utensil, GameObject food)
+        {
+            TaskStep pickup = Do("pick_up", utensil.Source);
+            pickup.UseHeld = held => ServingRecipient(held, food);
+            return pickup;
+        }
+        private bool ServingRecipient(GameObject recipient, GameObject food)
+        { return recipient != null && LogisticsInventory.Empty(recipient) &&
+            (recipient.GetComponent<ServerPlate>() != null || LogisticsInventory.UtensilType(recipient) != null) && CanCollect(recipient, food); }
         private IEnumerable<TaskStep> RemoveReady(GameObject station, GameObject item)
         {
             // The wait observes the originally selected food/container. It never
@@ -58,11 +68,11 @@ namespace SousChef.Plugin.Actions
                 return station != null && station.activeInHierarchy && System.Object.ReferenceEquals(ActionObservations.Receiver(station), item) && TaskNative.ReadyAt(station);
             });
             // An incomplete route slice is not evidence that plates are absent.
-            yield return Until("checking_serving_utensils", delegate { RefreshWorld(); return botSearchComplete; });
+            yield return Until("checking_serving_utensils", delegate { RefreshWorld(); return ServingRecipient(ActionObservations.Held(chef), item) || botSearchComplete; });
             LogisticsItem plate = ServingUtensil(item, station);
             if (plate != null)
             {
-                yield return Do("pick_up", plate.Source);
+                yield return GetServingUtensil(plate, item);
                 yield return Do("collect_contents", station);
                 foreach (TaskStep park in Park(ActionObservations.Held(chef))) yield return park;
             }
@@ -81,7 +91,7 @@ namespace SousChef.Plugin.Actions
                 plate = holder == null ? null : ServingUtensil(item, holder, true);
                 if (plate != null)
                 {
-                    yield return Do("pick_up", plate.Source);
+                    yield return GetServingUtensil(plate, item);
                     yield return Do("collect_contents", holder);
                     foreach (TaskStep park in Park(ActionObservations.Held(chef))) yield return park;
                 }

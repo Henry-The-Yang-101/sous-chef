@@ -13,6 +13,9 @@ namespace SousChef.Plugin.Actions
         public Func<bool> Ready;
         public Func<bool> Progress;
         public Func<bool> Outcome;
+        public Func<GameObject, bool> UseHeld, ReplanForHeld;
+        public Func<GameObject, IEnumerable<TaskStep>> FreeHands;
+        public bool EmptyHands;
         public bool ReplanOnBlock, ReplanAfterPress, Succeeded;
         public GameObject Obstruction;
     }
@@ -82,6 +85,7 @@ namespace SousChef.Plugin.Actions
                 if (!child.Run.Running && navigation.Action.State == "idle") handoffThrows.Tick(chef);
                 if (childStarted)
                 {
+                    if (ReconcileHands()) return;
                     if (child.Run.Running && step.ReplanOnBlock && child.CanRetry && child.NavigationStalled)
                     {
                         // No native button has been pressed: storage/handoff may
@@ -124,6 +128,14 @@ namespace SousChef.Plugin.Actions
                 }
                 if (step == null)
                 {
+                    if (handsPlan != null)
+                    {
+                        if (handsPlan.MoveNext()) step = handsPlan.Current;
+                        else { handsPlan.Dispose(); handsPlan = null; step = suspendedStep; suspendedStep = null; }
+                    }
+                }
+                if (step == null)
+                {
                     if (!plan.MoveNext())
                     {
                         plan.Dispose(); plan = null; completed++;
@@ -132,6 +144,7 @@ namespace SousChef.Plugin.Actions
                     }
                     step = plan.Current;
                 }
+                if (ReconcileHands()) return;
                 Run.Advance(step.Phase); waitingReason = null;
                 if (step.Progress != null) return;
                 if (step.Ready != null && !step.Ready())
@@ -176,7 +189,9 @@ namespace SousChef.Plugin.Actions
             child.Cancel(reason); input(0); Run.Finish(state, reason);
             handoffThrows.Reset();
             if (navigation.Action.State == "navigating") navigation.Stop(reason);
-            if (plan != null) plan.Dispose(); plan = null; step = null; release();
+            if (plan != null) plan.Dispose(); plan = null; step = null;
+            if (handsPlan != null) handsPlan.Dispose(); handsPlan = null; suspendedStep = null;
+            release();
         }
         private TaskStep Do(string operation, GameObject target, string condition = null)
         {
@@ -184,7 +199,13 @@ namespace SousChef.Plugin.Actions
             GameObject originalHeld = ActionObservations.Held(chef), originalOccupant = ActionObservations.Occupant(target);
             var supply = target == null ? null : target.GetComponent<PickupItemSpawner>();
             GameObject originalPrefab = supply == null ? null : supply.m_itemPrefab;
-            return new TaskStep { Phase = operation, Ready = delegate {
+            GameObject expected = originalOccupant ?? target;
+            var stack = expected == null ? null : expected.GetComponent<ServerStack>();
+            if (expected != null && expected.GetComponent<CleanPlateStack>() != null) expected = stack == null ? null : stack.InspectTopOfStack();
+            return new TaskStep { Phase = operation,
+                EmptyHands = operation == "pick_up" || operation == "work_at" || operation == "activate",
+                UseHeld = operation == "pick_up" ? (Func<GameObject, bool>)(held => System.Object.ReferenceEquals(held, expected)) : null,
+                Ready = delegate {
                 if (target == null || !target.activeInHierarchy) return false;
                 if (operation == "pick_up")
                     return System.Object.ReferenceEquals(ActionObservations.Occupant(target), originalOccupant) &&

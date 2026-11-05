@@ -13,7 +13,7 @@ namespace SousChef.Plugin.Actions
             foreach (LogisticsItem item in inventory.Items)
             {
                 if (item.Supply || item.InUse || !TaskNative.Burnt(item.Item) || (item.Empty && item.Item.GetComponent<ServerIngredientContainer>() != null) ||
-                    LogisticsChecks.Collect(chef, item, "move_item") != null) continue;
+                    LogisticsChecks.Collect(chef, item, "move_item", true) != null) continue;
                 if (item.Distance < distance) { distance = item.Distance; best = item; }
             }
             return best;

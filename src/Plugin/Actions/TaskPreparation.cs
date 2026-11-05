@@ -49,10 +49,33 @@ namespace SousChef.Plugin.Actions
         { return Source(desired.Selector, desired.Preparation == "empty", desired.Preparation != "raw" && desired.Preparation != "empty"); }
         private bool PreparationAvailable()
         {
-            if (ActionObservations.Held(chef) != null || Human() == null) return false;
+            if (Human() == null) return false;
             foreach (LogisticsItem item in inventory.Items)
                 if ((item.IngredientId != null || item.CleanPlate || item.UtensilType != null) &&
                     Obtainable(item, item.CleanPlate ? "get_plate" : "move_item")) return true;
+            return false;
+        }
+        private bool HeldPreparation(GameObject held, PreparationRequest desired)
+        {
+            if (held == null || deliveredItems.Contains(held)) return false;
+            inventory.Refresh(chef);
+            foreach (LogisticsItem entry in inventory.Items)
+            {
+                if (!System.Object.ReferenceEquals(entry.Item, held)) continue;
+                if (desired.Preparation == "empty")
+                {
+                    string type = LogisticsInventory.CanonicalUtensil(desired.Selector);
+                    return type == "plate" ? entry.CleanPlate : entry.Empty && entry.UtensilType == type;
+                }
+                return LogisticsInventory.IngredientMatches(entry, desired.Selector) ||
+                    desired.Preparation != "raw" && PreparedIngredientMatches(entry, desired.Selector);
+            }
+            return false;
+        }
+        private bool UsefulPreparation(GameObject held, List<PreparationUnit> units)
+        {
+            foreach (PreparationUnit unit in units)
+                if (!unit.Delivered && !unit.Processing && HeldPreparation(held, unit.Request)) return true;
             return false;
         }
         private static bool NeedsWork(PreparationRequest request, GameObject item)
@@ -140,7 +163,7 @@ namespace SousChef.Plugin.Actions
                 for (int n = 0; n < item.Quantity; n++) units.Add(new PreparationUnit { Request = item });
             while (true)
             {
-                PreparationUnit next = null; float soonest = Single.MaxValue; bool boardBlocked = false;
+                PreparationUnit next = null; float soonest = Single.MaxValue; bool boardBlocked = false, nextHeld = false;
                 bool processing = false; foreach (PreparationUnit unit in units) if (unit.Processing && !unit.Delivered) processing = true;
                 bool emptyCooker = !processing || EmptyProcessor(false), emptyMixer = !processing || EmptyProcessor(true);
                 // Ready equipment has priority, ordered by remaining cooking
@@ -152,11 +175,16 @@ namespace SousChef.Plugin.Actions
                     {
                         if (!TaskNative.Ready(unit.Item, unit.Request.Preparation == "mixed")) continue;
                         float margin = TaskNative.Remaining(unit.Item, unit.Request.Preparation == "mixed");
-                        if (next == null || !next.Processing || margin < soonest) { next = unit; soonest = margin; }
+                        if (next == null || !next.Processing || margin < soonest) { next = unit; soonest = margin; nextHeld = false; }
                     }
-                    else if ((!Passive(unit.Request) || (unit.Request.Preparation == "mixed" ? emptyMixer : emptyCooker)) &&
-                        StartingSource(unit, ref boardBlocked) != null &&
-                        (next == null || (!next.Processing && Passive(unit.Request) && !Passive(next.Request)))) next = unit;
+                    else if (!Passive(unit.Request) || (unit.Request.Preparation == "mixed" ? emptyMixer : emptyCooker))
+                    {
+                        LogisticsItem candidate = StartingSource(unit, ref boardBlocked);
+                        if (candidate == null) continue;
+                        bool held = System.Object.ReferenceEquals(candidate.Item, ActionObservations.Held(chef));
+                        if (next == null || !next.Processing && (held && !nextHeld || held == nextHeld && Passive(unit.Request) && !Passive(next.Request)))
+                        { next = unit; nextHeld = held; }
+                    }
                 }
                 // Avoid beginning an indivisible chopping/travel segment that
                 // would carry us past another pot's native completion time.
@@ -175,7 +203,9 @@ namespace SousChef.Plugin.Actions
                             if (unit.Processing || unit.Delivered || (Passive(unit.Request) && !(unit.Request.Preparation == "mixed" ? emptyMixer : emptyCooker)) ||
                                 StartingSource(unit, ref boardBlocked) == null) continue;
                             float estimate; if (!estimates.TryGetValue(unit.Request, out estimate)) { estimate = PreparationSeconds(unit); estimates.Add(unit.Request, estimate); }
-                            if (estimate + 2 < availableTime && (fits == null || Passive(unit.Request) && !Passive(fits.Request))) fits = unit;
+                            if (estimate + 2 < availableTime && (fits == null ||
+                                HeldPreparation(ActionObservations.Held(chef), unit.Request) && !HeldPreparation(ActionObservations.Held(chef), fits.Request) ||
+                                Passive(unit.Request) && !Passive(fits.Request) && !HeldPreparation(ActionObservations.Held(chef), fits.Request))) fits = unit;
                         }
                         next = fits;
                     }
@@ -211,7 +241,7 @@ namespace SousChef.Plugin.Actions
                     LogisticsItem serving = ServingUtensil(next.Item, next.Station);
                     if (serving != null)
                     {
-                        yield return Do("pick_up", serving.Source);
+                        yield return GetServingUtensil(serving, next.Item);
                         yield return Do("collect_contents", next.Station);
                     }
                     else yield return Do("pick_up", next.Station);
@@ -228,6 +258,8 @@ namespace SousChef.Plugin.Actions
                 if (board == null)
                 {
                     TaskStep pickup = Do("pick_up", ActionObservations.PickupTarget(source.Source, source.Supply ? null : source.Item));
+                    pickup.UseHeld = held => HeldPreparation(held, current.Request);
+                    pickup.ReplanForHeld = held => UsefulPreparation(held, units);
                     pickup.ReplanOnBlock = true; yield return pickup;
                     if (!pickup.Succeeded) { foreach (TaskStep clear in Clear(pickup.Obstruction)) yield return clear; continue; }
                 }
@@ -258,6 +290,7 @@ namespace SousChef.Plugin.Actions
                     // Before a press, blocked work leaves the food on its board;
                     // the scheduler resumes it there as an in-place source.
                     TaskStep work = Do("work_at", board, "work_complete"); work.ReplanOnBlock = true;
+                    work.ReplanForHeld = held => UsefulPreparation(held, units);
                     yield return work;
                     if (!work.Succeeded) { obstruction = work.Obstruction; rescheduled = true; break; }
                     yield return Do("pick_up", board);

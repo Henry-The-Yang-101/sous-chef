@@ -10,14 +10,17 @@ namespace SousChef.Plugin.Actions
         private LogisticsItem Extinguisher()
         {
             inventory.Refresh(chef);
+            LogisticsItem best = null;
             foreach (LogisticsItem item in inventory.Items)
-                if (TaskNative.Component(item.Item, "ServerFireExtinguishSpray") != null && LogisticsChecks.Collect(chef, item, "move_item") == null) return item;
-            return null;
+                if (TaskNative.Component(item.Item, "ServerFireExtinguishSpray") != null && LogisticsChecks.Collect(chef, item, "move_item", true) == null)
+                {
+                    if (System.Object.ReferenceEquals(item.Item, ActionObservations.Held(chef))) return item;
+                    if (best == null) best = item;
+                }
+            return best;
         }
         private bool FireAvailable()
         {
-            GameObject held = ActionObservations.Held(chef);
-            if (held != null && TaskNative.Component(held, "ServerFireExtinguishSpray") == null) return false;
             LogisticsItem tool = Extinguisher(); if (tool == null) return false;
             foreach (ServerFlammable fire in ServerFlammable.GetAllOnFire()) if (fire != null && fire.OnFire()) return true;
             return false;
@@ -66,8 +69,13 @@ namespace SousChef.Plugin.Actions
         {
             LogisticsItem source = null;
             yield return Until("waiting_for_extinguisher", delegate { source = Extinguisher(); return source != null; });
-            GameObject tool = source.Item;
-            if (!System.Object.ReferenceEquals(ActionObservations.Held(chef), tool)) yield return Do("pick_up", source.Source);
+            if (!System.Object.ReferenceEquals(ActionObservations.Held(chef), source.Item))
+            {
+                TaskStep pickup = Do("pick_up", source.Source);
+                pickup.UseHeld = held => TaskNative.Component(held, "ServerFireExtinguishSpray") != null;
+                yield return pickup;
+            }
+            GameObject tool = ActionObservations.Held(chef);
             while (true)
             {
                 RefreshWorld();

@@ -5,6 +5,21 @@ request and control lease until all steps and repetitions finish. Use `None` for
 unlimited repetitions; finite counts are 1–10. No model is invoked by the executor.
 Each repetition executes a complete batch. Completion leaves P2 idle.
 
+Held items do not hide otherwise eligible tasks. A task uses an already-held
+ingredient, empty utensil, dirty stack or tool when it supports the requested
+work. Preparation prioritizes useful held food, including native chopped outputs,
+and can switch to another unfinished requested ingredient after a catch. Raw
+requests still require raw food; completed quantities and prior deliveries are
+not counted again.
+
+When cargo blocks the next step, P2 puts it on a reachable compatible empty
+counter and resumes the same request. This also handles catches during walking
+or chopping. Partially worked food stays on its board; a dirty stack caught while
+washing joins the sink. Serving tasks can use a compatible plate already in hand.
+If no safe counter is available, the task waits with the cargo and Stop remains
+available. Task discovery only observes state; it never moves items. Explicit
+interaction and logistics commands retain their existing cargo preconditions.
+
 Environmental blocks wait indefinitely with neutral input and bounded periodic
 revalidation. Completed steps are retained. Explicit Stop, release, disconnect,
 focus loss, reassignment, respawn and round changes still cancel and restore
@@ -124,7 +139,8 @@ counter. Completed/overdoing food is ready; ruined contents are excluded.
 already in that sink). It snapshots the currently obtainable stacks, merges them
 using native placement/pickup, carries the whole batch to the sink, and washes
 until the sink empties. New dirty stacks are handled by the next repetition.
-An already-held dirty stack can join the batch; unrelated cargo is never moved.
+An already-held dirty stack can join the batch; unrelated cargo is parked before
+collecting dishes or using the sink.
 
 ## Deliver dirty dishes
 

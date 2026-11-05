@@ -30,12 +30,16 @@ namespace SousChef.Plugin.Actions
             var pickup = PlayerControlsHelper.GetControllingPickupHandler_Client(source);
             return pickup != null && pickup.CanHandlePickup(new CarrierView(actor, null));
         }
-        public static string Collect(PlayerControls actor, LogisticsItem entry, string operation)
+        public static string Collect(PlayerControls actor, LogisticsItem entry, string operation, bool canFreeHands = false)
         {
             if (entry.Item == null || entry.Source == null || !entry.Source.activeInHierarchy) return "source_unavailable";
             if (entry.InUse) return "item_in_use";
             GameObject payload = Payload(entry), held = ActionObservations.Held(actor);
-            if (held != null) return System.Object.ReferenceEquals(held, payload) ? null : "hands_full";
+            if (held != null && System.Object.ReferenceEquals(held, payload)) return null;
+            // Tasks can put unrelated cargo aside before collecting. Evaluate
+            // that future pickup without changing the real carrier or relaxing
+            // any of the source's identity, ownership or native pickup checks.
+            if (held != null && !canFreeHands) return "hands_full";
             if (entry.Distance == Single.MaxValue) return "source_unreachable";
             if (payload == null) return "source_empty";
             if (entry.Item.GetComponent<CleanPlateStack>() != null && operation != "get_plate" && operation != "clear_station") return "source_dispenses_plates_use_get_plate";
