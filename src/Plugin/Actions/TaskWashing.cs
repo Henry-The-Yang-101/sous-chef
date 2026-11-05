@@ -32,7 +32,9 @@ namespace SousChef.Plugin.Actions
         {
             GameObject held = ActionObservations.Held(chef);
             GameObject sink = Sink();
-            return sink != null && (TaskNative.Dirty(held) || DirtySources().Count > 0 || ActionObservations.DirtyCount(sink) > 0);
+            if (sink != null) return TaskNative.Dirty(held) || DirtySources().Count > 0 || ActionObservations.DirtyCount(sink) > 0;
+            LogisticsItem gun = SprayTool("ServerWaterGunSpray");
+            return gun != null && WashableBatch(gun.Item).Count != 0;
         }
         private IEnumerable<TaskStep> CollectDirtyBatch(bool allowEmpty = false)
         {
@@ -60,10 +62,45 @@ namespace SousChef.Plugin.Actions
                 }
             }
         }
+        private List<GameObject> WashableBatch(GameObject gun)
+        {
+            var batch = new List<GameObject>();
+            foreach (LogisticsItem item in inventory.Items)
+            {
+                Vector3 stance;
+                if (!item.InUse && TaskNative.Dirty(item.Item) && TaskNative.Component(item.Item, "ServerWashable") != null &&
+                    SprayStance(gun, item.Item, out stance)) batch.Add(item.Item);
+            }
+            return batch;
+        }
+        private IEnumerable<TaskStep> WashWithGun(LogisticsItem source, List<GameObject> batch)
+        {
+            GameObject gun = source.Item;
+            TaskStep pickup = Do("pick_up", source.Source);
+            pickup.UseHeld = held => System.Object.ReferenceEquals(held, gun);
+            yield return pickup;
+            foreach (GameObject stack in batch)
+            {
+                if (stack == null) continue;
+                yield return SprayUntil(gun, stack, "spray_washing", () => stack == null ||
+                    !stack.activeInHierarchy || ActionObservations.StackCount(stack) == 0);
+            }
+            foreach (TaskStep park in Park(gun, inventory.Home(gun))) yield return park;
+        }
         private IEnumerable<TaskStep> WashDishes()
         {
             GameObject sink = null;
-            yield return Until("waiting_for_sink_access", delegate { sink = Sink(); return sink != null; });
+            LogisticsItem gun = null; List<GameObject> batch = null;
+            yield return Until("waiting_for_wash_access", delegate {
+                sink = Sink(); if (sink != null) return true;
+                gun = SprayTool("ServerWaterGunSpray");
+                return gun != null && (batch = WashableBatch(gun.Item)).Count != 0;
+            });
+            if (sink == null)
+            {
+                foreach (TaskStep wash in WashWithGun(gun, batch)) yield return wash;
+                yield break;
+            }
             foreach (TaskStep step in CollectDirtyBatch(ActionObservations.DirtyCount(sink) > 0)) yield return step;
             GameObject held = ActionObservations.Held(chef);
             if (held != null && !TaskNative.Dirty(held)) foreach (TaskStep park in Park(held)) yield return park;
