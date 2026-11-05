@@ -66,8 +66,12 @@ namespace SousChef.Plugin.Navigation
             if (bucket.Count == 0) probeBuckets.Remove(key);
         }
 
-        private void InvalidateGeometryCache()
+        // Every attempted lattice stand (including misses) and every source of an
+        // attempted edge has a cached probe. Use the full XZ footprint for the
+        // search proof, including sweeps above and below the sampled height.
+        private bool InvalidateGeometryCache()
         {
+            bool touchesSearch = false;
             dirtyProbes.Clear();
             float padding = radius + Spacing * 1.5f; // includes a full diagonal edge
             foreach (Bounds bounds in changed)
@@ -86,28 +90,31 @@ namespace SousChef.Plugin.Navigation
                 if (bucketCount > probeBuckets.Count)
                 {
                     // Broad kill planes must not enumerate an enormous empty grid.
-                    foreach (HashSet<WalkCell> bucket in probeBuckets.Values) DirtyBucket(bucket, min, max);
+                    foreach (HashSet<WalkCell> bucket in probeBuckets.Values) DirtyBucket(bucket, min, max, ref touchesSearch);
                 }
                 else
                     for (int x = minX; x <= maxX; x++) for (int z = minZ; z <= maxZ; z++)
                     {
                         HashSet<WalkCell> bucket;
-                        if (probeBuckets.TryGetValue(BucketKey(x, z), out bucket)) DirtyBucket(bucket, min, max);
+                        if (probeBuckets.TryGetValue(BucketKey(x, z), out bucket)) DirtyBucket(bucket, min, max, ref touchesSearch);
                     }
             }
             foreach (WalkCell cell in dirtyProbes)
                 RemoveCachedProbe(cell);
             if (dirtyProbes.Count > 0) Changed = true;
             dirtyProbes.Clear();
+            return touchesSearch;
         }
 
-        private void DirtyBucket(HashSet<WalkCell> bucket, Vector3 min, Vector3 max)
+        private void DirtyBucket(HashSet<WalkCell> bucket, Vector3 min, Vector3 max, ref bool touchesSearch)
         {
             foreach (WalkCell cell in bucket)
             {
                 if (dirtyProbes.Contains(cell)) continue;
                 Vector3 p = Approximate(cell);
-                if (p.x >= min.x && p.x <= max.x && p.z >= min.z && p.z <= max.z && p.y >= min.y && p.y <= max.y)
+                if (p.x < min.x || p.x > max.x || p.z < min.z || p.z > max.z) continue;
+                touchesSearch = true;
+                if (p.y >= min.y && p.y <= max.y)
                     dirtyProbes.Add(cell);
             }
         }

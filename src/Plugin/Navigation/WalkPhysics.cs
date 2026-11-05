@@ -180,9 +180,16 @@ namespace SousChef.Plugin.Navigation
             // Compare readable mesh contents at reconciliation rather than treating
             // every unchanged mesh as a geometry edit. Large kill-plane meshes can
             // otherwise invalidate an entire kitchen before its graph finishes warming.
-            if (changed.Count > 0) InvalidateGeometryCache();
+            if (changed.Count > 0)
+            {
+                bool touchesLattice = InvalidateGeometryCache();
+                sceneRevision++;
+                // Wind fields use transformed, padded volumes and have their own
+                // dependencies beyond the footprint of a walking capsule.
+                if (touchesLattice || winds.Count > 0 || searchWinds.Count > 0) geometryVersion++;
+            }
             RefreshPortals();
-            if (Changed || changed.Count > 0) geometryVersion++;
+            if (Changed) geometryVersion++;
             return player.GroundCollider == null ? "not_grounded" : null;
         }
         private int ShapeKey(Collider c, bool reconcile)

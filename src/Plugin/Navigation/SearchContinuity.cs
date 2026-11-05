@@ -10,7 +10,7 @@ namespace SousChef.Plugin.Navigation
         private struct WindProof { public WindVolume Wind; public Vector3 Velocity; public int Key, Filter; public bool Active; }
         private readonly List<GroundProof> searchGrounds = new List<GroundProof>();
         private readonly List<WindProof> searchWinds = new List<WindProof>();
-        private long geometryVersion, savedGeometryVersion;
+        private long geometryVersion, savedGeometryVersion, sceneRevision, savedSceneRevision;
         private bool searchRemembered, searchBackfaces;
         private Vector3 searchPosition;
         private List<WalkEdge> currentStarts, savedStarts;
@@ -57,7 +57,7 @@ namespace SousChef.Plugin.Navigation
                     Filter = ((LayerMask)windFilter.GetValue(wind)).value, Active = wind.isActiveAndEnabled });
             }
             searchChef = chef; searchHeld = held; searchGround = chef.GroundCollider;
-            searchPosition = Position; savedGeometryVersion = geometryVersion; savedStarts = currentStarts;
+            searchPosition = Position; savedGeometryVersion = geometryVersion; savedSceneRevision = sceneRevision; savedStarts = currentStarts;
             searchSpeed = walkingSpeed; searchRadius = radius; searchNativeRadius = nativeRadius;
             searchHeight = height; searchPivot = pivotToFoot; searchStep = StepHeight;
             searchBackfaces = Physics.queriesHitBackfaces;
@@ -107,6 +107,12 @@ namespace SousChef.Plugin.Navigation
                 foreach (Probe probe in probes.Values)
                     if (((probe.Point - now).sqrMagnitude > rangeSquared) != ((probe.Point - searchPosition).sqrMagnitude > rangeSquared))
                         return CannotContinue("search_range_changed");
+            }
+            // Start connectors span up to two cells in each axis. Check their
+            // exact ordered costs even when a change missed all lattice edges.
+            if (sceneRevision != savedSceneRevision || !Position.Equals(searchPosition) || pivotToFoot != searchPivot)
+            {
+                if (savedStarts == null) return CannotContinue("no_saved_starts");
                 List<WalkEdge> previous = savedStarts;
                 Starts(); StartProofRevalidations++;
                 if (Overflow || currentStarts.Count != previous.Count) return CannotContinue("starting_connectors_changed");
