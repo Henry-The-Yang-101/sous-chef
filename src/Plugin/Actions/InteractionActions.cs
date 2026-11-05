@@ -37,6 +37,10 @@ namespace SousChef.Plugin.Actions
         private Vector3 lastDropPosition;
         private int groundDropDirection;
         private float groundDropTurnAt;
+        private GameObject groundDropAwayFrom;
+        private Vector3 groundDropOrigin;
+        private int groundDropStance;
+        private float groundDropSeekAt;
         private ServerAttachmentThrower launchObserver;
         private GenericVoid<GameObject> launchCallback;
         private bool sawLaunch;
@@ -173,7 +177,9 @@ namespace SousChef.Plugin.Actions
             initialContents = held == null || held.GetComponent<ServerIngredientContainer>() == null ? 0 : held.GetComponent<ServerIngredientContainer>().GetContentsCount();
             initialSourceContents = container == null ? 0 : container.GetContentsCount();
             pressed = throwReleased = triggeredByChef = sawLaunch = false; evidence = null; throwPlan = null; dropPlan = null; dropStableSince = -1; workable = null;
-            groundDropDirection = -1; groundDropTurnAt = Time.realtimeSinceStartup + .3f;
+            groundDropAwayFrom = request.GroundDrop ? navigation.Resolve(request.GroundDropAwayFrom) : null;
+            groundDropDirection = groundDropAwayFrom == null ? -1 : 0; groundDropTurnAt = Time.realtimeSinceStartup + .3f;
+            groundDropOrigin = Foot(); groundDropStance = 0; groundDropSeekAt = Time.realtimeSinceStartup + 1;
             string error = ValidateRequest();
             if (error != null) return error;
             if (!Run.Start(owner, request, Time.realtimeSinceStartup)) return "action_in_progress";
@@ -398,19 +404,43 @@ namespace SousChef.Plugin.Actions
                         Finish("blocked", "station_contents_changed");
                     return;
                 }
+                if (Run.Phase == "seeking_ground_drop")
+                {
+                    if (navigation.Action.State == "navigating") return;
+                    input(0);
+                    SetPhase("positioning_ground_drop"); groundDropSeekAt = Time.realtimeSinceStartup + 1;
+                }
                 if (Run.Phase == "positioning_ground_drop")
                 {
                     input(0);
                     if (!System.Object.ReferenceEquals(ActionObservations.Held(chef), held)) { Finish("blocked", "held_item_changed"); return; }
                     if (Time.realtimeSinceStartup >= groundDropTurnAt)
                     { groundDropDirection = (groundDropDirection + 1) % 8; groundDropTurnAt = Time.realtimeSinceStartup + .3f; }
+                    bool facing = true;
                     if (groundDropDirection >= 0)
                     {
                         float angle = groundDropDirection * Mathf.PI / 4;
-                        PlayerControlsHelper.TurnTowardsDirection(chef.gameObject, new Vector3(Mathf.Sin(angle), 0, Mathf.Cos(angle)), chef.Movement.TurnSpeed, Mathf.Min(Time.deltaTime, .05f));
+                        if (groundDropAwayFrom != null)
+                        {
+                            Vector3 away = chef.transform.position - groundDropAwayFrom.transform.position;
+                            // Try behind the chef's next pickup, then either
+                            // side. Dropping into that route can block walking.
+                            int offset = groundDropDirection % 2 == 0 ? -groundDropDirection / 2 : (groundDropDirection + 1) / 2;
+                            angle = (float)Math.Atan2(away.x, away.z) + offset * Mathf.PI / 4;
+                        }
+                        Vector3 direction = new Vector3(Mathf.Sin(angle), 0, Mathf.Cos(angle));
+                        PlayerControlsHelper.TurnTowardsDirection(chef.gameObject, direction, chef.Movement.TurnSpeed, Mathf.Min(Time.deltaTime, .05f));
+                        facing = Vector3.Angle(chef.transform.forward, direction) <= .5f;
+                        if (!facing) groundDropTurnAt = Time.realtimeSinceStartup + .3f;
                     }
-                    if (chef.GroundCollider == null || chef.Motion.GetVelocityXZ().magnitude > .1f ||
-                        !drops.Plan(chef, held, chef, out dropPlan, true)) { WaitFor("waiting_for_ground_drop"); return; }
+                    if (!facing || chef.GroundCollider == null || chef.Motion.GetVelocityXZ().magnitude > .1f ||
+                        !PlanGroundDrop())
+                    {
+                        // Some native counter selections persist while turning.
+                        // Use a short checked walk to nearby open floor instead.
+                        if (Time.realtimeSinceStartup >= groundDropSeekAt && SeekGroundDrop()) return;
+                        WaitFor("waiting_for_ground_drop"); return;
+                    }
                     recovery.Clear(); SetPhase("pressing");
                 }
                 if (Run.Phase == "drop_press")
@@ -522,7 +552,7 @@ namespace SousChef.Plugin.Actions
             if (command.GroundDrop)
             {
                 if (!System.Object.ReferenceEquals(ActionObservations.Held(chef), held)) { Finish("blocked", "held_item_changed"); return false; }
-                if (!drops.Plan(chef, held, chef, out dropPlan, true)) { input(0); SetPhase("positioning_ground_drop"); return false; }
+                if (!PlanGroundDrop()) { input(0); SetPhase("positioning_ground_drop"); return false; }
                 return true;
             }
             if (op == "activate" && command.DesiredState != "trigger" && ActionObservations.ToggleState(target) == (command.DesiredState == "on"))
@@ -654,6 +684,28 @@ namespace SousChef.Plugin.Actions
             if (server == null) return null;
             var message = ActionObservations.Read<PlateStationMessage>(server, "m_data");
             return message != null && message.m_success ? message.m_delivered : null;
+        }
+        private bool PlanGroundDrop()
+        {
+            if (!drops.Plan(chef, held, chef, out dropPlan, true)) return false;
+            if (groundDropAwayFrom == null) return true;
+            Vector3 toward = groundDropAwayFrom.transform.position - chef.transform.position; toward.y = 0;
+            Vector3 landing = dropPlan.Landing - chef.transform.position; landing.y = 0;
+            return Vector3.Dot(landing, toward) <= .05f * toward.magnitude;
+        }
+        private bool SeekGroundDrop()
+        {
+            groundDropSeekAt = Time.realtimeSinceStartup + .2f;
+            if (groundDropStance >= 16) return false;
+            int side = groundDropStance % 8;
+            int offset = side % 2 == 0 ? -side / 2 : (side + 1) / 2;
+            Vector3 away = groundDropAwayFrom == null ? chef.transform.forward : groundDropOrigin - groundDropAwayFrom.transform.position;
+            float angle = (float)Math.Atan2(away.x, away.z) + offset * Mathf.PI / 4;
+            Vector3 seed = groundDropOrigin + new Vector3(Mathf.Sin(angle), 0, Mathf.Cos(angle)) * (groundDropStance < 8 ? 1.2f : 2);
+            string error = navigation.StartPosition(chef, Run.Owner, groundDropAwayFrom ?? held, seed, true);
+            if (error != "planning_in_progress" && error != "planning_budget_exceeded") groundDropStance++;
+            if (error != null) return false;
+            SetPhase("seeking_ground_drop"); return true;
         }
         private bool Condition()
         {

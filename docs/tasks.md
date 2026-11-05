@@ -168,7 +168,8 @@ Otherwise P2 uses normal `pick_up` and `place_at` actions to collect and serve t
 exact dish. Unrelated held cargo is first placed on the nearest compatible empty
 counter within five walking units. After a bounded nearby-counter search, if none
 can be found or the checked alternatives cannot be used, normal placement drops
-the cargo on a supported floor. P2 turns away from native placement handlers
+the cargo on a supported floor, away from its next pickup route. P2 turns away
+from native placement handlers or takes a short checked walk to open floor
 before dropping; this never uses the throw button. Serving windows, boards and
 conveyors are excluded from storage. The floor release reuses the basic action's
 landing/identity checks, then resumes the original dish pickup.

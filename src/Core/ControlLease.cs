@@ -15,6 +15,7 @@ namespace SousChef.Core
         public bool GroundHandoff;
         // Internal place_at mode: use the native floor drop at the current pose.
         public bool GroundDrop;
+        public string GroundDropAwayFrom;
         public TaskRequest Task;
 
         // Small, bounded ASCII command grammar; replies are NDJSON.

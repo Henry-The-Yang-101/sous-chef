@@ -629,6 +629,14 @@ internal static class Program
     private static void DishDeliveryTasks()
     {
         {
+            var w=new World();w.Hold(w.Ingredient("onion"));
+            Check(w.Skills.Start(w.Chef,1,new ControlCommand {Operation="place_at",GroundDrop=true})==null,"floor placement starts under the normal interaction executor");
+            Check(w.Navigation.StartPosition(w.Chef,1,w.Target,new Vector3(-2,0,-1),true)==null,"floor positioning owns a checked walking child");
+            w.Skills.Run.Advance("seeking_ground_drop");int inputCount=w.Inputs.Count;w.Skills.Tick();
+            Check(w.Inputs.Count==inputCount && w.Navigation.Action.State=="navigating","floor positioning does not neutralize its walking child's movement input");
+            w.Skills.Cancel("stopped");Check(w.Navigation.Action.State=="idle" && w.Inputs.Last()==0,"Stop neutralizes a floor positioning walk");
+        }
+        {
             var w=new World();var item=w.Ingredient("onion");w.Hold(item);
             var catalog=(Json.Record)w.Navigation.Available(w.Chef);
             var target=((List<object>)catalog["destinations"]).Cast<Json.Record>().First(d=>(string)d["id"]==w.Id);
@@ -725,9 +733,15 @@ internal static class Program
             StartDishTask(w);
             Check(TaskUntil(w,()=>w.Skills.Run.Running) && w.Skills.Run.Phase=="positioning_ground_drop",
                 "missing nearby storage uses floor placement; conveyors, boards, windows and distant counters are excluded");
-            w.Verify();Check(!w.Inputs.Contains(1),"floor placement cannot press while a native station handler would intercept it");
+            double dropStarted=w.Skills.Run.Started;
+            w.Verify();Check(w.Skills.Run.Running && w.Skills.Run.Started==dropStarted && !w.Inputs.Contains(1),
+                "a temporarily intercepted floor placement retains its original child action while waiting");
             w.Chef.CurrentInteractionObjects.m_iHandlePlacement=null;w.Chef.CurrentInteractionObjects.m_TheOriginalHandlePickup=null;
-            Check(TaskUntil(w,()=>w.Skills.Run.Phase=="pressing" && w.Inputs.Last()==1),"a supported floor drop uses the ordinary pickup/placement button");
+            for(int n=0;n<60 && w.Skills.Run.Phase!="pressing";n++)
+            { cargo.transform.position=w.Chef.transform.position+Vector3.up+w.Chef.transform.forward*.4f;w.Tick(.05f); }
+            Check(w.Skills.Run.Phase=="pressing" && w.Inputs.Last()==1,"a supported floor drop uses the ordinary pickup/placement button");
+            Check(Vector3.Dot(w.Chef.transform.forward,w.Target.transform.position-w.Chef.transform.position)<=0,
+                "floor placement faces away from the next dish so its cargo does not block that pickup route");
             w.Hold(null);attachment.Attached=false;cargo.transform.position=w.Chef.transform.position+new Vector3(0,.1f,.4f);
             Check(TaskUntil(w,()=>w.Skills.Run.Operation=="pick_up" && w.Skills.Run.Running),"the verified floor drop resumes the suspended exact dish pickup");
             FinishDishTask(w,window,1);

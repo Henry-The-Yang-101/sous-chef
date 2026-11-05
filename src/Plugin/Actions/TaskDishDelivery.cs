@@ -75,7 +75,7 @@ namespace SousChef.Plugin.Actions
             return false;
         }
 
-        private IEnumerable<TaskStep> FreeHandsForDish(GameObject item)
+        private IEnumerable<TaskStep> FreeHandsForDish(GameObject item, GameObject source)
         {
             var excluded = new HashSet<GameObject>();
             while (System.Object.ReferenceEquals(ActionObservations.Held(chef), item))
@@ -92,7 +92,7 @@ namespace SousChef.Plugin.Actions
                     // Extend the normal placement primitive with a checked floor
                     // release. No task changes the carrier or an item's pose.
                     yield return new TaskStep { Phase = "dropping_held_item", Command = () =>
-                        new ControlCommand { Operation = "place_at", GroundDrop = true } };
+                        new ControlCommand { Operation = "place_at", GroundDrop = true, GroundDropAwayFrom = navigation.RegisterItem(source) } };
                     yield break;
                 }
                 TaskStep placement = Do("place_at", counter); placement.ReplanOnBlock = true;
@@ -113,7 +113,7 @@ namespace SousChef.Plugin.Actions
                 {
                     TaskStep pickup = Do("pick_up", dish.Source);
                     pickup.ReplanOnBlock = true;
-                    pickup.FreeHands = FreeHandsForDish;
+                    pickup.FreeHands = held => FreeHandsForDish(held, dish.Source);
                     pickup.ReplanForHeld = held => ServingWindow(held) != null;
                     pickup.AbandonBeforePress = () => !CanTakeDish(item, destination);
                     Func<bool> ready = pickup.Ready;
