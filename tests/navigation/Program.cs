@@ -835,6 +835,36 @@ internal static class Program
         Check(navigation.Action.State=="navigating" && (long)((Json.Record)navigation.Describe())["catalogRevision"]==currentRevision,
             "observation-only warming cannot tick, cancel, or replan an input-owning action");
     }
+    private static void StationConnectorReuse()
+    {
+        var w = new World();
+        var floor = w.AddFloor((x,z) => 0);
+        var material = floor.gameObject.Add(new PlayerPhysicsSurface());
+        var station = w.AddStation();
+        var collider = station.GetComponent<BoxCollider>();
+        var physics = w.Ready();
+        var cell = new WalkCell(0, 0, -2);
+        Vector3 stance;
+        Check(physics.CellApproach(cell, collider, out stance), "a static station connector is clear");
+        physics.Refresh(w.Chef);
+        int before = physics.Queries;
+        Check(physics.CellApproach(cell, collider, out stance) && physics.Queries == before + 1,
+            "a cached static connector still performs its sight query");
+        station.GetComponent<GridManager>().Station = null;
+        Check(!physics.CellApproach(cell, collider, out stance), "a changed grid occupant vetoes a cached connector");
+        station.GetComponent<GridManager>().Station = station;
+        material.Properties.Slidiness = .5f;
+        physics.Refresh(w.Chef);
+        Check(!physics.CellApproach(cell, collider, out stance), "a support speed veto overrides a cached connector");
+        material.Properties.Slidiness = 0;
+        var wall = new GameObject("connector obstruction").Add(new BoxCollider());
+        wall.transform.position = stance;
+        w.Colliders.Add(wall);
+        Physics.Cast = (a,b,r,d,length) => new[] { new RaycastHit { collider = wall } };
+        physics.Refresh(w.Chef);
+        Check(!physics.CellApproach(cell, collider, out stance), "changed connector geometry requires a fresh sweep");
+    }
+
     private static void FocusedPlanning()
     {
         var w = new World();
@@ -1080,7 +1110,7 @@ internal static class Program
     }
     private static void Main()
     {
-        FocusedPlanning(); SearchContinuity(); ShallowCeilingContacts(); EquivalentVerticalStarts(); ConveyorSearchContinuity(); CertifiedStart(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); DirectedConveyors(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
+        StationConnectorReuse(); FocusedPlanning(); SearchContinuity(); ShallowCeilingContacts(); EquivalentVerticalStarts(); ConveyorSearchContinuity(); CertifiedStart(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); DirectedConveyors(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
         WorkerStartingStateChanges(); LoosePickupBodies(); StationaryThrowStances();
         Console.WriteLine("PASS: " + checks + " navigator integration checks (analytical geometry; not PhysX)");
     }

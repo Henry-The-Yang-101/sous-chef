@@ -75,7 +75,7 @@ namespace SousChef.Plugin.Navigation
         }
         private int nearbyCount;
         private int geometryScan, meshRevision;
-        private sealed class Probe { public bool Valid; public Vector3 Point; public Collider Ground; }
+        private sealed class Probe { public bool Valid; public Vector3 Point; public Collider Ground; public StationConnector Connector; }
         private struct GroundSample { public Vector3 Point; public Collider Ground; }
         private sealed class CachedEdge { public WalkEdge Edge; public GroundSample[] Support; }
         private sealed class GeometryStamp { public Collider Collider; public Bounds Bounds, Obstruction; public Matrix4x4 Matrix; public int Layer, Shape; public bool Trigger, Danger, Step; }
@@ -803,48 +803,6 @@ namespace SousChef.Plugin.Navigation
                 grids[target.GetInstanceID()] = grid;
             }
             return grid;
-        }
-        public bool Approach(Vector3 foot, Collider target, out Vector3 stance, int surfaceHistory = 0)
-        {
-            stance = foot;
-            if (target == null || (interactMask & (1 << target.gameObject.layer)) == 0) return false;
-            IGridLocation grid = Grid(target);
-            if (grid != null)
-            {
-                GridManager manager = grid.AccessGridManager;
-                var component = grid as Component;
-                if (manager == null || component == null || !manager.isActiveAndEnabled) return false;
-                GridIndex at = manager.GetUnclampedGridLocationFromPos(foot + Vector3.up * pivotToFoot), destination = grid.GridIndex;
-                if (at.Y != destination.Y || Math.Abs(at.X - destination.X) + Math.Abs(at.Z - destination.Z) != 1) return false;
-                // Centre the chef on the counter's usable side. Track the actual
-                // station transform, including a grid moving/rotating with a cart.
-                Vector3 offset = manager.GetPosFromGridLocation(at) - manager.GetPosFromGridLocation(destination);
-                stance = component.transform.position + offset;
-            }
-            else
-            {
-                Bounds bounds = target.bounds;
-                Vector3 outward = foot - bounds.center; outward.y = 0;
-                if (outward.sqrMagnitude < .001f) return false;
-                outward.Normalize();
-                Vector3 extent = bounds.extents;
-                float reach = Mathf.Abs(outward.x) * extent.x + Mathf.Abs(outward.z) * extent.z;
-                stance = bounds.center + outward * (reach + radius + .08f);
-            }
-            stance.y = foot.y;
-            // Only attach a short, checked connector to the Dijkstra lattice.
-            if ((stance - foot).sqrMagnitude > Spacing * Spacing * .75f) return false;
-            Vector3 supported; Collider support;
-            if (!Stand(stance, out supported, out support) || Mathf.Abs(supported.y - foot.y) > .22f) return false;
-            stance = supported;
-            // Alignment uses neutral walking and requires settled native motion.
-            // A running belt cannot supply that stance: choose another reachable
-            // side instead of repeatedly braking, drifting and walking upstream.
-            IMovingSurface surface = MovingSurface(support), previous;
-            surfaceHistories.TryGetValue(surfaceHistory, out previous);
-            if (surface is Travelator && surface.CalculateVelocityAtPoint(stance, previous).magnitude > .2f)
-                return Fail("conveyor_alignment_drift", stance, support);
-            return Sight(stance, target) && Segment(foot, stance, ref surfaceHistory);
         }
         public bool Sight(Vector3 foot, Collider target)
         {

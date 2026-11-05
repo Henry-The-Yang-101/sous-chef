@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using SousChef.Core;
 using UnityEngine;
@@ -29,8 +28,8 @@ namespace SousChef.Plugin.Navigation
             private readonly List<Region> regions = new List<Region>();
             private readonly Vector3 retained;
             private readonly bool preferRetained;
-            private Choice best = new Choice { Cost = Single.PositiveInfinity };
-            private Choice preferred = new Choice { Cost = Single.PositiveInfinity };
+            private Choice best = new Choice { Cost = float.PositiveInfinity };
+            private Choice preferred = new Choice { Cost = float.PositiveInfinity };
 
             public StationMatch(NavigationActions nav, Destination destination)
             {
@@ -80,8 +79,8 @@ namespace SousChef.Plugin.Navigation
             private void Consider(WalkCell cell, float distance, Collider collider)
             {
                 if (distance >= CertificationCost) return;
-                Vector3 point = nav.physics.Point(cell), stance;
-                if (!nav.physics.Approach(point, collider, out stance, cell.SurfaceHistory)) return;
+                Vector3 stance;
+                if (!nav.physics.CellApproach(cell, collider, out stance)) return;
                 if (destination.Pack != null)
                 {
                     // A backpack only dispenses from its rear cone.
@@ -89,7 +88,7 @@ namespace SousChef.Plugin.Navigation
                     offset.y = 0;
                     if (Vector3.Angle(-destination.Object.transform.forward, offset) >= destination.Pack.m_pickupAngle * .5f) return;
                 }
-                var choice = new Choice { Cost = distance + Vector3.Distance(point, stance), Stance = stance, Cell = cell };
+                var choice = new Choice { Cost = distance + Vector3.Distance(nav.physics.Point(cell), stance), Stance = stance, Cell = cell };
                 if (choice.Cost < best.Cost) best = choice;
                 if (preferRetained && choice.Cost < preferred.Cost && Vector3.Distance(stance, retained) < .04f)
                     preferred = choice;
@@ -98,11 +97,11 @@ namespace SousChef.Plugin.Navigation
             public void Publish()
             {
                 Choice chosen = best;
-                if (preferRetained && preferred.Cost < Single.PositiveInfinity && preferred.Cost <= nav.search.MinimumPendingDistance)
+                if (preferRetained && preferred.Cost < float.PositiveInfinity && preferred.Cost <= nav.search.MinimumPendingDistance)
                     chosen = preferred;
                 else if (preferRetained && !nav.search.Complete && nav.RemainingRouteClear()) return;
 
-                if (chosen.Cost == Single.PositiveInfinity || chosen.Cost > nav.search.MinimumPendingDistance) return;
+                if (chosen.Cost == float.PositiveInfinity || chosen.Cost > nav.search.MinimumPendingDistance) return;
                 Vector3 local = destination.Object.transform.InverseTransformPoint(chosen.Stance);
                 if (nav.target == destination && destination.Object.transform.TransformVector(local - destination.LocalApproach).magnitude >= .04f)
                 {
