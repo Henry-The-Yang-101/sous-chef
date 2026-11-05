@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Audit P2 handoffs from spawn, or test native dish returns in an isolated DLC session."""
+"""Audit P2 handoffs, dish returns and equipment tasks in an isolated DLC session."""
 import argparse
 import gzip
 import json
@@ -79,6 +79,54 @@ def capture(args, initial, directory, name):
     return state
 
 
+def cooker_evidence(snapshot, target, original=None):
+    station = next(o for o in snapshot['objects'] if o['unityInstanceId'] == target)
+    occupant = (fields(station, 'ServerAttachStation').get('m_item') or {}).get('objectId')
+    item = next((o for o in snapshot['objects'] if o['id'] == (original or occupant)), {})
+    data = fields(item, 'ServerCookingHandler').get('m_ServerData', {}).get('fields', {})
+    return dict(stationItem=occupant, originalPresent=bool(item), containerName=item.get('name'),
+                contents=fields(item, 'ServerIngredientContainer').get('m_contents'),
+                cookState=data.get('CookingStateMessage.m_cookingState'),
+                fires=sum(bool(fields(o, 'ServerFlammable').get('m_onFire')) for o in snapshot['objects']))
+
+
+def supply_cooker(args, initial, directory, result, client):
+    deadline = time.monotonic() + args.discovery_seconds
+    while True:
+        catalog = client.available_actions()
+        ids = {i['id'] for i in catalog.get('ingredients', []) if i['label'] == args.ingredient}
+        eligible = {d for row in catalog.get('jobOptions', {}).get('fetch_ingredient', [])
+                    if row['sourceId'] in ids for d in row['destinationIds']}
+        choices = [t for t in catalog.get('destinations', []) if t['kind'] == 'cooking_station' and t['id'] in eligible]
+        if choices and catalog.get('complete'):
+            break
+        if time.monotonic() >= deadline:
+            if not choices:
+                raise RuntimeError('No compatible reachable cooker for ' + args.ingredient)
+            break
+        time.sleep(.2)
+    target = min(choices, key=lambda t: t['routeDistance'])
+    result.update(item=args.ingredient, cooker=target)
+    control = client.fetch_ingredient(args.ingredient, target['id'])
+    request = control['action']['requestId']
+    try:
+        deadline = time.monotonic() + 55
+        while control['action']['state'] == 'running' and time.monotonic() < deadline:
+            if not control['ownedByYou'] or control['action']['requestId'] != request:
+                raise RuntimeError('Setup job lost ownership or changed identity')
+            time.sleep(.25)
+            control = client.status()
+        write(directory / 'supply.json', control['action'])
+        if control['action']['state'] != 'succeeded' or control['action']['requestId'] != request:
+            raise RuntimeError('Setup job did not deliver ' + args.ingredient)
+    finally:
+        if client.claimed:
+            client.stop()
+    result['before'] = cooker_evidence(capture(args, initial, directory, 'before'), target['objectInstanceId'])
+    if not result['before']['contents'] or result['before']['cookState'] is None:
+        raise RuntimeError('No native evidence of food in the selected cooker')
+
+
 def probe(args, level, directory, result):
     generation = sim.read_status(args.runtime)['generation'] + 1
     sim.command(args.runtime, 'load ' + level['name'])
@@ -90,6 +138,9 @@ def probe(args, level, directory, result):
         if client.hello['sessionId'] != initial['sessionId']:
             raise RuntimeError('Unexpected native control session')
         wash = args.probe == 'wash'
+        heat = args.probe in ('monitor_equipment', 'take_ready')
+        if heat:
+            supply_cooker(args, initial, directory, result, client)
         if wash:
             sim.command(args.runtime, 'task-fixture dirty 1')
             fixture = json.loads((args.runtime / 'task-fixture.json').read_text())
@@ -106,7 +157,8 @@ def probe(args, level, directory, result):
             tasks = [t['name'] for t in catalog.get('taskOptions', [])]
             choices = list(select(catalog, args.ingredient))
             foods = [c for c in choices if c[0]['preparation'] == 'raw']
-            eligible = 'wash_dishes' in tasks if wash else choices and 'prepare_near_player' in tasks
+            eligible = (args.probe in tasks if heat else 'wash_dishes' in tasks if wash
+                        else choices and 'prepare_near_player' in tasks)
             if (catalog.get('complete') and eligible) or time.monotonic() >= until:
                 break
             time.sleep(.2)
@@ -115,7 +167,7 @@ def probe(args, level, directory, result):
                       destinations=len(catalog.get('destinations', [])), tasks=tasks,
                       observedOptions=[o['label'] for o in catalog.get('preparationOptions', [])],
                       observationErrors=catalog.get('logisticsObservationErrors', []))
-        if not wash:
+        if not wash and not heat:
             if not choices and args.menu_source:
                 # Replays only: ask for a kitchen dropdown entry without making
                 # a claim that its dispenser is currently reachable from spawn.
@@ -133,7 +185,10 @@ def probe(args, level, directory, result):
                 item['preparation'] = args.preparation
             result.update(item=label, parameters=item, source=source['label'], sourceInstanceId=source['sourceInstanceId'])
         try:
-            control = client.run_task('wash_dishes') if wash else client.run_task('prepare_near_player', items=[item])
+            if heat or wash:
+                control = client.run_task('wash_dishes' if wash else args.probe)
+            else:
+                control = client.run_task('prepare_near_player', items=[item])
         except ControlError as error:
             result.update(outcome='start_rejected', error=str(error))
             return
@@ -170,7 +225,9 @@ def probe(args, level, directory, result):
             if row['state'] == 'running':
                 client.stop()
             state = capture(args, initial, directory, 'after')
-            if wash:
+            if heat:
+                result['world'] = cooker_evidence(state, result['cooker']['objectInstanceId'], result['before']['stationItem'])
+            elif wash:
                 result['world'] = dict(stackStillPresent=any(o['unityInstanceId'] == fixture['stackInstanceId'] for o in state['objects']),
                                        platesInSinks=[fields(o, 'ServerWashingStation')['m_plateCount'] for o in state['objects']
                                                       if fields(o, 'ServerWashingStation')])
@@ -187,7 +244,7 @@ def main():
     p.add_argument('--port-base', required=True, type=int)
     p.add_argument('--output', required=True, type=Path, help='New evidence root (one directory per DLC/scene)')
     p.add_argument('--level', action='append')
-    p.add_argument('--probe', choices=['handoff', 'wash'], default='handoff')
+    p.add_argument('--probe', choices=['handoff', 'wash', 'monitor_equipment', 'take_ready'], default='handoff')
     p.add_argument('--menu-source', action='store_true', help='Also allow advertised ingredient roots without a proven source')
     p.add_argument('--ingredient', help='Select a specific offered label on replay')
     p.add_argument('--preparation', choices=['raw', 'chopped', 'cooked', 'mixed', 'empty'])
@@ -195,6 +252,8 @@ def main():
     p.add_argument('--discovery-seconds', type=float, default=6)
     p.add_argument('--resume', action='store_true', help='Skip previously recorded probes in this output directory')
     args = p.parse_args()
+    if args.probe in ('monitor_equipment', 'take_ready') and not args.ingredient:
+        p.error('Equipment tests require --ingredient for the initial cooker delivery')
     args.runtime = args.runtime.resolve()
     if any(not math.isfinite(n) or n <= 0 for n in (args.seconds, args.discovery_seconds)):
         p.error('Observation and discovery limits must be positive finite seconds')
