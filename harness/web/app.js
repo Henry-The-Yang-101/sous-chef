@@ -393,12 +393,20 @@ async function poll() {
 }
 let shareSignature = '';
 let shareLinks = [];
+let selectedPhoneUrl = null;
+let shareStatus = '';
+let internetPending = false;
 let qrObjectUrl = null;
 function showPhoneLink() {
-  const link = shareLinks[Number(el('phone-network').value) || 0];
+  const link = internetPending && !selectedPhoneUrl ? null : shareLinks[Number(el('phone-network').value) || 0];
   el('phone-qr').hidden = !link;
   el('phone-link').hidden = !link;
   if (qrObjectUrl) { URL.revokeObjectURL(qrObjectUrl); qrObjectUrl = null; }
+  el('phone-status').textContent = !link
+    ? shareStatus || 'No phone link available. Connect your Mac to a network.'
+    : link.label === 'Internet'
+      ? 'Scan to connect through the internet. Keep this harness running and the game focused on your Mac.'
+      : `${shareStatus ? shareStatus + ' ' : ''}For this Wi-Fi link, keep your phone on the same Wi-Fi as your Mac.`;
   if (!link) return;
   qrObjectUrl = URL.createObjectURL(new Blob([link.qrSvg], {type: 'image/svg+xml'}));
   el('phone-qr').src = qrObjectUrl;
@@ -412,19 +420,23 @@ async function pollSharing() {
     const sharing = await response.json();
     const signature = JSON.stringify(sharing);
     if (signature !== shareSignature) {
-      const previous = shareLinks[Number(el('phone-network').value) || 0]?.url;
       shareSignature = signature; shareLinks = sharing.links;
+      shareStatus = sharing.status; internetPending = sharing.internetPending;
       el('phone-network').replaceChildren(...shareLinks.map((link, index) => {
         const option = document.createElement('option');
         option.value = index; option.textContent = `${link.label} · ${new URL(link.url).host}`;
         return option;
       }));
-      const selected = shareLinks.findIndex(link => link.url === previous);
-      el('phone-network').value = Math.max(0, selected);
-      el('phone-network-label').hidden = shareLinks.length < 2;
-      el('phone-status').textContent = sharing.status || (shareLinks.length
-        ? 'Connect your phone to the same Wi-Fi, then scan. Keep the game focused on your Mac.'
-        : 'No Wi-Fi address found. Connect your Mac to a network, or restart with --tunnel for an internet link.');
+      if (internetPending) {
+        const waiting = document.createElement('option');
+        waiting.value = ''; waiting.textContent = 'Waiting for Cloudflare…';
+        el('phone-network').prepend(waiting);
+      }
+      // Follow the preferred Internet link as it arrives unless the user chose a link.
+      const selected = shareLinks.findIndex(link => link.url === selectedPhoneUrl);
+      if (selected < 0) selectedPhoneUrl = null;
+      el('phone-network').value = internetPending && selected < 0 ? '' : Math.max(0, selected);
+      el('phone-network-label').hidden = shareLinks.length < (internetPending ? 1 : 2);
       showPhoneLink();
     }
   } catch {
@@ -434,7 +446,11 @@ async function pollSharing() {
   }
   setTimeout(pollSharing, 3000);
 }
-el('phone-network').addEventListener('change', showPhoneLink);
+el('phone-network').addEventListener('change', () => {
+  const value = el('phone-network').value;
+  selectedPhoneUrl = value === '' ? null : shareLinks[Number(value)]?.url || null;
+  showPhoneLink();
+});
 if (matchMedia('(max-width: 650px)').matches) el('phone-share').open = false;
 el('filter').addEventListener('input', render);
 el('job-kind').addEventListener('change', render);

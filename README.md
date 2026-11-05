@@ -21,8 +21,9 @@ meaningful destinations, call `navigate_to(destination_id)`, or interrupt with
 `stop()`. The plugin handles routing and steering; callers never send waypoints.
 Run `python3 -m harness.server` for a [live clickable action harness](docs/harness.md)
 at [localhost:8765](http://127.0.0.1:8765). It shows dispenser food names and
-walking/direct distances, with a QR code for phone access; add `--tunnel` for an
-internet link that lets the game stay focused on your Mac.
+walking/direct distances, with a Cloudflare HTTPS QR link for phone access when
+`cloudflared` is installed (in PATH or `.tools/cloudflared`). Use `--no-tunnel`
+for same-Wi-Fi access. The game can stay focused on your Mac.
 It captures active kitchens, including paused rounds. Outside a round it sends
 status messages without a map, so consumers cannot mistake the level selector
 for a kitchen.

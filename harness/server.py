@@ -372,7 +372,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send(400, {'error': str(error)})
 
 
-def serve(port=8765, bridge_port=24703, local_only=False, tunnel=False, public_url=None, state_port=24702):
+def serve(port=8765, bridge_port=24703, local_only=False, tunnel=None, public_url=None, state_port=24702):
     contents = ContentsObserver(state_port)
     bridge = HarnessBridge(bridge_port, contents=contents)
     server = ThreadingHTTPServer(('127.0.0.1' if local_only else '0.0.0.0', port), Handler)
@@ -380,13 +380,20 @@ def serve(port=8765, bridge_port=24703, local_only=False, tunnel=False, public_u
     server.sharing = PhoneShare(server.server_port, server.token,
                                 () if local_only else lan_addresses(), public_url)
     print(f'Sous Chef actions: http://127.0.0.1:{server.server_port}', flush=True)
-    print('Scan the phone QR code on that page; keep your phone on the same Wi-Fi.', flush=True)
+    use_tunnel = tunnel if tunnel is not None else not (local_only or public_url)
+    print('Scan the phone QR code on that page to connect.', flush=True)
     print('Player 2 only. Use Stop to cancel a job; Ctrl+C closes the harness.', flush=True)
     try:
         if threading.current_thread() is threading.main_thread():
             signal.signal(signal.SIGTERM, signal.default_int_handler)
-        if tunnel:
-            server.sharing.start_tunnel(server.server_port)
+        if use_tunnel:
+            try:
+                server.sharing.start_tunnel(server.server_port)
+            except (RuntimeError, OSError) as error:
+                if tunnel is True:
+                    raise
+                server.sharing.status = f'Internet link unavailable: {error}. Same Wi-Fi access is still available.'
+                print(server.sharing.status, file=sys.stderr, flush=True)
         contents.start()
         bridge.start()
         server.serve_forever(poll_interval=.2)
@@ -399,17 +406,22 @@ def serve(port=8765, bridge_port=24703, local_only=False, tunnel=False, public_u
         server.sharing.close()
 
 
-if __name__ == '__main__':
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--port', type=int, default=8765)
     parser.add_argument('--bridge-port', type=int, default=24703)
     parser.add_argument('--state-port', type=int, default=24702, help='Full observation stream for live item contents')
     parser.add_argument('--local-only', action='store_true', help='Disable access over local Wi-Fi')
     sharing = parser.add_mutually_exclusive_group()
-    sharing.add_argument('--tunnel', action='store_true', help='Start a temporary internet link using cloudflared')
+    sharing.add_argument('--tunnel', action='store_true', default=None, help='Require a temporary Cloudflare internet link (started by default when available)')
+    sharing.add_argument('--no-tunnel', action='store_false', dest='tunnel', help='Use same-Wi-Fi links without starting Cloudflare')
     sharing.add_argument('--public-url', help='Existing forwarded http(s) origin to encode in the phone QR code')
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     try:
         serve(args.port, args.bridge_port, args.local_only, args.tunnel, args.public_url, args.state_port)
-    except (RuntimeError, ValueError) as error:
+    except (RuntimeError, ValueError, OSError) as error:
         parser.exit(1, str(error) + '\n')
+
+
+if __name__ == '__main__':
+    main()

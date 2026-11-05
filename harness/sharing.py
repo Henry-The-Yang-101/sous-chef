@@ -1,4 +1,4 @@
-"""Phone URLs, offline QR generation and an optional managed Cloudflare tunnel."""
+"""Phone URLs, offline QR generation and a managed Cloudflare tunnel."""
 import ipaddress
 import re
 import secrets
@@ -59,6 +59,7 @@ class PhoneShare:
         self.local_hosts = set(self.origins)
         self.links = []
         self.status = None
+        self.internet_pending = False
         self.process = None
         self.reader = None
         for address in addresses:
@@ -94,7 +95,8 @@ class PhoneShare:
 
     def describe(self):
         with self.lock:
-            return {'links': list(self.links), 'status': self.status}
+            return {'links': list(self.links), 'status': self.status,
+                    'internetPending': self.internet_pending}
 
     def start_tunnel(self, port):
         executable = shutil.which('cloudflared')
@@ -102,30 +104,37 @@ class PhoneShare:
         if executable is None and bundled.is_file():
             executable = str(bundled)
         if executable is None:
-            raise RuntimeError('Install cloudflared first (brew install cloudflared), then run with --tunnel')
-        self.status = 'Starting the internet tunnel…'
+            raise RuntimeError('Install cloudflared first (brew install cloudflared)')
         self.process = subprocess.Popen(
             [executable, 'tunnel', '--no-autoupdate', '--url', f'http://127.0.0.1:{port}'],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        with self.lock:
+            self.status = 'Starting the Cloudflare internet link…'
+            self.internet_pending = True
         self.reader = threading.Thread(target=self._read_tunnel, name='phone-tunnel', daemon=True)
         self.reader.start()
 
     def _read_tunnel(self):
         process = self.process
+        public_url = None
         try:
             for line in process.stdout:
                 match = re.search(r'https://[a-z0-9-]+\.trycloudflare\.com\b', line)
                 if match:
-                    self._add(match[0], 'Internet')
+                    public_url = match[0]
+                if public_url and 'Registered tunnel connection' in line:
                     with self.lock:
-                        self.status = 'Internet tunnel ready. Keep this harness running.'
+                        self._add(public_url, 'Internet')
+                        self.internet_pending = False
+                        self.status = 'Cloudflare internet link ready. Keep this harness running.'
             process.wait()
             with self.lock:
                 for link in self.links[:]:
                     if link['label'] == 'Internet':
                         self.origins.pop(urlsplit(link['url']).netloc, None)
                         self.links.remove(link)
-                self.status = 'Internet tunnel stopped. Restart with --tunnel to reconnect.'
+                self.internet_pending = False
+                self.status = 'Internet tunnel stopped. Restart the harness to reconnect.'
         finally:
             process.stdout.close()
 

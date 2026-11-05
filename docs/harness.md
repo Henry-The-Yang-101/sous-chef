@@ -9,8 +9,9 @@ python3 -m harness.server
 Open [http://127.0.0.1:8765](http://127.0.0.1:8765). The server uses Python's
 standard library and a bundled QR encoder, and uses the existing control endpoint
 on port 24703. Override with `--port` and `--bridge-port` if needed. By default it
-also listens on the Mac's network interfaces for phone access; `--local-only`
-restricts it to loopback.
+also starts a Cloudflare internet link when `cloudflared` is installed and listens
+on the Mac's network interfaces for same-Wi-Fi access. Use `--no-tunnel` for Wi-Fi
+only, or `--local-only` for loopback only without an automatic tunnel.
 
 Start the game through `python3 scripts/launch.py`, add Player 2 with **Split
 Controller**, and enter an unpaused **Arcade → Couch** kitchen. The page reconnects
@@ -132,26 +133,33 @@ from the connected plugin, independently of its currently available actions.
 ## Open on your phone
 
 Open **Open on your phone** on the Mac's localhost page and scan its QR code with
-your phone's camera. Keep both devices on the same Wi-Fi. The phone shows the same
-live list, distances, status, action selectors and Stop control, so Overcooked! 2 can stay
-focused on the Mac. If the Mac has several network addresses, choose the one on
-your phone's network in the connection selector. Guest Wi-Fi isolation or a local
-firewall can prevent direct access.
+your phone's camera. Normal startup creates a Cloudflare HTTPS internet link, so
+your phone can use Wi-Fi or cellular. The phone shows the same live list,
+distances, status, action selectors and Stop control, so Overcooked! 2 can stay
+focused on the Mac.
 
-For access from another network, install
+The internet link requires
 [`cloudflared`](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/)
-once (`brew install cloudflared` on macOS), then start:
+(`brew install cloudflared` on macOS, or a binary at `.tools/cloudflared`). Start:
 
 ```sh
-python3 -m harness.server --tunnel
+python3 -m harness.server
 ```
 
-The harness starts a temporary Cloudflare Quick Tunnel, adds its HTTPS URL to
-the QR panel automatically, and stops the tunnel when the harness exits. Select
-**Internet** if it is not already selected. It requires no router port forwarding
-or Cloudflare account. If you already have a forwarded URL, use
+The harness starts a temporary Cloudflare Quick Tunnel, waits for its connection,
+then selects its HTTPS QR link automatically. It stops the tunnel when the harness
+exits. An explicit choice in the connection selector is preserved. The tunnel
+requires no router port forwarding or Cloudflare account. If `cloudflared` cannot
+start, the page explains the failure and offers same-Wi-Fi access; `--tunnel`
+requires Cloudflare and exits on startup failure instead. If you already have a
+forwarded URL, use
 `--public-url https://your-forwarded-host.example` instead; this registers the
-exact origin and encodes it but does not start forwarding itself.
+exact origin and encodes it without starting another tunnel.
+
+Use `--no-tunnel` for direct same-Wi-Fi access. Keep both devices on the same
+Wi-Fi and choose the Mac address on your phone's network if there are several.
+Guest Wi-Fi isolation or a local firewall can prevent this direct connection;
+choose **Internet** to use Cloudflare when available.
 
 QR codes are generated locally with no external image service. Each link contains
 a random per-process access token in its URL fragment. The browser moves it into
@@ -159,7 +167,7 @@ session storage and removes the fragment; non-local viewers need that token to
 read state or issue commands. A tunnel's loopback proxy connection does not bypass
 authentication. Treat the QR/link as access to this Player 2 session; restarting
 the harness invalidates it, so scan the new QR afterward. Ordinary Wi-Fi HTTP is
-unencrypted; the optional tunnel uses HTTPS. The plugin's TCP endpoints remain
+unencrypted; the Cloudflare tunnel uses HTTPS. The plugin's TCP endpoints remain
 loopback-only.
 
 ## Live data and lifecycle
@@ -220,7 +228,8 @@ latency; native momentum is not forcibly erased.
 The HTTP server validates the exact configured Host/Origin and requires a
 per-process page token for commands, plus authenticated reads for phone/tunnel
 origins. There are no external page assets or runtime Python dependencies. Only
-`--tunnel` starts an outbound service. This is a development harness; every viewer
+the automatic Cloudflare tunnel starts an outbound service (`--no-tunnel` disables
+it). This is a development harness; every viewer
 with the QR token can control Player 2.
 
 ## Verification
@@ -235,6 +244,14 @@ disconnect/reconnect, browser closure and inactivity, Stop, shutdown and the HTT
 They also cover dispenser metadata, phone authentication, forwarded Host/Origin
 checks and phone command/heartbeat round trips. See
 [the validation record](validation.md) for actual Arcade Couch browser tests.
+
+Phone sharing was rechecked on November 5, 2026: all 117 Python tests passed,
+including automatic tunnel startup, explicit opt-outs, startup failure and tunnel
+connection/exit handling. A live Cloudflare HTTPS link returned HTTP 200 for a
+token-authenticated state request and 403 without the token. Browser checks
+confirmed that the QR waits during tunnel startup, automatically switches from
+the initial Wi-Fi link to Internet, and preserves an explicit Wi-Fi selection
+across link updates. A physical phone camera/network was not exercised.
 
 Phone sharing was checked on November 1, 2026: both the Mac's LAN address and the
 managed public HTTPS tunnel returned fresh game state with the QR token and

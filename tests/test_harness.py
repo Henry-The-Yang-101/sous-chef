@@ -3,10 +3,11 @@ import http.client
 import json
 import threading
 import unittest
+from unittest import mock
 from http.server import ThreadingHTTPServer
 
 from clients.control import ControlError
-from harness.server import Handler, HarnessBridge, HarnessError
+from harness.server import Handler, HarnessBridge, HarnessError, main, serve
 from harness.sharing import PhoneShare
 
 
@@ -469,6 +470,39 @@ class HttpTests(unittest.TestCase):
 
 
 class SharingTests(unittest.TestCase):
+    def test_tunnel_is_published_only_after_connection_and_removed_on_exit(self):
+        sharing = PhoneShare(8765, 'token', ['192.168.1.23'])
+        sharing.internet_pending = True
+        process = mock.MagicMock()
+        sharing.process = process
+
+        def logs():
+            yield 'INF Your quick Tunnel: https://connected.trycloudflare.com\n'
+            self.assertTrue(sharing.describe()['internetPending'])
+            self.assertEqual([link['label'] for link in sharing.links], ['Same Wi-Fi'])
+            yield 'INF Registered tunnel connection connIndex=0\n'
+            self.assertFalse(sharing.describe()['internetPending'])
+            self.assertEqual(sharing.links[0]['url'], 'https://connected.trycloudflare.com/#access=token')
+            self.assertTrue(sharing.valid_origin('connected.trycloudflare.com', None))
+
+        process.stdout.__iter__.side_effect = logs
+        sharing._read_tunnel()
+        self.assertFalse(sharing.describe()['internetPending'])
+        self.assertEqual([link['label'] for link in sharing.links], ['Same Wi-Fi'])
+        self.assertFalse(sharing.valid_origin('connected.trycloudflare.com', None))
+        self.assertIn('stopped', sharing.status)
+        process.stdout.close.assert_called_once()
+
+    def test_tunnel_failure_before_connection_clears_pending_state(self):
+        sharing = PhoneShare(8765, 'token')
+        sharing.internet_pending = True
+        sharing.process = mock.MagicMock()
+        sharing.process.stdout.__iter__.return_value = iter(['ERR Could not connect\n'])
+        sharing._read_tunnel()
+        self.assertFalse(sharing.describe()['internetPending'])
+        self.assertEqual(sharing.links, [])
+        self.assertIn('stopped', sharing.status)
+
     def test_invalid_forwarded_urls_are_rejected(self):
         for url in ['file:///etc/passwd', 'https://user:pass@example.com',
                     'https://example.com/path', 'https://example.com/#secret']:
@@ -484,3 +518,45 @@ class SharingTests(unittest.TestCase):
         self.assertFalse(sharing.authorized('wrong'))
         self.assertFalse(sharing.authorized('☃'))
         self.assertTrue(sharing.authorized('token'))
+
+
+class StartupTests(unittest.TestCase):
+    def run_server(self, options, failure=None):
+        with mock.patch.multiple('harness.server', ThreadingHTTPServer=mock.DEFAULT,
+                                 HarnessBridge=mock.DEFAULT, ContentsObserver=mock.DEFAULT,
+                                 PhoneShare=mock.DEFAULT, lan_addresses=mock.DEFAULT) as mocks, \
+                mock.patch('harness.server.signal.signal'), mock.patch('builtins.print'):
+            server = mocks['ThreadingHTTPServer'].return_value
+            server.server_port = 8765
+            server.serve_forever.side_effect = KeyboardInterrupt
+            sharing = mocks['PhoneShare'].return_value
+            sharing.start_tunnel.side_effect = failure
+            try:
+                serve(**options)
+            finally:
+                sharing.close.assert_called_once()
+                server.server_close.assert_called_once()
+            return sharing, server
+
+    def test_normal_startup_uses_cloudflare_and_explicit_modes_opt_out(self):
+        for options, expected in [({}, True), ({'tunnel': True}, True),
+                                  ({'tunnel': False}, False), ({'local_only': True}, False),
+                                  ({'public_url': 'https://forwarded.example'}, False)]:
+            with self.subTest(options=options):
+                sharing, _ = self.run_server(options)
+                self.assertEqual(sharing.start_tunnel.called, expected)
+
+    def test_missing_cloudflared_keeps_default_server_available_with_explanation(self):
+        sharing, server = self.run_server({}, RuntimeError('Install cloudflared first'))
+        self.assertIn('Install cloudflared', sharing.status)
+        server.serve_forever.assert_called_once()
+
+    def test_explicit_tunnel_failure_is_reported(self):
+        with self.assertRaisesRegex(RuntimeError, 'Install cloudflared'):
+            self.run_server({'tunnel': True}, RuntimeError('Install cloudflared first'))
+
+    def test_command_line_preserves_automatic_default_and_no_tunnel_option(self):
+        for arguments, expected in [([], None), (['--tunnel'], True), (['--no-tunnel'], False)]:
+            with self.subTest(arguments=arguments), mock.patch('harness.server.serve') as start:
+                main(arguments)
+                self.assertIs(start.call_args.args[3], expected)
