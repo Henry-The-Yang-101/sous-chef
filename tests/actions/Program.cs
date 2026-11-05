@@ -597,7 +597,7 @@ internal static class Program
     }
     private static void StartDishTask(World w, int repetitions = 1)
     {
-        Check(w.Tasks.Start(w.Chef,1,new ControlCommand {Id="deliver",Operation="task",Task=new TaskRequest {Action="deliver_dishes",Repetitions=repetitions}})==null,
+        Check(w.Tasks.Start(w.Chef,1,new ControlCommand {Id="deliver",Operation="task",Task=new TaskRequest {Action="deliver_completed_dishes",Repetitions=repetitions}})==null,
             "dish delivery accepts a reachable serving window even before a dish is ready");
     }
     private static void FinishDishTask(World w, GameObject window, int expectedServes)

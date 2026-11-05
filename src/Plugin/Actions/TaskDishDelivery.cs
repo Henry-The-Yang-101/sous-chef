@@ -7,7 +7,7 @@ namespace SousChef.Plugin.Actions
 {
     internal sealed partial class TaskActions
     {
-        partial void RegisterDishDelivery() { Register("deliver_dishes", DishDeliveryAvailable, DeliverDishes); }
+        partial void RegisterDishDelivery() { Register("deliver_completed_dishes", DishDeliveryAvailable, DeliverCompletedDishes); }
 
         private bool DishDeliveryAvailable()
         {
@@ -128,7 +128,7 @@ namespace SousChef.Plugin.Actions
             }
         }
 
-        private IEnumerable<TaskStep> DeliverDishes()
+        private IEnumerable<TaskStep> DeliverCompletedDishes()
         {
             while (true)
             {

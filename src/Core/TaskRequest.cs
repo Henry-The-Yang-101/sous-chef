@@ -11,7 +11,7 @@ namespace SousChef.Core
     }
     public sealed class TaskRequest
     {
-        public static readonly string[] Names = { "prepare_near_player", "take_ready", "wash_dishes", "deliver_dirty_dishes", "put_out_fire", "toss_burnt_food", "monitor_equipment", "deliver_dishes" };
+        public static readonly string[] Names = { "prepare_near_player", "take_ready", "wash_dishes", "deliver_dirty_dishes", "put_out_fire", "toss_burnt_food", "monitor_equipment", "deliver_completed_dishes" };
         public string Action;
         public int Repetitions = 1, Player = 1; // Zero means until explicitly stopped.
         public readonly List<PreparationRequest> Items = new List<PreparationRequest>();

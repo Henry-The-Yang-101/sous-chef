@@ -17,7 +17,7 @@ counter and resumes the same request. This also handles catches during walking
 or chopping. Partially worked food stays on its board; a dirty stack caught while
 washing joins the sink. Serving tasks can use a compatible plate already in hand.
 If no safe counter is available, most tasks wait with the cargo and Stop remains
-available. `deliver_dishes` instead uses a checked floor drop after trying nearby
+available. `deliver_completed_dishes` instead uses a checked floor drop after trying nearby
 counters, as described below. Task discovery only observes state; it never moves items. Explicit
 interaction and logistics commands retain their existing cargo preconditions.
 
@@ -156,9 +156,9 @@ water gun, approach a checked spray position for each washable stack in the
 batch, hold Use while the target is in the native spray, and park the gun.
 A stack with no reachable spray position does not enable the task.
 
-## Deliver dishes
+## Deliver completed dishes
 
-`deliver_dishes` monitors for a plated meal matching a current native order,
+`deliver_completed_dishes` monitors for a plated meal matching a current native order,
 including its required plate type. It is available whenever P2 can reach a serving
 window, even if no meal is ready yet. Empty, incomplete, mismatched and already
 reserved plates, and plates carried by another chef, are excluded. A ready plate
@@ -228,7 +228,7 @@ same native cooking handler instead of recipe/name-specific timing guesses.
 ```python
 chef.run_task('wash_dishes', repetitions=3)
 chef.run_task('monitor_equipment', repetitions=None)  # Stop cancels the loop.
-chef.run_task('deliver_dishes', repetitions=None)
+chef.run_task('deliver_completed_dishes', repetitions=None)
 chef.run_task('prepare_near_player', items=[
     {'ingredient': 'chicken', 'preparation': 'chopped', 'quantity': 2},
     {'ingredient': 'pot', 'preparation': 'empty', 'quantity': 1},

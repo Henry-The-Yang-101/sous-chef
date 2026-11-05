@@ -93,7 +93,7 @@ They are never invoked by production tasks.
 
 ## Dish delivery — 2026-11-05
 
-`deliver_dishes` passed seven scenarios in the native Unity player on
+`deliver_completed_dishes` (then named `deliver_dishes`) passed seven scenarios in the native Unity player on
 `s_sushi_1_1`, at requested 60 FPS. Implementation: `db43e24` (including `2bacd23`
 and `b66d209`). Tested DLL SHA-256:
 `bc36c0e5c3b2879ec75d5335117f00b7ec9d089e07e906bf931dd7ea5604f3da`.

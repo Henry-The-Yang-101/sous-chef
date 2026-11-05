@@ -44,7 +44,7 @@ class DishAudit(Audit):
                 (prawn_times if recipe == 'Sushi_PlainPrawn' else fish_times).append(data['OrderController.ServerOrderData.Remaining'])
             assert fish_times and prawn_times and min(prawn_times) < min(fish_times)
             break
-        self.request_when_available('deliver_dishes')
+        self.request_when_available('deliver_completed_dishes')
         receipts = self.observe('expiry-deliver', timeout=60)
         first_pickup = next(r['details']['child'] for r in receipts if (r['details'].get('child') or {}).get('operation') == 'pick_up')
         assert first_pickup['targetId'] == far['sourceId'], 'The more urgent far dish must be collected first'
@@ -98,7 +98,7 @@ class DishAudit(Audit):
             assert filled, 'Floor fallback must have explicit occupied-counter conditions'
 
         repetitions = None if mode == 'stop' else 2 if mode == 'repetitions' else 1
-        self.request_when_available('deliver_dishes', repetitions)
+        self.request_when_available('deliver_completed_dishes', repetitions)
         began = time.monotonic()
         supplied = False
 

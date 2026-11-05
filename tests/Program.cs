@@ -31,8 +31,8 @@ internal static class Program
     {
         Assert(ControlCommand.Parse("task once take_ready 1").Task.Repetitions == 1, "default finite task grammar");
         Assert(ControlCommand.Parse("task loop monitor_equipment forever").Task.Repetitions == 0, "infinite task grammar");
-        Assert(ControlCommand.Parse("task serve deliver_dishes 2").Task.Repetitions == 2, "dish delivery uses the standard task grammar");
-        Assert(ControlCommand.Parse("task serve deliver_dishes forever").Task.Repetitions == 0, "dish delivery supports continuous monitoring");
+        Assert(ControlCommand.Parse("task serve deliver_completed_dishes 2").Task.Repetitions == 2, "dish delivery uses the standard task grammar");
+        Assert(ControlCommand.Parse("task serve deliver_completed_dishes forever").Task.Repetitions == 0, "dish delivery supports continuous monitoring");
         var command = ControlCommand.Parse("task prep prepare_near_player 3 1 sY2hpY2tlbg chopped 2 scG90 empty 1");
         Assert(command.Task.Items.Count == 2 && command.Task.Items[0].Selector == "chicken" && command.Task.Items[0].Quantity == 2, "mixed ingredient utensil task grammar");
         foreach (string value in new[] {"0", "11", "-1", "nan", "1.5"})

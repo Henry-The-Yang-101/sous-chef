@@ -28,10 +28,10 @@ def reply(n, **fields):
 
 
 class ActionsTests(unittest.TestCase):
-    def test_deliver_dishes_uses_standard_task_repetitions(self):
+    def test_deliver_completed_dishes_uses_standard_task_repetitions(self):
         c = client(reply(1), reply(2))
-        c.run_task('deliver_dishes'); c.run_task('deliver_dishes', None)
-        self.assertEqual(c.socket.sent, [b'task 1 deliver_dishes 1\n', b'task 2 deliver_dishes forever\n'])
+        c.run_task('deliver_completed_dishes'); c.run_task('deliver_completed_dishes', None)
+        self.assertEqual(c.socket.sent, [b'task 1 deliver_completed_dishes 1\n', b'task 2 deliver_completed_dishes forever\n'])
 
     def test_task_wrapper_validates_and_encodes_finite_infinite_and_mixed_items(self):
         c = client(reply(1), reply(2), reply(3))
