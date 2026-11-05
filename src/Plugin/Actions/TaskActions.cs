@@ -213,7 +213,7 @@ namespace SousChef.Plugin.Actions
                         (supply == null || System.Object.ReferenceEquals(supply.m_itemPrefab, originalPrefab));
                 if ((operation == "place_at" || operation == "add_ingredient" || operation == "collect_contents" || operation == "discard") &&
                     !System.Object.ReferenceEquals(ActionObservations.Held(chef), originalHeld)) throw new InvalidOperationException("task_cargo_changed");
-                return operation != "place_at" && operation != "collect_contents" || System.Object.ReferenceEquals(ActionObservations.Occupant(target), originalOccupant);
+                return operation != "place_at" && operation != "collect_contents" && operation != "work_at" || System.Object.ReferenceEquals(ActionObservations.Occupant(target), originalOccupant);
             }, Command = delegate { return new ControlCommand {
                 Operation = operation, Destination = navigation.RegisterItem(target), Condition = condition, DesiredState = "trigger" }; } };
         }

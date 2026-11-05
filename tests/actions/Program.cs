@@ -441,6 +441,14 @@ internal static class Program
                 "a caught item leaving during hands recovery resumes original work instead of parking with empty hands");w.Tasks.Cancel("test_end");
         }
         {
+            var w=kitchen();var shelf=w.Delivery();var potato=raw(w,"potato");w.Target.GetComponent<ServerAttachStation>().Item=potato;
+            start(w,new[] {"potato"});Check(until(w,"work_at"),"changed-board fixture starts working the original potato");w.ArriveAt(w.Target);
+            var stray=w.Ingredient("onion");w.Hold(stray);Check(until(w,"place_at"),"changed-board fixture begins parking a catch");
+            w.Target.GetComponent<ServerAttachStation>().Item=raw(w,"chicken");place(w,shelf,stray);
+            for(int i=0;i<20;i++)w.Tick(.25f);
+            Check(w.Tasks.Run.Running && !w.Skills.Run.Running,"resuming after hands recovery revalidates the board instead of chopping replacement food");w.Tasks.Cancel("test_end");
+        }
+        {
             var w=kitchen();var shelf=w.Delivery();shelf.Add(new Pickup());shelf.Add(new PickupItemSpawner {m_itemPrefab=raw(w,"potato")});w.Hold(w.Ingredient("onion"));
             shelf.GetComponent<ServerAttachStation>().Item=w.Ingredient("counter full");start(w,new[] {"potato"});
             for(int i=0;i<30;i++)w.Tick(.25f);
