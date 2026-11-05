@@ -68,7 +68,30 @@ namespace SousChef.Plugin.Navigation
         private readonly Dictionary<int, Dictionary<WalkCell, PortalConnector>> portalExits = new Dictionary<int, Dictionary<WalkCell, PortalConnector>>();
         private Collider permittedPortalTrigger, exitPortal;
         public PortalLink Portal(int id) { PortalLink link; return portals.TryGetValue(id, out link) ? link : null; }
-        public void LeavePortal(PortalLink link) { exitPortal = link.ExitTrigger; }
+        private Vector3 exitDirection;
+        public void LeavePortal(PortalLink link)
+        {
+            exitPortal = link.ExitTrigger;
+            if (exitPortal == null) return;
+            Vector3 away = link.Exit - exitPortal.bounds.center; away.y = 0;
+            exitDirection = away.normalized;
+        }
+        public bool ExitClearance(Vector3 position, out Vector3 stance)
+        {
+            stance = position;
+            if (exitPortal == null || !exitPortal.enabled || exitDirection.sqrMagnitude < .9f) return false;
+            // A bidirectional portal can send the chef straight back if a turn
+            // at the attach point sweeps the body into its trigger. Walk clear
+            // on the arrival side before turning toward the next waypoint.
+            Bounds bounds = exitPortal.bounds;
+            Vector3 center = bounds.center; center.y = position.y;
+            float extent = Mathf.Abs(exitDirection.x) * bounds.extents.x + Mathf.Abs(exitDirection.z) * bounds.extents.z;
+            float clearance = extent + nativeRadius + .1f;
+            if (Vector3.Distance(position, center) >= clearance) { exitPortal = null; return false; }
+            Vector3 guess = center + exitDirection * (clearance + .2f); Collider support;
+            return PortalOutward(exitPortal, position, guess) && PortalStand(guess, exitPortal, out stance, out support) &&
+                PortalSegment(position, stance, exitPortal);
+        }
         public object PortalDiagnostics()
         {
             var result = new List<object>();
@@ -328,7 +351,7 @@ namespace SousChef.Plugin.Navigation
         {
             if (exitPortal == null || !exitPortal.enabled) return false;
             Vector3 centre = exitPortal.bounds.center; centre.y = from.y;
-            if (Vector3.Distance(from, centre) > 2f) { exitPortal = null; return false; }
+            if (Vector3.Distance(from, centre) > 2f) return false;
             return PortalOutward(exitPortal, from, to);
         }
         private static bool PortalOutward(Collider trigger, Vector3 from, Vector3 to)

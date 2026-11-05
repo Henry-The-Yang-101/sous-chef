@@ -439,7 +439,8 @@ namespace SousChef.Plugin.Navigation
             if (Time.realtimeSinceStartup - lastProgress > 2f) { Stop("no_progress"); return; }
             facingSince = -1; arrival.Reset(); arrivalDetails = null;
             Vector3 goal;
-            if (!TryWalkingGoal(position, out goal))
+            bool exiting = physics.ExitClearance(position, out goal);
+            if (!exiting && !TryWalkingGoal(position, out goal))
             {
                 // Native contact and slope motion can displace the body from the
                 // previously checked connector without changing static geometry.
@@ -449,7 +450,7 @@ namespace SousChef.Plugin.Navigation
                 if (!TryWalkingGoal(position, out goal)) { Stop("route_blocked"); return; }
             }
             PortalLink nextPortal;
-            if (portalSteps.TryGetValue(waypoint, out nextPortal))
+            if (!exiting && portalSteps.TryGetValue(waypoint, out nextPortal))
             {
                 activePortal = nextPortal; portalStarted = Time.realtimeSinceStartup; sawTeleport = sawReceive = false; portalBrakeFrames = nextPortal.StagingDistance < 1f ? 3 : 2;
                 TickPortal(commandMilliseconds); return;

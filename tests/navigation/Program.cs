@@ -611,6 +611,11 @@ internal static class Program
         w.Chef.transform.position=link.Exit; physics.LeavePortal(link); physics.Refresh(w.Chef);
         Check(!physics.Segment(link.Exit,new Vector3(9.1f,0,0)),"exit exemption cannot cross back through the portal to an equal or greater radius");
         Check(physics.Segment(link.Exit,new Vector3(11.5f,0,0)),"exit exemption permits walking outward");
+        Vector3 clear;
+        Vector3 partlyInside=link.ExitTrigger.bounds.center+Vector3.right*.3f; partlyInside.y=link.Exit.y;
+        Check(physics.ExitClearance(partlyInside,out clear) && clear.x>partlyInside.x && Math.Abs(clear.z-partlyInside.z)<.01f,
+            "before a turn, finish walking off the receiving trigger on the arrival side");
+        Check(!physics.ExitClearance(clear,out clear),"once clear of the portal, ordinary routing resumes");
         int departureHistory=0;
         Check(physics.PortalDeparture(link.Exit,new Vector3(10.8f,0,.4f),link,ref departureHistory),
             "an exit can join a nearer lattice cell when the ordinary body sweep stays clear of its trigger");
