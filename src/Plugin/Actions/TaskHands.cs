@@ -7,6 +7,24 @@ namespace SousChef.Plugin.Actions
     {
         private IEnumerator<TaskStep> handsPlan;
         private TaskStep suspendedStep;
+        private GameObject handsCargo;
+
+        private void ObserveHandsRecovery()
+        {
+            if (handsPlan == null || System.Object.ReferenceEquals(ActionObservations.Held(chef), handsCargo)) return;
+            // A catch while use is held can leave the hands on the following
+            // native input release. Once it has left, there is nothing to park.
+            // Let an issued placement finish verification before resuming; never
+            // repeat its edge or abandon the original task's claimed food.
+            if (childStarted && child.Run.Running && !child.CanRetry) return;
+            if (childStarted)
+            {
+                if (child.Run.State == "succeeded") completedSteps++;
+                child.Cancel("task_hands_changed"); childStarted = false;
+            }
+            handsPlan.Dispose(); handsPlan = null; handsCargo = null;
+            step = suspendedStep; suspendedStep = null; retryAt = 0; waitingReason = null;
+        }
 
         // A catch can happen before dispatch, during walking, or while working.
         // Suspend only an unpressed action (or resumable native work), retaining
@@ -32,6 +50,7 @@ namespace SousChef.Plugin.Actions
                 step = null; return true;
             }
             suspendedStep = step; step = null;
+            handsCargo = held;
             handsPlan = (suspendedStep.FreeHands == null ? Park(held) : suspendedStep.FreeHands(held)).GetEnumerator();
             Run.Advance("clearing_hands"); return true;
         }

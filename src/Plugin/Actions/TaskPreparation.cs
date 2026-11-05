@@ -15,14 +15,18 @@ namespace SousChef.Plugin.Actions
         }
         partial void RegisterPreparation()
         { Register("prepare_near_player", PreparationAvailable, PrepareNearPlayer); }
-        private bool PreparedIngredientMatches(LogisticsItem candidate, string selector)
+        private bool PreparationIngredientMatches(LogisticsItem candidate, string selector, bool processed)
         {
             // A preparation request names a dispenser root. Follow its native
             // work outputs to recognize supplied food at later stages without
             // weakening exact raw identities in the logistics API.
+            bool rootKnown = false;
             foreach (LogisticsItem root in inventory.Items)
             {
                 if (!root.Supply || !LogisticsInventory.IngredientMatches(root, selector)) continue;
+                rootKnown = true;
+                if (root.IngredientId == candidate.IngredientId) return true;
+                if (!processed) continue;
                 var seen = new HashSet<GameObject>(); GameObject stage = root.Item;
                 while (stage != null && seen.Add(stage))
                 {
@@ -32,7 +36,9 @@ namespace SousChef.Plugin.Actions
                     if (LogisticsInventory.IngredientIdentity(stage, out id, out name) && id == candidate.IngredientId) return true;
                 }
             }
-            return false;
+            // A raw prefab and its chopped order node can share a display name.
+            // Resolve aliases through the dispenser before comparing identities.
+            return !rootKnown && LogisticsInventory.IngredientMatches(candidate, selector);
         }
         private static int PreparationWork(GameObject item)
         {
@@ -67,8 +73,7 @@ namespace SousChef.Plugin.Actions
                     string type = LogisticsInventory.CanonicalUtensil(desired.Selector);
                     return type == "plate" ? entry.CleanPlate : entry.Empty && entry.UtensilType == type;
                 }
-                return LogisticsInventory.IngredientMatches(entry, desired.Selector) ||
-                    desired.Preparation != "raw" && PreparedIngredientMatches(entry, desired.Selector);
+                return PreparationIngredientMatches(entry, desired.Selector, desired.Preparation != "raw");
             }
             return false;
         }

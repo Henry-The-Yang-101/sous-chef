@@ -140,6 +140,7 @@ public class ServerFlammable : MonoBehaviour
 }
 
 public class ServerDirtyPlateStack : MonoBehaviour { }
+public class ServerFireExtinguishSpray : MonoBehaviour { }
 
 public class MixingStation : MonoBehaviour { }
 

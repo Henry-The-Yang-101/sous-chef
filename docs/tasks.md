@@ -24,7 +24,9 @@ Environmental blocks wait indefinitely with neutral input and bounded periodic
 revalidation. Completed steps are retained. Explicit Stop, release, disconnect,
 focus loss, reassignment, respawn and round changes still cancel and restore
 native input bindings. Changed source identities wait for the original source before an unpressed step.
-Changed cargo or unverified button outcomes fail safely with cargo retained. Waiting does not replay a successful step or disposal.
+Cargo identity checks still protect placements, transfers and disposal.
+Unverified button outcomes are never blindly replayed. Waiting does not replay a
+successful step or disposal.
 
 The existing interaction/logistics recovery window is also indefinite; time spent
 recovering suspends finite watchdogs. Button outcome verification remains bounded.

@@ -82,6 +82,7 @@ namespace SousChef.Plugin.Actions
             try
             {
                 ObserveDeliveries();
+                ObserveHandsRecovery();
                 if (!child.Run.Running && navigation.Action.State == "idle") handoffThrows.Tick(chef);
                 if (childStarted)
                 {
@@ -131,7 +132,7 @@ namespace SousChef.Plugin.Actions
                     if (handsPlan != null)
                     {
                         if (handsPlan.MoveNext()) step = handsPlan.Current;
-                        else { handsPlan.Dispose(); handsPlan = null; step = suspendedStep; suspendedStep = null; }
+                        else { handsPlan.Dispose(); handsPlan = null; handsCargo = null; step = suspendedStep; suspendedStep = null; }
                     }
                 }
                 if (step == null)
@@ -190,7 +191,7 @@ namespace SousChef.Plugin.Actions
             handoffThrows.Reset();
             if (navigation.Action.State == "navigating") navigation.Stop(reason);
             if (plan != null) plan.Dispose(); plan = null; step = null;
-            if (handsPlan != null) handsPlan.Dispose(); handsPlan = null; suspendedStep = null;
+            if (handsPlan != null) handsPlan.Dispose(); handsPlan = null; handsCargo = null; suspendedStep = null;
             release();
         }
         private TaskStep Do(string operation, GameObject target, string condition = null)

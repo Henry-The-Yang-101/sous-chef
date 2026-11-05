@@ -207,7 +207,7 @@ namespace SousChef.Plugin.Actions
             {
                 if (!entry.Supply && deliveredItems.Contains(entry.Item)) continue;
                 bool match = utensil ? plate ? entry.CleanPlate : entry.Empty && entry.UtensilType == utensilType :
-                    LogisticsInventory.IngredientMatches(entry, selector) || processed && PreparedIngredientMatches(entry, selector);
+                    PreparationIngredientMatches(entry, selector, processed);
                 if (!match || !Obtainable(entry, plate ? "get_plate" : "move_item")) continue;
                 if (!utensil && TaskNative.Equipment(entry.Holder ?? entry.Source)) continue;
                 // For equivalent preparation stages, prefer certified sources.
