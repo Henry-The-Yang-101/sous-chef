@@ -212,6 +212,10 @@ for the first route is in `.local/job-recovery-results/baseline/`.
 
 ## Autonomous task audits (bridge 0.8)
 
+The [cross-kitchen environment audit](environment-task-audit.md) records task behavior
+in all 140 installed two-player kitchens, with focused replays of failed handoffs,
+backpack pickups, water-gun washing and equipment rescue.
+
 See [task verification](task-verification.md) for preparation, utensils, ready-food
 serving, mixer monitoring, dishes, firefighting, disposal and repetition tests.
 See [preparation regressions](preparation-regressions.md) for story 4-2 floor-food,
