@@ -90,6 +90,13 @@ stance. A binary heap, cached geometry probes and a spatial index
 of reachable approach cells avoid repeating a search per target. Changed collider
 bounds/poses invalidate nearby probes. Periodic reconciliation catches changes
 that preserve bounds. Query buffers, node counts and planning time are bounded.
+Geometry caching is capped at 65,536 FIFO records, including invalidated entries
+awaiting eviction. Regional invalidation uses spatial buckets rather than scanning
+every retained probe for each moving collider. Eviction also removes the source's
+cached edges and invalidates saved search continuity. Throw-stance route costs
+reuse the reachable-cell index, inspecting only nearby nodes and portal exits
+before applying the existing native connector checks. Diagnostics expose
+`cachedProbes`, `cachedEdges` and `geometryCacheEvictions`.
 When a search exhausts its budget, already settled Dijkstra nodes retain proven
 shortest paths. A destination is published only if its best checked approach costs
 no more than the minimum pending frontier distance, so no unexplored approach

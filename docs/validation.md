@@ -713,6 +713,29 @@ establish every kitchen or DLC works, nor resolve the separately recorded
 Chocolate stair failures.
 
 
+## Progressive FPS investigation — 2026-11-05
+
+The user reported falling frame rates during story 4-2 (`s_rapids_4_2A`) and
+requested implementation without tests or a game run. Source inspection found
+that the existing 16,000-node walking search and 32,000-node worker production
+limits did not bound geometry probes retained across successive searches.
+Moving geometry invalidation scanned every retained probe against changed
+collider bounds, and each throw-stance route query scanned all settled nodes.
+These are sources of increasing main-thread work as caches and searches grow;
+the screenshot alone does not establish which dominated the reported session.
+
+Geometry cache records now have a 65,536-entry FIFO limit, including stale
+records left by regional invalidation. Live eviction removes the probe and its
+outgoing cached edges incrementally and invalidates saved search continuity.
+Spatial buckets narrow moving-geometry invalidation to the affected region,
+with a sparse-grid fallback for broad bounds. Throw-stance route queries reuse
+the settled-cell index and retain the same distance and native segment checks,
+including portal exits. Cache sizes and eviction counts are exposed in navigation
+diagnostics.
+
+No build, tests, simulator session, live-game profiling or installation was run
+for this change, as requested. Rendered FPS improvement remains unmeasured.
+
 ## FPS follow-up — 2026-11-02
 
 The earlier demand-driven streaming and serialization optimizations remain in

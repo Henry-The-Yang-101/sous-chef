@@ -23,6 +23,8 @@ namespace SousChef.Plugin.Navigation
         public readonly ChefActionState Action = new ChefActionState();
         private readonly Dictionary<string, Destination> available = new Dictionary<string, Destination>();
         private readonly Dictionary<int, Destination> identities = new Dictionary<int, Destination>();
+        private readonly Dictionary<long, List<WalkCell>> reachableByXZ = new Dictionary<long, List<WalkCell>>();
+        private readonly List<WalkCell> reachablePortals = new List<WalkCell>();
         private readonly Action<Vector3, int> move;
         private readonly Action neutral;
         private WalkTree search;
@@ -132,15 +134,30 @@ namespace SousChef.Plugin.Navigation
             float best = Single.MaxValue;
             if (Vector3.Distance(physics.Position, stance) < .01f && physics.Segment(physics.Position, stance)) return 0;
             if (search == null) return best;
-            foreach (WalkCell cell in search.Settled)
+            // A connector can only reach nodes within two lattice spacings.
+            // Reuse the destination index instead of scanning the entire tree
+            // for every candidate of every throw preview.
+            float reach = WalkPhysics.Spacing * 2;
+            int minX = Mathf.FloorToInt((stance.x - reach) / WalkPhysics.Spacing), maxX = Mathf.CeilToInt((stance.x + reach) / WalkPhysics.Spacing);
+            int minZ = Mathf.FloorToInt((stance.z - reach) / WalkPhysics.Spacing), maxZ = Mathf.CeilToInt((stance.z + reach) / WalkPhysics.Spacing);
+            for (int x = minX; x <= maxX; x++) for (int z = minZ; z <= maxZ; z++)
             {
-                Vector3 p = physics.Point(cell); float distance = Vector3.Distance(p, stance);
-                if (distance > WalkPhysics.Spacing * 2) continue;
-                float cost = search.Distances[cell] + distance;
-                if (cost < best && physics.Segment(p, stance)) best = cost;
+                List<WalkCell> bucket;
+                if (reachableByXZ.TryGetValue(((long)x << 32) ^ (uint)z, out bucket))
+                    foreach (WalkCell cell in bucket) best = ConnectorCost(cell, stance, best);
             }
+            // Portal exits use their live endpoint, rather than a lattice pose.
+            foreach (WalkCell cell in reachablePortals) best = ConnectorCost(cell, stance, best);
             return best;
         }
+        private float ConnectorCost(WalkCell cell, Vector3 stance, float best)
+        {
+            Vector3 p = physics.Point(cell); float distance = Vector3.Distance(p, stance);
+            if (distance > WalkPhysics.Spacing * 2) return best;
+            float cost = search.Distances[cell] + distance;
+            return cost < best && physics.Segment(p, stance) ? cost : best;
+        }
+        private void ClearReachableIndex() { reachableByXZ.Clear(); reachablePortals.Clear(); }
         public List<float> ReleaseHeights(Vector3 around, float range)
         {
             var values = new List<float> { physics.Position.y };
@@ -161,6 +178,7 @@ namespace SousChef.Plugin.Navigation
         public void Reset(string reason)
         {
             incrementalSearch = fastWarm = false; ClearRemote();
+            ClearReachableIndex();
             Stop(reason); teleportsCompleted = 0; lastDestination = arrivalDetails = null; identities.Clear(); available.Clear(); physics.Reset(); search = null; chef = null; lastPlan = -1; unavailable = reason;
         }
         public void Dispose() { ClearRemote(); }
@@ -187,6 +205,7 @@ namespace SousChef.Plugin.Navigation
             incrementalSearch = fastWarm = false; ClearRemote();
             if (Action.State == "navigating") Stop(reason);
             available.Clear(); unavailable = reason;
+            ClearReachableIndex();
         }
         public object Describe()
         {
@@ -206,6 +225,7 @@ namespace SousChef.Plugin.Navigation
                     "workerPid", WorkerHost.Current == null ? 0 : WorkerHost.Current.ProcessId,
                     "searchComplete", search != null && search.Complete,
                     "physicsQueries", physics.Queries, "candidateCount", candidateCount, "startCount", startCount, "observationError", observationError,
+                    "cachedProbes", physics.CachedProbeCount, "cachedEdges", physics.CachedEdgeCount, "geometryCacheEvictions", physics.GeometryCacheEvictions,
                     "portals", physics.PortalDiagnostics()));
         }
         private static object Identity(Destination d)
@@ -700,7 +720,7 @@ namespace SousChef.Plugin.Navigation
             nodeCount = candidateCount = startCount = 0;
             try
             {
-                available.Clear(); chef = player;
+                available.Clear(); ClearReachableIndex(); chef = player;
                 string error = alreadyRefreshed ? null : physics.Refresh(player);
                 if (error != null) { ClearRemote(); incrementalSearch = fastWarm = false; unavailable = error; return; }
                 if (target != null && target.IsPoint)
@@ -769,12 +789,11 @@ namespace SousChef.Plugin.Navigation
                 if (physics.Overflow) { incrementalSearch = fastWarm = false; unavailable = "physics_query_overflow"; return; }
                 // Index the reachable nodes once, then only inspect cells around each
                 // meaningful object. Never emit the lattice itself as available actions.
-                var byXZ = new Dictionary<long, List<WalkCell>>();
                 foreach (WalkCell cell in search.Settled)
                 {
-                    if (cell.Portal != 0) continue;
+                    if (cell.Portal != 0) { reachablePortals.Add(cell); continue; }
                     long key = ((long)cell.X << 32) ^ (uint)cell.Z; List<WalkCell> bucket;
-                    if (!byXZ.TryGetValue(key, out bucket)) { bucket = new List<WalkCell>(); byXZ[key] = bucket; }
+                    if (!reachableByXZ.TryGetValue(key, out bucket)) { bucket = new List<WalkCell>(); reachableByXZ[key] = bucket; }
                     bucket.Add(cell);
                 }
                 foreach (Destination d in candidates)
@@ -817,7 +836,7 @@ namespace SousChef.Plugin.Navigation
                         for (int x = minX; x <= maxX; x++) for (int z = minZ; z <= maxZ; z++)
                         {
                             List<WalkCell> bucket;
-                            if (!byXZ.TryGetValue(((long)x << 32) ^ (uint)z, out bucket)) continue;
+                            if (!reachableByXZ.TryGetValue(((long)x << 32) ^ (uint)z, out bucket)) continue;
                             foreach (WalkCell cell in bucket)
                             {
                                 float distance = search.Distances[cell]; Vector3 stance, point = physics.Point(cell);
@@ -846,7 +865,7 @@ namespace SousChef.Plugin.Navigation
                         d.Goal = goal; d.Approach = bestApproach; d.LocalApproach = localApproach; d.Distance = best; available[d.Id] = d;
                     }
                 }
-                if (physics.Overflow) { available.Clear(); unavailable = "physics_query_overflow"; }
+                if (physics.Overflow) { available.Clear(); ClearReachableIndex(); unavailable = "physics_query_overflow"; }
                 else unavailable = search.Complete ? null : "planning_in_progress";
                 bool reusable = incremental && !physics.Overflow && physics.RememberSearch(searchReused || remoteSearch != null);
                 fastWarm = reusable && !search.NodeLimitReached && (searchReused || !hadIncremental);
@@ -856,7 +875,7 @@ namespace SousChef.Plugin.Navigation
             catch (Exception e)
             {
                 ClearRemote(); incrementalSearch = fastWarm = false;
-                available.Clear(); unavailable = "navigation_observation_error"; observationError = e.GetType().Name + ": " + e.Message;
+                available.Clear(); ClearReachableIndex(); unavailable = "navigation_observation_error"; observationError = e.GetType().Name + ": " + e.Message;
             }
             finally { watch.Stop(); planMilliseconds = watch.Elapsed.TotalMilliseconds; lastPlan = Time.realtimeSinceStartup; lastPlanFrame = Time.frameCount; revision++; planning = false; }
         }

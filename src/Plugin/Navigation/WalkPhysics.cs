@@ -84,11 +84,11 @@ namespace SousChef.Plugin.Navigation
         public void Reset()
         {
             ForgetSearch();
-            chef = null; probes.Clear(); edges.Clear(); stamps.Clear(); meshes.Clear(); dangers.Clear(); nativeSteps.Clear(); surfaces.Clear(); surfaceHistories.Clear(); properties.Clear(); grids.Clear(); ignoredChefColliders.Clear(); ignoredLooseColliders.Clear(); portals.Clear(); portalEntries.Clear(); portalExits.Clear(); exitPortal = null;
+            chef = null; ClearGeometryCache(); stamps.Clear(); meshes.Clear(); dangers.Clear(); nativeSteps.Clear(); surfaces.Clear(); surfaceHistories.Clear(); properties.Clear(); grids.Clear(); ignoredChefColliders.Clear(); ignoredLooseColliders.Clear(); portals.Clear(); portalEntries.Clear(); portalExits.Clear(); exitPortal = null;
         }
         public string Refresh(PlayerControls player)
         {
-            Queries = 0; Overflow = false; Changed = false; speeds.Clear();
+            Queries = 0; Overflow = false; Changed = false; geometryCacheEvicted = false; speeds.Clear();
             if (!(player.GetActiveControlsImpl() is PlayerControlsImpl_Default)) return "unsupported_control_mode";
             CapsuleCollider shape = player.GetComponent<CapsuleCollider>();
             GroundCast ground = player.GetComponent<GroundCast>();
@@ -102,7 +102,7 @@ namespace SousChef.Plugin.Navigation
             interactMask = ((LayerMask)interactionMask.GetValue(chef)).value;
             var carrier = chef.GetComponent<ClientPlayerAttachmentCarrier>();
             GameObject nextHeld = carrier == null ? null : carrier.InspectCarriedItem();
-            if (held != nextHeld) { probes.Clear(); edges.Clear(); held = nextHeld; Changed = true; }
+            if (held != nextHeld) { ClearGeometryCache(); held = nextHeld; Changed = true; }
             int nextGroundMask = ((LayerMask)landscape.GetValue(ground)).value;
             int nextCollisionMask = 0;
             for (int i = 0; i < 32; i++) if (!Physics.GetIgnoreLayerCollision(chef.gameObject.layer, i)) nextCollisionMask |= 1 << i;
@@ -116,7 +116,7 @@ namespace SousChef.Plugin.Navigation
             // far smaller than the extra 0.025-unit collision margin.
             if (groundMask != nextGroundMask || collisionMask != nextCollisionMask || bodyContactOffset != nextBodyContact ||
                 Mathf.Abs(radius - nextRadius) > .0001f || Mathf.Abs(height - nextHeight) > .0001f || stepHeight != StepHeight)
-            { probes.Clear(); edges.Clear(); Changed = true; radius = nextRadius; height = nextHeight; stepHeight = StepHeight; bodyContactOffset = nextBodyContact; }
+            { ClearGeometryCache(); Changed = true; radius = nextRadius; height = nextHeight; stepHeight = StepHeight; bodyContactOffset = nextBodyContact; }
             groundMask = nextGroundMask; collisionMask = nextCollisionMask;
             pivotToFoot = chef.transform.position.y - capsule.bounds.min.y;
             nearbyCount = Physics.OverlapSphereNonAlloc(chef.transform.position, Range, nearby, ~0, QueryTriggerInteraction.Collide); Queries++;
@@ -180,31 +180,7 @@ namespace SousChef.Plugin.Navigation
             // Compare readable mesh contents at reconciliation rather than treating
             // every unchanged mesh as a geometry edit. Large kill-plane meshes can
             // otherwise invalidate an entire kitchen before its graph finishes warming.
-            if (changed.Count > 0)
-            {
-                var dirty = new List<WalkCell>();
-                foreach (var pair in probes)
-                {
-                    Vector3 p = Approximate(pair.Key);
-                    foreach (Bounds bounds in changed)
-                    {
-                        float padding = radius + Spacing * 1.5f; // includes a full diagonal edge
-                        // Probes reach about one unit below their foot, and a full
-                        // chef height above. Symmetric height expansion would make
-                        // a distant kill plane underneath every kitchen invalidate
-                        // the entire graph on every mesh reconciliation.
-                        Vector3 min = bounds.min, max = bounds.max;
-                        if (p.x >= min.x - padding && p.x <= max.x + padding &&
-                            p.z >= min.z - padding && p.z <= max.z + padding &&
-                            p.y >= min.y - height - StepHeight - nativeRadius - .2f && p.y <= max.y + StepHeight + nativeRadius + .2f)
-                        { dirty.Add(pair.Key); break; }
-                    }
-                }
-                // Invalidate every edge that could cross the changed region, while
-                // retaining the rest of the kitchen when a person or wall moves.
-                foreach (WalkCell cell in dirty) { probes.Remove(cell); edges.Remove(cell); }
-                if (dirty.Count > 0) Changed = true;
-            }
+            if (changed.Count > 0) InvalidateGeometryCache();
             RefreshPortals();
             if (Changed || changed.Count > 0) geometryVersion++;
             return player.GroundCollider == null ? "not_grounded" : null;
@@ -469,7 +445,7 @@ namespace SousChef.Plugin.Navigation
             if (probes.TryGetValue(hint, out result)) return result;
             Vector3 point; Collider support;
             bool valid = Stand(Approximate(hint), out point, out support);
-            result = new Probe { Valid = valid, Point = point, Ground = support }; probes[hint] = result;
+            result = new Probe { Valid = valid, Point = point, Ground = support }; CacheProbe(hint, result);
             return result;
         }
         public Vector3 Point(WalkCell cell) { return cell.Portal == 0 ? Sample(cell).Point : portals[cell.Portal].Exit; }
@@ -515,6 +491,9 @@ namespace SousChef.Plugin.Navigation
                 if (Segment(from.Point, to.Point, radius, false, support))
                     result.Add(new CachedEdge { Edge = new WalkEdge(Resolved(next, to), Vector3.Distance(from.Point, to.Point)), Support = support.ToArray() });
             }
+            // Cache eviction during neighbour production may have removed the
+            // source. Keep every edge's key indexed for later invalidation.
+            CacheProbe(geometryCell, from);
             edges[geometryCell] = result; return FilterFlow(cell, result);
         }
         private IEnumerable<WalkEdge> FilterFlow(WalkCell from, List<CachedEdge> candidates)
@@ -554,7 +533,7 @@ namespace SousChef.Plugin.Navigation
             var key = new WalkCell(hint.X, Mathf.RoundToInt(probe.Point.y / HeightBand), hint.Z);
             // The same supported surface reached from above or below is one node.
             // Distinct decks at the same x/z retain distinct height keys.
-            probes[key] = probe;
+            CacheProbe(key, probe);
             return key;
         }
         public bool Segment(Vector3 from, Vector3 to)

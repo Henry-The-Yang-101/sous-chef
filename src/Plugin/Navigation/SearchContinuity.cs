@@ -30,6 +30,7 @@ namespace SousChef.Plugin.Navigation
         public bool RememberSearch(bool retainGrounds = false)
         {
             searchRemembered = false; if (!retainGrounds) searchGrounds.Clear(); searchWinds.Clear();
+            if (geometryCacheEvicted) return CannotContinue("geometry_cache_evicted");
             // Native conveyors have an explicit continuity proof. Arbitrary
             // moving surfaces and portal readiness retain fresh searches.
             if (portals.Count > 0 || Overflow) return CannotContinue(portals.Count > 0 ? "portal_predicates" : "physics_query_overflow");
