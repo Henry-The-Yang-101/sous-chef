@@ -12,7 +12,7 @@ namespace SousChef.Plugin.Actions
         public Func<ControlCommand> Command;
         public Func<bool> Ready;
         public Func<bool> Progress;
-        public Func<bool> Outcome;
+        public Func<bool> Outcome, AbandonBeforePress;
         public Func<GameObject, bool> UseHeld, ReplanForHeld;
         public Func<GameObject, IEnumerable<TaskStep>> FreeHands;
         public bool EmptyHands;
@@ -48,7 +48,8 @@ namespace SousChef.Plugin.Actions
         public TaskActions(NavigationActions nav, InteractionActions primitive, Action<int> buttons, Action finished)
         {
             navigation = nav; child = primitive; inventory = new LogisticsInventory(nav); input = buttons; release = finished;
-            handoffThrows = new ThrowOptions(nav);
+            groundPass = new GroundPassAccess(CanReachLanding, CanCollectLanding);
+            handoffThrows = new ThrowOptions(nav, groundPass); child.GroundAccess = groundPass;
             RegisterPreparation(); RegisterTakeReady(); RegisterWashing(); RegisterDirtyDelivery(); RegisterFire(); RegisterBurnt(); RegisterMonitor();
         }
         partial void RegisterPreparation(); partial void RegisterTakeReady(); partial void RegisterWashing();
@@ -87,7 +88,8 @@ namespace SousChef.Plugin.Actions
                 if (childStarted)
                 {
                     if (ReconcileHands()) return;
-                    if (child.Run.Running && step.ReplanOnBlock && child.CanRetry && child.NavigationStalled)
+                    if (child.Run.Running && step.ReplanOnBlock && child.CanRetry &&
+                        (child.NavigationStalled || (step.AbandonBeforePress != null && step.AbandonBeforePress())))
                     {
                         // No native button has been pressed: storage/handoff may
                         // choose another checked destination without replaying cargo.
@@ -180,7 +182,7 @@ namespace SousChef.Plugin.Actions
         }
         public void Reset(string reason)
         {
-            Cancel(reason); inventory.Reset(); counterMotion.Clear(); humanDistances.Clear(); deliveredItems.Clear(); pendingDeliveries.Clear();
+            Cancel(reason); inventory.Reset(); counterMotion.Clear(); humanFrame = -1; humanDistances.Clear(); deliveredItems.Clear(); pendingDeliveries.Clear();
             foreach (NavigationActions observer in observers.Values) observer.Dispose(); observers.Clear();
         }
         private void Finish(string state, string reason)

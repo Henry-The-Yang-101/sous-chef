@@ -285,6 +285,11 @@ public class ServerTeleportalPlayerReceiver : UnityEngine.MonoBehaviour
 public class WashingStation : UnityEngine.MonoBehaviour { }
 public class RubbishBin : UnityEngine.MonoBehaviour { }
 public class ServerWorkstation : UnityEngine.MonoBehaviour { }
+public class ClientBackpackDispenser : UnityEngine.MonoBehaviour, IPickup { public bool CanHandlePickup(ICarrier c) { return true; } }
+public class Backpack : UnityEngine.MonoBehaviour
+{
+    public float m_pickupAngle = 90;
+}
 public class PickupItemSpawner : UnityEngine.MonoBehaviour { public UnityEngine.GameObject m_itemPrefab; }
 public class CookingStation : UnityEngine.MonoBehaviour { }
 public class PlateReturnStation : UnityEngine.MonoBehaviour { }

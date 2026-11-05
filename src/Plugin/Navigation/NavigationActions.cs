@@ -12,6 +12,7 @@ namespace SousChef.Plugin.Navigation
         {
             public string Id, Kind;
             public GameObject Object;
+            public Backpack Pack;
             public readonly List<Collider> Colliders = new List<Collider>();
             public WalkCell Goal;
             public Vector3 Approach, LocalApproach;
@@ -129,6 +130,33 @@ namespace SousChef.Plugin.Navigation
         { Collider ground; return physics.StationaryStand(point, out stance, out ground); }
         public bool TryStance(Vector3 point, out Vector3 stance, out Collider support)
         { return physics.StationaryStand(point, out stance, out support); }
+        public bool CanApproachLocally(GameObject go)
+        {
+            Destination d;
+            if (go == null || !identities.TryGetValue(go.GetInstanceID(), out d)) return false;
+            foreach (Collider c in d.Colliders)
+            {
+                for (int side = 0; side < 8; side++)
+                {
+                    float angle = side * Mathf.PI / 4;
+                    Vector3 seed = c.bounds.center + new Vector3(Mathf.Cos(angle), 0, Mathf.Sin(angle)) * 1.2f;
+                    seed.y = physics.Position.y; Vector3 stance;
+                    if (physics.Approach(seed, c, out stance) && CanWalkTo(stance)) return true;
+                }
+            }
+            return false;
+        }
+        public bool CanReachFloor(Vector3 floor)
+        {
+            Vector3 stance;
+            return TryStance(floor, out stance) && Vector3.Distance(stance, floor) <= .12f && CanWalkTo(stance);
+        }
+        private bool CanWalkTo(Vector3 stance)
+        {
+            // A direct checked walk also works when a moving raft repeatedly
+            // invalidates the background route tree.
+            return RouteCost(stance) != Single.MaxValue || physics.Segment(physics.Position, stance);
+        }
         public float RouteCost(Vector3 stance)
         {
             float best = Single.MaxValue;
@@ -657,9 +685,10 @@ namespace SousChef.Plugin.Navigation
         private static bool Eligible(GameObject go, PlayerControls player, out string kind, bool includeEmpty = false)
         {
             kind = null;
-            if (go == null || !go.activeInHierarchy || go.transform.IsChildOf(player.transform) || go.GetComponentInParent<PlayerControls>() != null) return false;
+            if (go == null || !go.activeInHierarchy || go.transform.IsChildOf(player.transform)) return false;
             var interact = go.GetComponent<ClientInteractable>();
             var pickup = PlayerControlsHelper.GetControllingPickupHandler_Client(go);
+            if (go.GetComponentInParent<PlayerControls>() != null && !(pickup is ClientBackpackDispenser)) return false;
             var placement = PlayerControlsHelper.GetControllingPlacementHandler_Client(go);
             if (go.GetComponent<WashingStation>() != null) kind = "washing_station";
             else if (go.GetComponent<RubbishBin>() != null) kind = "disposal_station";
@@ -701,7 +730,7 @@ namespace SousChef.Plugin.Navigation
                     {
                         if (!identities.TryGetValue(key, out d) || d.Object != t.gameObject)
                         { d = new Destination { Id = "d" + (++nextId), Object = t.gameObject }; identities[key] = d; }
-                        d.Kind = kind; d.Colliders.Clear(); found[key] = d;
+                        d.Kind = kind; d.Pack = kind == "ingredient_supply" ? t.GetComponent<Backpack>() : null; d.Colliders.Clear(); found[key] = d;
                     }
                     d.Colliders.Add(collider); break;
                 }
@@ -841,6 +870,13 @@ namespace SousChef.Plugin.Navigation
                             {
                                 float distance = search.Distances[cell]; Vector3 stance, point = physics.Point(cell);
                                 if ((distance >= best && (!retainApproach || distance >= preferred)) || !physics.Approach(point, c, out stance, cell.SurfaceHistory)) continue;
+                                // A backpack dispenses only from its rear cone. Other
+                                // approaches select the wearable pack itself.
+                                if (d.Pack != null)
+                                {
+                                    Vector3 offset = stance - d.Object.transform.position; offset.y = 0;
+                                    if (Vector3.Angle(-d.Object.transform.forward, offset) >= d.Pack.m_pickupAngle * .5f) continue;
+                                }
                                 distance += Vector3.Distance(point, stance);
                                 if (distance < best) { best = distance; goal = cell; bestApproach = stance; }
                                 if (retainApproach && distance < preferred && Vector3.Distance(stance, retained) < .04f)

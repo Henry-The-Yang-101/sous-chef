@@ -95,8 +95,13 @@ namespace SousChef.Plugin.Actions
             foreach (GameObject target in navigation.Targets())
             {
                 if (target.GetComponent<ServerWorkstation>() == null) continue;
-                float cost = ApproachCost(target);
-                if (cost == Single.MaxValue) continue;
+                float cost = inventory.DistanceTo(target);
+                if (cost == Single.MaxValue)
+                {
+                    if ((bool)inventory.Catalog["complete"] || !navigation.SharesCurrentSupport(target) ||
+                        !navigation.CanApproachLocally(target)) continue;
+                    cost = 20000 + Vector3.Distance(chef.transform.position, target.transform.position);
+                }
                 if (!CanDeliver(item, target, supplyPrefab))
                 {
                     GameObject occupant = ActionObservations.Occupant(target);
@@ -122,15 +127,17 @@ namespace SousChef.Plugin.Actions
         // Food already on a board is worked in place. Otherwise a unit needing
         // work may only collect food when a board can receive it: holding cargo
         // while every reachable board is occupied would keep P2 from clearing
-        // the very boards it is waiting for. Unknown routes keep the existing
-        // behaviour; the active child still proves them before interacting.
-        private LogisticsItem StartingSource(PreparationUnit unit, ref bool boardBlocked)
+        // the very boards it is waiting for. An unknown route is not a free board.
+        private enum BoardWait { None, Unreachable, Occupied }
+        private LogisticsItem StartingSource(PreparationUnit unit, ref BoardWait boardWait)
         {
             LogisticsItem source = PreparationSource(unit.Request);
             if (source == null || !NeedsWork(unit.Request, source.Item) || OnBoard(source)) return source;
             bool occupied;
-            if (Board(source.Item, out occupied, source.Supply) != null || !occupied) return source;
-            boardBlocked = true; return null;
+            if (Board(source.Item, out occupied, source.Supply) != null) return source;
+            if (occupied) boardWait = BoardWait.Occupied;
+            else if (boardWait == BoardWait.None) boardWait = BoardWait.Unreachable;
+            return null;
         }
         private GameObject Processor(GameObject item, bool mixing)
         {
@@ -168,7 +175,8 @@ namespace SousChef.Plugin.Actions
                 for (int n = 0; n < item.Quantity; n++) units.Add(new PreparationUnit { Request = item });
             while (true)
             {
-                PreparationUnit next = null; float soonest = Single.MaxValue; bool boardBlocked = false, nextHeld = false;
+                PreparationUnit next = null; float soonest = Single.MaxValue; bool nextHeld = false;
+                BoardWait boardWait = BoardWait.None;
                 bool processing = false; foreach (PreparationUnit unit in units) if (unit.Processing && !unit.Delivered) processing = true;
                 bool emptyCooker = !processing || EmptyProcessor(false), emptyMixer = !processing || EmptyProcessor(true);
                 // Ready equipment has priority, ordered by remaining cooking
@@ -184,7 +192,7 @@ namespace SousChef.Plugin.Actions
                     }
                     else if (!Passive(unit.Request) || (unit.Request.Preparation == "mixed" ? emptyMixer : emptyCooker))
                     {
-                        LogisticsItem candidate = StartingSource(unit, ref boardBlocked);
+                        LogisticsItem candidate = StartingSource(unit, ref boardWait);
                         if (candidate == null) continue;
                         bool held = System.Object.ReferenceEquals(candidate.Item, ActionObservations.Held(chef));
                         if (next == null || !next.Processing && (held && !nextHeld || held == nextHeld && Passive(unit.Request) && !Passive(next.Request)))
@@ -206,7 +214,7 @@ namespace SousChef.Plugin.Actions
                         foreach (PreparationUnit unit in units)
                         {
                             if (unit.Processing || unit.Delivered || (Passive(unit.Request) && !(unit.Request.Preparation == "mixed" ? emptyMixer : emptyCooker)) ||
-                                StartingSource(unit, ref boardBlocked) == null) continue;
+                                StartingSource(unit, ref boardWait) == null) continue;
                             float estimate; if (!estimates.TryGetValue(unit.Request, out estimate)) { estimate = PreparationSeconds(unit); estimates.Add(unit.Request, estimate); }
                             if (estimate + 2 < availableTime && (fits == null ||
                                 HeldPreparation(ActionObservations.Held(chef), unit.Request) && !HeldPreparation(ActionObservations.Held(chef), fits.Request) ||
@@ -221,7 +229,7 @@ namespace SousChef.Plugin.Actions
                     if (done) yield break;
                     // Every reachable board holds food the remaining units cannot
                     // use now, such as a later repetition's. Only P2 can free one.
-                    GameObject full = boardBlocked ? MovableBoardContents() : null;
+                    GameObject full = boardWait == BoardWait.Occupied ? MovableBoardContents() : null;
                     if (full != null)
                     {
                         TaskStep lift = Do("pick_up", full); lift.ReplanOnBlock = true;
@@ -233,7 +241,7 @@ namespace SousChef.Plugin.Actions
                     // currently unconfirmed ingredient route must not occupy the
                     // entire cooking window when it becomes available next frame.
                     float retry = Time.realtimeSinceStartup + .2f;
-                    yield return Until(boardBlocked ? "waiting_for_chopping_board" : processing ? "waiting_for_prepared_ingredients" : "waiting_for_ingredient",
+                    yield return Until(boardWait != BoardWait.None ? "waiting_for_chopping_board" : processing ? "waiting_for_prepared_ingredients" : "waiting_for_ingredient",
                         delegate { return Time.realtimeSinceStartup >= retry; });
                     continue;
                 }
@@ -275,7 +283,7 @@ namespace SousChef.Plugin.Actions
                     if (board == null)
                     {
                         bool occupied = false;
-                        yield return Until("waiting_for_chopping_board", delegate { board = Board(current.Item, out occupied); return board != null || occupied; });
+                        yield return Until("waiting_for_chopping_board", delegate { board = Board(current.Item, out occupied); return board != null || occupied || (bool)inventory.Catalog["complete"]; });
                         if (board == null)
                         {
                             // Other food reached every board after our pickup. Set
@@ -284,11 +292,16 @@ namespace SousChef.Plugin.Actions
                             rescheduled = true; break;
                         }
                         TaskStep placement = Do("place_at", board); placement.ReplanOnBlock = true;
+                        placement.AbandonBeforePress = () => child.RouteUnavailable;
                         yield return placement;
                         if (!placement.Succeeded)
                         {
                             board = null; obstruction = placement.Obstruction;
-                            if (obstruction == null) continue;
+                            if (obstruction == null)
+                            {
+                                foreach (TaskStep park in Park(current.Item)) yield return park;
+                                rescheduled = true; break;
+                            }
                             rescheduled = true; break;
                         }
                     }

@@ -43,7 +43,9 @@ namespace SousChef.Plugin.Actions
         }
         public void EndObservation() { observing = false; observedWinds = null; }
 
-        public ThrowOptions(NavigationActions navigation) { this.navigation = navigation; }
+        private readonly GroundPassAccess groundAccess;
+        public ThrowOptions(NavigationActions navigation, GroundPassAccess groundAccess = null)
+        { this.navigation = navigation; this.groundAccess = groundAccess; }
         public object Describe()
         {
             var result = new List<object>();
@@ -116,7 +118,7 @@ namespace SousChef.Plugin.Actions
             Option option;
             long key = ((long)target.GetInstanceID() << 1) | (ground ? 1L : 0L);
             if (!options.TryGetValue(key, out option))
-            { option = new Option { Target = target, Ground = ground }; options[key] = option; Prepare(option); }
+            { option = new Option { Target = target, Ground = ground }; option.Planner.GroundAccess = groundAccess; options[key] = option; Prepare(option); }
             else if (!SameTarget(option) || (option.Reason != null && option.Reason != ThrowPlanner.Pending && Time.realtimeSinceStartup >= option.RetryAt)) Prepare(option);
             option.Seen = true;
             if (option.Plan != null)

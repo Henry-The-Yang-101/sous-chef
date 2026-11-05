@@ -489,7 +489,7 @@ internal static class Program
                 "firefighting parks unrelated food before fetching the extinguisher");w.Tasks.Cancel("test_end");
             var held=new GameObject("held extinguisher");held.Add(new ServerFireExtinguishSpray());w.Hold(held);
             var flags=System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic;
-            var selected=(LogisticsItem)typeof(TaskActions).GetMethod("Extinguisher",flags).Invoke(w.Tasks,null);
+            var selected=(LogisticsItem)typeof(TaskActions).GetMethod("SprayTool",flags).Invoke(w.Tasks,new object[] {"ServerFireExtinguishSpray"});
             Check(selected!=null && selected.Item==held,"a useful held extinguisher takes priority over another available tool");
         }
         {
@@ -1474,6 +1474,20 @@ internal static class Program
         var planner=new ThrowPlanner();ThrowPlan plan;
         Check(planner.Prepare(w.Chef,item,human)=="player_cannot_catch","ordinary player passes retain their native catch preconditions");
         Check(planner.Prepare(w.Chef,item,human,groundHandoff:true)==null && FindPlan(planner,w.Navigation,out plan)==null && plan.Ground,"a checked floor throw works with full human hands and without a catcher");
+        var groundAccess=new GroundPassAccess((receiver,landing)=>false,(receiver,cargo)=>false);
+        var receiverChef=human.GetComponent<PlayerControls>();
+        var rejected=new ThrowPlan {Stance=w.Chef.transform.position};
+        rejected.AnchorStance(w.Chef.GroundCollider);
+        groundAccess.Reject(rejected,receiverChef);
+        Check(!groundAccess.Allows(rejected.CurrentStance,receiverChef) && groundAccess.Allows(rejected.CurrentStance+Vector3.right,receiverChef),
+            "an unsafe release suppresses that stance but leaves alternatives open");
+        human.transform.position+=Vector3.right;
+        Check(groundAccess.Allows(rejected.CurrentStance,receiverChef),"moving the receiver invalidates a stale release rejection");
+        human.transform.position-=Vector3.right;
+        planner.GroundAccess=groundAccess;
+        Check(planner.Prepare(w.Chef,item,human,groundHandoff:true)==null && FindPlan(planner,w.Navigation,out plan)!=null,
+            "physical floor support alone cannot prove a recipient can reach a landing");
+        planner.GroundAccess=null;
         var options=new ThrowOptions(w.Navigation);object preview;options.Begin(w.Chef);options.Check(human,out preview,true);options.End();
         bool ready=false;
         for(int n=0;n<20 && !ready;n++)

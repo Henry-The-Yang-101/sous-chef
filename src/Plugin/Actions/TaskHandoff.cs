@@ -16,6 +16,7 @@ namespace SousChef.Plugin.Actions
             public Vector3? Approach;
             public float? ArrivalSeconds;
         }
+        private readonly GroundPassAccess groundPass;
         private object handoffEvidence;
         private readonly ThrowOptions handoffThrows;
         private bool ThrowPossible(GameObject item, GameObject target, bool ground = false)
@@ -24,7 +25,6 @@ namespace SousChef.Plugin.Actions
         }
         private Handoff FindHandoff(GameObject item, int player, List<Vector3> excluded, HashSet<GameObject> blockedTargets)
         {
-            if (!System.Object.ReferenceEquals(ActionObservations.Held(chef), item)) throw new InvalidOperationException("task_cargo_changed");
             handoffThrows.Begin(chef);
             // Rank usable choices. An unfinished counter proof must not hold a
             // feasible ground pass hostage on a continuously moving kitchen.
@@ -106,6 +106,8 @@ namespace SousChef.Plugin.Actions
         // human ends here undelivered (absent from deliveredItems) for the caller.
         private IEnumerable<TaskStep> Give(GameObject item, int player = 1, bool backgroundTransport = false, bool lossTolerant = false)
         {
+            groundPass.Reset();
+            Func<bool> lost = () => item == null || !System.Object.ReferenceEquals(ActionObservations.Held(chef), item);
             var excluded = new List<Vector3>();
             var blockedTargets = new HashSet<GameObject>();
             float rejectedAt = Time.realtimeSinceStartup;
@@ -114,10 +116,17 @@ namespace SousChef.Plugin.Actions
             {
                 Handoff choice = null;
                 yield return Until("waiting_for_player_handoff", delegate {
+                    if (lost()) return true;
                     choice = FindHandoff(item, player, excluded, blockedTargets);
                     if (choice == null && Time.realtimeSinceStartup - rejectedAt > 5) { excluded.Clear(); blockedTargets.Clear(); }
                     return choice != null;
                 });
+                if (choice == null)
+                {
+                    if (HumanCanCollect(item, player)) { deliveredItems.Add(item); yield break; }
+                    if (lossTolerant) yield break;
+                    throw new InvalidOperationException("task_cargo_changed");
+                }
                 handoffEvidence = Json.Object("mode", choice.Mode, "itemInstanceId", item.GetInstanceID(), "player", player,
                     "predictedArrivalSeconds", choice.ArrivalSeconds,
                     "targetInstanceId", choice.Target == null ? null : (object)choice.Target.GetInstanceID());
@@ -126,11 +135,12 @@ namespace SousChef.Plugin.Actions
                 {
                     if (choice.Approach.HasValue)
                     {
-                        TaskStep approach = WalkTo(Human(player).gameObject, choice.Approach.Value, true);
+                        TaskStep approach = WalkTo(Human(player).gameObject, choice.Approach.Value, true, lost);
                         yield return approach;
                         if (!approach.Succeeded) { reject(choice.Approach.Value); continue; }
                         float settle = Time.realtimeSinceStartup + .3f;
                         yield return Until("settling_for_handoff", delegate { return Time.realtimeSinceStartup >= settle; });
+                        if (lost()) continue;
                         DropPlan proof;
                         if (!new DropHandoff().Plan(chef, item, Human(player), out proof)) { reject(choice.Approach.Value); continue; }
                     }

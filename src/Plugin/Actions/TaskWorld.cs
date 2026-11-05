@@ -92,8 +92,20 @@ namespace SousChef.Plugin.Actions
             inventory.Refresh(chef); botSearchComplete = (bool)inventory.Catalog["complete"];
             if (player != 0) RefreshHuman(player);
         }
+        private int humanFrame = -1, observedPlayer;
+        private bool CanReachLanding(PlayerControls human, Vector3 floor)
+        {
+            int id = (int)human.PlayerIDProvider.GetID() + 1;
+            RefreshHuman(id);
+            NavigationActions observer;
+            return observers.TryGetValue(id, out observer) && observer.CanReachFloor(floor);
+        }
+        private bool CanCollectLanding(PlayerControls human, GameObject item)
+        { return HumanCanCollect(item, (int)human.PlayerIDProvider.GetID() + 1); }
         private void RefreshHuman(int player)
         {
+            if (humanFrame == Time.frameCount && player == observedPlayer) return;
+            humanFrame = Time.frameCount; observedPlayer = player;
             humanDistances.Clear(); humanSearchComplete = false; var human = Human(player); if (human == null) return;
             NavigationActions observer;
             if (!observers.TryGetValue(player, out observer))
@@ -103,7 +115,6 @@ namespace SousChef.Plugin.Actions
             foreach (Json.Record identity in (List<object>)catalog["destinations"])
             {
                 int instance = (int)identity["objectInstanceId"]; humanDistances[instance] = (float)identity["routeDistance"];
-                GameObject go = observer.Resolve((string)identity["id"]);
             }
             foreach (GameObject go in navigation.Targets())
             {
@@ -126,11 +137,16 @@ namespace SousChef.Plugin.Actions
             return !(bool)inventory.Catalog["complete"] && navigation.SharesCurrentSupport(target)
                 ? 20000 + Vector3.Distance(chef.transform.position, target.transform.position) : Single.MaxValue;
         }
-        private TaskStep WalkTo(GameObject aim, Vector3 stance, bool alternatives = false)
+        private TaskStep WalkTo(GameObject aim, Vector3 stance, bool alternatives = false, Func<bool> obsolete = null)
         {
             bool started = false; float retry = 0;
             var step = new TaskStep { Phase = "approaching" };
             step.Progress = delegate {
+                if (obsolete != null && obsolete())
+                {
+                    if (started && navigation.Action.State == "navigating") navigation.Stop("handoff_cargo_changed");
+                    return true;
+                }
                 if (navigation.Action.State == "navigating") return false;
                 if (started && (navigation.Action.Reason == "arrived" || navigation.Action.Reason == "positioned_no_action")) { step.Succeeded = true; return true; }
                 if (started && alternatives && navigation.Action.Reason != "planning_in_progress" && navigation.Action.Reason != "planning_budget_exceeded") return true;

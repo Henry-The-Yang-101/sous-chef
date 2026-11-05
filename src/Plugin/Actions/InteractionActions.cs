@@ -30,6 +30,7 @@ namespace SousChef.Plugin.Actions
         private int initialSourceContents;
         private float phaseStarted, lastProgressTime, lastProgress;
         private bool triggeredByChef, pressed, throwReleased;
+        internal GroundPassAccess GroundAccess { set { throws.GroundAccess = value; } }
         private ThrowPlan throwPlan;
         private DropPlan dropPlan;
         private float dropStableSince = -1;
@@ -52,6 +53,10 @@ namespace SousChef.Plugin.Actions
         }
         public static bool Handles(string operation)
         { return Array.IndexOf(ActionRun.Names, operation) >= 0 && operation != "navigate_to" && operation != "stop"; }
+        public bool RouteUnavailable { get { return recovery.Active && recovery.Elapsed > .5f &&
+            (recoveryReason == "destination_unavailable" || recoveryReason == "destination_unreachable"); } }
+        public bool TransferUnavailable { get { return RouteUnavailable || recovery.Active &&
+            recoveryReason == "placement_unavailable" && recovery.Elapsed > .5f; } }
         public bool CanRetry { get { return !pressed && !throwReleased && Run.State != "cancelled"; } }
         public bool NavigationStalled { get { return Run.Phase == "recovering_navigation" &&
             (recoveryReason == "no_progress" || recoveryReason == "alignment_failed" || recoveryReason == "navigation_timeout") ||
@@ -90,7 +95,7 @@ namespace SousChef.Plugin.Actions
             bool canPlace = held != null && carrier != null && placement != null && placement.CanHandlePlacement(carrier, new Vector2(delta.x, delta.z), new PlacementContext(PlacementContext.Source.Player));
             if (held == null)
             {
-                if (pickup != null && carrier != null && pickup.CanHandlePickup(carrier)) options.Add("pick_up");
+                if (pickup != null && carrier != null && pickup.CanHandlePickup(carrier) && ActionObservations.Dispensing(go)) options.Add("pick_up");
                 if (interact != null && interact.CanInteract(chef.gameObject))
                 {
                     if (go.GetComponent<ServerWashingStation>() != null || receiver.GetComponent<ServerWorkableItem>() != null) options.Add("work_at");
@@ -226,6 +231,7 @@ namespace SousChef.Plugin.Actions
             if (op == "pick_up")
             {
                 if (held != null) return "hands_full";
+                if (!ActionObservations.Dispensing(target)) return "pickup_unavailable";
                 if (expectedPickup == null && (target.GetComponent<PhysicalAttachment>() != null || target.GetComponent<ServerStack>() != null)) expectedPickup = target;
                 if (expectedPickup == null && target.GetComponent<PickupItemSpawner>() == null && target.GetComponent<PlateStackBase>() == null)
                     return "nothing_to_pick_up";
@@ -678,7 +684,8 @@ namespace SousChef.Plugin.Actions
                 Vector3 position = throwPlan.GroundSupport == null ? held.transform.position : throwPlan.GroundSupport.transform.InverseTransformPoint(held.transform.position);
                 if (dropStableSince < 0 || Vector3.Distance(lastDropPosition, position) > .03f)
                 { dropStableSince = Time.realtimeSinceStartup; lastDropPosition = position; }
-                received = Time.realtimeSinceStartup - dropStableSince >= .1f;
+                received = Time.realtimeSinceStartup - dropStableSince >= .1f &&
+                    (throws.GroundAccess == null || throws.GroundAccess.CanCollect(player, held));
             }
             else if (!received) dropStableSince = -1;
             if (!received && container != null && ingredient != null)
@@ -703,6 +710,8 @@ namespace SousChef.Plugin.Actions
             interactable = null; triggered = null;
             if (launchObserver != null && launchCallback != null) launchObserver.UnregisterThrowCallback(launchCallback);
             launchObserver = null; launchCallback = null; throws.CancelPlanning();
+            if (reason == "unsafe_release_stance" && throwPlan != null && throwPlan.Ground && throws.GroundAccess != null)
+                throws.GroundAccess.Reject(throwPlan, target.GetComponent<PlayerControls>());
             if (throwReleased && state != "succeeded") evidence = Json.Object("throwReleased", true, "throw", throwPlan.Describe());
             if (dropPlan != null && pressed && state != "succeeded") evidence = Json.Object("handoffRequested", true, "handoff", dropPlan.Describe());
             // Cancel the child while the parent still owns the input lease.

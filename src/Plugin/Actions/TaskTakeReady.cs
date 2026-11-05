@@ -39,7 +39,8 @@ namespace SousChef.Plugin.Actions
             foreach (LogisticsItem candidate in inventory.Items)
             {
                 if ((!candidate.CleanPlate && candidate.UtensilType == null) || !candidate.Empty || candidate.InUse ||
-                    !CanCollect(LogisticsChecks.Payload(candidate), source) || LogisticsChecks.Collect(chef, candidate, candidate.CleanPlate ? "get_plate" : "move_item", true) != null) continue;
+                    !CanCollect(LogisticsChecks.Payload(candidate), source) || LogisticsChecks.Collect(chef, candidate, candidate.CleanPlate ? "get_plate" : "move_item", true) != null ||
+                    !LogisticsChecks.AcceptsPlacement(chef, LogisticsChecks.Payload(candidate), station)) continue;
                 if (System.Object.ReferenceEquals(candidate.Item, ActionObservations.Held(chef))) return candidate;
                 // Fetching a plate across stairs/another island can consume the
                 // entire ready window. Prefer immediate utensil removal when a
@@ -67,34 +68,58 @@ namespace SousChef.Plugin.Actions
             yield return Until("waiting_until_food_ready", delegate {
                 return station != null && station.activeInHierarchy && System.Object.ReferenceEquals(ActionObservations.Receiver(station), item) && TaskNative.ReadyAt(station);
             });
-            // An incomplete route slice is not evidence that plates are absent.
-            yield return Until("checking_serving_utensils", delegate { RefreshWorld(); return ServingRecipient(ActionObservations.Held(chef), item) || botSearchComplete; });
-            LogisticsItem plate = ServingUtensil(item, station);
+            // Serve in place when the station accepts the actual utensil and
+            // there is time to fetch it. If that proof stops holding before
+            // the press, switch to rescuing the cookware instead of waiting.
+            Func<bool> urgent = () => !TaskNative.ReadyAt(station) ||
+                TaskNative.Remaining(item, TaskNative.IsMixer(station), true) < 5f;
+            LogisticsItem serving = null;
+            yield return Until("checking_serving_utensils", delegate {
+                RefreshWorld();
+                if (!botSearchComplete && !ServingRecipient(ActionObservations.Held(chef), item) && !urgent()) return false;
+                serving = ServingUtensil(item, station); return true;
+            });
+            if (serving != null)
+            {
+                bool heldPlate = ServingRecipient(ActionObservations.Held(chef), item);
+                Func<bool> unsafeToWait = () => child.TransferUnavailable || urgent();
+                if (!heldPlate)
+                {
+                    TaskStep fetch = GetServingUtensil(serving, item);
+                    fetch.ReplanOnBlock = true; fetch.AbandonBeforePress = unsafeToWait;
+                    yield return fetch;
+                }
+                GameObject plateInHand = ActionObservations.Held(chef);
+                if (ServingRecipient(plateInHand, item))
+                {
+                    TaskStep serve = Do("collect_contents", station);
+                    serve.ReplanOnBlock = true; serve.AbandonBeforePress = unsafeToWait;
+                    yield return serve;
+                    foreach (TaskStep park in Park(plateInHand, serve.Succeeded ? serving.Holder : null)) yield return park;
+                    if (serve.Succeeded) yield break;
+                }
+            }
+            if (!System.Object.ReferenceEquals(ActionObservations.Receiver(station), item)) yield break;
+            yield return Do("pick_up", station);
+            foreach (TaskStep park in Park(item)) yield return park;
+            // Off heat there is time to try the native transfer at the holder.
+            GameObject holder = null; LogisticsItem plate = null;
+            yield return Until("checking_serving_utensils", delegate {
+                RefreshWorld();
+                if (!botSearchComplete) return false;
+                foreach (LogisticsItem candidate in inventory.Items)
+                    if (System.Object.ReferenceEquals(candidate.Item, item)) { holder = candidate.Holder; break; }
+                if (holder != null) plate = ServingUtensil(item, holder, true);
+                return true;
+            });
             if (plate != null)
             {
                 yield return GetServingUtensil(plate, item);
-                yield return Do("collect_contents", station);
+                TaskStep serve = Do("collect_contents", holder);
+                serve.ReplanOnBlock = true;
+                serve.AbandonBeforePress = () => child.TransferUnavailable;
+                yield return serve;
                 foreach (TaskStep park in Park(ActionObservations.Held(chef))) yield return park;
-            }
-            else
-            {
-                yield return Do("pick_up", station);
-                foreach (TaskStep park in Park(item)) yield return park;
-                // Rescue urgent cookware first, then plate its contents safely
-                // off the heat. A short spoil window must not permanently skip plating.
-                yield return Until("checking_serving_utensils", delegate { RefreshWorld(); return botSearchComplete; });
-                // Approach the authoritative holder, not the small/elevated pot
-                // collider. Its item-only stance may lie behind the counter.
-                GameObject holder = null;
-                foreach (LogisticsItem candidate in inventory.Items)
-                    if (System.Object.ReferenceEquals(candidate.Item, item)) { holder = candidate.Holder; break; }
-                plate = holder == null ? null : ServingUtensil(item, holder, true);
-                if (plate != null)
-                {
-                    yield return GetServingUtensil(plate, item);
-                    yield return Do("collect_contents", holder);
-                    foreach (TaskStep park in Park(ActionObservations.Held(chef))) yield return park;
-                }
             }
         }
         private IEnumerable<TaskStep> TakeReady()

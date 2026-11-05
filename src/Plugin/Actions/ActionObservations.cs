@@ -64,9 +64,16 @@ namespace SousChef.Plugin.Actions
             var holder = item == null ? null : item.GetComponentInParent<ServerAttachStation>();
             return holder != null && System.Object.ReferenceEquals(holder.InspectItem(), item) ? holder.gameObject : item;
         }
+        public static bool Dispensing(GameObject source)
+        {
+            return source.GetComponent<Backpack>() == null ||
+                PlayerControlsHelper.GetControllingPickupHandler_Client(source) is ClientBackpackDispenser;
+        }
         public static bool CanPickUpExact(PlayerControls chef, GameObject target, GameObject expected)
         {
             var observed = chef.CurrentInteractionObjects;
+            var pack = target == null ? null : target.GetComponent<Backpack>();
+            if (pack != null && !(observed.m_iHandlePickup is ClientBackpackDispenser)) return false;
             GameObject selected = observed.m_TheOriginalHandlePickup;
             bool matches = expected == null ? Matches(selected, target) :
                 System.Object.ReferenceEquals(selected, expected) || (selected != null && selected.GetComponent<ServerAttachStation>() != null

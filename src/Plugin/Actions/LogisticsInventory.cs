@@ -152,7 +152,10 @@ namespace SousChef.Plugin.Actions
             foreach (GameObject source in targets)
             {
                 var supply = source.GetComponent<PickupItemSpawner>();
-                if (supply != null && supply.m_itemPrefab != null) TryAdd(chef, supply.m_itemPrefab, source, true, distances, seen);
+                if (supply != null && supply.m_itemPrefab != null)
+                {
+                    if (ActionObservations.Dispensing(source)) TryAdd(chef, supply.m_itemPrefab, source, true, distances, seen);
+                }
                 else if (source.GetComponent<PhysicalAttachment>() != null || source.GetComponent<ServerStack>() != null || System.Object.ReferenceEquals(source, held))
                     TryAdd(chef, source, source, false, distances, seen);
             }

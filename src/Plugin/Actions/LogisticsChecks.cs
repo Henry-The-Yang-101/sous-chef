@@ -44,7 +44,17 @@ namespace SousChef.Plugin.Actions
             if (payload == null) return "source_empty";
             if (entry.Item.GetComponent<CleanPlateStack>() != null && operation != "get_plate" && operation != "clear_station") return "source_dispenses_plates_use_get_plate";
             var pickup = PlayerControlsHelper.GetControllingPickupHandler_Client(entry.Source);
-            return pickup != null && pickup.CanHandlePickup(new CarrierView(actor, null)) ? null : "pickup_unavailable";
+            // The reachable backpack stance has already passed the rear-cone
+            // check. Evaluate the real handler again at the press, not from spawn.
+            return pickup != null && (entry.Supply && pickup is ClientBackpackDispenser ||
+                pickup.CanHandlePickup(new CarrierView(actor, null))) ? null : "pickup_unavailable";
+        }
+        public static bool AcceptsPlacement(PlayerControls actor, GameObject cargo, GameObject target)
+        {
+            var handler = PlayerControlsHelper.GetControllingPlacementHandler_Client(target);
+            Vector3 direction = target.transform.position - actor.transform.position; direction.y = 0; direction.Normalize();
+            return handler != null && handler.CanHandlePlacement(new CarrierView(actor, cargo),
+                new Vector2(direction.x, direction.z), new PlacementContext(PlacementContext.Source.Player));
         }
         public static string Delivery(PlayerControls actor, string operation, GameObject item, GameObject destination, out string delivery, bool supplyPrefab = false)
         {

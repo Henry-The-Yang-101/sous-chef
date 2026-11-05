@@ -152,6 +152,7 @@ namespace SousChef.Plugin.Actions
             }
             return null;
         }
+        internal GroundPassAccess GroundAccess { get; set; }
         private Bounds Receiving(Vector3 direction)
         {
             Bounds result = itemBody.Receiving(receiverBounds, direction);
@@ -366,6 +367,7 @@ namespace SousChef.Plugin.Actions
         {
             AimIterations = 0;
             plan = null;
+            if (ground && GroundAccess != null && !GroundAccess.Allows(stance, player)) return Reject("rejected_release_stance");
             if (ground && !RefreshGround()) return Reject("ground_support_changed");
             if (actualRelease && chef.CurrentInteractionObjects.m_interactable != null && chef.CurrentInteractionObjects.m_interactable.CanInteract(chef.gameObject)) return Reject("interactable_selected");
             Vector3 velocity = ReceiverVelocity(), destination = receiving.center;
@@ -469,6 +471,7 @@ namespace SousChef.Plugin.Actions
             {
                 Bounds body = itemBody.BoundsAt(arrival - velocity * time, direction);
                 landing = body.center; landing.y = body.min.y;
+                if (GroundAccess != null && !GroundAccess.CanLand(player, landing)) return Reject("recipient_cannot_reach_landing");
             }
             plan = new ThrowPlan { Stance = stance, Origin = origin, Direction = direction, Arrival = arrival, FlightSeconds = time,
                 InitialVelocity = launch, WindDisplacement = arrival - calm, PeakHeight = path.PeakHeight, Drag = drag,
