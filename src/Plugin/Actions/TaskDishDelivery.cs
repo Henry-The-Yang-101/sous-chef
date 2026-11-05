@@ -18,7 +18,11 @@ namespace SousChef.Plugin.Actions
         }
 
         private bool DishReady(GameObject item, GameObject destination)
+        { float expiry; return DishExpiry(item, destination, out expiry); }
+
+        private bool DishExpiry(GameObject item, GameObject destination, out float expiry)
         {
+            expiry = Single.MaxValue;
             if (item == null || !item.activeInHierarchy || destination == null || !destination.activeInHierarchy) return false;
             var plate = item.GetComponent<ServerPlate>();
             var station = destination.GetComponent<ServerPlateStation>();
@@ -32,36 +36,50 @@ namespace SousChef.Plugin.Actions
                 var monitor = flow.GetMonitorForTeam(station.GetTeamID());
                 var orders = monitor == null ? null : monitor.OrdersController;
                 if (orders == null) continue;
-                OrderController.OrderID order; float remaining;
-                if (orders.FindBestOrderForRecipe(composition, plate.GetPlatingStep(), out order, out remaining)) return true;
+                OrderController.OrderID order; float fraction;
+                if (!orders.FindBestOrderForRecipe(composition, plate.GetPlatingStep(), out order, out fraction)) continue;
+                // The matcher returns a fraction of the ticket's lifetime.
+                // Compare actual seconds so differing order lifetimes cannot
+                // invert which ticket will expire first.
+                foreach (var active in ActionObservations.Read<List<OrderController.ServerOrderData>>(orders, "m_activeOrders"))
+                    if (active.ID.Equals(order) && active.Remaining >= 0 && active.Remaining < expiry) expiry = active.Remaining;
             }
-            return false;
+            return expiry != Single.MaxValue;
         }
 
         private GameObject ServingWindow(GameObject item)
+        { float expiry; return ServingWindow(item, out expiry); }
+
+        private GameObject ServingWindow(GameObject item, out float expiry)
         {
-            GameObject best = null; float distance = Single.MaxValue;
+            GameObject best = null; float distance = Single.MaxValue; expiry = Single.MaxValue;
             foreach (GameObject target in navigation.Targets())
-                if (inventory.DistanceTo(target) < distance && DishReady(item, target) &&
+            {
+                float candidate;
+                if (Reachable(target) && DishExpiry(item, target, out candidate) &&
+                    (candidate < expiry || candidate == expiry && inventory.DistanceTo(target) < distance) &&
                     ActionObservations.Occupant(target) == null && CanDeliver(item, target))
-                { best = target; distance = inventory.DistanceTo(target); }
+                { best = target; distance = inventory.DistanceTo(target); expiry = candidate; }
+            }
             return best;
         }
 
         private LogisticsItem PlatedDish(out GameObject destination)
         {
-            RefreshWorld(); LogisticsItem best = null; destination = null; float distance = Single.MaxValue;
+            RefreshWorld(); LogisticsItem best = null; destination = null; float distance = Single.MaxValue, expiry = Single.MaxValue;
             GameObject held = ActionObservations.Held(chef);
             foreach (LogisticsItem item in inventory.Items)
             {
                 if (item.Supply || item.InUse || item.Item.GetComponent<ServerPlate>() == null || !Obtainable(item, "move_item")) continue;
-                GameObject window = ServingWindow(item.Item);
+                float candidate;
+                GameObject window = ServingWindow(item.Item, out candidate);
                 if (window == null) continue;
                 // Do this before comparing walking costs: a ready plate in P2's
                 // own hands never needs another pickup or a parking detour.
                 if (System.Object.ReferenceEquals(item.Item, held)) { destination = window; return item; }
                 float cost = item.Distance + inventory.DistanceTo(window);
-                if (cost < distance) { best = item; destination = window; distance = cost; }
+                if (candidate < expiry || candidate == expiry && cost < distance)
+                { best = item; destination = window; distance = cost; expiry = candidate; }
             }
             return best;
         }
@@ -69,7 +87,15 @@ namespace SousChef.Plugin.Actions
         private bool CanTakeDish(GameObject item, GameObject destination)
         {
             RefreshWorld();
-            if (!DishReady(item, destination)) return false;
+            float expiry;
+            if (!DishExpiry(item, destination, out expiry)) return false;
+            GameObject preferredWindow;
+            LogisticsItem preferred = PlatedDish(out preferredWindow);
+            if (preferred != null && !System.Object.ReferenceEquals(preferred.Item, item))
+            {
+                float earlier;
+                if (DishExpiry(preferred.Item, preferredWindow, out earlier) && earlier < expiry) return false;
+            }
             foreach (LogisticsItem entry in inventory.Items)
                 if (System.Object.ReferenceEquals(entry.Item, item)) return !entry.InUse && Obtainable(entry, "move_item");
             return false;

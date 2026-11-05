@@ -628,6 +628,43 @@ internal static class Program
     }
     private static void DishDeliveryTasks()
     {
+        foreach (bool tied in new[] {false, true})
+        {
+            var w=new World();ServingKitchen(w);
+            var orders=UnityEngine.Object.FindObjectsOfType<ServerKitchenFlowControllerBase>()[0].Monitor.OrdersController;
+            orders.Recipes.Add(new AssembledDefinitionNode("prawn"));
+            orders.Remaining["fish"]=20;orders.Lifetimes["fish"]=200;
+            orders.Remaining["prawn"]=tied ? 20 : 10;orders.Lifetimes["prawn"]=25;
+            w.Target.GetComponent<ServerAttachStation>().Item=Dish(w);
+            var far=w.Delivery();far.transform.position=new Vector3(-4,0,0);far.Add(new Pickup());far.GetComponent<ServerAttachStation>().Item=Dish(w,"prawn");
+            for(int n=0;n<30;n++) {w.Tick(.11f);w.Navigation.Available(w.Chef);}
+            StartDishTask(w);
+            Check(TaskUntil(w,()=>w.Skills.Run.Running) && w.Skills.Run.Operation=="pick_up" && w.Navigation.Resolve(w.Skills.Run.Target)==(tied ? w.Target : far),
+                tied ? "equal ticket expiry uses walking distance to break the tie" : "an earlier-expiring distant ticket outranks a closer dish and a lower lifetime fraction");
+            w.Tasks.Cancel("stopped");
+        }
+        {
+            var w=new World();var window=ServingKitchen(w);
+            var orders=UnityEngine.Object.FindObjectsOfType<ServerKitchenFlowControllerBase>()[0].Monitor.OrdersController;
+            orders.Recipes.Add(new AssembledDefinitionNode("prawn"));orders.Remaining["fish"]=50;orders.Remaining["prawn"]=5;
+            w.Hold(Dish(w));w.Target.GetComponent<ServerAttachStation>().Item=Dish(w,"prawn");StartDishTask(w);
+            Check(TaskUntil(w,()=>w.Skills.Run.Running) && w.Skills.Run.Operation=="place_at" && w.Navigation.Resolve(w.Skills.Run.Target)==window,
+                "an already-held ready dish retains direct-serving priority over more urgent map dishes");
+            w.Tasks.Cancel("stopped");
+        }
+        {
+            var w=new World();ServingKitchen(w);
+            var orders=UnityEngine.Object.FindObjectsOfType<ServerKitchenFlowControllerBase>()[0].Monitor.OrdersController;
+            orders.Recipes.Add(new AssembledDefinitionNode("prawn"));orders.Remaining["fish"]=50;orders.Remaining["prawn"]=5;
+            w.Target.GetComponent<ServerAttachStation>().Item=Dish(w);
+            var far=w.Delivery();far.transform.position=new Vector3(-4,0,0);far.Add(new Pickup());
+            for(int n=0;n<30;n++) {w.Tick(.11f);w.Navigation.Available(w.Chef);}
+            StartDishTask(w);Check(TaskUntil(w,()=>w.Skills.Run.Running),"initial dish pickup starts before a more urgent meal appears");
+            far.GetComponent<ServerAttachStation>().Item=Dish(w,"prawn");
+            Check(TaskUntil(w,()=>w.Skills.Run.Running && w.Navigation.Resolve(w.Skills.Run.Target)==far),
+                "a newly ready earlier-expiring dish can replace an unpressed pickup without another task request");
+            w.Tasks.Cancel("stopped");
+        }
         {
             var w=new World();w.Hold(w.Ingredient("onion"));
             Check(w.Skills.Start(w.Chef,1,new ControlCommand {Operation="place_at",GroundDrop=true})==null,"floor placement starts under the normal interaction executor");

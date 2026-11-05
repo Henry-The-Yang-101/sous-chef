@@ -61,6 +61,36 @@ namespace SousChef.Plugin
                 result["preparation"] = chopped ? "chopped" : "raw";
                 result["targetInstanceId"] = loose ? null : (object)target.GetInstanceID();
             }
+            else if (args[0] == "serving-order")
+            {
+                // Explicit timed-ticket initial condition for expiry audits.
+                if (args.Length != 3) throw new ArgumentException("serving-order PLATE_ID SECONDS");
+                var plate = FixtureObject(Int32.Parse(args[1])).GetComponent<ServerPlate>();
+                float seconds = Single.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture);
+                if (plate == null || Single.IsNaN(seconds) || seconds < 1 || seconds > 300) throw new ArgumentException("invalid_serving_order_fixture");
+                OrderDefinitionNode recipe = null;
+                foreach (var client in UnityEngine.Object.FindObjectsOfType<ClientKitchenFlowControllerBase>())
+                    foreach (var candidate in client.GetCachedRecipeList())
+                        if (candidate.m_platingStep == plate.GetPlatingStep() && AssembledDefinitionNode.Matching(plate.GetOrderComposition(), candidate)) recipe = candidate;
+                if (recipe == null) throw new InvalidOperationException("fixture_requires_known_plated_recipe");
+                bool added = false;
+                foreach (var station in UnityEngine.Object.FindObjectsOfType<ServerPlateStation>())
+                {
+                    foreach (var flow in UnityEngine.Object.FindObjectsOfType<ServerKitchenFlowControllerBase>())
+                    {
+                        var monitor = flow.GetMonitorForTeam(station.GetTeamID());
+                        if (monitor == null || monitor.OrdersController == null) continue;
+                        var add = typeof(ServerOrderControllerBase).GetMethod("AddNewOrder", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public |
+                            System.Reflection.BindingFlags.NonPublic, null, new[] { typeof(RecipeList.Entry) }, null);
+                        var order = (OrderController.ServerOrderData)add.Invoke(monitor.OrdersController,
+                            new object[] { new RecipeList.Entry { m_order = recipe, m_scoreForMeal = 20 } });
+                        order.Remaining = seconds; added = true; break;
+                    }
+                    if (added) break;
+                }
+                if (!added) throw new InvalidOperationException("fixture_requires_serving_orders");
+                result["recipe"] = recipe.name; result["remainingSeconds"] = seconds;
+            }
             else if (args[0] == "plate-food")
             {
                 // Supplied plated-food initial condition for serving audits.

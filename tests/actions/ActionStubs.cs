@@ -71,13 +71,28 @@ public class ServerPlateStation : MonoBehaviour
     public int Team;
     public int GetTeamID() { return Team; }
 }
-namespace OrderController { public struct OrderID { } }
+namespace OrderController
+{
+    public struct OrderID { public int Value; }
+    public class ServerOrderData { public OrderID ID; public float Remaining, Lifetime; }
+}
 public class ServerOrderControllerBase
 {
     public readonly List<AssembledDefinitionNode> Recipes = new List<AssembledDefinitionNode>();
     public PlatingStepData PlatingStep;
+    public readonly Dictionary<string, float> Remaining = new Dictionary<string, float>(), Lifetimes = new Dictionary<string, float>();
+    public readonly List<OrderController.ServerOrderData> m_activeOrders = new List<OrderController.ServerOrderData>();
     public bool FindBestOrderForRecipe(AssembledDefinitionNode food, PlatingStepData plate, out OrderController.OrderID order, out float remaining)
-    { order = new OrderController.OrderID(); remaining = 1; return plate == PlatingStep && Recipes.Exists(recipe => AssembledDefinitionNode.Matching(recipe, food)); }
+    {
+        order = new OrderController.OrderID(); remaining = 1;
+        if (plate != PlatingStep || !Recipes.Exists(recipe => AssembledDefinitionNode.Matching(recipe, food))) return false;
+        float seconds, lifetime;
+        if (!Remaining.TryGetValue(food.Name, out seconds)) seconds = 100;
+        if (!Lifetimes.TryGetValue(food.Name, out lifetime)) lifetime = 100;
+        order.Value = food.Name.GetHashCode(); remaining = seconds / lifetime;
+        m_activeOrders.Clear();m_activeOrders.Add(new OrderController.ServerOrderData {ID=order,Remaining=seconds,Lifetime=lifetime});
+        return true;
+    }
 }
 public class ServerTeamMonitor { public ServerOrderControllerBase OrdersController = new ServerOrderControllerBase(); }
 public class ServerKitchenFlowControllerBase : MonoBehaviour

@@ -1,0 +1,36 @@
+{
+  "bridgeSha256": "08f155c08de35fab5e4ed4e4cc9ffda9d6eecd161231be1dfe4f8c2229dde5f2",
+  "cases": [
+    {
+      "name": "expiry",
+      "success": true,
+      "urgentPlate": 506014,
+      "laterPlate": 509946,
+      "urgentRemainingSeconds": 59.39064407348633,
+      "laterRemainingSeconds": 148.7998504638672,
+      "urgentRouteDistance": 7.204397201538086,
+      "laterRouteDistance": 0.7566143870353699
+    },
+    {
+      "name": "held",
+      "success": true,
+      "served": 1,
+      "plateInstanceIds": [
+        524010
+      ],
+      "requestId": "12"
+    },
+    {
+      "name": "repetitions",
+      "success": true,
+      "served": 2,
+      "plateInstanceIds": [
+        538074,
+        534926
+      ],
+      "requestId": "13"
+    }
+  ],
+  "level": "s_sushi_1_1",
+  "requestedFps": 60
+}

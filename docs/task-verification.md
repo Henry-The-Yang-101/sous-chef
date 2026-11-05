@@ -141,3 +141,25 @@ python3 scripts/native_simulator.py --runtime .local/dish-check start --level s_
 python3 scripts/dish_delivery_audit.py --runtime .local/dish-check --port-base 40032 --output .local/dish-check-results
 python3 scripts/native_simulator.py --runtime .local/dish-check stop
 ```
+
+### Expiry priority follow-up — 2026-11-05
+
+Dish selection now compares the actual seconds remaining on the native matcher's
+selected ticket. Its returned lifetime fraction is not used for sorting. Held
+ready plates retain direct-serving priority; walking distance breaks expiry ties
+among plates to collect. An earlier-expiring meal appearing before pickup can
+replace the unpressed selection.
+
+The [expiry audit report](dish-delivery-expiry-audit.json) records three passing
+native scenarios: expiry priority, already-held serving and two repetitions.
+On `s_sushi_1_1`, P2 chose a prawn plate 7.20 walking units away with 59.39 seconds
+remaining, ahead of a fish plate 0.76 units away with 148.80 seconds remaining.
+A fresh snapshot confirmed one successful delivery and the later plate left
+filled. The headless-only `serving-order PLATE_ID SECONDS` fixture adds a matching
+native ticket with an explicit initial remaining time; all measured execution
+uses production inputs. Full evidence: `.local/dish-expiry-audit/`.
+
+`scripts/check.py` passed, including regression checks for absolute time versus
+lifetime percentage, distance ties, held-dish priority and a more urgent meal
+appearing during an unpressed pickup. Repeat the native checks with
+`scripts/dish_delivery_audit.py --case expiry --case held --case repetitions`.

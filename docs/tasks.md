@@ -163,6 +163,10 @@ including its required plate type. It is available whenever P2 can reach a servi
 window, even if no meal is ready yet. Empty, incomplete, mismatched and already
 reserved plates, and plates carried by another chef, are excluded. A ready plate
 already in P2's hands takes priority and goes straight to the serving window.
+Among other ready dishes, P2 serves the one whose matching order has the fewest
+seconds remaining before expiry. Walking distance breaks ties. This uses the
+native ticket's actual remaining seconds, rather than its percentage bar; a more
+urgent meal appearing before pickup can replace an unpressed selection.
 
 Otherwise P2 uses normal `pick_up` and `place_at` actions to collect and serve the
 exact dish. Unrelated held cargo is first placed on the nearest compatible empty

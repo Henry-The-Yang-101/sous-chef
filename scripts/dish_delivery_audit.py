@@ -22,7 +22,43 @@ def successful_deliveries(snapshot):
 
 
 class DishAudit(Audit):
+    def expiry(self):
+        catalog = self.load('s_sushi_1_1')
+        plates = sorted((i for i in catalog['items'] if i['cleanPlate'] and i['routeDistance'] is not None), key=lambda i: i['routeDistance'])
+        near, far = plates[0], plates[-1]
+        fish = next(i for i in catalog['items'] if i['supply'] and i['ingredientName'] == 'SushiFish')
+        prawn = next(i for i in catalog['items'] if i['supply'] and i['ingredientName'] == 'SushiPrawn')
+        self.fixture(f"plate-food {near['objectInstanceId']} {fish['sourceInstanceId']}")
+        self.fixture(f"plate-food {far['objectInstanceId']} {prawn['sourceInstanceId']}")
+        self.fixture(f"serving-order {far['objectInstanceId']} 60")
+        before = self.snap('expiry-before')
+        for obj in before['objects']:
+            flow = fields(obj, 'ServerCampaignFlowController')
+            if not flow:
+                continue
+            orders = flow['m_teamMonitor']['fields']['ServerTeamMonitor.m_ordersController']['fields']['ServerOrderControllerBase.m_activeOrders']
+            fish_times, prawn_times = [], []
+            for entry in orders:
+                data = entry['fields']
+                recipe = data['OrderController.ServerOrderData.RecipeListEntry']['fields']['RecipeList+Entry.m_order']['name']
+                (prawn_times if recipe == 'Sushi_PlainPrawn' else fish_times).append(data['OrderController.ServerOrderData.Remaining'])
+            assert fish_times and prawn_times and min(prawn_times) < min(fish_times)
+            break
+        self.request_when_available('deliver_dishes')
+        receipts = self.observe('expiry-deliver', timeout=60)
+        first_pickup = next(r['details']['child'] for r in receipts if (r['details'].get('child') or {}).get('operation') == 'pick_up')
+        assert first_pickup['targetId'] == far['sourceId'], 'The more urgent far dish must be collected first'
+        after = self.snap('expiry-after')
+        assert successful_deliveries(after) - successful_deliveries(before) == 1
+        near_plate = next(o for o in after['objects'] if o['unityInstanceId'] == near['objectInstanceId'])
+        assert fields(near_plate, 'ServerIngredientContainer')['m_contents'], 'The closer later-expiring plate must be left alone'
+        return {'urgentPlate': far['objectInstanceId'], 'laterPlate': near['objectInstanceId'],
+                'urgentRemainingSeconds': min(prawn_times), 'laterRemainingSeconds': min(fish_times),
+                'urgentRouteDistance': far['routeDistance'], 'laterRouteDistance': near['routeDistance']}
+
     def run(self, mode):
+        if mode == 'expiry':
+            return self.expiry()
         catalog = self.load('s_sushi_1_1')
         before = self.snap('before')
         plates = sorted((i for i in catalog['items'] if i['cleanPlate'] and i['routeDistance'] is not None),
@@ -123,12 +159,12 @@ def main():
     parser.add_argument('--runtime', type=Path, required=True)
     parser.add_argument('--port-base', type=int, required=True)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--case', action='append', choices=('held', 'counter', 'wait', 'drop', 'drop_plate', 'repetitions', 'stop'))
+    parser.add_argument('--case', action='append', choices=('held', 'counter', 'wait', 'drop', 'drop_plate', 'repetitions', 'stop', 'expiry'))
     args = parser.parse_args(); args.output.mkdir(parents=True, exist_ok=True)
     sim.wait_ready(args.runtime)
     report = {'bridgeSha256': hashlib.sha256((args.runtime / 'BepInEx/plugins/SousChef.Bridge.dll').read_bytes()).hexdigest(), 'cases': []}
     audit = DishAudit(args)
-    for case in args.case or ('held', 'counter', 'wait', 'drop', 'drop_plate', 'repetitions', 'stop'):
+    for case in args.case or ('held', 'counter', 'wait', 'drop', 'drop_plate', 'repetitions', 'stop', 'expiry'):
         audit.directory = args.output / case; audit.directory.mkdir(exist_ok=True)
         try:
             result = {'name': case, 'success': True, **audit.run(case)}
