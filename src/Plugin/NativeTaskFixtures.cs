@@ -61,6 +61,26 @@ namespace SousChef.Plugin
                 result["preparation"] = chopped ? "chopped" : "raw";
                 result["targetInstanceId"] = loose ? null : (object)target.GetInstanceID();
             }
+            else if (args[0] == "plate-food")
+            {
+                // Supplied plated-food initial condition for serving audits.
+                // Use native ingredient definitions and content notifications;
+                // measured pickup, clearing hands and serving still use inputs.
+                if (args.Length != 3) throw new ArgumentException("plate-food PLATE_ID SUPPLY_ID");
+                GameObject plate = FixtureObject(Int32.Parse(args[1]));
+                var contents = plate.GetComponent<ServerIngredientContainer>();
+                var supply = FixtureObject(Int32.Parse(args[2])).GetComponent<PickupItemSpawner>();
+                if (plate.GetComponent<ServerPlate>() == null || contents == null || contents.GetContentsCount() != 0 || supply == null)
+                    throw new ArgumentException("fixture_requires_empty_plate_and_supply");
+                GameObject prefab = supply.m_itemPrefab;
+                var seen = new HashSet<GameObject>();
+                while (prefab != null && prefab.GetComponent<WorkableItem>() != null && seen.Add(prefab))
+                    prefab = prefab.GetComponent<WorkableItem>().GetNextPrefab();
+                var composition = Actions.ActionObservations.Composition(prefab);
+                if (composition == null || !contents.CanAddIngredient(composition)) throw new ArgumentException("fixture_requires_platable_ingredient");
+                contents.AddIngredient(composition);
+                result["plateInstanceId"] = plate.GetInstanceID(); result["ingredient"] = prefab.name;
+            }
             else if (args[0] == "stance")
             {
                 // Exercise the production throw-approach navigator without

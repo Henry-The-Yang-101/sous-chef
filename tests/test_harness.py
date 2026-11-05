@@ -135,6 +135,12 @@ class HarnessTests(unittest.TestCase):
             self.bridge.act('viewer', 'test-session', 'task', 0, 'task', {'action': 'wash_dishes'})
         self.assertEqual(len([c for c in self.native.calls if c[0] == 'task']), 1)
 
+    def test_deliver_dishes_uses_live_task_dispatch(self):
+        self.native.tasks = [{'name': 'deliver_dishes'}]
+        self.bridge.poll()
+        self.bridge.act('viewer', 'test-session', 'task', 0, 'task', {'action': 'deliver_dishes', 'repetitions': 2})
+        self.assertEqual(self.native.calls[-1], ('task', 'deliver_dishes', 2, {}))
+
     def test_implemented_actions_remain_visible_when_paused_catalogue_hides_jobs(self):
         self.native.hello.update(bridgeVersion='0.6.0', actions=['navigate_to', 'move_item', 'stop'])
         self.native.control.update(available=False, reason='paused')

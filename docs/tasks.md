@@ -16,8 +16,9 @@ When cargo blocks the next step, P2 puts it on a reachable compatible empty
 counter and resumes the same request. This also handles catches during walking
 or chopping. Partially worked food stays on its board; a dirty stack caught while
 washing joins the sink. Serving tasks can use a compatible plate already in hand.
-If no safe counter is available, the task waits with the cargo and Stop remains
-available. Task discovery only observes state; it never moves items. Explicit
+If no safe counter is available, most tasks wait with the cargo and Stop remains
+available. `deliver_dishes` instead uses a checked floor drop after trying nearby
+counters, as described below. Task discovery only observes state; it never moves items. Explicit
 interaction and logistics commands retain their existing cargo preconditions.
 
 Environmental blocks wait indefinitely with neutral input and bounded periodic
@@ -155,6 +156,30 @@ water gun, approach a checked spray position for each washable stack in the
 batch, hold Use while the target is in the native spray, and park the gun.
 A stack with no reachable spray position does not enable the task.
 
+## Deliver dishes
+
+`deliver_dishes` monitors for a plated meal matching a current native order,
+including its required plate type. It is available whenever P2 can reach a serving
+window, even if no meal is ready yet. Empty, incomplete, mismatched and already
+reserved plates, and plates carried by another chef, are excluded. A ready plate
+already in P2's hands takes priority and goes straight to the serving window.
+
+Otherwise P2 uses normal `pick_up` and `place_at` actions to collect and serve the
+exact dish. Unrelated held cargo is first placed on the nearest compatible empty
+counter within five walking units. After a bounded nearby-counter search, if none
+can be found or the checked alternatives cannot be used, normal placement drops
+the cargo on a supported floor. P2 turns away from native placement handlers
+before dropping; this never uses the throw button. Serving windows, boards and
+conveyors are excluded from storage. The floor release reuses the basic action's
+landing/identity checks, then resumes the original dish pickup.
+
+The task rechecks the selected dish and order before pressing. A dish taken by
+someone else or a ticket expiring during travel returns it to monitoring. Native
+serving immediately removes the plate from the window, so `place_at` verifies the
+window's delivery message for the exact original plate instead of relying on an
+occupied holder or a score change. Each verified serve completes one repetition;
+use unlimited repetitions to keep delivering dishes until Stop.
+
 ## Deliver dirty dishes
 
 `deliver_dirty_dishes` is offered only with obtainable dirty stacks, a sink the
@@ -198,6 +223,7 @@ same native cooking handler instead of recipe/name-specific timing guesses.
 ```python
 chef.run_task('wash_dishes', repetitions=3)
 chef.run_task('monitor_equipment', repetitions=None)  # Stop cancels the loop.
+chef.run_task('deliver_dishes', repetitions=None)
 chef.run_task('prepare_near_player', items=[
     {'ingredient': 'chicken', 'preparation': 'chopped', 'quantity': 2},
     {'ingredient': 'pot', 'preparation': 'empty', 'quantity': 1},

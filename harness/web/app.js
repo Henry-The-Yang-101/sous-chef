@@ -480,7 +480,7 @@ pollSharing();
 
 const taskLabels = {prepare_near_player: 'Prepare and give to player', take_ready: 'Take ready food off heat',
   wash_dishes: 'Wash dirty dishes', deliver_dirty_dishes: 'Deliver dirty dishes', put_out_fire: 'Put out fires',
-  toss_burnt_food: 'Toss burnt food', monitor_equipment: 'Monitor cooking and mixing'};
+  toss_burnt_food: 'Toss burnt food', monitor_equipment: 'Monitor cooking and mixing', deliver_dishes: 'Deliver dishes'};
 function addTaskItem() {
   if (el('task-items').children.length >= 10) return;
   const row = document.createElement('div'); row.className = 'task-item';

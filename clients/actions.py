@@ -17,10 +17,10 @@ class ActionClient(ControlClient):
     WAIT_CONDITIONS = (*WORK_CONDITIONS, 'occupied', 'empty', 'cooked', 'mixed', 'reachable', 'ready')
 
     TASK_ACTIONS = ('prepare_near_player', 'take_ready', 'wash_dishes', 'deliver_dirty_dishes',
-                    'put_out_fire', 'toss_burnt_food', 'monitor_equipment')
+                    'put_out_fire', 'toss_burnt_food', 'monitor_equipment', 'deliver_dishes')
 
     def run_task(self, action, repetitions=1, *, items=None, player_id=1):
-        """Run one autonomous task; repetitions=None repeats until Stop/disconnect.
+        """Run one autonomous task; repetitions=None repeats until Stop.
 
         Preparation items: [{'ingredient': 'chicken', 'preparation': 'chopped', 'quantity': 2}].
         Use preparation='empty' and ingredient='plate'/'pot' for utensils.

@@ -50,10 +50,11 @@ namespace SousChef.Plugin.Actions
             navigation = nav; child = primitive; inventory = new LogisticsInventory(nav); input = buttons; release = finished;
             groundPass = new GroundPassAccess(CanReachLanding, CanCollectLanding);
             handoffThrows = new ThrowOptions(nav, groundPass); child.GroundAccess = groundPass;
-            RegisterPreparation(); RegisterTakeReady(); RegisterWashing(); RegisterDirtyDelivery(); RegisterFire(); RegisterBurnt(); RegisterMonitor();
+            RegisterPreparation(); RegisterTakeReady(); RegisterWashing(); RegisterDirtyDelivery(); RegisterFire(); RegisterBurnt(); RegisterMonitor(); RegisterDishDelivery();
         }
         partial void RegisterPreparation(); partial void RegisterTakeReady(); partial void RegisterWashing();
         partial void RegisterDirtyDelivery(); partial void RegisterFire(); partial void RegisterBurnt(); partial void RegisterMonitor();
+        partial void RegisterDishDelivery();
         private void Register(string name, Func<bool> available, Func<IEnumerable<TaskStep>> steps)
         { definitions.Add(name, new TaskDefinition { Name = name, Available = available, Plan = steps }); }
         public object Describe()

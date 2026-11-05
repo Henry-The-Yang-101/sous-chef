@@ -282,7 +282,7 @@ or game restart was needed.
 
 ## Autonomous tasks
 
-The Tasks panel runs the seven actions described in [tasks.md](tasks.md), with
+The Tasks panel runs the actions described in [tasks.md](tasks.md), with
 1–10 repetitions or Until stopped. Preparation supports multiple ingredient/utensil
 rows, states and quantities. Only eligible tasks are selectable. While a task is
 running or waiting, its phase, completed repetitions and waiting reason remain

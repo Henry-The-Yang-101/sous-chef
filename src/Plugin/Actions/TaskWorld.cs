@@ -158,18 +158,18 @@ namespace SousChef.Plugin.Actions
         {
             return go != null && go.GetComponent<ServerAttachStation>() != null && !TaskNative.Equipment(go) &&
                 go.GetComponent<ServerWorkstation>() == null && go.GetComponent<ServerWashingStation>() == null &&
-                go.GetComponent<ServerRubbishBin>() == null && go.GetComponent<PickupItemSpawner>() == null;
+                go.GetComponent<ServerRubbishBin>() == null && go.GetComponent<PickupItemSpawner>() == null && go.GetComponent<ServerPlateStation>() == null;
         }
         private bool CanDeliver(GameObject item, GameObject target, bool supplyPrefab = false)
         { string op; return LogisticsChecks.Delivery(chef, "stage_item", item, target, out op, supplyPrefab) == null; }
-        private GameObject Parking(GameObject item, GameObject preferred = null, bool burners = false, HashSet<GameObject> excluded = null)
+        private GameObject Parking(GameObject item, GameObject preferred = null, bool burners = false, HashSet<GameObject> excluded = null, float maxDistance = Single.MaxValue)
         {
             RefreshWorld(); GameObject best = null; float cost = Single.MaxValue;
             foreach (GameObject target in navigation.Targets())
             {
                 if (excluded != null && excluded.Contains(target)) continue;
                 if ((!Counter(target) && !(burners && target.GetComponent<CookingStation>() != null)) ||
-                    ActionObservations.Occupant(target) != null || !Reachable(target) || !CanDeliver(item, target)) continue;
+                    ActionObservations.Occupant(target) != null || !Reachable(target) || inventory.DistanceTo(target) > maxDistance || !CanDeliver(item, target)) continue;
                 // A conveyor is a transport, not stable storage for a hot pot.
                 if (TaskNative.Component(target, "ServerConveyorStation") != null) continue;
                 float score = inventory.DistanceTo(target) + (target == preferred ? 0 : burners && target.GetComponent<CookingStation>() != null ? 1000 : 2000);

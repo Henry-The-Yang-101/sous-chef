@@ -102,6 +102,8 @@ namespace SousChef.Plugin.Adapters
             Add(s, "dishes", "PlateReturnController+PlateReturnControllerConfig", "m_plateReturnTime");
             Add(s, "dishes", "PlateReturnController+PlatesPendingReturn", "m_station m_timer m_platingStepData");
             Add(s, "dishes", "ServerPlateReturnStation", "m_isDirtyReturn m_stack m_attachStation");
+            Add(s, "dishes", "ServerPlateStation", "m_data");
+            Add(s, "dishes", "PlateStationMessage", "m_delivered m_success");
             Add(s, "spawners", "PickupItemSpawner", "m_itemPrefab m_pickupPriority m_spawnCost");
             Add(s, "spawners", "ServerPlacementItemSpawner", "m_orderDefinition m_attachStation");
             Add(s, "spawners", "ServerLimitedQuantityItem", "m_fLastActivity m_Manager");

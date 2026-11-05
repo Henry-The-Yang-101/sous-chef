@@ -18,7 +18,7 @@ namespace SousChef.Plugin.Actions
         private readonly DropHandoff drops = new DropHandoff();
         private PlayerControls chef;
         private ControlCommand command;
-        private GameObject target, held, receiver, expectedPickup, expectedTopPlate, initialOccupant;
+        private GameObject target, held, receiver, expectedPickup, expectedTopPlate, initialOccupant, initialServedPlate;
         private GameObject pickupPrefab;
         private Vector3 pickupOrigin, pickupForward;
         private ServerIngredientContainer container;
@@ -35,6 +35,8 @@ namespace SousChef.Plugin.Actions
         private DropPlan dropPlan;
         private float dropStableSince = -1;
         private Vector3 lastDropPosition;
+        private int groundDropDirection;
+        private float groundDropTurnAt;
         private ServerAttachmentThrower launchObserver;
         private GenericVoid<GameObject> launchCallback;
         private bool sawLaunch;
@@ -139,7 +141,8 @@ namespace SousChef.Plugin.Actions
             if (Run.Running || navigation.Action.State != "idle") return "action_in_progress";
             recovery.Reset(); recoveryReason = null; nextRecoveryAttempt = 0; lastTick = Time.realtimeSinceStartup;
             chef = player; command = request; target = null;
-            if (request.Operation == "throw_to_player")
+            if (request.GroundDrop && request.Operation == "place_at") target = chef.gameObject;
+            else if (request.Operation == "throw_to_player")
             {
                 foreach (PlayerControls candidate in UnityEngine.Object.FindObjectsOfType<PlayerControls>())
                 {
@@ -161,6 +164,7 @@ namespace SousChef.Plugin.Actions
             pickupPrefab = pickupSupply == null ? null : pickupSupply.m_itemPrefab;
             held = ActionObservations.Held(chef); receiver = ActionObservations.Receiver(target);
             initialOccupant = ActionObservations.Occupant(target); expectedPickup = initialOccupant;
+            initialServedPlate = DeliveredPlate(target);
             container = ActionObservations.Container(target); ingredient = expectedOutput = null;
             initialDirty = ActionObservations.DirtyCount(target); initialClean = ActionObservations.CleanCount(target);
             initialStack = ActionObservations.StackCount(receiver); initialMatches = 0;
@@ -169,12 +173,14 @@ namespace SousChef.Plugin.Actions
             initialContents = held == null || held.GetComponent<ServerIngredientContainer>() == null ? 0 : held.GetComponent<ServerIngredientContainer>().GetContentsCount();
             initialSourceContents = container == null ? 0 : container.GetContentsCount();
             pressed = throwReleased = triggeredByChef = sawLaunch = false; evidence = null; throwPlan = null; dropPlan = null; dropStableSince = -1; workable = null;
+            groundDropDirection = -1; groundDropTurnAt = Time.realtimeSinceStartup + .3f;
             string error = ValidateRequest();
             if (error != null) return error;
             if (!Run.Start(owner, request, Time.realtimeSinceStartup)) return "action_in_progress";
             try
             {
                 if (request.Operation == "wait_until") { Run.Advance("waiting"); input(0); return null; }
+                if (request.GroundDrop) { SetPhase("positioning_ground_drop"); input(0); return null; }
                 // A placement already leaves us stopped at the selected board.
                 // Use that native interaction opportunity without navigating
                 // and settling a second time. All work/identity checks remain.
@@ -377,6 +383,21 @@ namespace SousChef.Plugin.Actions
                         Finish("blocked", "station_contents_changed");
                     return;
                 }
+                if (Run.Phase == "positioning_ground_drop")
+                {
+                    input(0);
+                    if (!System.Object.ReferenceEquals(ActionObservations.Held(chef), held)) { Finish("blocked", "held_item_changed"); return; }
+                    if (Time.realtimeSinceStartup >= groundDropTurnAt)
+                    { groundDropDirection = (groundDropDirection + 1) % 8; groundDropTurnAt = Time.realtimeSinceStartup + .3f; }
+                    if (groundDropDirection >= 0)
+                    {
+                        float angle = groundDropDirection * Mathf.PI / 4;
+                        PlayerControlsHelper.TurnTowardsDirection(chef.gameObject, new Vector3(Mathf.Sin(angle), 0, Mathf.Cos(angle)), chef.Movement.TurnSpeed, Mathf.Min(Time.deltaTime, .05f));
+                    }
+                    if (chef.GroundCollider == null || chef.Motion.GetVelocityXZ().magnitude > .1f ||
+                        !drops.Plan(chef, held, chef, out dropPlan, true)) { WaitFor("waiting_for_ground_drop"); return; }
+                    recovery.Clear(); SetPhase("pressing");
+                }
                 if (Run.Phase == "drop_press")
                 {
                     if (!pressed)
@@ -483,6 +504,12 @@ namespace SousChef.Plugin.Actions
         private bool BeforePress()
         {
             string op = command.Operation;
+            if (command.GroundDrop)
+            {
+                if (!System.Object.ReferenceEquals(ActionObservations.Held(chef), held)) { Finish("blocked", "held_item_changed"); return false; }
+                if (!drops.Plan(chef, held, chef, out dropPlan, true)) { input(0); SetPhase("positioning_ground_drop"); return false; }
+                return true;
+            }
             if (op == "activate" && command.DesiredState != "trigger" && ActionObservations.ToggleState(target) == (command.DesiredState == "on"))
             { Finish("succeeded", "already_in_desired_state"); return false; }
             if (op == "work_at" && Condition()) { Finish("succeeded", "condition_met"); return false; }
@@ -573,6 +600,19 @@ namespace SousChef.Plugin.Actions
             }
             if (op == "place_at")
             {
+                if (command.GroundDrop)
+                {
+                    bool dropped = !System.Object.ReferenceEquals(carrying, held) && drops.Received(held, chef, dropPlan);
+                    if (dropped) evidence = Json.Object("groundDrop", true, "item", ItemEvidence(held));
+                    return dropped;
+                }
+                // A native serving window takes its plate back off the holder
+                // immediately. Its delivery message pins the original plate;
+                // empty hands or somebody else's score cannot prove our serve.
+                GameObject delivered = DeliveredPlate(target);
+                if (!System.Object.ReferenceEquals(carrying, held) && !System.Object.ReferenceEquals(delivered, initialServedPlate) &&
+                    System.Object.ReferenceEquals(delivered, held))
+                { evidence = Json.Object("served", true, "targetInstanceId", target.GetInstanceID(), "item", ItemEvidence(held)); return true; }
                 bool placed = !System.Object.ReferenceEquals(carrying, held) && ((held != null && System.Object.ReferenceEquals(ActionObservations.Occupant(target), held)) ||
                     (initialDirty >= 0 && ActionObservations.DirtyCount(target) > initialDirty) ||
                     (initialStack > 0 && ActionObservations.StackCount(ActionObservations.Receiver(target)) > initialStack));
@@ -592,6 +632,13 @@ namespace SousChef.Plugin.Actions
                 if (done) evidence = Json.Object("nativeTriggerObserved", triggeredByChef, "desiredState", command.DesiredState); return done;
             }
             return false;
+        }
+        private static GameObject DeliveredPlate(GameObject station)
+        {
+            var server = station == null ? null : station.GetComponent<ServerPlateStation>();
+            if (server == null) return null;
+            var message = ActionObservations.Read<PlateStationMessage>(server, "m_data");
+            return message != null && message.m_success ? message.m_delivered : null;
         }
         private bool Condition()
         {

@@ -53,7 +53,38 @@ public class ServerStack : MonoBehaviour
     public int GetSize() { return m_stackItems.Count; }
     public GameObject InspectTopOfStack() { return m_stackItems.Count==0 ? null : m_stackItems[m_stackItems.Count-1]; }
 }
-public class ServerPlate : MonoBehaviour { public ServerIngredientContainer m_ingredientContainer; }
+public class PlatingStepData : UnityEngine.Object { }
+public class ServerPlate : MonoBehaviour
+{
+    public ServerIngredientContainer m_ingredientContainer;
+    public AssembledDefinitionNode Composition;
+    public PlatingStepData PlatingStep;
+    public bool Reserved;
+    public bool IsReserved() { return Reserved; }
+    public AssembledDefinitionNode GetOrderComposition() { return Composition; }
+    public PlatingStepData GetPlatingStep() { return PlatingStep; }
+}
+public class PlateStationMessage { public GameObject m_delivered; public bool m_success; }
+public class ServerPlateStation : MonoBehaviour
+{
+    public PlateStationMessage m_data = new PlateStationMessage();
+    public int Team;
+    public int GetTeamID() { return Team; }
+}
+namespace OrderController { public struct OrderID { } }
+public class ServerOrderControllerBase
+{
+    public readonly List<AssembledDefinitionNode> Recipes = new List<AssembledDefinitionNode>();
+    public PlatingStepData PlatingStep;
+    public bool FindBestOrderForRecipe(AssembledDefinitionNode food, PlatingStepData plate, out OrderController.OrderID order, out float remaining)
+    { order = new OrderController.OrderID(); remaining = 1; return plate == PlatingStep && Recipes.Exists(recipe => AssembledDefinitionNode.Matching(recipe, food)); }
+}
+public class ServerTeamMonitor { public ServerOrderControllerBase OrdersController = new ServerOrderControllerBase(); }
+public class ServerKitchenFlowControllerBase : MonoBehaviour
+{
+    public readonly ServerTeamMonitor Monitor = new ServerTeamMonitor();
+    public ServerTeamMonitor GetMonitorForTeam(int team) { return team == 0 ? Monitor : null; }
+}
 public class ServerWashingStation : MonoBehaviour { public int m_plateCount; public float m_cleaningTimer; public ServerAttachStation m_dryingAttachStation; }
 public class ClientTriggerToggleOnAnimator : MonoBehaviour { public bool CurrentState; }
 public class ClientToggleSwitchCosmeticDecisions : MonoBehaviour { public ClientTriggerToggleOnAnimator m_toggleOnAnimator; }

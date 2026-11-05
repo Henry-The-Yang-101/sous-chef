@@ -26,10 +26,10 @@ namespace SousChef.Plugin.Actions
         { var capsule = player.GetComponent<CapsuleCollider>(); return capsule == null ? player.transform.position.y : capsule.bounds.min.y; }
         internal static bool GroundHazard(Collider c)
         { return c.CompareTag("Hazard") || c.GetComponentInParent<RespawnCollider>() != null || c.GetComponentInParent<ServerFireHazard>() != null || c.GetComponentInParent<Teleportal>() != null; }
-        public bool Plan(PlayerControls chef, GameObject item, PlayerControls player, out DropPlan plan)
+        public bool Plan(PlayerControls chef, GameObject item, PlayerControls player, out DropPlan plan, bool floorOnly = false)
         {
             plan = null;
-            if (item == null || player == null || player == chef || !player.gameObject.activeInHierarchy || player.m_bRespawning) return false;
+            if (item == null || player == null || player == chef && !floorOnly || !player.gameObject.activeInHierarchy || player.m_bRespawning) return false;
             var config = PlayerInputLookup.GetInputConfig();
             var entry = config == null || player.PlayerIDProvider == null ? null : config.GetInputConfigEntry(player.PlayerIDProvider.GetID());
             if (entry == null || !entry.IsLocal()) return false;
@@ -38,6 +38,7 @@ namespace SousChef.Plugin.Actions
             var selected = chef.CurrentInteractionObjects.m_TheOriginalHandlePickup;
             if (chef.CurrentInteractionObjects.m_iHandlePlacement != null)
             {
+                if (floorOnly) return false;
                 if (selected == null || selected.GetComponent<ServerAttachStation>() == null || ActionObservations.Occupant(selected) != null ||
                     selected.GetComponent<CookingStation>() != null || selected.GetComponent<ServerWashingStation>() != null || selected.GetComponent<ServerRubbishBin>() != null ||
                     Vector3.Distance(selected.transform.position, player.transform.position) > 1.6f || !ActionObservations.CanPlace(chef, selected)) return false;

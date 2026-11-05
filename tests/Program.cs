@@ -31,6 +31,8 @@ internal static class Program
     {
         Assert(ControlCommand.Parse("task once take_ready 1").Task.Repetitions == 1, "default finite task grammar");
         Assert(ControlCommand.Parse("task loop monitor_equipment forever").Task.Repetitions == 0, "infinite task grammar");
+        Assert(ControlCommand.Parse("task serve deliver_dishes 2").Task.Repetitions == 2, "dish delivery uses the standard task grammar");
+        Assert(ControlCommand.Parse("task serve deliver_dishes forever").Task.Repetitions == 0, "dish delivery supports continuous monitoring");
         var command = ControlCommand.Parse("task prep prepare_near_player 3 1 sY2hpY2tlbg chopped 2 scG90 empty 1");
         Assert(command.Task.Items.Count == 2 && command.Task.Items[0].Selector == "chicken" && command.Task.Items[0].Quantity == 2, "mixed ingredient utensil task grammar");
         foreach (string value in new[] {"0", "11", "-1", "nan", "1.5"})
@@ -399,6 +401,9 @@ internal static class Program
         Type cooking = assembly.GetType("ClientCookingHandler")?.GetField("m_cachedCookingState", BindingFlags.Instance | BindingFlags.NonPublic)?.FieldType;
         Assert(cooking != null && Enum.GetNames(cooking).Contains("Completed"), "cooked/mixed completion uses installed enum names");
         Type launch = assembly.GetType("ServerAttachmentThrower"), windReceiver = assembly.GetType("ServerAttachmentWindReceiver");
+        Assert(assembly.GetType("ServerOrderControllerBase")?.GetMethod("FindBestOrderForRecipe") != null &&
+            assembly.GetType("ServerPlate")?.GetMethod("GetPlatingStep") != null && assembly.GetType("ServerPlate")?.GetMethod("IsReserved") != null,
+            "native serving readiness uses the installed recipe matcher, plating step and reservation state");
         Assert(launch?.GetMethod("CalculateThrowVelocity", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic) != null, "exact launch calculator is bound from the installed native implementation");
         Assert(launch?.GetMethod("RegisterThrowCallback") != null && launch.GetMethod("UnregisterThrowCallback") != null, "native actual-launch observer has matching registration and cleanup");
         Assert(windReceiver?.GetMethod("FixedUpdate", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic) != null &&

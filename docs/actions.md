@@ -11,7 +11,7 @@ with `collect_contents`; arbitrary container-to-container recipes remain separat
 | --- | --- |
 | `navigate_to(destination_id)` | Existing walking action; see [navigation](navigation.md). |
 | `pick_up(target_id)` | Approach the specified source, tap pickup once, confirm the exact item, a plate removed from its stack, or the dispenser's ingredient composition in P2's hands. Requires empty hands. |
-| `place_at(target_id)` | Approach, tap placement once, confirm the target holds the item, its plate stack increased, or its sink accepted dirty dishes. Occupied non-stack surfaces require an explicit ingredient-add action. Disposal requires `discard`. |
+| `place_at(target_id)` | Approach, tap placement once, confirm the target holds the item, its plate stack increased, its sink accepted dirty dishes, or its serving window delivered the exact plate. Occupied non-stack surfaces require an explicit ingredient-add action. Disposal requires `discard`. |
 | `collect_contents(target_id)` | Collect ready contents into a held compatible plate/container using native placement. Verify recipient increase, source decrease and retained identities. |
 | `add_ingredient(target_id)` | Add the held single ingredient to the target or its explicitly attached container. Confirm matching contents increased and P2 no longer holds that ingredient. Refuses container-to-container transfer. |
 | `work_at(target_id, until='work_complete', timeout=60)` | Work until chopping completes, one plate is cleaned, or the sink empties. Detect expected replacement ingredient composition when chopping replaces an object. |
