@@ -98,6 +98,8 @@ namespace SousChef.Plugin.Navigation
             Destination d;
             return go != null && identities.TryGetValue(go.GetInstanceID(), out d) && d.Object == go ? Identity(d) : null;
         }
+        public bool AligningAt(GameObject station)
+        { return Action.State == "navigating" && target != null && !target.IsPoint && target.Object == station && facingSince >= 0; }
         public string RegisterItem(GameObject go)
         {
             if (go == null || !go.activeInHierarchy) return null;

@@ -332,6 +332,21 @@ namespace SousChef.Plugin.Actions
                     if (!BeforePress()) return;
                     SetPhase("working");
                 }
+                // The native selection/placement predicate can be satisfied a
+                // fraction short of a conservative geometric station stance.
+                // Once stopped, use that actual opportunity instead of looping
+                // on alignment (as with immediate native work above).
+                if (!command.GroundDrop && (command.Operation == "place_at" || command.Operation == "add_ingredient" ||
+                    command.Operation == "collect_contents" || command.Operation == "discard") &&
+                    (Run.Phase == "navigating" || Run.Phase == "recovering_navigation") &&
+                    navigation.AligningAt(target) &&
+                    chef.GroundCollider != null && !chef.m_bRespawning && chef.Motion.GetVelocityXZ().magnitude <= .1f &&
+                    ActionObservations.CanPlace(chef, target))
+                {
+                    if (navigation.Action.State == "navigating") navigation.Stop("arrived");
+                    if (!BeforePress()) return;
+                    SetPhase("pressing");
+                }
                 if (recoveryReason == "target_unavailable" && Run.Phase != "navigating" &&
                     Run.Phase != "recovering_navigation" && Run.Phase != "pressing" && Run.Phase != "working") recovery.Clear();
                 if (Run.Phase == "recovering_navigation")

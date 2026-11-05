@@ -629,6 +629,18 @@ internal static class Program
     private static void DishDeliveryTasks()
     {
         {
+            var w=new World();var item=w.Ingredient("onion");w.Hold(item);
+            var catalog=(Json.Record)w.Navigation.Available(w.Chef);
+            var target=((List<object>)catalog["destinations"]).Cast<Json.Record>().First(d=>(string)d["id"]==w.Id);
+            float[] approach=(float[])target["approachPosition"];
+            Check(w.Start("place_at")==null,"placement starts before its native alignment opportunity");
+            w.Chef.transform.position=new Vector3(approach[0],approach[1],approach[2]);w.Navigation.Tick(w.Chef);
+            w.Tick();Check(w.Skills.Run.Phase=="pressing" && w.Navigation.Action.State=="idle" && w.Inputs.Last()==1,
+                "a stopped exact native placement opportunity can finish conservative navigation alignment");
+            w.Target.GetComponent<ServerAttachStation>().Item=item;w.Hold(null);w.Verify();
+            Check(w.Skills.Run.State=="succeeded","immediate native placement still verifies the original cargo");
+        }
+        {
             var w=new World();var window=ServingKitchen(w);StartDishTask(w,0);
             w.Tick(1000);w.Verify();
             Check(w.Tasks.Run.Running && w.Tasks.Run.Phase=="waiting_for_plated_dish" && !w.Skills.Run.Running && !w.Inputs.Contains(1),
