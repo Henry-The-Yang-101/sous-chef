@@ -5,6 +5,7 @@ import threading
 import unittest
 from unittest import mock
 from http.server import ThreadingHTTPServer
+from urllib.parse import urlsplit
 
 from clients.control import ControlError
 from harness.server import Handler, HarnessBridge, HarnessError, main, serve
@@ -480,6 +481,7 @@ class SharingTests(unittest.TestCase):
         sharing = PhoneShare(8765, 'token', ['192.168.1.23'])
         sharing.internet_pending = True
         process = mock.MagicMock()
+        process.poll.return_value = None
         sharing.process = process
 
         def logs():
@@ -487,27 +489,125 @@ class SharingTests(unittest.TestCase):
             self.assertTrue(sharing.describe()['internetPending'])
             self.assertEqual([link['label'] for link in sharing.links], ['Same Wi-Fi'])
             yield 'INF Registered tunnel connection connIndex=0\n'
+            self.assertTrue(sharing.describe()['internetPending'])
+            self.assertEqual([link['label'] for link in sharing.links], ['Same Wi-Fi'])
+            with mock.patch.object(sharing, '_verify_tunnel') as verify:
+                sharing._check_tunnel()
+                verify.assert_called_once_with('https://connected.trycloudflare.com')
             self.assertFalse(sharing.describe()['internetPending'])
             self.assertEqual(sharing.links[0]['url'], 'https://connected.trycloudflare.com/#access=token')
             self.assertTrue(sharing.valid_origin('connected.trycloudflare.com', None))
 
         process.stdout.__iter__.side_effect = logs
         sharing._read_tunnel()
-        self.assertFalse(sharing.describe()['internetPending'])
+        self.assertTrue(sharing.describe()['internetPending'])
         self.assertEqual([link['label'] for link in sharing.links], ['Same Wi-Fi'])
         self.assertFalse(sharing.valid_origin('connected.trycloudflare.com', None))
         self.assertIn('stopped', sharing.status)
         process.stdout.close.assert_called_once()
 
-    def test_tunnel_failure_before_connection_clears_pending_state(self):
+    def test_tunnel_failure_before_connection_waits_for_recovery(self):
         sharing = PhoneShare(8765, 'token')
         sharing.internet_pending = True
         sharing.process = mock.MagicMock()
         sharing.process.stdout.__iter__.return_value = iter(['ERR Could not connect\n'])
         sharing._read_tunnel()
-        self.assertFalse(sharing.describe()['internetPending'])
+        self.assertTrue(sharing.describe()['internetPending'])
         self.assertEqual(sharing.links, [])
         self.assertIn('stopped', sharing.status)
+
+    def connected_tunnel(self):
+        sharing = PhoneShare(8765, 'token', ['192.168.1.23'])
+        sharing.process = mock.Mock()
+        sharing.process.poll.return_value = None
+        sharing.tunnel_url = 'https://connected.trycloudflare.com'
+        sharing.tunnel_verified = True
+        sharing._add(sharing.tunnel_url, 'Internet')
+        return sharing
+
+    def test_live_process_with_broken_dns_hides_qr_and_requests_replacement(self):
+        sharing = self.connected_tunnel()
+        with mock.patch.object(sharing, '_verify_tunnel', side_effect=OSError('NXDOMAIN')), \
+                mock.patch('builtins.print'):
+            self.assertFalse(sharing._check_tunnel())
+            self.assertTrue(sharing.describe()['internetPending'])
+            self.assertEqual([link['label'] for link in sharing.links], ['Same Wi-Fi'])
+            self.assertFalse(sharing.valid_origin('connected.trycloudflare.com', None))
+            self.assertFalse(sharing._check_tunnel())
+            self.assertTrue(sharing._check_tunnel())
+        self.assertIsNone(sharing.process.poll())
+
+    def test_transient_failure_recovers_same_link_and_resets_failure_count(self):
+        sharing = self.connected_tunnel()
+        with mock.patch.object(sharing, '_verify_tunnel', side_effect=[OSError('offline'), None]), \
+                mock.patch('builtins.print'):
+            sharing._check_tunnel()
+            self.assertFalse(sharing._check_tunnel())
+        self.assertEqual(sharing.links[0]['url'], sharing.tunnel_url + '/#access=token')
+        self.assertEqual(sharing.tunnel_failures, 0)
+        self.assertFalse(sharing.internet_pending)
+
+    def test_unverified_candidate_requires_token_and_does_not_publish_qr(self):
+        sharing = self.connected_tunnel()
+        sharing.links[:] = [link for link in sharing.links if link['label'] != 'Internet']
+
+        def probe(origin):
+            self.assertTrue(sharing.valid_origin(urlsplit(origin).netloc, origin))
+            self.assertFalse(sharing.is_local(urlsplit(origin).netloc, '127.0.0.1'))
+            self.assertEqual([link['label'] for link in sharing.links], ['Same Wi-Fi'])
+
+        with mock.patch.object(sharing, '_verify_tunnel', side_effect=probe):
+            sharing._check_tunnel()
+        self.assertEqual(sharing.links[0]['label'], 'Internet')
+
+    def test_public_probe_checks_dns_and_exact_authenticated_session(self):
+        sharing = PhoneShare(8765, 'token')
+        response = mock.MagicMock()
+        response.__enter__.return_value.read.return_value = b'{"token":"different-session"}'
+        with mock.patch('harness.sharing.socket.getaddrinfo') as dns, \
+                mock.patch('harness.sharing.urlopen', return_value=response) as fetch:
+            with self.assertRaisesRegex(ValueError, 'this harness session'):
+                sharing._verify_tunnel('https://connected.trycloudflare.com')
+            dns.assert_called_once()
+            request = fetch.call_args.args[0]
+            self.assertEqual(request.full_url, 'https://connected.trycloudflare.com/api/bootstrap')
+            self.assertEqual(request.get_header('X-page-token'), 'token')
+
+    def test_monitor_replaces_failed_process_and_does_not_restart_after_close(self):
+        sharing = self.connected_tunnel()
+        sharing.health_changed.set()
+        with mock.patch.object(sharing, '_check_tunnel', return_value=True), \
+                mock.patch.object(sharing, '_stop_tunnel') as stop, \
+                mock.patch.object(sharing, '_launch_tunnel', side_effect=sharing.halt.set) as launch:
+            sharing._monitor_tunnel()
+            stop.assert_called_once()
+            launch.assert_called_once()
+            launch.reset_mock()
+            sharing._monitor_tunnel()
+            launch.assert_not_called()
+
+    def test_startup_without_a_connection_eventually_replaces_stalled_process(self):
+        sharing = self.connected_tunnel()
+        sharing.tunnel_url = None
+        sharing.tunnel_started = 100
+        with mock.patch('harness.sharing.time.monotonic', return_value=150):
+            self.assertFalse(sharing._check_tunnel())
+        with mock.patch('harness.sharing.time.monotonic', return_value=200), mock.patch('builtins.print'):
+            for _ in range(sharing.FAILURE_LIMIT - 1):
+                self.assertFalse(sharing._check_tunnel())
+            self.assertTrue(sharing._check_tunnel())
+
+    def test_new_hostname_gets_dns_propagation_grace_before_replacement(self):
+        sharing = self.connected_tunnel()
+        sharing.tunnel_verified = False
+        sharing.tunnel_started = 100
+        with mock.patch.object(sharing, '_verify_tunnel', side_effect=OSError('NXDOMAIN')), \
+                mock.patch('harness.sharing.time.monotonic', return_value=150), mock.patch('builtins.print'):
+            for _ in range(sharing.FAILURE_LIMIT + 1):
+                self.assertFalse(sharing._check_tunnel())
+        with mock.patch.object(sharing, '_verify_tunnel'):
+            self.assertFalse(sharing._check_tunnel())
+        self.assertTrue(sharing.tunnel_verified)
 
     def test_invalid_forwarded_urls_are_rejected(self):
         for url in ['file:///etc/passwd', 'https://user:pass@example.com',

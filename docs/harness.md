@@ -146,9 +146,15 @@ The internet link requires
 python3 -m harness.server
 ```
 
-The harness starts a temporary Cloudflare Quick Tunnel, waits for its connection,
-then selects its HTTPS QR link automatically. It stops the tunnel when the harness
-exits. An explicit choice in the connection selector is preserved. The tunnel
+The harness starts a temporary Cloudflare Quick Tunnel, checks local DNS and
+authenticated HTTPS access to this exact harness session, then selects its QR
+link automatically. It rechecks every 15 seconds, hides a failed link, and replaces
+the tunnel after three failed checks. Unverified startup links get 90 seconds
+for connection and DNS propagation before replacement. Keep the Mac awake;
+sleep or a network interruption can disconnect the tunnel and invalidate its
+temporary hostname. After a replacement, scan the current QR on the Mac again.
+The tunnel stops when the harness exits. An explicit choice in the connection
+selector is preserved while that link remains available. The tunnel
 requires no router port forwarding or Cloudflare account. If `cloudflared` cannot
 start, the page explains the failure and offers same-Wi-Fi access; `--tunnel`
 requires Cloudflare and exits on startup failure instead. If you already have a
@@ -252,6 +258,15 @@ token-authenticated state request and 403 without the token. Browser checks
 confirmed that the QR waits during tunnel startup, automatically switches from
 the initial Wi-Fi link to Internet, and preserves an explicit Wi-Fi selection
 across link updates. A physical phone camera/network was not exercised.
+
+Later that day, after the Mac slept, a live `cloudflared` process had zero ready
+connections while its hostname returned NXDOMAIN from the system resolver,
+Cloudflare, Google and Cloudflare's authoritative nameserver. Recovery checks now
+cover DNS/HTTPS failures with a live process, stalled startup, DNS propagation
+grace, transient recovery, shutdown and exact-session authentication. An isolated
+live test stopped `cloudflared`, observed removal of its old QR link, and verified
+the automatically created replacement through DNS and authenticated HTTPS.
+All 126 Python tests passed after this recovery change.
 
 Phone sharing was checked on November 1, 2026: both the Mac's LAN address and the
 managed public HTTPS tunnel returned fresh game state with the QR token and
