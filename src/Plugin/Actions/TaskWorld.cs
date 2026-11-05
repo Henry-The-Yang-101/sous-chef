@@ -179,6 +179,18 @@ namespace SousChef.Plugin.Actions
                 excluded.Add(destination); rejectedAt = Time.realtimeSinceStartup;
             }
         }
+        // A loose object the native selection prefers over a station blocks it
+        // as surely as an occupant does. Set cargo down, then move that object.
+        private IEnumerable<TaskStep> Clear(GameObject obstruction)
+        {
+            if (obstruction == null) yield break;
+            GameObject held = ActionObservations.Held(chef);
+            if (held != null) foreach (TaskStep park in Park(held)) yield return park;
+            if (!obstruction.activeInHierarchy || !ActionObservations.Loose(obstruction)) yield break;
+            TaskStep pickup = Do("pick_up", obstruction); pickup.ReplanOnBlock = true;
+            yield return pickup;
+            if (pickup.Succeeded) foreach (TaskStep park in Park(obstruction)) yield return park;
+        }
         // A moving raft can continually invalidate a distant catalogue frontier.
         // Let the pickup's bounded active planner try a local source on the
         // same native support; this is not a route proof.

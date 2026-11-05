@@ -13,7 +13,8 @@ namespace SousChef.Plugin.Actions
         public Func<bool> Ready;
         public Func<bool> Progress;
         public Func<bool> Outcome;
-        public bool ReplanOnBlock, Succeeded;
+        public bool ReplanOnBlock, ReplanAfterPress, Succeeded;
+        public GameObject Obstruction;
     }
     internal sealed class TaskDefinition
     {
@@ -85,6 +86,7 @@ namespace SousChef.Plugin.Actions
                     {
                         // No native button has been pressed: storage/handoff may
                         // choose another checked destination without replaying cargo.
+                        step.Obstruction = child.Obstruction;
                         child.Cancel("task_replan_before_press"); childStarted = false;
                         step = null; Wait("waiting_for_alternative_destination"); return;
                     }
@@ -93,6 +95,9 @@ namespace SousChef.Plugin.Actions
                     if (child.Run.State != "succeeded" && (step.Outcome == null || !step.Outcome()))
                     {
                         if (step.ReplanOnBlock && child.CanRetry) { step = null; Wait(child.Run.Reason); return; }
+                        // Pressed or released: the plan reconciles the cargo's
+                        // observed fate itself and never replays the press.
+                        if (step.ReplanAfterPress && child.Run.State != "cancelled") { step = null; Wait(child.Run.Reason); return; }
                         if (child.Run.State == "blocked" && child.CanRetry) { Wait(child.Run.Reason); return; }
                         if (!ActionRecovery.Transient(child.Run.Reason)) { Finish(child.Run.State == "cancelled" ? "cancelled" : "failed", child.Run.Reason); return; }
                         Wait(child.Run.Reason); return;

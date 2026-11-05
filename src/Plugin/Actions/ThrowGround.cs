@@ -108,16 +108,19 @@ namespace SousChef.Plugin.Actions
                 if (UseGround(groundSpots[n]) && GroundSupported(receiving.center, -toward, 0)) break;
             return null;
         }
-        private bool RefreshGround()
+        private bool RefreshGround() { return RefreshGround(chef.transform.forward); }
+        private bool RefreshGround(Vector3 direction)
         {
             if (receivingSupport == null || !receivingSupport.enabled || !receivingSupport.gameObject.activeInHierarchy) return false;
             Vector3 point = receivingSupport.transform.TransformPoint(groundLocalPoint); RaycastHit contact;
             if (!GroundAt(point, out contact)) return false;
             groundPoint = contact.point; groundSupport = contact.collider;
-            receiving = GroundReceiving(chef.transform.forward); return true;
+            receiving = GroundReceiving(direction); return true;
         }
         private bool UseGround(GroundSpot spot)
         { receivingSupport = spot.Support; groundLocalPoint = spot.Point; return RefreshGround(); }
+        // The cargo lands oriented along its planned throw, not along the
+        // chef's facing while it walks or turns to aim.
         public bool RestoreGround(ThrowPlan plan)
         {
             if (!ground) return true;
@@ -125,12 +128,12 @@ namespace SousChef.Plugin.Actions
             {
                 if (receivingSupport != plan.GroundSupport) return false;
                 groundLocalPoint = plan.GroundLocalPoint;
-                return RefreshGround() && GroundSupported(receiving.center, chef.transform.forward, 0);
+                return RefreshGround(plan.Direction) && GroundSupported(receiving.center, plan.Direction, 0);
             }
             RaycastHit contact;
             if (!GroundAt(player.transform.position + plan.GroundOffset, out contact)) return false;
             groundLocalPoint = receivingSupport.transform.InverseTransformPoint(contact.point);
-            return RefreshGround() && GroundSupported(receiving.center, chef.transform.forward, 0);
+            return RefreshGround(plan.Direction) && GroundSupported(receiving.center, plan.Direction, 0);
         }
         private Bounds GroundReceiving(Vector3 direction)
         {

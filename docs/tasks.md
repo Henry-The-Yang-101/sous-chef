@@ -71,11 +71,22 @@ contents prefer a serving plate/utensil, leaving the processor available.
 Chopping boards are scheduled the same way. Food already on a board, such as food
 the human threw there, is chopped in place and preferred to an equal-stage copy
 elsewhere. Food needing a board is collected only when a reachable board can
-receive it. While every reachable board holds other food, P2 waits empty-handed
-(`waiting_for_chopping_board`) and can still chop what occupies them. If a board
-fills after a pickup or during placement, P2 sets its cargo down on a counter and
-reschedules rather than holding it indefinitely. Between repetitions, the task
-continues with the same local sources the scheduler itself accepts.
+receive it, so P2 never holds cargo while it alone could free a board. When every
+reachable board holds food the remaining work cannot use now (a later repetition's
+ingredient or unrelated food), P2 moves the nearest board's contents to a counter;
+a board someone is using is left alone. If a board fills after a pickup or during
+placement, P2 sets its cargo down on a counter and reschedules. Between
+repetitions, the task continues with the same local sources the scheduler accepts.
+
+Loose food in front of a station can take the game's interaction selection from
+it. If P2 is positioned at its target but the game selects a different loose
+object, waiting cannot help. Before any press, the task sets down P2's cargo,
+moves that object to a counter, and reschedules.
+
+Loose food in front of a station can take the game's interaction selection from
+it. If P2 is positioned at its target but the game selects a different loose
+object, waiting cannot help. Before any press, the task sets down P2's cargo,
+moves that object to a counter, and reschedules.
 
 Delivery preference: a compatible counter within five walking units of the human,
 then a checked pass/drop at the human, then a directed conveyor or returning
@@ -92,6 +103,10 @@ cleanup. The executor keeps observing that cargo if its final proof changes or a
 native launch arrives early. A failed primitive handoff can still fulfill the task
 when a fresh native route proves the exact item is collectible within five walking
 units of the human. This never replays the throw or takes another ingredient.
+In `prepare_near_player`, an unverified pass is never counted as delivered and
+does not end the task: cargo still in P2's hands is offered again, and lost cargo
+(for example, food that bounced into the river) is prepared again. Other tasks
+still stop on an unverified pressed handoff.
 
 ## Take ready food off heat
 

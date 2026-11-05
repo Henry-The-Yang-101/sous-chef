@@ -54,7 +54,19 @@ namespace SousChef.Plugin.Actions
         { return Array.IndexOf(ActionRun.Names, operation) >= 0 && operation != "navigate_to" && operation != "stop"; }
         public bool CanRetry { get { return !pressed && !throwReleased && Run.State != "cancelled"; } }
         public bool NavigationStalled { get { return Run.Phase == "recovering_navigation" &&
-            (recoveryReason == "no_progress" || recoveryReason == "alignment_failed" || recoveryReason == "navigation_timeout"); } }
+            (recoveryReason == "no_progress" || recoveryReason == "alignment_failed" || recoveryReason == "navigation_timeout") ||
+            Obstruction != null && recovery.Elapsed > .5f; } }
+        // Positioned at the target while the native selection holds another
+        // loose object. Waiting cannot change that selection; moving it can.
+        public GameObject Obstruction
+        {
+            get
+            {
+                if (!Run.Running || Run.Phase != "navigating" || navigation.Action.State != "idle" || navigation.Action.Reason != "positioned_no_action") return null;
+                GameObject selected = chef.CurrentInteractionObjects.m_TheOriginalHandlePickup;
+                return selected != null && !ActionObservations.Matches(selected, target) && ActionObservations.Loose(selected) ? selected : null;
+            }
+        }
         public void ContinueRecovery(ActionRecovery previous)
         { if (Run.Phase == "recovering_navigation") recovery.ContinueFrom(previous); }
         public void ResumeAfterPause(float seconds)

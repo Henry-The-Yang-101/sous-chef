@@ -102,7 +102,9 @@ namespace SousChef.Plugin.Actions
                 if (HumanDistance(target) != Single.MaxValue && HumanDistance(target) <= maximumDistance && System.Object.ReferenceEquals(ActionObservations.Occupant(target), item)) return true;
             return false;
         }
-        private IEnumerable<TaskStep> Give(GameObject item, int player = 1, bool backgroundTransport = false)
+        // With `lossTolerant`, a pass that leaves P2's hands without reaching the
+        // human ends here undelivered (absent from deliveredItems) for the caller.
+        private IEnumerable<TaskStep> Give(GameObject item, int player = 1, bool backgroundTransport = false, bool lossTolerant = false)
         {
             var excluded = new List<Vector3>();
             var blockedTargets = new HashSet<GameObject>();
@@ -143,8 +145,13 @@ namespace SousChef.Plugin.Actions
                     if (!HumanCanCollect(item, player, true, choice.Ground ? Single.MaxValue : 5)) return false;
                     ((Json.Record)handoffEvidence)["reconciledOutcome"] = child.Run.Reason; return true;
                 };
-                delivery.ReplanOnBlock = true; yield return delivery;
-                if (!delivery.Succeeded) { if (choice.Target != null) blockedTargets.Add(choice.Target); rejectedAt = Time.realtimeSinceStartup; continue; }
+                delivery.ReplanOnBlock = true; delivery.ReplanAfterPress = lossTolerant; yield return delivery;
+                if (!delivery.Succeeded)
+                {
+                    if (lossTolerant && !System.Object.ReferenceEquals(ActionObservations.Held(chef), item)) yield break;
+                    if (choice.Target != null) blockedTargets.Add(choice.Target);
+                    rejectedAt = Time.realtimeSinceStartup; continue;
+                }
                 if (choice.Transport)
                 {
                     if (backgroundTransport) DispatchDelivery(item, player);

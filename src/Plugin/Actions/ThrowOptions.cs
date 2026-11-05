@@ -22,6 +22,8 @@ namespace SousChef.Plugin.Actions
             public bool Ground;
             public Collider Support;
             public long LastSlice;
+            public string Invalidated;
+            public int Invalidations;
         }
         private readonly NavigationActions navigation;
         private readonly DropHandoff drops = new DropHandoff();
@@ -47,7 +49,8 @@ namespace SousChef.Plugin.Actions
             var result = new List<object>();
             foreach (Option option in options.Values)
                 result.Add(Json.Object("targetInstanceId", option.Target == null ? 0 : option.Target.GetInstanceID(),
-                    "ground", option.Ground, "reason", option.Reason, "slices", option.LastSlice, "diagnostics", option.Planner.Diagnostics));
+                    "ground", option.Ground, "reason", option.Reason, "slices", option.LastSlice, "diagnostics", option.Planner.Diagnostics,
+                    "invalidated", option.Invalidated, "invalidations", option.Invalidations));
             return result;
         }
         public void Reset()
@@ -120,15 +123,16 @@ namespace SousChef.Plugin.Actions
             {
                 // Refresh positive proofs against current obstacles, height,
                 // receiver availability, wind and the current walking graph.
-                ThrowPlan checkedPlan = null; Vector3 stance; Collider support; float routeCost = Single.MaxValue;
+                ThrowPlan checkedPlan = null; Vector3 stance; Collider support = null; float routeCost = Single.MaxValue;
                 Vector3 foot = chef.transform.position; foot.y = chef.GetComponent<CapsuleCollider>().bounds.min.y;
                 Vector3 planned = option.Plan.CurrentStance;
                 float uncertainty = option.Ground || Vector3.Distance(planned, foot) < .02f ? 0 : ArrivalCheck.PositionTolerance + .02f;
-                if (option.Planner.Prepare(chef, item, target, Winds(), option.Ground) != null ||
-                    !option.Planner.RestoreGround(option.Plan) ||
-                    !navigation.TryStance(planned, out stance, out support) || Vector3.Distance(stance, planned) > .02f ||
-                    !option.Planner.From(stance, false, out checkedPlan, uncertainty) || (routeCost = navigation.RouteCost(stance)) == Single.MaxValue)
-                    Prepare(option);
+                string invalid = option.Planner.Prepare(chef, item, target, Winds(), option.Ground) != null ? "prepare" :
+                    !option.Planner.RestoreGround(option.Plan) ? "landing" :
+                    !navigation.TryStance(planned, out stance, out support) || Vector3.Distance(stance, planned) > .02f ? "stance" :
+                    !option.Planner.From(stance, false, out checkedPlan, uncertainty) ? "flight" :
+                    (routeCost = navigation.RouteCost(stance)) == Single.MaxValue ? "route" : null;
+                if (invalid != null) { Prepare(option); option.Invalidated = invalid; option.Invalidations++; }
                 else { checkedPlan.WalkDistance = routeCost; checkedPlan.AnchorStance(support); option.Plan = checkedPlan; }
             }
             description = Json.Object("state", option.Plan != null ? "feasible" : option.Reason == ThrowPlanner.Pending ? "pending" : "unavailable",

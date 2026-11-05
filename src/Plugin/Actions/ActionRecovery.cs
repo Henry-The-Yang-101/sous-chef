@@ -10,6 +10,7 @@ namespace SousChef.Plugin.Actions
         private string reason;
         public int Count { get; private set; }
         public bool Active { get { return since >= 0; } }
+        public float Elapsed { get { return Active ? Time.realtimeSinceStartup - since : 0; } }
         public void Reset() { Clear(); Count = 0; }
         public void Clear() { since = -1; reason = null; }
         public void ContinueFrom(ActionRecovery previous)
@@ -27,7 +28,7 @@ namespace SousChef.Plugin.Actions
         }
         public object Describe()
         {
-            return Json.Object("reason", reason, "elapsedSeconds", Active ? Time.realtimeSinceStartup - since : 0,
+            return Json.Object("reason", reason, "elapsedSeconds", Elapsed,
                 "graceSeconds", null, "indefinite", true, "count", Count);
         }
         public static bool Transient(string reason)

@@ -128,6 +128,11 @@ namespace SousChef.Plugin.Actions
             return Matches(observed.m_TheOriginalHandlePickup, target) ||
                 (observed.m_interactable != null && Matches(observed.m_interactable.gameObject, target));
         }
+        public static bool Loose(GameObject item)
+        {
+            var attachment = item == null ? null : item.GetComponent<ServerPhysicalAttachment>();
+            return attachment != null && !attachment.IsAttached();
+        }
         public static bool Matches(GameObject a, GameObject b)
         {
             return a != null && b != null && (a == b || a.transform.IsChildOf(b.transform) || b.transform.IsChildOf(a.transform));

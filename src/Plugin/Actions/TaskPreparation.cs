@@ -79,6 +79,18 @@ namespace SousChef.Plugin.Actions
             }
             return best;
         }
+        // The nearest reachable board whose contents P2 may move aside.
+        private GameObject MovableBoardContents()
+        {
+            GameObject best = null; float cost = Single.MaxValue;
+            foreach (LogisticsItem entry in inventory.Items)
+            {
+                if (!OnBoard(entry) || entry.InUse || !Obtainable(entry, "move_item")) continue;
+                float approach = ApproachCost(entry.Holder);
+                if (approach < cost) { best = entry.Holder; cost = approach; }
+            }
+            return best;
+        }
         // Food already on a board is worked in place. Otherwise a unit needing
         // work may only collect food when a board can receive it: holding cargo
         // while every reachable board is occupied would keep P2 from clearing
@@ -172,6 +184,16 @@ namespace SousChef.Plugin.Actions
                 {
                     bool done = true; foreach (PreparationUnit unit in units) if (!unit.Delivered) done = false;
                     if (done) yield break;
+                    // Every reachable board holds food the remaining units cannot
+                    // use now, such as a later repetition's. Only P2 can free one.
+                    GameObject full = boardBlocked ? MovableBoardContents() : null;
+                    if (full != null)
+                    {
+                        TaskStep lift = Do("pick_up", full); lift.ReplanOnBlock = true;
+                        yield return lift;
+                        if (lift.Succeeded) foreach (TaskStep park in Park(ActionObservations.Held(chef))) yield return park;
+                        continue;
+                    }
                     // Revisit the scheduler as route discovery progresses. A
                     // currently unconfirmed ingredient route must not occupy the
                     // entire cooking window when it becomes available next frame.
@@ -193,7 +215,10 @@ namespace SousChef.Plugin.Actions
                         yield return Do("collect_contents", next.Station);
                     }
                     else yield return Do("pick_up", next.Station);
-                    foreach (TaskStep give in Give(ActionObservations.Held(chef), request.Player, true)) yield return give;
+                    GameObject meal = ActionObservations.Held(chef);
+                    foreach (TaskStep give in Give(meal, request.Player, true, true)) yield return give;
+                    // A lost pass prepares this unit again from what remains.
+                    if (!deliveredItems.Contains(meal)) { next.Processing = false; next.Item = next.Station = null; continue; }
                     next.Delivered = true; continue;
                 }
                 LogisticsItem source = PreparationSource(next.Request);
@@ -204,10 +229,10 @@ namespace SousChef.Plugin.Actions
                 {
                     TaskStep pickup = Do("pick_up", ActionObservations.PickupTarget(source.Source, source.Supply ? null : source.Item));
                     pickup.ReplanOnBlock = true; yield return pickup;
-                    if (!pickup.Succeeded) continue;
+                    if (!pickup.Succeeded) { foreach (TaskStep clear in Clear(pickup.Obstruction)) yield return clear; continue; }
                 }
                 next.Item = board == null ? ActionObservations.Held(chef) : source.Item;
-                bool rescheduled = false;
+                bool rescheduled = false; GameObject obstruction = null;
                 while (NeedsWork(next.Request, next.Item))
                 {
                     if (board == null)
@@ -223,17 +248,26 @@ namespace SousChef.Plugin.Actions
                         }
                         TaskStep placement = Do("place_at", board); placement.ReplanOnBlock = true;
                         yield return placement;
-                        if (!placement.Succeeded) { board = null; continue; }
+                        if (!placement.Succeeded)
+                        {
+                            board = null; obstruction = placement.Obstruction;
+                            if (obstruction == null) continue;
+                            rescheduled = true; break;
+                        }
                     }
                     // Before a press, blocked work leaves the food on its board;
                     // the scheduler resumes it there as an in-place source.
                     TaskStep work = Do("work_at", board, "work_complete"); work.ReplanOnBlock = true;
                     yield return work;
-                    if (!work.Succeeded) { rescheduled = true; break; }
+                    if (!work.Succeeded) { obstruction = work.Obstruction; rescheduled = true; break; }
                     yield return Do("pick_up", board);
                     next.Item = ActionObservations.Held(chef); board = null;
                 }
-                if (rescheduled) { next.Item = null; continue; }
+                if (rescheduled)
+                {
+                    foreach (TaskStep clear in Clear(obstruction)) yield return clear;
+                    next.Item = null; continue;
+                }
                 if (Passive(next.Request))
                 {
                     GameObject processor = null;
@@ -261,7 +295,9 @@ namespace SousChef.Plugin.Actions
                     // No wait child occupies P2 while native time advances.
                     continue;
                 }
-                foreach (TaskStep give in Give(next.Item, request.Player, true)) yield return give;
+                GameObject prepared = next.Item;
+                foreach (TaskStep give in Give(prepared, request.Player, true, true)) yield return give;
+                if (!deliveredItems.Contains(prepared)) { next.Item = null; continue; }
                 next.Delivered = true;
             }
         }
