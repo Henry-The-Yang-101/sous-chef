@@ -68,6 +68,15 @@ just before a pot finishes. Full equipment defers new cooking units instead of
 holding an ingredient that would prevent collecting an earlier unit. Ready
 contents prefer a serving plate/utensil, leaving the processor available.
 
+Chopping boards are scheduled the same way. Food already on a board, such as food
+the human threw there, is chopped in place and preferred to an equal-stage copy
+elsewhere. Food needing a board is collected only when a reachable board can
+receive it. While every reachable board holds other food, P2 waits empty-handed
+(`waiting_for_chopping_board`) and can still chop what occupies them. If a board
+fills after a pickup or during placement, P2 sets its cargo down on a counter and
+reschedules rather than holding it indefinitely. Between repetitions, the task
+continues with the same local sources the scheduler itself accepts.
+
 Delivery preference: a compatible counter within five walking units of the human,
 then a checked pass/drop at the human, then a directed conveyor or returning
 counter. Both chefs use the same navigator implementation in independent read-only

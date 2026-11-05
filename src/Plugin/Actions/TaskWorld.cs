@@ -144,8 +144,8 @@ namespace SousChef.Plugin.Actions
                 go.GetComponent<ServerWorkstation>() == null && go.GetComponent<ServerWashingStation>() == null &&
                 go.GetComponent<ServerRubbishBin>() == null && go.GetComponent<PickupItemSpawner>() == null;
         }
-        private bool CanDeliver(GameObject item, GameObject target)
-        { string op; return LogisticsChecks.Delivery(chef, "stage_item", item, target, out op) == null; }
+        private bool CanDeliver(GameObject item, GameObject target, bool supplyPrefab = false)
+        { string op; return LogisticsChecks.Delivery(chef, "stage_item", item, target, out op, supplyPrefab) == null; }
         private GameObject Parking(GameObject item, GameObject preferred = null, bool burners = false, HashSet<GameObject> excluded = null)
         {
             RefreshWorld(); GameObject best = null; float cost = Single.MaxValue;
@@ -179,28 +179,32 @@ namespace SousChef.Plugin.Actions
                 excluded.Add(destination); rejectedAt = Time.realtimeSinceStartup;
             }
         }
+        // A moving raft can continually invalidate a distant catalogue frontier.
+        // Let the pickup's bounded active planner try a local source on the
+        // same native support; this is not a route proof.
+        private bool Obtainable(LogisticsItem entry, string operation)
+        {
+            string collect = LogisticsChecks.Collect(chef, entry, operation);
+            return collect == null || collect == "source_unreachable" && ApproachCost(entry.Source) != Single.MaxValue && LogisticsChecks.CanCollectEmpty(chef, entry.Source);
+        }
         private LogisticsItem Source(string selector, bool utensil = false, bool processed = false)
         {
-            inventory.Refresh(chef); LogisticsItem best = null; float score = Single.MaxValue; int bestWork = Int32.MaxValue;
+            inventory.Refresh(chef); LogisticsItem best = null; float score = Single.MaxValue; int bestWork = Int32.MaxValue; bool bestPlaced = false;
             string utensilType = LogisticsInventory.CanonicalUtensil(selector); bool plate = utensilType == "plate";
             foreach (LogisticsItem entry in inventory.Items)
             {
                 if (!entry.Supply && deliveredItems.Contains(entry.Item)) continue;
                 bool match = utensil ? plate ? entry.CleanPlate : entry.Empty && entry.UtensilType == utensilType :
                     LogisticsInventory.IngredientMatches(entry, selector) || processed && PreparedIngredientMatches(entry, selector);
-                if (!match) continue;
-                string collect = LogisticsChecks.Collect(chef, entry, plate ? "get_plate" : "move_item");
-                float approach = ApproachCost(entry.Source);
-                bool provisional = collect == "source_unreachable" && approach != Single.MaxValue && LogisticsChecks.CanCollectEmpty(chef, entry.Source);
-                if (collect != null && !provisional) continue;
+                if (!match || !Obtainable(entry, plate ? "get_plate" : "move_item")) continue;
                 if (!utensil && TaskNative.Equipment(entry.Holder ?? entry.Source)) continue;
-                // A moving raft can continually invalidate a distant catalogue
-                // frontier. Let the pickup's bounded active planner try a local
-                // source on the same native support; this is not a route proof.
                 // For equivalent preparation stages, prefer certified sources.
-                float candidate = (provisional ? approach : entry.Distance) + (entry.Supply ? 10000 : 0);
+                float candidate = (entry.Distance != Single.MaxValue ? entry.Distance : ApproachCost(entry.Source)) + (entry.Supply ? 10000 : 0);
                 int work = processed ? PreparationWork(entry.Item) : 0;
-                if (work < bestWork || work == bestWork && candidate < score) { best = entry; score = candidate; bestWork = work; }
+                // Food already on a board needs no placement and frees that board.
+                bool placed = work > 0 && OnBoard(entry);
+                if (work < bestWork || work == bestWork && (placed && !bestPlaced || placed == bestPlaced && candidate < score))
+                { best = entry; score = candidate; bestWork = work; bestPlaced = placed; }
             }
             return best;
         }

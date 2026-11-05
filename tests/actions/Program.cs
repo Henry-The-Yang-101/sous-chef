@@ -177,13 +177,16 @@ internal static class Program
         var board=typeof(TaskActions).GetMethod("Board",flags);
         catalog["complete"]=false;catalog["destinations"]=new List<object>();
         inventory.BeginObservation();inventory.Refresh(w.Chef,catalog);
-        Check((GameObject)board.Invoke(w.Tasks,new object[] {item})==w.Target,"incomplete discovery may propose a compatible board on the current support for active route validation");
+        var args=new object[] {item,null,false};
+        Check((GameObject)board.Invoke(w.Tasks,args)==w.Target,"incomplete discovery may propose a compatible board on the current support for active route validation");
         w.Target.GetComponent<Placement>().Accepts=cargo=>false;
-        Check(board.Invoke(w.Tasks,new object[] {item})==null,"provisional preparation still respects native placement vetoes");
-        w.Target.GetComponent<Placement>().Accepts=cargo=>true;catalog["complete"]=true;
-        Check(board.Invoke(w.Tasks,new object[] {item})==null,"complete discovery cannot propose a board without a certified route");
+        Check(board.Invoke(w.Tasks,args)==null && !(bool)args[1],"provisional preparation still respects native placement vetoes");
+        w.Target.GetComponent<Placement>().Accepts=cargo=>true;w.Target.GetComponent<ServerAttachStation>().Item=w.Ingredient("other food");
+        Check(board.Invoke(w.Tasks,args)==null && (bool)args[1],"a reachable board holding other food is reported occupied, not unreachable");
+        w.Target.GetComponent<ServerAttachStation>().Item=null;catalog["complete"]=true;
+        Check(board.Invoke(w.Tasks,args)==null && !(bool)args[1],"complete discovery cannot propose a board without a certified route");
         catalog["complete"]=false;w.Target.transform.position=new Vector3(0,3,0);
-        Check(board.Invoke(w.Tasks,new object[] {item})==null,"a board on another elevation is not a provisional local station");
+        Check(board.Invoke(w.Tasks,args)==null,"a board on another elevation is not a provisional local station");
         inventory.EndObservation();
     }
     private static void PreparedIngredientSources()
@@ -230,6 +233,76 @@ internal static class Program
                 "missing earlier chicken cannot block available potato requested "+preparation);
             w.Tasks.Cancel("test_end");
         }
+    }
+    private static void OccupiedBoards()
+    {
+        // Raft kitchens: the human throws raw food onto P2's floor, counters
+        // and boards. P2 must never hold cargo while it alone could free a board.
+        Func<World,string,GameObject> raw=(w,label)=>{
+            var food=w.Ingredient(label+" raw");food.Add(new ServerWorkableItem());food.Add(new WorkableItem {Next=w.Ingredient(label+" chopped")});return food;
+        };
+        Func<World> kitchen=()=>{
+            var w=new World();var human=new GameObject("human");human.Add(new PlayerIDProvider {Id=0});human.transform.position=new Vector3(3,0,-1);
+            human.Add(new PlayerControls {GroundCollider=w.Chef.GroundCollider});human.Add(new CapsuleCollider());human.Add(new GroundCast());
+            human.Add(new ServerPlayerAttachmentCarrier());human.Add(new ClientPlayerAttachmentCarrier());return w;
+        };
+        Func<World,string[],bool> start=(w,foods)=>{
+            var request=new TaskRequest {Action="prepare_near_player"};
+            foreach(string food in foods)request.Items.Add(new PreparationRequest {Selector=food,Preparation="chopped",Quantity=1});
+            return w.Tasks.Start(w.Chef,1,new ControlCommand {Id="boards",Operation="task",Task=request})==null;
+        };
+        Func<World,string,bool> until=(w,operation)=>{
+            for(int i=0;i<16 && !(w.Skills.Run.Running && w.Skills.Run.Operation==operation);i++)w.Tick(.25f);
+            return w.Skills.Run.Running && w.Skills.Run.Operation==operation;
+        };
+        Action<World,GameObject,GameObject> collect=(w,counter,food)=>{
+            w.ArriveAt(counter);counter.GetComponent<ServerAttachStation>().Item=null;w.Hold(food);w.Verify();
+        };
+
+        var a=kitchen();var shelf=a.Delivery();shelf.Add(new Pickup());
+        shelf.GetComponent<ServerAttachStation>().Item=raw(a,"potato");a.Target.GetComponent<ServerAttachStation>().Item=raw(a,"chicken");
+        Check(start(a,new[] {"potato","chicken"}),"occupied-board preparation accepted");
+        Check(until(a,"work_at") && a.Navigation.Resolve(a.Skills.Run.Target)==a.Target && a.Carrier.Item==null && !a.Inputs.Contains(1),
+            "food the human left on the only board is chopped in place before other food is collected");
+        a.Tasks.Cancel("test_end");
+
+        var b=kitchen();shelf=b.Delivery();shelf.Add(new Pickup());var potato=raw(b,"potato");
+        shelf.GetComponent<ServerAttachStation>().Item=potato;b.Target.GetComponent<ServerAttachStation>().Item=raw(b,"onion");
+        Check(start(b,new[] {"potato"}),"blocked-board preparation accepted");
+        for(int i=0;i<12;i++)b.Tick(.25f);
+        Check(!b.Skills.Run.Running && b.Carrier.Item==null && b.Tasks.Run.Phase=="waiting_for_chopping_board",
+            "food needing a board is not collected while every reachable board holds unrelated food");
+        b.Target.GetComponent<ServerAttachStation>().Item=null;
+        Check(until(b,"pick_up") && b.Navigation.Resolve(b.Skills.Run.Target)==shelf,"collection resumes once a board is free");
+        b.Tasks.Cancel("test_end");
+
+        foreach(bool duringPlacement in new[] {false,true})
+        {
+            var c=kitchen();shelf=c.Delivery();shelf.Add(new Pickup());potato=raw(c,"potato");shelf.GetComponent<ServerAttachStation>().Item=potato;
+            Check(start(c,new[] {"potato"}) && until(c,"pick_up"),"potato collection starts while the board is free");
+            if(!duringPlacement)c.Target.GetComponent<ServerAttachStation>().Item=raw(c,"onion");
+            collect(c,shelf,potato);
+            if(duringPlacement)
+            {
+                Check(until(c,"place_at") && c.Navigation.Resolve(c.Skills.Run.Target)==c.Target,"collected food heads for the free board");
+                c.Target.GetComponent<ServerAttachStation>().Item=raw(c,"onion");c.ArriveAt(c.Target);
+            }
+            for(int i=0;i<16 && !(c.Skills.Run.Running && c.Skills.Run.Operation=="place_at" && c.Navigation.Resolve(c.Skills.Run.Target)==shelf);i++)c.Tick(.25f);
+            Check(c.Skills.Run.Running && c.Skills.Run.Operation=="place_at" && c.Navigation.Resolve(c.Skills.Run.Target)==shelf && !c.Inputs.Contains(2),
+                "cargo is set down when a throw fills the board "+(duringPlacement ? "during placement" : "after collection")+", never held indefinitely");
+            c.Tasks.Cancel("test_end");
+        }
+
+        var d=kitchen();shelf=d.Delivery();shelf.Add(new Pickup());
+        var loose=raw(d,"potato");var placed=raw(d,"potato");shelf.GetComponent<ServerAttachStation>().Item=loose;d.Target.GetComponent<ServerAttachStation>().Item=placed;
+        var flags=System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic;
+        var catalog=(Json.Record)d.Navigation.Available(d.Chef);d.Tasks.Decorate(catalog,d.Chef);
+        foreach(Json.Record row in (List<object>)catalog["destinations"]) row["routeDistance"]=(int)row["objectInstanceId"]==shelf.GetInstanceID() ? .5f : 4f;
+        var inventory=(LogisticsInventory)typeof(TaskActions).GetField("inventory",flags).GetValue(d.Tasks);
+        inventory.BeginObservation();inventory.Refresh(d.Chef,catalog);
+        var chosen=(LogisticsItem)typeof(TaskActions).GetMethod("PreparationSource",flags).Invoke(d.Tasks,new object[] {new PreparationRequest {Selector="potato",Preparation="chopped"}});
+        inventory.EndObservation();
+        Check(chosen!=null && chosen.Item==placed,"equal-work food already on a board is preferred to a closer copy that would need that board");
     }
     private static void ReconciledHandoffs()
     {
@@ -1313,6 +1386,6 @@ internal static class Program
         Check(found==null && plan.WalkDistance>1,
             "walking can seek a safe release for a narrow floor landing that will be revalidated at the actual stopped pose");
     }
-    private static void Main() { CounterForecasts();PersistentTasks();HumanSinkEligibility();NativeUtensilDefinitions();PreparationEquipmentDiscovery();PreparedIngredientSources();AvailablePreparationWork();ReconciledHandoffs();MixerReadiness();ReadyFoodTasks();PauseTimers();MovingPickups();Transactions();IngredientsAndDisposal();WorkAndWait();ImmediateNativeWork();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();GroundThrows();RaftLandingFallback();CurrentPoseLandingClearance();SupportedLandingArea();WalkingLandingClearance();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
+    private static void Main() { CounterForecasts();PersistentTasks();HumanSinkEligibility();NativeUtensilDefinitions();PreparationEquipmentDiscovery();PreparedIngredientSources();AvailablePreparationWork();OccupiedBoards();ReconciledHandoffs();MixerReadiness();ReadyFoodTasks();PauseTimers();MovingPickups();Transactions();IngredientsAndDisposal();WorkAndWait();ImmediateNativeWork();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();GroundThrows();RaftLandingFallback();CurrentPoseLandingClearance();SupportedLandingArea();WalkingLandingClearance();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
     private static ClientInteractable GetCurrentlyInteractingForTest(this PlayerControls chef) { return chef.GetComponent<ClientPlayerControlsImpl_Default>().Current; }
 }

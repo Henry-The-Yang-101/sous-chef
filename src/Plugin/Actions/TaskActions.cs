@@ -129,7 +129,12 @@ namespace SousChef.Plugin.Actions
                 }
                 Run.Advance(step.Phase); waitingReason = null;
                 if (step.Progress != null) return;
-                if (step.Ready != null && !step.Ready()) { Wait(step.Phase); return; }
+                if (step.Ready != null && !step.Ready())
+                {
+                    // Like a failed child precondition, no button has been pressed.
+                    string phase = step.Phase; if (step.ReplanOnBlock) step = null;
+                    Wait(phase); return;
+                }
                 if (step.Command == null) { completedSteps++; step = null; return; }
                 ControlCommand command = step.Command();
                 if (command == null) { Wait(step.Phase); return; }
