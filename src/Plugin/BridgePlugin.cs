@@ -9,10 +9,14 @@ using UnityEngine;
 
 namespace SousChef.Plugin
 {
-    [BepInPlugin("dev.souschef.observer", "Sous Chef Observer", "0.8.7")]
+    [BepInPlugin("dev.souschef.observer", "Sous Chef Observer", BridgePlugin.Version)]
     public sealed class BridgePlugin : BaseUnityPlugin
     {
-        private StreamServer server, gameplayServer;
+        internal const string Version = "0.8.8";
+        private StreamServer server, gameplayServer, harnessServer;
+        private SceneCapture harnessCapture;
+        private long harnessSequence;
+        private float nextHarness;
         private long gameplaySequence;
         private float nextGameplay, gameplayInterval;
         private SceneCapture capture;
@@ -58,18 +62,26 @@ namespace SousChef.Plugin
                 int controlPort = Config.Bind("Control", "Port", 24703, "Loopback port for direct control of existing local Player 2.").Value;
                 if (controlPort < 1024 || controlPort > 65535 || controlPort == port || gameplayPort < 1024 || gameplayPort > 65535 || gameplayPort == port || gameplayPort == controlPort) throw new ArgumentException("Invalid control port");
                 control = new Player2Control(controlPort, session);
+                harnessCapture = new SceneCapture(session, ":view");
+                harnessServer = new StreamServer(0, Json.Object("type", "hello", "protocolVersion", 1,
+                    "sessionId", session, "stream", "harness", "captureHz", hz), LogWorkerError);
+                harnessServer.Start();
                 server = new StreamServer(port, Json.Object("type", "hello", "protocolVersion", 1,
-                    "bridgeVersion", "0.8.7", "sessionId", session, "unityVersion", Application.unityVersion,
-                    "gameAssemblySha256", hash, "captureHz", hz, "gameplayPort", gameplayPort, "gameplayHz", gameplayHz, "readOnly", false, "controlPort", controlPort, "controlPlayer", 2), LogWorkerError);
+                    "bridgeVersion", Version, "sessionId", session, "unityVersion", Application.unityVersion,
+                    "gameAssemblySha256", hash, "captureHz", hz, "harnessPort", harnessServer.Port, "gameplayPort", gameplayPort, "gameplayHz", gameplayHz, "readOnly", false, "controlPort", controlPort, "controlPlayer", 2), LogWorkerError);
                 server.Start();
                 gameplayServer = new StreamServer(gameplayPort, Json.Object("type", "hello", "protocolVersion", 1,
-                    "bridgeVersion", "0.8.7", "sessionId", session, "stream", "gameplay", "captureHz", gameplayHz,
+                    "bridgeVersion", Version, "sessionId", session, "stream", "gameplay", "captureHz", gameplayHz,
                     "fullSnapshotPort", port), LogWorkerError);
                 gameplayServer.Start();
                 Logger.LogInfo("Observer listening on 127.0.0.1:" + port + "; active rounds only; assembly=" + hash);
                 StartCoroutine(CaptureLoop());
             }
-            catch (Exception e) { Logger.LogError("Observer startup failed: " + e); if (server != null) server.Dispose(); if (gameplayServer != null) gameplayServer.Dispose(); if (control != null) control.Dispose(); control = null; server = null; if (worker != null) worker.Dispose(); }
+            catch (Exception e)
+            {
+                Logger.LogError("Observer startup failed: " + e);
+                CloseBridge();
+            }
         }
 
         private void FixedUpdate() { fixedTicks++; }
@@ -95,7 +107,7 @@ namespace SousChef.Plugin
                 yield return boundary;
                 if (server == null) continue;
                 float now = Time.realtimeSinceStartup;
-                if (now < nextCapture && now < nextGameplay) continue;
+                if (now < nextCapture && now < nextGameplay && now < nextHarness) continue;
                 try
                 {
                     KitchenGate gate = KitchenGate.Inspect();
@@ -116,13 +128,18 @@ namespace SousChef.Plugin
                                 fixedTicks, gameplayServer.CoalescedCaptures));
                             nextGameplay = SampleSchedule.Next(nextGameplay, now, gameplayInterval);
                         }
+                        if (now >= nextHarness)
+                        {
+                            if (harnessServer.HasClients) PublishHarness(gate);
+                            nextHarness = SampleSchedule.Next(nextHarness, now, interval);
+                        }
                         if (!fullWanted && !gameplayWanted) nextCapture = now + interval;
                         if (!gameplayWanted) nextGameplay = now + gameplayInterval;
                     }
                     else
                     {
-                        if (wasInRound) capture.EndRound();
-                        nextCapture = now + interval; nextGameplay = now + gameplayInterval;
+                        if (wasInRound) { capture.EndRound(); harnessCapture.EndRound(); }
+                        nextCapture = nextHarness = now + interval; nextGameplay = now + gameplayInterval;
                         if (wasInRound || Time.realtimeSinceStartup >= nextStatus)
                         {
                             nextStatus = Time.realtimeSinceStartup + 1f;
@@ -136,28 +153,52 @@ namespace SousChef.Plugin
                     Logger.LogWarning("Capture failed: " + e);
                     // Invalidate downstream state instead of silently leaving stale
                     // kitchen data as the most recently published frame.
-                    capture.EndRound();
-                    nextCapture = now + interval; nextGameplay = now + gameplayInterval;
+                    capture.EndRound(); harnessCapture.EndRound();
+                    nextCapture = nextHarness = now + interval; nextGameplay = now + gameplayInterval;
                     PublishStatus("capture_error", "unknown");
                 }
             }
         }
 
-        private void PublishStatus(string reason, string role)
+        private void PublishHarness(KitchenGate gate)
         {
-            PublishStatusTo(server, ++sequence, reason, role);
-            PublishStatusTo(gameplayServer, ++gameplaySequence, reason, role);
+            try
+            {
+                harnessServer.Publish(harnessCapture.CaptureHarness(gate, ++harnessSequence));
+            }
+            catch (Exception e)
+            {
+                Logger.LogWarning("Harness capture failed: " + e);
+                harnessCapture.EndRound();
+                PublishStatusTo(harnessServer, ++harnessSequence, "capture_error", gate.Role, harnessCapture.Epoch);
+            }
         }
 
-        private void PublishStatusTo(StreamServer target, long seq, string reason, string role)
+        private void PublishStatus(string reason, string role)
+        {
+            PublishStatusTo(server, ++sequence, reason, role, capture.Epoch);
+            PublishStatusTo(gameplayServer, ++gameplaySequence, reason, role, capture.Epoch);
+            PublishStatusTo(harnessServer, ++harnessSequence, reason, role, harnessCapture.Epoch);
+        }
+
+        private void PublishStatusTo(StreamServer target, long seq, string reason, string role, int epoch)
         {
             if (target == null) return;
-            target.Publish(new CapturePacket { Sequence = seq, Epoch = capture.Epoch,
+            target.Publish(new CapturePacket { Sequence = seq, Epoch = epoch,
                 Frame = Json.Object("type", "status", "protocolVersion", 1, "sessionId", session,
-                    "sequence", seq, "levelEpoch", capture.Epoch, "inRound", false, "reason", reason,
+                    "sequence", seq, "levelEpoch", epoch, "inRound", false, "reason", reason,
                     "role", role, "realtime", Time.realtimeSinceStartup) });
         }
 
-        private void OnDestroy() { StopAllCoroutines(); if (worker != null) worker.Dispose(); if (gameplayServer != null) { gameplayServer.Dispose(); gameplayServer = null; } if (control != null) { control.Dispose(); control = null; } if (server != null) { server.Dispose(); server = null; } }
+        private void OnDestroy() { StopAllCoroutines(); CloseBridge(); }
+
+        private void CloseBridge()
+        {
+            if (control != null) { control.Dispose(); control = null; }
+            if (harnessServer != null) { harnessServer.Dispose(); harnessServer = null; }
+            if (gameplayServer != null) { gameplayServer.Dispose(); gameplayServer = null; }
+            if (server != null) { server.Dispose(); server = null; }
+            if (worker != null) { worker.Dispose(); worker = null; }
+        }
     }
 }

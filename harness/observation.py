@@ -1,4 +1,4 @@
-"""Small browser views derived off-process from the existing full stream."""
+"""Small browser views derived off-process from kitchen observations."""
 from collections import deque
 import math
 import threading
@@ -152,7 +152,7 @@ class ObservationViews:
 
     def publish(self, sample, assets=None):
         now = self.clock()
-        valid = sample.get('type') == 'snapshot' and sample.get('inRound')
+        valid = sample.get('type') in ('snapshot', 'harness') and sample.get('inRound')
         identity = (sample.get('sessionId'), sample.get('levelEpoch')) if valid else None
         kitchen = self.kitchen.build(sample, assets or {}) if valid else None
         clock = sample.get('clock', {})

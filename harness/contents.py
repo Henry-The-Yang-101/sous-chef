@@ -162,11 +162,11 @@ class ContentsIndex:
 
 
 class ContentsObserver:
-    """One read-only full stream, shared by all browser viewers."""
+    """One read-only kitchen view shared by all browser viewers."""
     STALE_SECONDS = 1.5
 
     def __init__(self, port=24702, factory=None, clock=time.monotonic):
-        self.factory = factory or (lambda: BridgeClient(port, timeout=1))
+        self.factory = factory or (lambda: BridgeClient(port, timeout=3))
         self.clock = clock
         self.lock = threading.Lock()
         self.halt = threading.Event()
@@ -176,7 +176,7 @@ class ContentsObserver:
         self.views = ObservationViews(clock)
 
     def publish(self, sample, assets=None):
-        index = ContentsIndex(sample) if sample.get('type') == 'snapshot' and sample.get('inRound') else None
+        index = ContentsIndex(sample) if sample.get('type') in ('snapshot', 'harness') and sample.get('inRound') else None
         self.views.publish(sample, assets)
         with self.lock:
             self.index = index
@@ -200,16 +200,35 @@ class ContentsObserver:
         self.thread = threading.Thread(target=self._run, name='contents-observer', daemon=True)
         self.thread.start()
 
+    def _consume(self, client, messages):
+        for sample in messages:
+            if self.halt.is_set():
+                return
+            if sample.get('type') in ('snapshot', 'harness', 'status'):
+                self.publish(sample, client.assets)
+
+    def _observe(self):
+        with self.factory() as client:
+            messages = client.messages()
+            hello = next(messages)
+            port = hello.get('harnessPort')
+            if port is None:
+                self._consume(client, messages)
+                return
+            session = hello['sessionId']
+        # Release the full stream before subscribing to the smaller view.
+        with BridgeClient(port, timeout=3) as client:
+            messages = client.messages()
+            greeting = next(messages)
+            if greeting.get('stream') != 'harness' or greeting.get('sessionId') != session:
+                raise ValueError('Kitchen view belongs to a different bridge')
+            self._consume(client, messages)
+
     def _run(self):
         while not self.halt.is_set():
             try:
-                with self.factory() as client:
-                    for sample in client.messages():
-                        if self.halt.is_set():
-                            break
-                        if sample.get('type') in {'snapshot', 'status', 'hello'}:
-                            self.publish(sample, client.assets)
-            except (OSError, EOFError, ValueError, KeyError, TypeError):
+                self._observe()
+            except (OSError, EOFError, ValueError, KeyError, TypeError, StopIteration):
                 self.publish({})
             if not self.halt.is_set():
                 self.halt.wait(.5)

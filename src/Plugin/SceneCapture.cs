@@ -9,7 +9,7 @@ using Object = UnityEngine.Object;
 
 namespace SousChef.Plugin
 {
-    internal sealed class SceneCapture
+    internal sealed partial class SceneCapture
     {
         private readonly IdentityBook identities;
         public readonly GameplayCapture Gameplay;
@@ -23,9 +23,9 @@ namespace SousChef.Plugin
         private string flowIdentity;
         public int Epoch { get { return identities.Epoch; } }
 
-        public SceneCapture(string sessionId)
+        public SceneCapture(string sessionId, string identitySuffix = "")
         {
-            session = sessionId; identities = new IdentityBook(sessionId);
+            session = sessionId; identities = new IdentityBook(sessionId + identitySuffix);
             Gameplay = new GameplayCapture(sessionId, Id);
             reader = new FieldReader(Reference); geometry = new GeometryCapture(Reference);
         }
@@ -43,30 +43,13 @@ namespace SousChef.Plugin
         public CapturePacket Capture(KitchenGate gate, long sequence, long fixedTicks, long coalesced)
         {
             var watch = System.Diagnostics.Stopwatch.StartNew();
-            string key = gate.Flow.gameObject.scene.GetHashCode() + ":" + gate.Flow.GetInstanceID();
-            if (flowIdentity != key)
-            {
-                identities.NewEpoch(); geometry.Reset(); Gameplay.Reset(); previousParents.Clear(); flowIdentity = key;
-            }
+            var scenes = new List<object>();
+            BeginObservation(gate, scenes);
             Gameplay.BeginReconciliation();
-            seen.Clear(); included.Clear(); referenced.Clear(); reader.BeginFrame(); geometry.BeginFrame();
-            var objects = new List<object>(); var scenes = new List<object>();
+            var objects = new List<object>();
             var inventory = new Dictionary<string, int>(); var unsupported = new Dictionary<string, int>();
             var errors = new List<object>(); var parents = new Dictionary<string, string>();
             int missingScripts = 0;
-
-            for (int i = 0; i < SceneManager.sceneCount; i++)
-            {
-                Scene scene = SceneManager.GetSceneAt(i);
-                if (!scene.isLoaded) continue;
-                scenes.Add(Json.Object("handle", scene.GetHashCode(), "name", scene.name, "path", scene.path));
-                foreach (GameObject root in scene.GetRootGameObjects()) EnqueueTree(root.transform);
-            }
-            // Add referenced persistent managers/attachments, without sweeping
-            // account/session/save managers in DontDestroyOnLoad.
-            referenced.Enqueue(gate.Flow.gameObject);
-            foreach (var pair in EntitySerialisationRegistry.m_EntitiesByGameObject)
-                if (pair.Key != null && pair.Key.scene.IsValid()) referenced.Enqueue(pair.Key);
 
             while (referenced.Count > 0)
             {
@@ -169,6 +152,28 @@ namespace SousChef.Plugin
                 "diagnostics", Json.Object("captureMilliseconds", watch.Elapsed.TotalMilliseconds, "coalescedCaptures", coalesced));
             return new CapturePacket { Sequence = sequence, Epoch = Epoch, Frame = snapshot,
                 Assets = new Dictionary<string, object>(geometry.Assets) };
+        }
+
+        private void BeginObservation(KitchenGate gate, List<object> scenes)
+        {
+            string key = gate.Flow.gameObject.scene.GetHashCode() + ":" + gate.Flow.GetInstanceID();
+            if (flowIdentity != key)
+            {
+                identities.NewEpoch(); geometry.Reset(); Gameplay.Reset(); previousParents.Clear(); flowIdentity = key;
+            }
+            seen.Clear(); included.Clear(); referenced.Clear(); reader.BeginFrame(); geometry.BeginFrame();
+            for (int i = 0; i < SceneManager.sceneCount; i++)
+            {
+                Scene scene = SceneManager.GetSceneAt(i);
+                if (!scene.isLoaded) continue;
+                if (scenes != null) scenes.Add(Json.Object("handle", scene.GetHashCode(), "name", scene.name, "path", scene.path));
+                foreach (GameObject root in scene.GetRootGameObjects()) EnqueueTree(root.transform);
+            }
+            // Add referenced persistent managers/attachments, without sweeping
+            // account/session/save managers in DontDestroyOnLoad.
+            referenced.Enqueue(gate.Flow.gameObject);
+            foreach (var pair in EntitySerialisationRegistry.m_EntitiesByGameObject)
+                if (pair.Key != null && pair.Key.scene.IsValid()) referenced.Enqueue(pair.Key);
         }
 
         private void EnqueueTree(Transform transform)

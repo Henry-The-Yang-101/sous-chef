@@ -181,8 +181,10 @@ loopback-only.
 A single persistent connection polls the plugin up to **5 Hz**, shared across all
 browser tabs. The page reads that cache every 250 ms; more viewers do not increase
 game-side planning frequency. This is a target rate, bounded by game response time.
-One additional read-only connection consumes the existing full observation stream
-on port **24702** (`--state-port` to override), shared by all viewers. Contents
+The harness discovers its read-only observation feed on port **24702**
+(`--state-port` to override). On bridge 0.8.8 it releases the discovery socket
+and subscribes to the compact harness stream. Older bridges supply full
+snapshots on the discovery socket. All viewers share one subscription. Contents
 follow explicit attachment, workstation, cooking, stack and ingredient-container
 fields from a fresh sample of the same bridge session, joined by exact Unity
 object instance and name. They are not inferred from proximity or model children.

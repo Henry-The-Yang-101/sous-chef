@@ -4,7 +4,7 @@ A local observation and Player 2 control bridge for couch co-op in the native ma
 Overcooked! 2. The target is two separate local players, each controlling their
 own chef simultaneously. Online multiplayer is outside the supported scope.
 
-Bridge **0.8.7** [preserves accepted jobs across focus loss and harness disconnects](docs/control-lifecycle.md). Unfocusing suspends P2 until the game accepts input again; Stop cancels the job. It includes the [held-item task recovery](docs/held-item-regressions.md), [raft handoff and board scheduling fixes](docs/raft-handoff-regressions.md), and earlier [preparation fixes](docs/preparation-regressions.md).
+Bridge **0.8.8** adds a compact observation stream for the harness map, FPS and station contents. It [preserves accepted jobs across focus loss and harness disconnects](docs/control-lifecycle.md). Unfocusing suspends P2 until the game accepts input again; Stop cancels the job. It includes the [held-item task recovery](docs/held-item-regressions.md), [raft handoff and board scheduling fixes](docs/raft-handoff-regressions.md), and earlier [preparation fixes](docs/preparation-regressions.md).
 
 Bridge 0.5 adds [first-layer interaction actions](docs/actions.md): pickup,
 placement, ingredient addition, work, activation, disposal, typed waits, and

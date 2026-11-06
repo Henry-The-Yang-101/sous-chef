@@ -1,5 +1,7 @@
+from contextlib import contextmanager
 import copy
 import unittest
+from unittest.mock import Mock, patch
 
 from harness.contents import ContentsIndex, ContentsObserver
 from harness.server import HarnessBridge
@@ -131,6 +133,43 @@ class ContentsTests(unittest.TestCase):
         self.assertEqual(current()['status'], 'unknown')
         observer.publish({'type': 'status', 'inRound': False})
         self.assertEqual(current()['status'], 'unknown')
+
+    def test_compact_stream_releases_discovery_socket_and_checks_session(self):
+        hello = dict(type='hello', sessionId='test-session', harnessPort=12345)
+        frame = dict(sample(self.counter, self.pot), type='harness')
+        for session in ('test-session', 'restarted'):
+            with self.subTest(session=session):
+                closed = []
+                @contextmanager
+                def discovery():
+                    yield Mock(messages=lambda: iter([hello]))
+                    closed.append(True)
+
+                @contextmanager
+                def compact(port, timeout):
+                    self.assertEqual((closed, port), ([True], hello['harnessPort']))
+                    yield Mock(assets={}, messages=lambda: iter([
+                        dict(type='hello', stream='harness', sessionId=session), frame]))
+
+                observer = ContentsObserver(factory=discovery)
+                with patch('harness.contents.BridgeClient', compact):
+                    if session == hello['sessionId']:
+                        observer._observe()
+                        self.assertEqual(observer.index.describe(destination())['summary'], 'pot (Rice, Tomato)')
+                    else:
+                        with self.assertRaises(ValueError):
+                            observer._observe()
+                        self.assertIsNone(observer.index)
+
+    def test_legacy_bridge_uses_full_stream_after_hello(self):
+        @contextmanager
+        def discovery():
+            yield Mock(assets={}, messages=lambda: iter([
+                dict(type='hello', sessionId='test-session'), sample(self.counter, self.pot)]))
+
+        observer = ContentsObserver(factory=discovery)
+        observer._observe()
+        self.assertEqual(observer.index.describe(destination())['summary'], 'pot (Rice, Tomato)')
 
     def test_bridge_enrichment_preserves_exact_navigation_target(self):
         native = FakeBridge()

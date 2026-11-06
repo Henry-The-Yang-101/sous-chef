@@ -182,3 +182,19 @@ for indexes, and e.g. `client.current(max_age=0.2)` for a tighter local receive-
 limit. Receive age alone is not end-to-end capture latency: also monitor capture
 clock advancement, gaps and sample intervals. No cross-stream atomic merge is
 performed implicitly.
+
+## Harness observation stream
+
+Bridge 0.8.8 advertises an ephemeral loopback `harnessPort` in the full stream's
+`hello`. Close the discovery connection, connect to that port and verify its
+`hello.stream == "harness"` and matching `sessionId`. Repeat discovery after
+disconnect. Bridges without this field serve the harness through full snapshots.
+
+Each `harness` frame replaces the previous kitchen view. It carries the round
+role, render frame and realtime, active objects with holder relationships,
+player positions, solid colliders with map transforms, and physics layer names.
+Mesh and terrain assets precede the referencing frame. The stream has its own
+sequence, epoch and object IDs. Join to control targets by Unity instance ID
+and name within the same session. Status, gaps and backpressure follow the
+full stream conventions. The capture runs at the configured snapshot cadence
+only while this endpoint has subscribers.
