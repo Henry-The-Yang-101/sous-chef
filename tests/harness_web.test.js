@@ -8,10 +8,11 @@ const path = require('node:path');
 const source = fs.readFileSync(path.join(__dirname, '../harness/web/app.js'), 'utf8');
 const helpers = source.slice(source.indexOf('const actionNames ='), source.indexOf('function nameOf('));
 const labels = source.slice(source.indexOf('const taskLabels ='), source.indexOf('function addTaskItem('));
-const tasks = source.slice(source.indexOf('function renderTasks('), source.indexOf("el('task-kind').addEventListener"));
+const tasks = source.slice(source.indexOf('function selectedResources('), source.indexOf("el('task-kind').addEventListener"));
 
 class Select {
   constructor(values = []) { this.dataset = {}; this.disabled = false; this.replaceChildren(...values.map(value => ({value, textContent: value}))); }
+  get selectedOptions() { return this.multiple ? this.options.filter(o => o.selected) : this.selected ? [this.selected] : []; }
   get value() { return this.selected?.value || ''; }
   set value(value) { this.selected = this.options.find(option => option.value === value); }
   replaceChildren(...options) { this.options = options; this.selected = options[0]; }
@@ -24,8 +25,10 @@ function fixture() {
   };
   const row = {children: [new Select(), new Select(['raw', 'empty']), {checkValidity: () => true}]};
   el('task-items').children = [row];
+  for (const id of ['assembly-bases', 'assembly-components', 'assembly-equipment']) el(id).multiple = true;
   el('task-form').querySelectorAll = () => ['task-kind', 'task-player', 'task-run', 'task-add-item'].map(el);
   el('task-preparation').querySelectorAll = () => row.children;
+  el('task-assembly').querySelectorAll = () => [];
   el('task-player').replaceChildren({value: '1'}, {value: '3'});
   el('throw-kind').replaceChildren({value: 'throw_to_player'}, {value: 'throw_to'});
   const context = vm.createContext({
@@ -44,10 +47,38 @@ const visible = {displayOptions: {
   deliveryDestinations: [{id: 'counter', label: 'Counter'}, {id: 'board', label: 'Board'}],
 }};
 
+test('assembly keeps allocation explicit, preserves choices and rejects overlaps', () => {
+  const {context: c, el} = fixture();
+  const catalog = {taskOptions: [{name: 'assemble_dish'}], assemblyOrders: [{id: 'flow:One:7', recipe: 'Sushi_Fish'}]};
+  const kitchen = {targets: [{id: 'burner', label: 'Burner', processingEquipment: true}], displayOptions: {items: [
+    {id: 'plate', label: 'Plate', plate: true}, {id: 'fish', label: 'Fish'},
+    {id: 'pot', label: 'Pot', utensilType: 'pot'}, {id: 'supply', label: 'Fish dispenser', supply: true},
+  ]}};
+  c.renderTasks(catalog, kitchen, false, true); el('task-kind').value = 'assemble_dish';
+  c.renderTasks(catalog, kitchen, false, true);
+  assert.equal(el('task-repeat').disabled, true);
+  assert.equal(el('task-run').disabled, true);
+  assert.equal(el('assembly-bases').selectedOptions.length, 0);
+  assert.deepEqual(el('assembly-equipment').options.map(o => o.value), ['pot', 'burner']);
+  assert.ok(!el('assembly-components').options.some(o => o.value === 'supply'));
+  el('assembly-order').value = 'flow:One:7';
+  el('assembly-bases').options[0].selected = true;
+  el('assembly-components').options.find(o => o.value === 'fish').selected = true;
+  c.renderTasks(catalog, kitchen, false, true);
+  assert.equal(el('task-run').disabled, false);
+  assert.deepEqual(Array.from(c.selectedResources('assembly-components')), ['fish']);
+  el('assembly-components').options.find(o => o.value === 'plate').selected = true;
+  c.renderTasks(catalog, kitchen, false, true);
+  assert.equal(el('task-run').disabled, true);
+  el('assembly-components').options.find(o => o.value === 'plate').selected = false;
+  c.renderTasks({...catalog, assemblyOrders: []}, kitchen, false, true);
+  assert.equal(el('task-run').disabled, true);
+});
+
 test('all tasks and jobs remain selectable while unavailable, pending or busy', () => {
   const {context: c, el} = fixture();
   c.renderTasks({}, visible, true, true); c.renderJobs({}, visible, true, true);
-  assert.equal(el('task-kind').options.length, 9); assert.equal(el('job-kind').options.length, 8);
+  assert.equal(el('task-kind').options.length, 10); assert.equal(el('job-kind').options.length, 8);
   assert.equal(el('task-kind').disabled, false); assert.equal(el('job-kind').disabled, false);
   assert.equal(el('task-run').disabled, true); assert.equal(el('job-run').disabled, true);
   el('task-kind').value = 'wash_dishes';

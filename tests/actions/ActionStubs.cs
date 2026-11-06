@@ -31,7 +31,7 @@ public class CompositeAssembledNode : AssembledDefinitionNode
         return this;
     }
 }
-public class IngredientAssembledNode : AssembledDefinitionNode { public IngredientAssembledNode(string name) : base(name) {} }
+public class IngredientAssembledNode : AssembledDefinitionNode { public OrderDefinitionNode m_ingriedientOrderNode; public IngredientAssembledNode(string name) : base(name) {m_ingriedientOrderNode=new OrderDefinitionNode {name=name,m_uID=name.GetHashCode()};} }
 public class CookingStepData : UnityEngine.Object {public int m_uID;}
 public class CookedCompositeOrderNode {public enum CookingProgress {Raw,Cooked,Burnt}}
 public class MixedCompositeOrderNode {public enum MixingProgress {Unmixed,Mixed,OverMixed}}
@@ -231,8 +231,8 @@ public class ServerWaterGunSpray : ServerFireExtinguishSpray { }
 public class ServerWashable : MonoBehaviour { }
 
 public class MixingStation : MonoBehaviour { }
-public class ServerMixingStation : MonoBehaviour { }
-public class ServerCookingStation : MonoBehaviour { }
+public class ServerMixingStation : MonoBehaviour { public bool m_bMixerOn=true; }
+public class ServerCookingStation : MonoBehaviour { public bool m_isTurnedOn=true; }
 public class ServerCookingRegion : MonoBehaviour { }
 
 public class CookingHandler : MonoBehaviour { public UnityEngine.Object m_cookingType; }

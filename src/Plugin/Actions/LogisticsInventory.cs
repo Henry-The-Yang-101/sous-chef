@@ -17,7 +17,7 @@ namespace SousChef.Plugin.Actions
         {
             return Json.Object("id", ItemId, "label", Item.name, "sourceId", SourceId, "sourceInstanceId", Source.GetInstanceID(),
                 "objectInstanceId", Item.GetInstanceID(), "ingredientId", IngredientId, "ingredientName", IngredientName,
-                "utensilType", UtensilType, "cleanPlate", CleanPlate, "empty", Empty, "inUse", InUse,
+                "assemblyBase", Item.GetComponent<PreparationContainer>() != null, "utensilType", UtensilType, "plate", Item.GetComponent<ServerPlate>() != null || Item.GetComponent<CleanPlateStack>() != null, "cleanPlate", CleanPlate, "empty", Empty, "inUse", InUse,
                 "supply", Supply, "routeDistance", Distance == Single.MaxValue ? null : (object)Distance);
         }
     }

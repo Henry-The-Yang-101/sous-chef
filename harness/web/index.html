@@ -78,6 +78,13 @@
           <div id="task-items"></div>
           <button id="task-add-item" type="button">Add ingredient or utensil</button>
         </div>
+        <div id="task-assembly" hidden>
+          <label>Order<select id="assembly-order"></select></label>
+          <p>Assign the resources for this dish. Choose multiple suitable plates to let the chef pick one. Hold Command or Control to select several items.</p>
+          <label>Suitable plates and assembly bases<select id="assembly-bases" multiple size="4"></select></label>
+          <label>Assigned components<select id="assembly-components" multiple size="5"></select></label>
+          <label>Cookware and processing stations<select id="assembly-equipment" multiple size="5"></select></label>
+        </div>
         <button id="task-run" type="submit" disabled>Start task</button>
       </form>
       <p id="task-status" role="status" aria-live="polite"></p>

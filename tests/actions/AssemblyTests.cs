@@ -18,7 +18,7 @@ internal static partial class Program
     private static GameObject AssemblyFood(World w, GameObject counter, string name)
     {
         var food=w.Ingredient(name);food.GetComponent<IngredientPropertiesComponent>().Node=Leaf(name);
-        food.Add(new PhysicalAttachment());food.Add(new Pickup());counter.GetComponent<ServerAttachStation>().Item=food;return food;
+        food.Add(new PhysicalAttachment());food.Add(new Pickup());counter.Add(new Pickup());counter.GetComponent<ServerAttachStation>().Item=food;return food;
     }
     private static TaskRequest AssemblyJob(World w, GameObject[] bases, GameObject[] foods, params AssembledDefinitionNode[] recipe)
     {
@@ -34,12 +34,12 @@ internal static partial class Program
     }
     private static void StartAssembly(World w, TaskRequest request)
     {Check(w.Tasks.Start(w.Chef,1,new ControlCommand {Id="assemble",Operation="task",Task=request})==null,"assigned assembly accepted");}
-    private static int DriveAssembly(World w, int limit=180, Action<GameObject,string> beforeArrival=null, bool consume=true)
+    private static int DriveAssembly(World w, int limit=180, Action<GameObject,string> beforeArrival=null, bool consume=true, Action onTick=null)
     {
         int additions=0;
         for(int n=0;n<limit && w.Tasks.Run.Running;n++)
         {
-            w.Tick(.11f);if(!w.Skills.Run.Running)continue;
+            onTick?.Invoke();w.Tick(.11f);if(!w.Skills.Run.Running)continue;
             var target=w.Navigation.Resolve(w.Skills.Run.Target);
             if(w.Skills.Run.Phase=="navigating") {beforeArrival?.Invoke(target,w.Skills.Run.Operation);w.ArriveAt(target);}
             if(w.Skills.Run.Phase!="pressing" || w.Inputs.Last()!=1)continue;
@@ -53,13 +53,152 @@ internal static partial class Program
             else if(w.Skills.Run.Operation=="transfer_contents" && w.Carrier.Item!=null)
             {
                 var cargo=w.Carrier.Item;var contents=ActionObservations.Container(target);
+                if(RecipeProof.Empty(RecipeProof.Composition(cargo)))continue;
                 if(contents.GetContentsCount()!=0 && !consume)continue;
-                contents.Contents.Add(RecipeProof.Composition(cargo));
-                if(consume){cargo.activeInHierarchy=false;w.Hold(null);} additions++;
+                var addition=RecipeProof.Composition(cargo);
+                if(ActionObservations.Receiver(target).GetComponent<ServerPlate>()!=null && contents.Contents.Any(n=>n is CompositeAssembledNode))
+                {var existing=contents.Contents.ToArray();contents.Contents.Clear();contents.Contents.Add(new CompositeAssembledNode {m_composition=existing.SelectMany(n=>n is CompositeAssembledNode c ? c.m_composition : new[]{n}).Concat(addition is CompositeAssembledNode ac ? ac.m_composition : new[]{addition}).ToArray()});}
+                else contents.Contents.Add(addition);
+                if(consume){
+                    var source=cargo.GetComponent<ServerIngredientContainer>();
+                    if(source!=null && cargo.GetComponent<PreparationContainer>()==null)source.Contents.Clear();else {cargo.activeInHierarchy=false;w.Hold(null);}
+                } additions++;
             }
         }
         return additions;
     }
+
+    private sealed class ProcessorComposition : MonoBehaviour, IOrderDefinition
+    {
+        public CookingStepData Step;
+        public AssembledDefinitionNode GetOrderComposition()
+        {
+            var contents=gameObject.GetComponent<ServerIngredientContainer>().GetContents();
+            if(contents.Length==0)return AssembledDefinitionNode.NullNode;
+            AssembledDefinitionNode result=Recipe(contents);
+            var mixing=gameObject.GetComponent<ServerMixingHandler>();
+            if(mixing!=null && mixing.m_serverData.m_mixingState==ProcessingState.Completed)
+                result=new MixedCompositeAssembledNode {m_composition=contents,m_progress=MixedCompositeOrderNode.MixingProgress.Mixed};
+            var cooking=gameObject.GetComponent<ServerCookingHandler>();
+            if(cooking!=null && cooking.m_ServerData.m_cookingState==ProcessingState.Completed)
+                result=new CookedCompositeAssembledNode {m_composition=result is MixedCompositeAssembledNode ? new[]{result}:contents,m_cookingStep=Step,m_progress=CookedCompositeOrderNode.CookingProgress.Cooked};
+            return result;
+        }
+    }
+    private static void AssemblyProcessing()
+    {
+        {
+            var w=new World();var plate=AssemblyPlate(w,w.Delivery());var raw=AssemblyFood(w,w.Target,"rice");
+            var step=new CookingStepData {m_uID=31};
+            var goal=new CookedCompositeAssembledNode {m_composition=new[]{Leaf("rice")},m_cookingStep=step,m_progress=CookedCompositeOrderNode.CookingProgress.Cooked};
+            var preparedCounter=w.Delivery();var prepared=AssemblyPlate(w,preparedCounter,goal);prepared.Add(new IngredientTransfer());
+            var vesselCounter=w.Delivery();var vessel=new GameObject("empty assigned pot");
+            vessel.Add(new PhysicalAttachment());vessel.Add(new Pickup());vessel.Add(new ServerIngredientContainer());
+            vessel.Add(new CookingHandler {m_cookingType=step});vessel.Add(new CookableContainer());vessel.Add(new ServerCookingHandler());
+            vessel.Add(new ProcessorComposition {Step=step});vesselCounter.GetComponent<ServerAttachStation>().Item=vessel;vesselCounter.Add(new Pickup());
+            var human=new GameObject("human carrying assigned prepared food");human.Add(new PlayerControls());
+            var carrier=human.Add(new ServerPlayerAttachmentCarrier {Item=prepared});
+            var request=AssemblyJob(w,new[]{plate},new[]{raw,prepared},goal);request.Assembly.Equipment.Add(w.Navigation.RegisterItem(vessel));
+            StartAssembly(w,request);DriveAssembly(w,25);
+            Check(w.Tasks.Run.Running && !w.Inputs.Contains(1) && RecipeProof.Empty(RecipeProof.Composition(vessel)),
+                "temporarily unavailable prepared component does not authorize cooking duplicate demand");
+            carrier.Item=null;
+            Check(DriveAssembly(w)==1 && w.Tasks.Run.State=="succeeded","uses exact already-cooked component when its holder releases it");
+        }
+        foreach(bool mixing in new[]{false,true})
+        {
+            var w=new World();var plateCounter=w.Delivery();var plate=AssemblyPlate(w,plateCounter);
+            var first=AssemblyFood(w,w.Target,"flour");var otherCounter=w.Delivery();otherCounter.transform.position=new Vector3(-2,0,0);
+            var second=AssemblyFood(w,otherCounter,"egg");var vesselCounter=w.Delivery();vesselCounter.transform.position=new Vector3(4,0,0);
+            var vessel=new GameObject("assigned vessel");vessel.Add(new PhysicalAttachment());vessel.Add(new Pickup());vessel.Add(new IngredientTransfer());
+            vessel.Add(new ServerIngredientContainer());var step=new CookingStepData {m_uID=31};
+            vessel.Add(new CookingHandler {m_cookingType=step});vessel.Add(new CookableContainer());var cooking=vessel.Add(new ServerCookingHandler());
+            vessel.Add(new ProcessorComposition {Step=step});vesselCounter.GetComponent<ServerAttachStation>().Item=vessel;vesselCounter.Add(new Pickup());
+            var oven=w.Delivery();oven.name="oven";oven.Add(new ServerCookingStation());oven.Add(new Pickup());oven.transform.position=new Vector3(-4,0,0);
+            GameObject mixer=null;ServerMixingHandler handler=null;
+            AssembledDefinitionNode[] parts={Leaf("flour"),Leaf("egg")};
+            if(mixing)
+            {
+                handler=vessel.Add(new ServerMixingHandler());vessel.Add(new MixingHandler {m_mixingType=step});vessel.Add(new MixableContainer());
+                mixer=w.Delivery();mixer.name="mixer";mixer.Add(new ServerMixingStation());mixer.Add(new Pickup());mixer.transform.position=new Vector3(0,0,3);
+                vesselCounter.GetComponent<ServerAttachStation>().Item=null;mixer.GetComponent<ServerAttachStation>().Item=vessel;
+                parts=new AssembledDefinitionNode[]{new MixedCompositeAssembledNode {m_composition=parts,m_progress=MixedCompositeOrderNode.MixingProgress.Mixed}};
+            }
+            var goal=new CookedCompositeAssembledNode {m_composition=parts,m_cookingStep=step,m_progress=CookedCompositeOrderNode.CookingProgress.Cooked};
+            var request=AssemblyJob(w,new[]{plate},new[]{first,second},goal);
+            request.Assembly.Equipment.Add(w.Navigation.RegisterItem(vessel));request.Assembly.Equipment.Add(w.IdOf(oven));
+            if(mixer!=null)request.Assembly.Equipment.Add(w.IdOf(mixer));
+            StartAssembly(w,request);bool sawMix=false,sawCook=false;
+            int adds=DriveAssembly(w,450,onTick:()=>{
+                if(mixer!=null && ActionObservations.Occupant(mixer)==vessel)
+                {
+                    if(vessel.GetComponent<ServerIngredientContainer>().GetContentsCount()!=2)return;
+                    sawMix=true;
+                    handler.m_serverData.m_mixingProgress+=1;
+                    handler.m_serverData.m_mixingState=handler.m_serverData.m_mixingProgress>=4?ProcessingState.Completed:ProcessingState.Progressing;
+                }
+                if(ActionObservations.Occupant(oven)==vessel)
+                {
+                    Check(vessel.GetComponent<ServerIngredientContainer>().GetContentsCount()==2 && (!mixing || sawMix && handler.m_serverData.m_mixingState==ProcessingState.Completed),"cooking starts only after full assembly and required mixing");sawCook=true;
+                    cooking.m_ServerData.m_cookingProgress+=1;
+                    cooking.m_ServerData.m_cookingState=cooking.m_ServerData.m_cookingProgress>=4?ProcessingState.Completed:ProcessingState.Progressing;
+                }
+            });
+            Check(w.Tasks.Run.State=="succeeded" && adds==3 && sawCook && (!mixing || sawMix),"combined processing assembled, rescued and plated: "+Json.Encode(w.Tasks.Describe()));
+            Check(RecipeProof.Equal(RecipeProof.Composition(plate),goal),"final dish retains exact cooking/mixing structure");
+        }
+    }
+
+    private sealed class BaseComposition : MonoBehaviour, IOrderDefinition
+    {
+        public AssembledDefinitionNode GetOrderComposition() { return RecipeProof.Combine(Leaf("bun"), Recipe(gameObject.GetComponent<ServerIngredientContainer>().GetContents())); }
+    }
+    private static void AssemblyBasesAndRecovery()
+    {
+        var w=new World();var plate=AssemblyPlate(w,w.Delivery());var holder=w.Delivery();holder.Add(new Pickup());holder.transform.position=new Vector3(-2,0,0);
+        var bun=new GameObject("partly assembled bun");bun.Add(new PhysicalAttachment());bun.Add(new Pickup());bun.Add(new IngredientTransfer());
+        bun.Add(new PreparationContainer {m_ingredientOrderNode=new Definition {name="bun",m_uID=1}});bun.Add(new BaseComposition());
+        bun.Add(new ServerIngredientContainer()).Contents.Add(Leaf("lettuce"));holder.GetComponent<ServerAttachStation>().Item=bun;
+        var cheese=AssemblyFood(w,w.Target,"cheese");var request=AssemblyJob(w,new[]{plate,bun},new[]{cheese},Leaf("bun"),Leaf("lettuce"),Leaf("cheese"));
+        StartAssembly(w,request);int additions=DriveAssembly(w);
+        Check(w.Tasks.Run.State=="succeeded" && additions==2,"assigned partial assembly base is reused and plated before completing its exact recipe: "+Json.Encode(w.Tasks.Describe()));
+        w=new World();plate=AssemblyPlate(w,w.Delivery());var food=AssemblyFood(w,w.Target,"fish");request=AssemblyJob(w,new[]{plate},new[]{food},Leaf("fish"));
+        StartAssembly(w,request);
+        // Reach the first transfer, suppress its input, then allow a retry only
+        // after both native sides prove unchanged.
+        for(int i=0;i<100 && w.Skills.Run.Operation!="transfer_contents";i++)
+        {
+            w.Tick(.11f);if(w.Skills.Run.Operation=="transfer_contents")break;if(!w.Skills.Run.Running)continue;
+            var target=w.Navigation.Resolve(w.Skills.Run.Target);if(w.Skills.Run.Phase=="navigating")w.ArriveAt(target);
+            if(w.Skills.Run.Operation=="pick_up" && w.Skills.Run.Phase=="pressing" && w.Inputs.Last()==1 && w.Carrier.Item==null)
+            {w.Hold(food);w.Target.GetComponent<ServerAttachStation>().Item=null;}
+        }
+        w.ArriveAt(w.Navigation.Resolve(w.Skills.Run.Target));
+        for(int i=0;i<25;i++)w.Tick(.11f);
+        Check(w.Tasks.Run.Running && RecipeProof.Empty(RecipeProof.Composition(plate)),"unchanged suppressed transfer keeps its request and demand");
+        Check(DriveAssembly(w)==1 && w.Tasks.Run.State=="succeeded","unchanged transfer retries once and verifies exactly one addition");
+
+        w=new World();plate=AssemblyPlate(w,w.Delivery());food=AssemblyFood(w,w.Target,"fish");
+        request=AssemblyJob(w,new[]{plate},new[]{food},Leaf("fish"));StartAssembly(w,request);
+        for(int i=0;i<100 && w.Skills.Run.Operation!="transfer_contents";i++)
+        {
+            w.Tick(.11f);if(w.Skills.Run.Operation=="transfer_contents")break;if(!w.Skills.Run.Running)continue;
+            var target=w.Navigation.Resolve(w.Skills.Run.Target);if(w.Skills.Run.Phase=="navigating")w.ArriveAt(target);
+            if(w.Skills.Run.Operation=="pick_up" && w.Skills.Run.Phase=="pressing" && w.Inputs.Last()==1 && w.Carrier.Item==null)
+            {w.Hold(food);w.Target.GetComponent<ServerAttachStation>().Item=null;}
+        }
+        // Reproduce native transport's temporary loss of held-item visibility.
+        // The navigation suite separately exercises full portal geometry.
+        var travelling=w.Chef.gameObject.Add(new ServerTeleportablePlayer {Travelling=true});
+        typeof(SousChef.Plugin.Navigation.NavigationActions).GetField("activePortal",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)
+            .SetValue(w.Navigation,new SousChef.Plugin.Navigation.PortalLink());
+        w.Hold(null);int edges=w.Inputs.Count(n=>n==1);w.Tick();
+        Check(w.Tasks.Run.Running && w.Skills.Run.Running && w.Navigation.Action.State=="navigating" && w.Inputs.Count(n=>n==1)==edges,
+            "native portal transport retains assembly and issues no new irreversible input with hidden cargo");
+        travelling.Travelling=false;w.Hold(food);
+        Check(DriveAssembly(w)==1 && w.Tasks.Run.State=="succeeded","assembly revalidates restored cargo and finishes after native transit");
+    }
+
     private static void AssemblyProofs()
     {
         var a=Leaf("fish");var b=Leaf("rice");var goal=Recipe(a,b);

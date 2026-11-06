@@ -91,6 +91,10 @@ namespace SousChef.Plugin.Actions
             try
             {
                 if (assembly != null && !assembly.Order.Live) { Finish("blocked", "assembly_order_unavailable"); return; }
+                // Native portals temporarily hide/detach carried objects. Let
+                // the selected transport finish before interpreting cargo or
+                // recipe changes; the input-edge guard still runs on arrival.
+                if (navigation.NativeTeleportInProgress(chef)) return;
                 ObserveDeliveries();
                 ObserveHandsRecovery();
                 if (!child.Run.Running && navigation.Action.State == "idle") handoffThrows.Tick(chef);

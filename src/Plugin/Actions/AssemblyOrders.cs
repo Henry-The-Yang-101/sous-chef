@@ -50,7 +50,8 @@ namespace SousChef.Plugin.Actions
         {
             var result = new List<object>();
             foreach (var order in Observe()) result.Add(Json.Object("id", order.Id, "recipe", order.Recipe.name,
-                "recipeId", order.Recipe.m_uID, "remainingSeconds", order.Ticket.Remaining));
+                "recipeId", order.Recipe.m_uID, "remainingSeconds", order.Ticket.Remaining,
+                "composition", RecipeProof.Describe(order.Goal), "platingStep", order.Recipe.m_platingStep == null ? null : order.Recipe.m_platingStep.name));
             return result;
         }
     }

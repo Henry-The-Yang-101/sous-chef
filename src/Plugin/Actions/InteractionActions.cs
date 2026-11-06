@@ -268,7 +268,7 @@ namespace SousChef.Plugin.Actions
             if (op == "transfer_contents")
             {
                 var transfer = GameObjectUtils.RequestInterface<IContainerTransferBehaviour>(held);
-                transferSource = RecipeProof.Composition(held); transferDestination = RecipeProof.Composition(receiver);
+                transferSource = RecipeProof.Composition(held); transferDestination = TransferDestination();
                 if (container == null || transfer == null || transferSource == null || transferDestination == null ||
                     RecipeProof.Empty(transferSource) || !transfer.CanTransferToContainer(container)) return "incompatible_contents_transfer";
             }
@@ -526,7 +526,13 @@ namespace SousChef.Plugin.Actions
                         // (e.g. a contact/selection change). Only retry when both
                         // authoritative sides prove that nothing was transferred.
                         var contents = held == null ? null : held.GetComponent<ServerIngredientContainer>();
-                        if (command.Indefinite && command.Operation == "place_at" && held != null &&
+                        if (command.Indefinite && command.Operation == "transfer_contents" && held != null &&
+                            System.Object.ReferenceEquals(ActionObservations.Held(chef), held) && ActionObservations.Container(target) == container &&
+                            container != null && container.GetContentsCount() == initialSourceContents &&
+                            (contents == null ? initialContents == 0 : contents.GetContentsCount() == initialContents) &&
+                            RecipeProof.Equal(transferSource, RecipeProof.Composition(held)) && RecipeProof.Equal(transferDestination, TransferDestination()))
+                        { pressed = false; Finish("blocked", "transfer_not_applied"); }
+                        else if (command.Indefinite && command.Operation == "place_at" && held != null &&
                             System.Object.ReferenceEquals(ActionObservations.Held(chef), held) &&
                             System.Object.ReferenceEquals(ActionObservations.Occupant(target), initialOccupant) &&
                             (contents == null ? initialContents == 0 : contents.GetContentsCount() == initialContents) &&
@@ -561,6 +567,8 @@ namespace SousChef.Plugin.Actions
             return chef.GroundCollider != null && !chef.m_bRespawning && chef.Motion.GetVelocityXZ().magnitude <= .1f &&
                 Vector3.Distance(chef.transform.position, target.transform.position) <= 1.6f && ActionObservations.CanUse(chef, target);
         }
+        private AssembledDefinitionNode TransferDestination()
+        { return command.Condition == "assembly_mixing_inputs" ? RecipeProof.MixingInputs(receiver) : RecipeProof.Composition(receiver); }
         private bool BeforePress()
         {
             // Execute the parent's recipe/ownership proof at the actual input
@@ -605,7 +613,7 @@ namespace SousChef.Plugin.Actions
                 if (op == "add_ingredient" && ActionObservations.Container(target) != container) { Finish("blocked", "container_changed"); return false; }
                 if (op == "transfer_contents" && (ActionObservations.Container(target) != container ||
                     !RecipeProof.Equal(transferSource, RecipeProof.Composition(held)) ||
-                    !RecipeProof.Equal(transferDestination, RecipeProof.Composition(receiver))))
+                    !RecipeProof.Equal(transferDestination, TransferDestination())))
                 { Finish("blocked", "transfer_contents_changed"); return false; }
                 if (op == "collect_contents")
                 {
@@ -674,7 +682,7 @@ namespace SousChef.Plugin.Actions
                 bool consumed = held == null || !held.activeInHierarchy || source != null &&
                     source.GetContentsCount() < initialContents && RecipeProof.Empty(RecipeProof.Composition(held));
                 bool added = container != null && ActionObservations.Container(target) == container &&
-                    RecipeProof.Equal(RecipeProof.Combine(transferDestination, transferSource), RecipeProof.Composition(receiver));
+                    RecipeProof.Equal(RecipeProof.Combine(transferDestination, transferSource), TransferDestination());
                 if (consumed && added) evidence = Json.Object("source", ItemEvidence(held), "receiver", ItemEvidence(receiver), "compositionVerified", true);
                 return consumed && added;
             }

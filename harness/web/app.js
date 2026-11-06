@@ -510,7 +510,7 @@ setInterval(() => { if (!fresh()) render(); }, 250);
 poll();
 pollSharing();
 
-const taskLabels = {prepare_near_player: 'Prepare and give to player', take_ready: 'Take ready food off heat',
+const taskLabels = {assemble_dish: 'Assemble assigned dish', prepare_near_player: 'Prepare and give to player', take_ready: 'Take ready food off heat',
   wash_dishes: 'Wash dirty dishes', deliver_dirty_dishes: 'Deliver dirty dishes', put_out_fire: 'Put out fires',
   toss_burnt_food: 'Toss burnt food', monitor_equipment: 'Monitor cooking and mixing', deliver_completed_dishes: 'Deliver completed dishes'};
 function addTaskItem() {
@@ -527,11 +527,25 @@ function addTaskItem() {
   const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Remove'; remove.onclick = () => { row.remove(); render(); };
   row.append(ingredient, preparation, quantity, remove); el('task-items').append(row);
 }
+function selectedResources(id) {
+  return Array.from(el(id).selectedOptions || []).map(option => option.value).filter(Boolean);
+}
+function setResourceOptions(id, options) {
+  const select = el(id), selected = new Set(selectedResources(id));
+  const signature = JSON.stringify(options.map(option => [option.value, option.label]));
+  if (select.dataset.options === signature) return;
+  select.dataset.options = signature;
+  select.replaceChildren(...options.map(option => {
+    const node = document.createElement('option'); node.value = option.value; node.textContent = option.label;
+    node.selected = selected.has(option.value); return node;
+  }));
+}
 function renderTasks(catalog, visible, busy, live) {
   const task = state?.control?.action;
   setJobOptions(el('task-kind'), Object.entries(taskLabels).map(([value, label]) => ({value, label})));
   const kind = el('task-kind').value;
-  const preparing = kind === 'prepare_near_player';
+  const preparing = kind === 'prepare_near_player', assembling = kind === 'assemble_dish';
+  el('task-assembly').hidden = !assembling;
   el('task-preparation').hidden = !preparing;
   const preparationOptions = displayOptions(visible).preparationOptions || [];
   for (const row of el('task-items').children) {
@@ -539,17 +553,32 @@ function renderTasks(catalog, visible, busy, live) {
     setJobOptions(row.children[0], preparationOptions.filter(option => option.utensil === utensil)
       .map(option => ({value: option.id, label: option.label.replaceAll('_', ' ')})));
   }
+  const orders = catalog.assemblyOrders || visible.assemblyOrders || [];
+  setJobOptions(el('assembly-order'), orders.map(order => ({value: order.id, label: `${order.recipe.replaceAll('_', ' ')} · ticket ${order.id.split(':').at(-1)}`})));
+  const resources = (displayOptions(visible).items || []).filter(item => !item.supply);
+  const resourceLabel = item => `${nameOf(item)} · ${item.id}`;
+  const bases = resources.filter(item => item.plate || item.cleanPlate || item.assemblyBase);
+  setResourceOptions('assembly-bases', bases.map(item => ({value: item.id, label: resourceLabel(item)})));
+  setResourceOptions('assembly-components', resources.map(item => ({value: item.id, label: resourceLabel(item)})));
+  const equipment = new Map(resources.filter(item => item.utensilType).map(item => [item.id, item]));
+  for (const target of visible.targets || []) if (target.processingEquipment) equipment.set(target.id, target);
+  setResourceOptions('assembly-equipment', Array.from(equipment.values()).map(item => ({value: item.id, label: resourceLabel(item)})));
+  const assigned = ['assembly-bases', 'assembly-components', 'assembly-equipment'].map(selectedResources);
+  const validAssembly = !assembling || (el('assembly-order').value && assigned[0].length > 0 && assigned.every(group => group.length <= 24) && new Set(assigned.flat()).size === assigned.flat().length);
   // Browsing and editing remain possible while execution is blocked.
   for (const field of el('task-form').querySelectorAll('input, select, button')) if (field.id !== 'task-run') field.disabled = false;
   for (const field of el('task-preparation').querySelectorAll('input, select, button')) field.disabled = !preparing;
+  for (const field of el('task-assembly').querySelectorAll('select')) field.disabled = !assembling;
+  el('task-repeat').disabled = assembling;
   el('task-add-item').disabled = !preparing || el('task-items').children.length >= 10;
   const eligible = (catalog.taskOptions || []).some(t => t.name === kind);
   const validItems = !preparing || (el('task-items').children.length > 0 && Array.from(el('task-items').children).every(row =>
     row.children[0].value && row.children[2].checkValidity()));
   const playerPresent = !preparing || (catalog.players || []).some(player => String(player.playerId) === el('task-player').value);
-  el('task-run').disabled = actionBlocked(busy, live) || !eligible || !validItems || !playerPresent;
+  el('task-run').disabled = actionBlocked(busy, live) || !eligible || !validItems || !playerPresent || !validAssembly;
   let message = blockedReason(busy, live);
   if (!message && !kind) message = 'Choose a task. All tasks stay listed; Start task enables when the selected task can run.';
+  else if (!message && !validAssembly) message = 'Choose an order and at least one suitable plate. Assign each resource to only one group.';
   else if (!message && !validItems) message = 'Choose a level ingredient or utensil and quantity for every preparation row.';
   else if (!message && !playerPresent) message = 'The selected receiving player is not in this kitchen.';
   else if (!message && !eligible) message = 'This task is currently unavailable. Start task enables automatically when the kitchen allows it.';
@@ -560,10 +589,15 @@ function renderTasks(catalog, visible, busy, live) {
 el('task-kind').addEventListener('change', render);
 el('task-add-item').addEventListener('click', () => { addTaskItem(); render(); });
 el('task-player').addEventListener('change', render);
+for (const id of ['assembly-order', 'assembly-bases', 'assembly-components', 'assembly-equipment']) el(id).addEventListener('change', render);
 el('task-form').addEventListener('submit', async event => {
   event.preventDefault(); if (el('task-run').disabled) return;
   const action = el('task-kind').value;
   const args = {action, repetitions: el('task-repeat').value === 'forever' ? null : Number(el('task-repeat').value)};
+  if (action === 'assemble_dish') {
+    args.repetitions = 1; args.order_id = el('assembly-order').value;
+    args.bases = selectedResources('assembly-bases'); args.components = selectedResources('assembly-components'); args.equipment = selectedResources('assembly-equipment');
+  }
   if (action === 'prepare_near_player') {
     args.player_id = Number(el('task-player').value);
     args.items = Array.from(el('task-items').children).map(row => ({ingredient: row.children[0].value, preparation: row.children[1].value, quantity: Number(row.children[2].value)}));

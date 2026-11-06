@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using SousChef.Core;
 using UnityEngine;
 
 namespace SousChef.Plugin.Actions
@@ -15,6 +16,11 @@ namespace SousChef.Plugin.Actions
             var plate = item.GetComponent<ServerPlate>();
             var value = plate == null ? ActionObservations.Composition(item) : plate.GetOrderComposition();
             return value == null ? null : value.Simpilfy();
+        }
+        public static AssembledDefinitionNode MixingInputs(GameObject item)
+        {
+            var contents = item == null ? null : item.GetComponent<ServerIngredientContainer>();
+            return contents == null ? null : new CompositeAssembledNode { m_composition = contents.GetContents() };
         }
         public static List<AssembledDefinitionNode> Parts(AssembledDefinitionNode value)
         {
@@ -62,5 +68,17 @@ namespace SousChef.Plugin.Actions
         }
         public static bool Advances(AssembledDefinitionNode current, AssembledDefinitionNode addition, AssembledDefinitionNode goal)
         { return current != null && addition != null && !Empty(addition) && Subset(current, goal) && Subset(Combine(current, addition), goal); }
+        public static object Describe(AssembledDefinitionNode node)
+        {
+            var ingredient = node as IngredientAssembledNode;
+            if (ingredient != null) return Json.Object("kind", "ingredient", "id", "i" + ingredient.m_ingriedientOrderNode.m_uID, "name", ingredient.m_ingriedientOrderNode.name);
+            var composite = node as CompositeAssembledNode;
+            if (composite == null) return null;
+            var parts = new List<object>(); foreach (var part in composite.m_composition) parts.Add(Describe(part));
+            var cooked = node as CookedCompositeAssembledNode;
+            return Json.Object("kind", cooked != null ? "cooked" : node is MixedCompositeAssembledNode ? "mixed" : "assembly", "components", parts,
+                "cookingStep", cooked == null ? null : cooked.m_cookingStep.name,
+                "cookingStepId", cooked == null ? null : (object)cooked.m_cookingStep.m_uID);
+        }
     }
 }

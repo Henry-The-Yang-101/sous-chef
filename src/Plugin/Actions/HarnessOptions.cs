@@ -36,6 +36,7 @@ namespace SousChef.Plugin.Actions
             foreach (string condition in workConditions) if (!waitConditions.Contains(condition)) waitConditions.Add(condition);
             if (go.GetComponent<CookingStation>() != null)
                 foreach (string condition in new[] { "cooked", "mixed" }) if (!waitConditions.Contains(condition)) waitConditions.Add(condition);
+            identity["processingEquipment"] = TaskNative.Equipment(go);
             identity["possibleOperations"] = operations.ToArray();
             identity["possibleWorkConditions"] = workConditions.ToArray();
             identity["possibleWaitConditions"] = waitConditions.ToArray();

@@ -38,12 +38,12 @@ namespace SousChef.Plugin.Actions
                     objects.Add(item);
                 }
             }
-            assembly = schedule; return null;
+            schedule.Initialize(); assembly = schedule; return null;
         }
 
         private LogisticsItem AssemblyEntry(GameObject item)
         {
-            if (item == null || !item.activeInHierarchy) return null;
+            if (item == null || !item.activeInHierarchy || item.GetComponent<ServerPlate>() != null && item.GetComponent<ServerPlate>().IsReserved()) return null;
             foreach (var entry in inventory.Items)
             {
                 if (entry.Supply || entry.InUse) continue;
@@ -66,7 +66,7 @@ namespace SousChef.Plugin.Actions
             {
                 if (!AssemblyBaseValid(item)) continue;
                 var entry = AssemblyEntry(item);
-                if (entry == null || !Obtainable(entry, "move_item")) continue;
+                if (entry == null || !Obtainable(entry, entry.CleanPlate ? "get_plate" : "move_item")) continue;
                 int parts = RecipeProof.Parts(RecipeProof.Composition(item)).Count;
                 if (parts > progress || parts == progress && entry.Distance < distance)
                 { best = item; progress = parts; distance = entry.Distance; }
@@ -79,20 +79,26 @@ namespace SousChef.Plugin.Actions
             // Raw single ingredients that already have their native definition
             // are usable. Workable (unchopped) stock never substitutes for them.
             if (item.GetComponent<WorkableItem>() != null) return false;
-            return (TaskNative.ProcessingHandler(item, false) == null && TaskNative.ProcessingHandler(item, true) == null) || TaskNative.Ready(item);
+            if (TaskNative.ProcessingHandler(item, false) == null && TaskNative.ProcessingHandler(item, true) == null) return true;
+            var composition = RecipeProof.Composition(item);
+            if (composition is CookedCompositeAssembledNode) return TaskNative.Ready(item, false);
+            if (composition is MixedCompositeAssembledNode) return TaskNative.Ready(item, true);
+            return false;
         }
-        private bool AssemblyTransfer(GameObject source, GameObject recipient, AssembledDefinitionNode goal)
+        private bool AssemblyTransfer(GameObject source, GameObject recipient, AssembledDefinitionNode goal, bool mixingInputs = false)
         {
-            if (!AssemblyReady(source) || recipient == null || !RecipeProof.Advances(RecipeProof.Composition(recipient), RecipeProof.Composition(source), goal)) return false;
+            if (!AssemblyReady(source) || recipient == null || !RecipeProof.Advances(mixingInputs ? RecipeProof.MixingInputs(recipient) : RecipeProof.Composition(recipient), RecipeProof.Composition(source), goal)) return false;
             var container = recipient.GetComponent<ServerIngredientContainer>();
             var transfer = GameObjectUtils.RequestInterface<IContainerTransferBehaviour>(source);
             return container != null && transfer != null && transfer.CanTransferToContainer(container);
         }
         private bool AssemblyDeferred(GameObject item)
         { float at; return assembly.RetryAt.TryGetValue(item, out at) && Time.realtimeSinceStartup < at; }
-        private TaskStep AssemblyStep(string operation, GameObject target, Func<bool> proof)
+        private TaskStep AssemblyStep(string operation, GameObject target, Func<bool> proof, string condition = null)
         {
-            var next = Reschedulable(operation, target);
+            var next = Reschedulable(operation, target, condition);
+            var ready = next.Ready;
+            next.Ready = () => assembly.Order.Live && proof() && (ready == null || ready());
             next.BeforePress = () => assembly.Order.Live && proof();
             next.AbandonBeforePress = () => !assembly.Order.Live || !proof() || child.TransferUnavailable;
             return next;
@@ -103,67 +109,21 @@ namespace SousChef.Plugin.Actions
             {
                 inventory.Refresh(chef);
                 if (System.Object.ReferenceEquals(assembly.Base, null)) assembly.Base = SelectAssemblyBase();
-                GameObject plate = assembly.Base;
-                var baseEntry = AssemblyEntry(plate);
-                if (baseEntry == null || !AssemblyBaseValid(plate))
-                { yield return AssemblyWait("waiting_for_assigned_base"); continue; }
-                var contents = RecipeProof.Composition(plate);
-                if (RecipeProof.Equal(contents, assembly.Order.Goal) && AssembledDefinitionNode.Matching(contents, assembly.Order.Recipe))
+                assembly.Root.Vessel = assembly.Base;
+                var plate = assembly.Base;
+                if (AssemblyEntry(plate) != null && AssemblyBaseValid(plate))
                 {
-                    // Completion is the actual composition and required native
-                    // plate type, never the number of presses we attempted.
-                    assembly.Verified = true; assembly.Waiting = null; completed = 1;
-                    deliveredItems.Add(plate); yield break;
-                }
-                GameObject held = ActionObservations.Held(chef);
-                GameObject destination = baseEntry.Holder;
-                if (destination == null || !Counter(destination) || TaskNative.Component<ServerConveyorStation>(destination) != null)
-                {
-                    GameObject parking = Parking(plate);
-                    if (parking == null) { yield return AssemblyWait("waiting_for_assembly_counter"); continue; }
-                    if (!System.Object.ReferenceEquals(held, plate))
+                    var contents = RecipeProof.Composition(plate);
+                    if (RecipeProof.Equal(contents, assembly.Order.Goal) && AssembledDefinitionNode.Matching(contents, assembly.Order.Recipe))
                     {
-                        var pickup = AssemblyStep("pick_up", baseEntry.Source, () => AssemblyBaseValid(plate));
-                        pickup.UseHeld = cargo => System.Object.ReferenceEquals(cargo, plate);
-                        yield return pickup;
+                        assembly.Verified = true; assembly.Waiting = null; completed = 1;
+                        deliveredItems.Add(plate); yield break;
                     }
-                    else
-                    {
-                        var put = AssemblyStep("place_at", parking, () => System.Object.ReferenceEquals(ActionObservations.Held(chef), plate) &&
-                            AssemblyBaseValid(plate) && ActionObservations.Occupant(parking) == null);
-                        yield return put;
-                    }
-                    continue;
                 }
-                LogisticsItem source = null; float cost = Single.MaxValue;
-                foreach (GameObject item in assembly.Components)
-                {
-                    if (AssemblyDeferred(item) || !AssemblyTransfer(item, plate, assembly.Order.Goal)) continue;
-                    var entry = AssemblyEntry(item);
-                    if (entry == null || !Obtainable(entry, "move_item")) continue;
-                    float candidate = System.Object.ReferenceEquals(held, item) ? -1 : entry.Distance;
-                    if (candidate < cost) { cost = candidate; source = entry; }
-                }
-                if (source == null) { yield return AssemblyWait("waiting_for_assigned_component"); continue; }
-                GameObject food = source.Item;
-                Func<bool> permitted = () => AssemblyBaseValid(plate) && System.Object.ReferenceEquals(ActionObservations.Occupant(destination), plate) &&
-                    AssemblyTransfer(food, plate, assembly.Order.Goal);
-                if (!System.Object.ReferenceEquals(held, food))
-                {
-                    var pickup = AssemblyStep("pick_up", ActionObservations.PickupTarget(source.Source, food), permitted);
-                    pickup.UseHeld = cargo => System.Object.ReferenceEquals(cargo, food);
-                    yield return pickup;
-                    if (!pickup.Succeeded) assembly.RetryAt[food] = Time.realtimeSinceStartup + 1;
-                    continue;
-                }
-                var before = RecipeProof.Composition(plate); var addition = RecipeProof.Composition(food);
-                var add = AssemblyStep("transfer_contents", destination, () => permitted() &&
-                    RecipeProof.Equal(before, RecipeProof.Composition(plate)) && RecipeProof.Equal(addition, RecipeProof.Composition(food)));
-                yield return add;
-                if (!add.Succeeded) { assembly.RetryAt[food] = Time.realtimeSinceStartup + 1; continue; }
-                if (!RecipeProof.Equal(RecipeProof.Combine(before, addition), RecipeProof.Composition(plate)))
-                    throw new InvalidOperationException("assembly_composition_changed_after_transfer");
-                assembly.Additions++;
+                var job = SelectAssemblyWork();
+                if (job == null) { yield return AssemblyWait(plate == null ? "waiting_for_assigned_base" : "waiting_for_assembly_dependency"); continue; }
+                assembly.Waiting = null;
+                foreach (var next in ExecuteAssembly(job)) yield return next;
             }
         }
         private TaskStep AssemblyWait(string reason)
