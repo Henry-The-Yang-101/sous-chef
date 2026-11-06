@@ -55,10 +55,10 @@ namespace SousChef.Plugin.Actions
             {
                 float angle = i * Mathf.PI / 6; Vector3 stance;
                 Vector3 near = human.transform.position + new Vector3(Mathf.Cos(angle), 0, Mathf.Sin(angle)) * 1.45f;
-                bool skip = false; foreach (Vector3 tried in excluded) if (Vector3.Distance(tried, near) < .4f) skip = true;
+                bool skip = false; foreach (Vector3 tried in excluded) if (Vector3.Distance(tried, near - human.transform.position) < .4f) skip = true;
                 if (skip) continue;
                 if (navigation.TryStance(near, out stance) && navigation.RouteCost(stance) != Single.MaxValue)
-                    return new Handoff { Player = player, Mode = "drop_at_player", Approach = stance };
+                    return new Handoff { Player = player, Mode = "drop_at_player", Approach = stance - human.transform.position };
             }
             // Native next-receiver links include direction and rotated conveyors;
             // reverse belts and cycles never masquerade as a delivery path.
@@ -104,7 +104,7 @@ namespace SousChef.Plugin.Actions
         }
         // With `lossTolerant`, a pass that leaves P2's hands without reaching the
         // human ends here undelivered (absent from deliveredItems) for the caller.
-        private IEnumerable<TaskStep> Give(GameObject item, int player = 1, bool backgroundTransport = false, bool lossTolerant = false)
+        private IEnumerable<TaskStep> Give(GameObject item, int player = 1, bool backgroundTransport = false, bool lossTolerant = false, Func<bool> defer = null)
         {
             groundPass.Reset();
             Func<bool> lost = () => item == null || !System.Object.ReferenceEquals(ActionObservations.Held(chef), item);
@@ -119,10 +119,11 @@ namespace SousChef.Plugin.Actions
                     if (lost()) return true;
                     choice = FindHandoff(item, player, excluded, blockedTargets);
                     if (choice == null && Time.realtimeSinceStartup - rejectedAt > 5) { excluded.Clear(); blockedTargets.Clear(); }
-                    return choice != null;
+                    return choice != null || defer != null && defer();
                 });
                 if (choice == null)
                 {
+                    if (!lost() && defer != null && defer()) yield break;
                     if (HumanCanCollect(item, player)) { deliveredItems.Add(item); yield break; }
                     if (lossTolerant) yield break;
                     throw new InvalidOperationException("task_cargo_changed");
@@ -135,9 +136,11 @@ namespace SousChef.Plugin.Actions
                 {
                     if (choice.Approach.HasValue)
                     {
-                        TaskStep approach = WalkTo(Human(player).gameObject, choice.Approach.Value, true, lost);
+                        var receiver = Human(player);
+                        if (receiver == null) continue;
+                        TaskStep approach = WalkTo(receiver.gameObject, receiver.transform.position + choice.Approach.Value, true, lost);
                         yield return approach;
-                        if (!approach.Succeeded) { reject(choice.Approach.Value); continue; }
+                        if (!approach.Succeeded) { if (defer != null && defer()) yield break; reject(choice.Approach.Value); continue; }
                         float settle = Time.realtimeSinceStartup + .3f;
                         yield return Until("settling_for_handoff", delegate { return Time.realtimeSinceStartup >= settle; });
                         if (lost()) continue;
@@ -155,10 +158,12 @@ namespace SousChef.Plugin.Actions
                     if (!HumanCanCollect(item, player, true, choice.Ground ? Single.MaxValue : 5)) return false;
                     ((Json.Record)handoffEvidence)["reconciledOutcome"] = child.Run.Reason; return true;
                 };
+                if (defer != null) delivery.AbandonBeforePress = () => child.RouteUnavailable && defer();
                 delivery.ReplanOnBlock = true; delivery.ReplanAfterPress = lossTolerant; yield return delivery;
                 if (!delivery.Succeeded)
                 {
                     if (lossTolerant && !System.Object.ReferenceEquals(ActionObservations.Held(chef), item)) yield break;
+                    if (defer != null && defer()) yield break;
                     if (choice.Target != null) blockedTargets.Add(choice.Target);
                     rejectedAt = Time.realtimeSinceStartup; continue;
                 }

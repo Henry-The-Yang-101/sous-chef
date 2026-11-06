@@ -139,7 +139,8 @@ namespace SousChef.Plugin.Actions
         }
         private TaskStep WalkTo(GameObject aim, Vector3 stance, bool alternatives = false, Func<bool> obsolete = null)
         {
-            bool started = false; float retry = 0;
+            bool started = false; float retry = 0, planningSince = -1;
+            Vector3 offset = aim == null ? Vector3.zero : stance - aim.transform.position;
             var step = new TaskStep { Phase = "approaching" };
             step.Progress = delegate {
                 if (obsolete != null && obsolete())
@@ -151,7 +152,16 @@ namespace SousChef.Plugin.Actions
                 if (started && (navigation.Action.Reason == "arrived" || navigation.Action.Reason == "positioned_no_action")) { step.Succeeded = true; return true; }
                 if (started && alternatives && navigation.Action.Reason != "planning_in_progress" && navigation.Action.Reason != "planning_budget_exceeded") return true;
                 input(0); if (Time.realtimeSinceStartup < retry) return false; retry = Time.realtimeSinceStartup + .2f;
-                started = navigation.StartPosition(chef, Run.Owner, aim, stance, true) == null; return false;
+                // A fixed world-space point can slide off a moving raft before
+                // the route is certified. Track the receiving chef until the
+                // navigator takes over and pins the point to its native floor.
+                if (alternatives && aim == null) return true;
+                string error = navigation.StartPosition(chef, Run.Owner, aim, alternatives ? aim.transform.position + offset : stance, true);
+                started = error == null;
+                if (started || !alternatives) { planningSince = -1; return false; }
+                if (planningSince < 0) planningSince = Time.realtimeSinceStartup;
+                return error != "planning_in_progress" && error != "planning_budget_exceeded" ||
+                    Time.realtimeSinceStartup - planningSince >= 2;
             }; return step;
         }
         private static bool Counter(GameObject go)
@@ -214,28 +224,6 @@ namespace SousChef.Plugin.Actions
         {
             string collect = LogisticsChecks.Collect(chef, entry, operation, true);
             return collect == null || collect == "source_unreachable" && ApproachCost(entry.Source) != Single.MaxValue && LogisticsChecks.CanCollectEmpty(chef, entry.Source);
-        }
-        private LogisticsItem Source(string selector, bool utensil = false, bool processed = false)
-        {
-            inventory.Refresh(chef); LogisticsItem best = null; float score = Single.MaxValue; int bestWork = Int32.MaxValue; bool bestPlaced = false, bestHeld = false;
-            string utensilType = LogisticsInventory.CanonicalUtensil(selector); bool plate = utensilType == "plate";
-            foreach (LogisticsItem entry in inventory.Items)
-            {
-                if (!entry.Supply && deliveredItems.Contains(entry.Item)) continue;
-                bool match = utensil ? plate ? entry.CleanPlate : entry.Empty && entry.UtensilType == utensilType :
-                    PreparationIngredientMatches(entry, selector, processed);
-                if (!match || !Obtainable(entry, plate ? "get_plate" : "move_item")) continue;
-                if (!utensil && TaskNative.Equipment(entry.Holder ?? entry.Source)) continue;
-                // For equivalent preparation stages, prefer certified sources.
-                float candidate = (entry.Distance != Single.MaxValue ? entry.Distance : ApproachCost(entry.Source)) + (entry.Supply ? 10000 : 0);
-                int work = processed ? PreparationWork(entry.Item) : 0;
-                bool held = System.Object.ReferenceEquals(ActionObservations.Held(chef), entry.Item);
-                // Food already on a board needs no placement and frees that board.
-                bool placed = work > 0 && OnBoard(entry);
-                if (held && !bestHeld || held == bestHeld && (work < bestWork || work == bestWork && (placed && !bestPlaced || placed == bestPlaced && candidate < score)))
-                { best = entry; score = candidate; bestWork = work; bestPlaced = placed; bestHeld = held; }
-            }
-            return best;
         }
     }
 }

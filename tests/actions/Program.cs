@@ -224,6 +224,11 @@ internal static class Program
             human.Add(new PlayerControls {GroundCollider=w.Chef.GroundCollider});human.Add(new CapsuleCollider());human.Add(new GroundCast());
             human.Add(new ServerPlayerAttachmentCarrier());human.Add(new ClientPlayerAttachmentCarrier());
             var potato=w.Ingredient("potato");w.Target.Add(new PickupItemSpawner {m_itemPrefab=potato});
+            if(preparation=="cooked") {
+                var station=w.Delivery(); station.Add(new CookingStation());
+                var pan=new GameObject("pan"); pan.Add(new ServerCookingHandler()); pan.Add(new ServerIngredientContainer());
+                station.GetComponent<ServerAttachStation>().Item=pan;
+            }
             var request=new TaskRequest {Action="prepare_near_player"};
             request.Items.Add(new PreparationRequest {Selector="missing chicken",Preparation="cooked",Quantity=1});
             request.Items.Add(new PreparationRequest {Selector="potato",Preparation=preparation,Quantity=1});
@@ -381,6 +386,22 @@ internal static class Program
             else Check(until(w,"place_at") && w.Navigation.Resolve(w.Skills.Run.Target)==w.Target,"held raw food is selected without fetching a substitute");
             w.Tasks.Cancel("test_end");
         }
+        {
+            // A fresh raw catch cannot endlessly outrank finished food, or be
+            // mistaken for the chopped source when the pickup is dispatched.
+            var w=kitchen(); var root=raw(w,"potato"); var chopped=root.GetComponent<WorkableItem>().Next;
+            var supply=w.Delivery(); supply.Add(new Pickup()); supply.Add(new PickupItemSpawner {m_itemPrefab=root});
+            var shelf=w.Delivery(); shelf.Add(new Pickup()); shelf.GetComponent<ServerAttachStation>().Item=chopped;
+            var spare=w.Delivery(); spare.transform.position=new Vector3(-2,0,0);
+            var caught=raw(w,"potato"); w.Hold(caught);
+            start(w,new[] {"potato"});
+            Check(until(w,"place_at") && w.Navigation.Resolve(w.Skills.Run.Target)==spare,
+                "P2 parks raw cargo when the same requested ingredient is already chopped");
+            place(w,spare,caught);
+            Check(until(w,"pick_up") && w.Navigation.Resolve(w.Skills.Run.Target)==shelf,
+                "the original chopped portion is collected before either raw potato is worked");
+            w.Tasks.Cancel("test_end");
+        }
         foreach(bool caughtDuringTravel in new[] {false,true})
         {
             var w=kitchen();var shelf=w.Delivery();shelf.Add(new Pickup());shelf.Add(new PickupItemSpawner {m_itemPrefab=raw(w,"potato")});
@@ -534,7 +555,7 @@ internal static class Program
             if(outcome=="delivered") Check(injected==1 && w.Tasks.Run.State=="succeeded","a failed primitive reconciles an exact item actually obtainable by the human");
             else if(outcome=="held") Check(offeredAgain && w.Tasks.Run.Running && pickups==1 && w.Carrier.Item!=null,
                 "an unverified pass is never counted as delivered: cargo still in hand is offered again");
-            else Check(injected==2 && w.Tasks.Run.Running && pickups==2,"an unverified pass is never counted as delivered: lost cargo is prepared again");
+            else Check(injected==2 && w.Tasks.Run.Running && pickups==2,"an unverified pass is never counted as delivered: lost cargo is prepared again; injected="+injected+" pickups="+pickups+" "+Json.Encode(w.Tasks.Describe()));
             w.Tasks.Cancel("test_end");
         }
     }

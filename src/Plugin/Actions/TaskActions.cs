@@ -62,7 +62,7 @@ namespace SousChef.Plugin.Actions
             return Run.Describe(Json.Object("taskAction", request == null ? null : request.Action,
                 "repetitions", request == null ? 1 : request.Repetitions, "infinite", request != null && request.Repetitions == 0,
                 "completedRepetitions", completed, "completedSteps", completedSteps, "waitingReason", waitingReason,
-                "handoff", handoffEvidence, "pendingDeliveries", pendingDeliveries.Count, "observationError", observationError,
+                "preparation", preparation == null ? null : preparation.Describe(), "handoff", handoffEvidence, "pendingDeliveries", pendingDeliveries.Count, "observationError", observationError,
                 "handoffPlanning", waitingReason == "waiting_for_player_handoff" ? handoffThrows.Describe() : null,
                 "child", childStarted ? child.Describe() : null));
         }
@@ -74,7 +74,7 @@ namespace SousChef.Plugin.Actions
             chef = actor; request = command.Task; inventory.Refresh(chef);
             if (!definition.Available()) return "task_not_available";
             pendingDeliveries.Clear(); nextDeliveryCheck = 0;
-            completed = completedSteps = 0; childStarted = false; waitingReason = null; observationError = null; handoffEvidence = null; step = null; plan = definition.Plan().GetEnumerator(); retryAt = 0;
+            preparation = null; completed = completedSteps = 0; childStarted = false; waitingReason = null; observationError = null; handoffEvidence = null; step = null; plan = definition.Plan().GetEnumerator(); retryAt = 0;
             command.Indefinite = true; Run.Start(owner, command, Time.realtimeSinceStartup); input(0); return null;
         }
         public void Tick()

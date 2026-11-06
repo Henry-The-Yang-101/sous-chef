@@ -16,16 +16,12 @@ namespace SousChef.Plugin.Actions
             while (MoreRequested)
             {
                 yield return Until("waiting_for_dirty_dishes", DirtyDeliveryAvailable);
-                foreach (TaskStep step in DeliverDirtyBatch()) yield return step;
+                foreach (TaskStep step in CollectDirtyBatch()) yield return step;
+                GameObject dishes = ActionObservations.Held(chef);
+                if (dishes == null) continue;
+                foreach (TaskStep step in Give(dishes)) yield return step;
                 completed++;
             }
-        }
-        private IEnumerable<TaskStep> DeliverDirtyBatch()
-        {
-            foreach (TaskStep step in CollectDirtyBatch()) yield return step;
-            GameObject dishes = ActionObservations.Held(chef);
-            if (dishes == null) yield break;
-            foreach (TaskStep step in Give(dishes)) yield return step;
         }
     }
 }
