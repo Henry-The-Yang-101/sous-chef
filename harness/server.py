@@ -20,6 +20,7 @@ from harness.capabilities import snapshot as capability_snapshot
 from harness.contents import ContentsObserver
 from harness.scheduler import Scheduler, QueueConflict, context_of
 from harness.sharing import PhoneShare, lan_addresses
+from harness.voice import VoiceService
 
 
 class HarnessError(Exception):
@@ -64,6 +65,7 @@ class HarnessBridge:
                       'control': {}, 'error': 'Connecting to the game bridge',
                       'lastCommand': None}
         self.scheduler = Scheduler(self, journal_path)
+        self.voice = VoiceService()
 
     def start(self):
         self.thread = threading.Thread(target=self._run, name='bridge-observer', daemon=True)
@@ -139,6 +141,7 @@ class HarnessBridge:
                 self.contents.decorate(result)
         result['queue'] = self.scheduler.snapshot()
         result['queue']['nativeContext'] = context_of(result)
+        result['voice'] = self.voice.snapshot()
         return result
 
     def navigate(self, viewer, session, destination, instance):
@@ -312,6 +315,7 @@ class HarnessBridge:
         return dict(self.state(), operationResult=result)
 
     def stop(self):
+        self.voice.invalidate()
         with self.state_lock:
             self.generation += 1
         # Native Stop remains available even if the local journal cannot write.
@@ -350,6 +354,7 @@ class HarnessBridge:
 
     def close(self):
         self.halt.set()
+        self.voice.close()
         if self.thread:
             self.thread.join(timeout=4)
         with self.io_lock:
@@ -452,6 +457,9 @@ class Handler(BaseHTTPRequestHandler):
                 result = self.server.bridge.accept_plan(data.get('plan'), data.get('context'), data.get('focus', False))
             elif path == '/api/queue':
                 result = self.server.bridge.edit_queue(data.get('edit'))
+            elif path == '/api/voice':
+                self.server.bridge.voice.command(data.get('voice'), viewer)
+                result = self.server.bridge.state(viewer)
             elif path == '/api/stop':
                 result = self.server.bridge.stop()
             elif path == '/api/leave':
