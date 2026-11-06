@@ -43,7 +43,7 @@ class NextRequest(Exception):
 
 async def next_request(session):
     queue = session.get('queue', {'revision': 0, 'active': None, 'pending': []})
-    context = build_context(synthetic_world(), queue)
+    context = build_context(session.get('world', synthetic_world()), queue)
     history = iter(session['responses'])
     async def ask(request):
         item = next(history, None)
