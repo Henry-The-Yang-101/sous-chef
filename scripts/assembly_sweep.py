@@ -215,7 +215,7 @@ class Sweep(Audit):
         snapshot = self.snap('before'); objects = {o['unityInstanceId']: o for o in snapshot['objects']}
         supplies = [i for i in catalog['items'] if i['supply']]
         observed = catalog['displayOptions']['items']
-        plates = [i for i in observed if i.get('cleanPlate') and i.get('routeDistance') is not None]
+        plates = [i for i in observed if i.get('cleanPlate') and not i.get('inUse')]
         equipment = [i for i in observed if i.get('empty') and
                      any(c['type'] in ('ServerCookingHandler', 'ServerMixingHandler') for c in objects.get(i['objectInstanceId'], {}).get('components', []))]
         counters = [d for d in catalog['deliveryDestinations'] if d['kind'] == 'counter' and
@@ -253,7 +253,7 @@ class Sweep(Audit):
         # All assigned equipment is explicit; stations are native capability
         # descriptors, not prefab names. The executor chooses appropriate ones.
         stations = [t['id'] for t in catalog['targets'] if t.get('processingEquipment')]
-        allocation = dict(order_id=order['id'], bases=[p['id'] for p in sorted(plates, key=lambda p: p['routeDistance'])[:4]],
+        allocation = dict(order_id=order['id'], bases=[p['id'] for p in sorted(plates, key=lambda p: p['routeDistance'] if p.get('routeDistance') is not None else float('inf'))[:4]],
                           components=[items[i]['id'] for _, i in assigned], equipment=list(dict.fromkeys([e['id'] for e in equipment] + stations)))
         write(self.directory / 'allocation.json', {'order': order, 'request': allocation, 'components': [items[i] for _, i in assigned], 'unassigned': unused})
         write(self.directory / 'catalog-allocated.json', catalog)

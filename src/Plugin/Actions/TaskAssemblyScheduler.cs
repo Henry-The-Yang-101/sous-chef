@@ -119,7 +119,10 @@ namespace SousChef.Plugin.Actions
                 { earliest = margin; rescue = new AssemblyJob { Stage = stage, Source = stage.Vessel, Destination = entry.Source, Operation = "pick_up", Rescue = true }; }
             }
             if (rescue != null) return rescue;
-            if (AssemblyEntry(assembly.Base) == null || !AssemblyBaseValid(assembly.Base)) return null;
+            // An unavailable plate must not block independent recipe work.
+            // Keep its selection pending (or its identity pinned) while owned
+            // processing dependencies advance and finished food is rescued.
+            if (!System.Object.ReferenceEquals(assembly.Base, null) && (assembly.Base == null || !AssemblyBaseValid(assembly.Base))) return null;
             if (assembly.Plating != null && StageComplete(assembly.Root)) return SelectStageWork(assembly.Plating);
             return SelectStageWork(assembly.Root);
         }

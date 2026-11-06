@@ -177,6 +177,9 @@ internal static partial class Program
             request.Assembly.Equipment.Add(w.Navigation.RegisterItem(vessel));request.Assembly.Equipment.Add(w.IdOf(oven));
             if(mixer!=null)request.Assembly.Equipment.Add(w.IdOf(mixer));
             StartAssembly(w,request);bool sawMix=false,sawCook=false;
+            var human=new GameObject("human temporarily holding allocated plate");human.Add(new PlayerControls());
+            var humanCarrier=human.Add(new ServerPlayerAttachmentCarrier {Item=plate});plateCounter.GetComponent<ServerAttachStation>().Item=null;
+            bool cookedBeforePlateAvailable=false, rescuedBeforePlateAvailable=false;
             int adds=DriveAssembly(w,450,onTick:()=>{
                 if(mixer!=null && ActionObservations.Occupant(mixer)==vessel)
                 {
@@ -187,11 +190,15 @@ internal static partial class Program
                 }
                 if(ActionObservations.Occupant(oven)==vessel)
                 {
+                    cookedBeforePlateAvailable |= humanCarrier.Item==plate;
                     Check(vessel.GetComponent<ServerIngredientContainer>().GetContentsCount()==2 && (!mixing || sawMix && handler.m_serverData.m_mixingState==ProcessingState.Completed),"cooking starts only after full assembly and required mixing");sawCook=true;
                     cooking.m_ServerData.m_cookingProgress+=1;
                     cooking.m_ServerData.m_cookingState=cooking.m_ServerData.m_cookingProgress>=4?ProcessingState.Completed:ProcessingState.Progressing;
                 }
+                if(humanCarrier.Item==plate && cooking.m_ServerData.m_cookingState==ProcessingState.Completed && w.Carrier.Item==vessel)
+                { rescuedBeforePlateAvailable=true;humanCarrier.Item=null;plateCounter.GetComponent<ServerAttachStation>().Item=plate; }
             });
+            Check(cookedBeforePlateAvailable && rescuedBeforePlateAvailable,"independent recipe processing and heat rescue continue while the allocated plate is unavailable");
             Check(w.Tasks.Run.State=="succeeded" && adds==3 && sawCook && (!mixing || sawMix),"combined processing assembled, rescued and plated: "+Json.Encode(w.Tasks.Describe()));
             Check(RecipeProof.Equal(RecipeProof.Composition(plate),goal),"final dish retains exact cooking/mixing structure");
         }
