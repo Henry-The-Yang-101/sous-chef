@@ -353,7 +353,14 @@ namespace SousChef.Plugin.Navigation
             // Recovery runs with neutral input and may need a fresh graph after
             // a target/geometry outage. Portal kitchens cannot reuse a frontier;
             // a small idle slice can starve the same distant goal indefinitely.
-            Refresh(player, true, false, !recovering, recovering ? RecoveryBudgetMilliseconds : PlanningBudgetMilliseconds);
+            Destination requested = null;
+            if (recovering)
+                foreach (Destination known in identities.Values)
+                    if (known.Id == destination && known.Object != null && known.Object.activeInHierarchy) { requested = known; break; }
+            // A stalled pickup/placement already identifies its next station.
+            // Certify that route before spending the recovery slice matching the
+            // whole kitchen, which may change again before a broad search ends.
+            Refresh(player, true, false, !recovering, recovering ? RecoveryBudgetMilliseconds : PlanningBudgetMilliseconds, requested);
             Destination chosen;
             if (!available.TryGetValue(destination, out chosen)) return unavailable ?? "destination_unavailable";
             if (!Action.Start(owner, destination, true)) return "action_in_progress";
@@ -818,7 +825,7 @@ namespace SousChef.Plugin.Navigation
             foreach (int key in removed) identities.Remove(key);
             return new List<Destination>(found.Values);
         }
-        private void Refresh(PlayerControls player, bool force, bool alreadyRefreshed = false, bool incremental = false, double activeBudgetMilliseconds = PlanningBudgetMilliseconds)
+        private void Refresh(PlayerControls player, bool force, bool alreadyRefreshed = false, bool incremental = false, double activeBudgetMilliseconds = PlanningBudgetMilliseconds, Destination requested = null)
         {
             if (planning) return;
             if (!force && Time.realtimeSinceStartup - lastPlan < .1f) return;
@@ -840,10 +847,11 @@ namespace SousChef.Plugin.Navigation
                     if (!supported || Vector3.Distance(checkedPoint, target.Approach) > .04f) { unavailable = "unsafe_release_stance"; return; }
                 }
                 observationError = null;
-                focusedPlan = target != null && !target.IsPoint && !fullCatalogueRequested;
-                var candidates = target != null && target.IsPoint ? new List<Destination> { target } : Discover(player, focusedPlan ? target : null);
+                Destination station = requested ?? target;
+                focusedPlan = station != null && !station.IsPoint && (requested != null || !fullCatalogueRequested);
+                var candidates = target != null && target.IsPoint ? new List<Destination> { target } : Discover(player, focusedPlan ? station : null);
                 candidateCount = candidates.Count;
-                StationMatch focused = focusedPlan && candidates.Count == 1 ? new StationMatch(this, target) : null;
+                StationMatch focused = focusedPlan && candidates.Count == 1 ? new StationMatch(this, station) : null;
                 bool hadIncremental = incrementalSearch;
                 searchReused = incremental && incrementalSearch && search != null && physics.CanContinueSearch();
                 List<WalkEdge> starts = null;

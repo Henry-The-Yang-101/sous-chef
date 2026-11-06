@@ -1105,6 +1105,12 @@ internal static class Program
         Check(options.Count == 2 && (bool)catalog["complete"], "a catalogue poll restores full matching at the next active replan");
         var matched = options.Cast<Json.Record>().Single(row => Equals(row["id"],focused["id"]));
         Check(Equals(matched["routeDistance"],focused["routeDistance"]), "focused and unrestricted search certify the same route cost");
+        nav.Stop("recovery_fixture");
+        string error = nav.Start(w.Chef, 2, (string)focused["id"], true);
+        Check(error == null, "recovery certifies a known requested station from idle");
+        var diagnostics = (Json.Record)((Json.Record)nav.Describe())["diagnostics"];
+        Check((int)diagnostics["candidateCount"] == 1 && !(bool)diagnostics["searchComplete"],
+            "recovery focuses on its station before completing the unrelated kitchen catalogue");
     }
 
     private static void DoorwayChanges()
