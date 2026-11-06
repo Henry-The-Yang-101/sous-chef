@@ -121,9 +121,9 @@ internal static class Program
             Chef.CurrentInteractionObjects.m_gridLocation=grid; Chef.CurrentInteractionObjects.m_interactable=interact;
             return station;
         }
-        public NavigationActions Navigate(GameObject station)
+        public NavigationActions Navigate(GameObject station, Action<Vector3, int> walk = null, Action halt = null)
         {
-            var navigation=new NavigationActions((v,ms) => { LastInput=v;LastMilliseconds=ms; },() => {}); string id=null;
+            var navigation=new NavigationActions((v,ms) => { LastInput=v;LastMilliseconds=ms; if (walk != null) walk(v,ms); },halt ?? (() => {})); string id=null;
             for (int i=0; i<8; i++)
             {
                 var catalog=(Json.Record)navigation.Available(Chef);
@@ -372,6 +372,25 @@ internal static class Program
         w.Chef.transform.position = new Vector3(0,0,-2.5f); navigation = w.Navigate(w.AddStation()); navigation.Tick(w.Chef);
         for (int i=0; i<3; i++) { Time.realtimeSinceStartup += .2f; navigation.Tick(w.Chef); }
         Check(Reroutes(navigation) == 0, "expired input windows cannot count as continuous commanded walking");
+
+        // Match the bridge's distinction between a neutral walking command and
+        // the completion callback, which releases standalone navigation input.
+        w = new World(); w.AddFloor((x,z) => Math.Abs(x)<4 && Math.Abs(z)<4 ? 0 : (float?)null);
+        w.Chef.transform.position = new Vector3(0,0,-2.5f);
+        var lease = new ControlLease(); lease.Claim(1, Time.realtimeSinceStartup, true); long sequence = 0;
+        bool lostOwner = false;
+        navigation = w.Navigate(w.AddStation(), (v,ms) =>
+        {
+            string error = lease.Set(1, new ControlCommand { Sequence=++sequence,
+                Milliseconds=WalkingCommand.OwnershipMilliseconds(ms), X=v.x, Y=v.z }, Time.realtimeSinceStartup, ms);
+            if (error != null) lostOwner = true;
+        }, () => lease.Release(1, "action_finished"));
+        Time.deltaTime = Time.unscaledDeltaTime = .05f; navigation.Tick(w.Chef);
+        for (int i=0; i<10; i++) { Time.realtimeSinceStartup += .05f; navigation.Tick(w.Chef); }
+        Check(Reroutes(navigation) == 1 && !lostOwner && lease.Owner(Time.realtimeSinceStartup) == 1,
+            "stall replanning neutralizes movement without releasing the standalone navigation owner");
+        navigation.Stop("stopped");
+        Check(lease.Owner(Time.realtimeSinceStartup) == 0, "explicit stop still releases navigation ownership");
     }
 
     private static void StallAvoidanceGeometry()
@@ -488,8 +507,24 @@ internal static class Program
         cruise.Chef.transform.position = new Vector3(0,0,-1.3f);
         cruiseNavigation = cruise.Navigate(cruise.AddStation());
         Time.realtimeSinceStartup += .02f; cruiseNavigation.Tick(cruise.Chef);
-        Check(cruise.LastMilliseconds == 17 && cruise.LastInput.magnitude > .9f,
-            "final approach keeps the original movement and braking window");
+        Check(cruise.LastMilliseconds == 54 && cruise.LastInput.magnitude > .9f,
+            "supported final approach also covers a delayed native input read");
+        cruise = new World(); cruise.AddFloor((x,z) => Math.Abs(x)<4 && Math.Abs(z)<4 ? 0 : (float?)null);
+        cruise.Chef.transform.position = new Vector3(0,0,-1.24f);
+        cruiseNavigation = cruise.Navigate(cruise.AddStation());
+        Time.realtimeSinceStartup += .02f; cruiseNavigation.Tick(cruise.Chef);
+        Check(cruise.LastMilliseconds > 17 && cruise.LastMilliseconds < 54 &&
+            cruise.Chef.transform.position.z + 4*(cruise.LastMilliseconds/1000f + Time.fixedDeltaTime) <= -1,
+            "final continuation is shortened to stop before the stance including the physics-step tail");
+        cruise = new World(); cruise.AddFloor((x,z) => Math.Abs(x)<4 && Math.Abs(z)<4 ? 0 : (float?)null);
+        cruise.Chef.transform.position = new Vector3(0,0,-1.3f);
+        cruiseNavigation = cruise.Navigate(cruise.AddStation());
+        var continuationWall = new GameObject("obstacle inside optional continuation").Add(new Collider());
+        Physics.Cast=(a,b,r,d,length) => Math.Max(a.z,a.z+d.z*length) > -1.16f ?
+            new[] { new RaycastHit { collider=continuationWall } } : new RaycastHit[0];
+        Time.realtimeSinceStartup += .02f; cruiseNavigation.Tick(cruise.Chef);
+        Check(cruise.LastMilliseconds == 17 && cruiseNavigation.Action.State == "navigating",
+            "blocked continuation retains only the original checked movement window");
         var w=new World(); w.AddFloor((x,z) => Math.Abs(x)<2 && Math.Abs(z)<2 ? 0 : (float?)null);
         w.Chef.transform.position=new Vector3(0,0,-1.3f); var station=w.AddStation(); var navigation=w.Navigate(station);
         Time.deltaTime=Time.unscaledDeltaTime=.1f; Time.realtimeSinceStartup += .1f; navigation.Tick(w.Chef);

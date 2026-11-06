@@ -26,15 +26,18 @@ flow on cached edges, moving search boundaries, arrival under wind and external
 pushes, shared platform translation/rotation, fallback from an unreachable
 retained side, preserved reachable-side preference, slow-frame movement windows
 and rejected overshoot. The core suite separately checks input expiry while
-retaining ownership and renewal after frame jitter. Open-corridor continuation
-and unchanged final-approach windows have separate production-controller checks.
+retaining ownership and renewal after frame jitter. Open-corridor continuation,
+final-approach continuation bounded by stopping distance, rejection of obstructed
+extensions and unchanged arrival braking have production-controller checks.
 
 Stall recovery checks the 499/500 ms boundary, successful rerouting around an
 unreported contact, small contact jitter, moving/rotating ground independent of
 the destination, slow relative progress, pause/resume and expired input windows.
 It also checks live exclusions on cached edges and shortcuts, support-relative
 exclusion transforms, clearing recovery without corrupting geometry caches, and
-refusal to escape over a hole when no alternate route exists.
+refusal to escape over a hole when no alternate route exists. A production
+`ControlLease` regression also distinguishes neutral replanning from completion:
+recovery must retain standalone navigation ownership, while Stop releases it.
 
 Stall-recovery validation on 2026-11-05 passed the complete `scripts/check.py`
 suite (391 navigation checks). An isolated native `s_wizard_school_3_4` runtime

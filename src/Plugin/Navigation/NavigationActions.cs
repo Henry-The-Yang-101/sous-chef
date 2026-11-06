@@ -551,14 +551,27 @@ namespace SousChef.Plugin.Navigation
             }
             // Native input can be read before this component's next Update.
             // A lease lasting exactly the preceding frame often expires there.
-            // Extend only a fully checked straight continuation, away from the
-            // final stance. Arrival braking keeps its original frame horizon.
-            if (Vector3.Distance(position, target.Approach) > .8f)
+            // Extend only a fully checked straight continuation. Near arrival,
+            // cap that window before the working stance, including one native
+            // physics step after expiry. Braking still uses the original frame
+            // horizon; a longer input lease is not a predicted arrival.
             {
                 int continuation = WalkingCommand.ContinuationMilliseconds(commandMilliseconds);
+                Vector3 movement = input * speed + drift;
+                if (Vector3.Distance(position, target.Approach) <= .8f)
+                {
+                    Vector3 remaining = target.Approach - position; remaining.y = 0;
+                    Vector3 relative = movement - targetVelocity; relative.y = 0;
+                    float untilClosest = relative.sqrMagnitude > .0001f ? Vector3.Dot(remaining, relative) / relative.sqrMagnitude : 0;
+                    int beforeStance = (int)Math.Floor(Mathf.Max(0, untilClosest - Time.fixedDeltaTime) * 1000f);
+                    continuation = Math.Min(continuation, Math.Max(commandMilliseconds, beforeStance));
+                    // Retained sliding momentum has its own existing checks;
+                    // do not extend its final approach using walking speed alone.
+                    if (surface != null && surface.Slippiness > .05f) continuation = commandMilliseconds;
+                }
                 // A preceding native velocity may integrate for one fixed step
                 // before the expired input is read and neutralized.
-                Vector3 extended = position + (input * speed + drift) * (continuation / 1000f + Time.fixedDeltaTime);
+                Vector3 extended = position + movement * (continuation / 1000f + Time.fixedDeltaTime);
                 if (continuation > commandMilliseconds && physics.Segment(position, extended)) commandMilliseconds = continuation;
             }
             RecordWalking(position, goal - position, commandMilliseconds);

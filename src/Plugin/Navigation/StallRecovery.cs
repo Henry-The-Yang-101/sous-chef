@@ -54,7 +54,9 @@ namespace SousChef.Plugin.Navigation
             stallReroutes++;
             Trace("stall_reroute", position + heading, Vector3.zero);
             ResetWalkingProgress();
-            neutral();
+            // The completion callback releases standalone navigation ownership.
+            // Replanning needs neutral input while retaining the same action.
+            move(Vector3.zero, SousChef.Core.WalkingCommand.Milliseconds(Time.unscaledDeltaTime));
             // The usual periodic refresh could choose precisely the same edge.
             // Rebuild with the failed local heading excluded, including cached
             // edges, start/goal connectors and execution shortcuts.

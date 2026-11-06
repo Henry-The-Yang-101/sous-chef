@@ -319,14 +319,18 @@ with a minimum native-step window of 17 ms. The safety projection also covers th
 scaled game delta when it is larger. There is no 60 ms cap that truncates a slow
 frame. Native input reads neutralize the command when its checked motion window
 expires; a separate 500 ms ownership lease permits renewal after frame jitter.
-That ownership grace does not extend the checked movement window. Away from the
-final stance, the controller may separately certify a short continuation window
+That ownership grace does not extend the checked movement window. The controller
+may separately certify a short continuation window
 (two preceding frame windows plus 20 ms, capped at 100 ms; already slower commands
 are unchanged). It checks the entire extra travel plus one fixed physics step.
 If the extended corridor is blocked, the shorter certified command remains usable.
-Near arrival and during portal entry, the original frame window and braking horizon
-remain in force. This prevents normal Update jitter from zeroing a command just
-before the native controller reads it.
+Within 0.8 units of arrival, that optional continuation is shortened so its motion
+plus the fixed-step tail cannot pass the point of closest approach to the working
+stance, accounting for target motion. Slippery final approaches retain the original
+window. Arrival braking still uses the original frame horizon, and portal entry
+keeps its existing windows. This prevents normal Update jitter from zeroing a
+walking command just before the native controller reads it, including the last
+few steps toward a counter, while preserving the actual arrival checks.
 An update interval above 0.9 seconds or an invalid interval stops with
 `unsafe_update_interval`. Ownership expiry after a stall still stops the action.
 
