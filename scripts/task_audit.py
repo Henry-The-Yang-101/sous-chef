@@ -26,18 +26,18 @@ class Audit:
         self.directory = args.output
         self.client = None
 
-    def load(self, level):
+    def load(self, level, complete=True):
         generation = sim.read_status(self.args.runtime)['generation'] + 1
         sim.command(self.args.runtime, 'load ' + level)
         sim.wait_ready(self.args.runtime, generation)
         self.client = ActionClient(self.args.port_base + 1, timeout=15)
-        return self.catalog()
+        return self.catalog(complete)
 
-    def catalog(self):
+    def catalog(self, complete=True):
         end = time.monotonic() + 30
         while time.monotonic() < end:
             catalog = self.client.available_actions()
-            if catalog.get('complete'):
+            if catalog.get('complete') or not complete and catalog.get('targets'):
                 return catalog
             time.sleep(.1)
         raise TimeoutError('Native walking catalogue did not complete')
@@ -367,6 +367,63 @@ class Audit:
         assert final['action']['state'] == 'cancelled' and duration < .5
         return {'infiniteWaitRetained': True, 'stopSeconds': duration}
 
+    def fryer(self):
+        # The rotating raft continually invalidates the global route frontier.
+        # Supplied chopped food models P1's contribution; insertion, cooking,
+        # removal and parking all use the production executor/native engine.
+        catalog = self.load('s_rapids_4_2A', complete=False)
+        before = self.snap('initial')
+        bot = next(o for o in before['objects'] if o['name'] == 'Player 2')
+        supply = next(t for t in catalog['targets'] if t.get('foodName') == 'Potato')
+        fryers = [o for o in before['objects'] if fields(o, 'CookingStation').get('m_stationType') == 'DeepFatFryer'
+                  and fields(o, 'ServerAttachStation').get('m_item')]
+        assert len(fryers) == 2
+        original = {}
+        for index, station in enumerate(fryers):
+            original[station['unityInstanceId']] = fields(station, 'ServerAttachStation')['m_item']['objectId']
+            self.fixture(f"ingredient {supply['objectInstanceId']} {bot['unityInstanceId']} chopped")
+            catalog = self.client.available_actions()
+            target = next(t for t in catalog['targets'] if t['objectInstanceId'] == station['unityInstanceId'])
+            self.client.add_ingredient(target['id'])
+            self.observe('supply-' + str(index), timeout=45)
+        cooking = self.snap('before')
+        for identity in original.values():
+            basket = next(o for o in cooking['objects'] if o['id'] == identity)
+            assert fields(basket, 'ServerIngredientContainer')['m_contents']
+        self.request_when_available('monitor_equipment', len(fryers))
+        receipts = self.observe('task', timeout=90)
+        after = self.snap('after')
+        evidence = []
+        for instance, identity in original.items():
+            station = next(o for o in after['objects'] if o['unityInstanceId'] == instance)
+            basket = next(o for o in after['objects'] if o['id'] == identity)
+            contents = fields(basket, 'ServerIngredientContainer')['m_contents']
+            current = fields(station, 'ServerAttachStation').get('m_item')
+            state = fields(basket, 'ServerCookingHandler')['m_ServerData']['fields']['CookingStateMessage.m_cookingState']
+            assert state != 'Ruined', 'Monitoring must rescue food before it burns'
+            assert not contents or not current or current['objectId'] != identity
+            if contents:
+                assert state in ('Completed', 'OverDoing'), 'Never remove unfinished food'
+                holders = [o for o in after['objects'] if
+                           (fields(o, 'ServerAttachStation').get('m_item') or {}).get('objectId') == identity]
+                assert holders and all(not fields(o, 'ServerCookingStation') for o in holders)
+            evidence.append(dict(basket=basket['unityInstanceId'], state=state, emptied=not contents))
+        assert receipts[-1]['details']['completedRepetitions'] == len(fryers)
+        assert not any(fields(o, 'ServerFlammable').get('m_onFire') for o in after['objects'])
+        plated = []
+        for item in after['objects']:
+            if not fields(item, 'ServerPlate'):
+                continue
+            for node in fields(item, 'ServerIngredientContainer').get('m_contents', []):
+                data = node.get('fields', {})
+                step = data.get('CookedCompositeAssembledNode.m_cookingStep', {})
+                if step.get('name') == 'DeepFatFryer':
+                    assert data.get('CookedCompositeAssembledNode.m_progress') == 'Cooked'
+                    plated.append(item['unityInstanceId'])
+        assert len(plated) == sum(e['emptied'] for e in evidence), 'Each emptied basket must have a cooked plated batch'
+        return {'completedRepetitions': len(fryers), 'baskets': evidence, 'cookedPlates': plated,
+                'singleRequest': receipts[-1]['requestId']}
+
     def mixer(self):
         catalog = self.load('s_wizard_school_3_4')
         mixer = next(t for t in catalog['targets'] if t['kind'] != 'item' and 'mixed' in t.get('waitConditions', [])
@@ -438,13 +495,13 @@ def main():
     parser.add_argument('--runtime', type=Path, required=True)
     parser.add_argument('--port-base', type=int, required=True)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--case', action='append', choices=('camp_backpacks', 'backpack', 'lost_handoff', 'water_gun', 'prepare', 'take_ready', 'repeated_heat', 'repeated_prepare', 'fire', 'burnt', 'wash', 'repetitions', 'monitor', 'mixer', 'utensil', 'dirty_delivery'))
+    parser.add_argument('--case', action='append', choices=('camp_backpacks', 'backpack', 'lost_handoff', 'water_gun', 'prepare', 'take_ready', 'repeated_heat', 'repeated_prepare', 'fire', 'burnt', 'wash', 'repetitions', 'monitor', 'fryer', 'mixer', 'utensil', 'dirty_delivery'))
     args = parser.parse_args(); args.output.mkdir(parents=True, exist_ok=True)
     sim.wait_ready(args.runtime)
     runtime_dll = args.runtime / 'BepInEx/plugins/SousChef.Bridge.dll'
     report = {'bridgeSha256': hashlib.sha256(runtime_dll.read_bytes()).hexdigest(), 'cases': []}
     audit = Audit(args)
-    for case in args.case or ['prepare', 'take_ready', 'fire', 'burnt', 'wash', 'repetitions', 'monitor', 'mixer', 'utensil', 'dirty_delivery']:
+    for case in args.case or ['prepare', 'take_ready', 'fire', 'burnt', 'wash', 'repetitions', 'monitor', 'fryer', 'mixer', 'utensil', 'dirty_delivery']:
         audit.directory = args.output / case; audit.directory.mkdir(exist_ok=True)
         try:
             details = getattr(audit, case)()

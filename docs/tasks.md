@@ -249,12 +249,20 @@ placement blocked by changed contents can select another allowed destination. If
 
 ## Monitor equipment
 
-`monitor_equipment` waits for any accessible native cooker, heated station, or
-mixer/blender to finish. It uses shared ready-food collection and serving/parking,
+`monitor_equipment` watches accessible equipment that advances food unattended:
+fryers, pots and pans on burners, ovens, grills/griddles, heated cookers, and
+mixers/blenders. It discovers native cooking/mixing drivers and observes the
+attached food's current processing stage, without a prefab or recipe allowlist.
+Chopping boards and other stations that require continuous chef work are excluded.
+It uses shared ready-food collection and serving/parking,
 then completes one repetition. Serving-tool travel is bounded by the native
-remaining spoil window; a distant plate cannot delay removing a ready container. Use unlimited repetitions for ongoing monitoring,
-including idle periods when equipment is empty. Cooking station variants use the
-same native cooking handler instead of recipe/name-specific timing guesses.
+remaining spoil window; a distant plate cannot delay removing a ready container.
+Incomplete kitchen-wide route discovery cannot delay rescue or optional plating.
+On moving kitchens, the executor can prove a local safe counter on the chef's
+current support and park the finished container there. Actual walking and
+placement still require the normal native checks.
+Use unlimited repetitions for ongoing monitoring, including idle periods when
+equipment is empty. See the [fryer regression and native checks](equipment-monitoring.md).
 
 ## Examples
 
