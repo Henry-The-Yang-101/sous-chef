@@ -9,18 +9,18 @@ namespace SousChef.Plugin.Actions
         partial void RegisterFire() { Register("put_out_fire", FireAvailable, PutOutFire); }
         private bool FireAvailable()
         {
-            LogisticsItem tool = SprayTool("ServerFireExtinguishSpray"); if (tool == null) return false;
+            LogisticsItem tool = SprayTool<ServerFireExtinguishSpray>(); if (tool == null) return false;
             foreach (ServerFlammable fire in ServerFlammable.GetAllOnFire()) if (fire != null && fire.OnFire()) return true;
             return false;
         }
         private IEnumerable<TaskStep> PutOutFire()
         {
             LogisticsItem source = null;
-            yield return Until("waiting_for_extinguisher", delegate { source = SprayTool("ServerFireExtinguishSpray"); return source != null; });
+            yield return Until("waiting_for_extinguisher", delegate { source = SprayTool<ServerFireExtinguishSpray>(); return source != null; });
             if (!System.Object.ReferenceEquals(ActionObservations.Held(chef), source.Item))
             {
                 TaskStep pickup = Do("pick_up", source.Source);
-                pickup.UseHeld = held => TaskNative.Component(held, "ServerFireExtinguishSpray") != null;
+                pickup.UseHeld = held => TaskNative.Component<ServerFireExtinguishSpray>(held) != null;
                 yield return pickup;
             }
             GameObject tool = ActionObservations.Held(chef);

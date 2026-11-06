@@ -38,7 +38,7 @@ namespace SousChef.Plugin.Actions
             foreach (GameObject target in navigation.Targets())
             {
                 if (blockedTargets.Contains(target) || !Counter(target) || ActionObservations.Occupant(target) != null ||
-                    HumanDistance(target) > 5 || TaskNative.Component(target, "ServerConveyorStation") != null) continue;
+                    HumanDistance(target) > 5 || TaskNative.Component<ServerConveyorStation>(target) != null) continue;
                 bool walk = Reachable(target) && CanDeliver(item, target);
                 if (!walk && !ThrowPossible(item, target)) continue;
                 float candidate = HumanDistance(target) * 100 + (walk ? inventory.DistanceTo(target) : 50);
@@ -83,7 +83,7 @@ namespace SousChef.Plugin.Actions
             for (int hop = 0; current != null && hop < 64 && seen.Add(current.GetInstanceID()); hop++)
             {
                 if (current != start && HumanDistance(current) != Single.MaxValue) return true;
-                Component belt = TaskNative.Component(current, "ServerConveyorStation"); if (belt == null) return false;
+                Component belt = TaskNative.Component<ServerConveyorStation>(current); if (belt == null) return false;
                 object next = TaskNative.Call(belt, "GetAdjacentReceiver"); var component = next as Component;
                 if (component == null) return false;
                 var attachment = GameObjectUtils.RequestInterface<IAttachment>(item);

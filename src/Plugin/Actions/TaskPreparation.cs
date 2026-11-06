@@ -145,7 +145,7 @@ namespace SousChef.Plugin.Actions
             foreach (LogisticsItem candidate in inventory.Items)
             {
                 if (!candidate.Empty || candidate.InUse || !TaskNative.Equipment(candidate.Holder ?? candidate.Source) ||
-                    TaskNative.Component(candidate.Item, mixing ? "ServerMixingHandler" : "ServerCookingHandler") == null) continue;
+                    TaskNative.ProcessingHandler(candidate.Item, mixing) == null) continue;
                 string operation;
                 if (LogisticsChecks.Delivery(chef, "fetch_ingredient", item, candidate.Source, out operation) != null) continue;
                 float distance = ApproachCost(candidate.Source);
@@ -159,7 +159,7 @@ namespace SousChef.Plugin.Actions
             foreach (LogisticsItem item in inventory.Items)
             {
                 if (!item.Empty || item.InUse || ApproachCost(item.Source) == Single.MaxValue || !LogisticsChecks.CanCollectEmpty(chef, item.Source) ||
-                    TaskNative.Component(item.Item, mixing ? "ServerMixingHandler" : "ServerCookingHandler") == null) continue;
+                    TaskNative.ProcessingHandler(item.Item, mixing) == null) continue;
                 string operation;
                 if (LogisticsChecks.Delivery(chef, "fetch_ingredient", food, item.Item, out operation) != null) continue;
                 foreach (GameObject target in navigation.Targets())
@@ -339,9 +339,9 @@ namespace SousChef.Plugin.Actions
                     yield return Do("add_ingredient", processor);
                     next.Station = processor; next.Item = ActionObservations.Receiver(processor); next.Processing = true;
                     // Native mixers/ovens may require an explicit activation.
-                    Component mixer = TaskNative.Component(processor, "ServerMixingStation");
+                    Component mixer = TaskNative.Component<ServerMixingStation>(processor);
                     if (mixer != null && !ActionObservations.Read<bool>(mixer, "m_bMixerOn")) yield return Do("activate", processor);
-                    Component cooker = TaskNative.Component(processor, "ServerCookingStation") ?? TaskNative.Component(processor, "ServerHeatedCookingStation");
+                    Component cooker = TaskNative.Component<ServerCookingStation>(processor);
                     if (cooker != null && !ActionObservations.Read<bool>(cooker, "m_isTurnedOn") && processor.GetComponent<ClientInteractable>() != null) yield return Do("activate", processor);
                     // No wait child occupies P2 while native time advances.
                     continue;
@@ -358,7 +358,7 @@ namespace SousChef.Plugin.Actions
             inventory.Refresh(chef);
             foreach (LogisticsItem item in inventory.Items)
                 if (item.Empty && !item.InUse && TaskNative.Equipment(item.Holder ?? item.Source) && ApproachCost(item.Source) != Single.MaxValue &&
-                    TaskNative.Component(item.Item, mixing ? "ServerMixingHandler" : "ServerCookingHandler") != null) return true;
+                    TaskNative.ProcessingHandler(item.Item, mixing) != null) return true;
             return false;
         }
         private float PreparationSeconds(PreparationUnit unit)

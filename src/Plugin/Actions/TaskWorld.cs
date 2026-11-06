@@ -10,12 +10,12 @@ namespace SousChef.Plugin.Actions
     // Read native capabilities/state rather than item or kitchen name heuristics.
     internal static class TaskNative
     {
-        public static Component Component(GameObject go, string name)
-        {
-            if (go != null) foreach (Component c in go.GetComponents<Component>())
-                if (c != null) for (Type type = c.GetType(); type != null; type = type.BaseType) if (type.Name == name) return c;
-            return null;
-        }
+        public static T Component<T>(GameObject go) where T : Component
+        { return go == null ? null : go.GetComponent<T>(); }
+
+        public static Component ProcessingHandler(GameObject item, bool mixing)
+        { return mixing ? (Component)Component<ServerMixingHandler>(item) : Component<ServerCookingHandler>(item); }
+
         public static object Call(object instance, string method, params object[] args)
         {
             if (instance == null) return null;
@@ -25,7 +25,7 @@ namespace SousChef.Plugin.Actions
         }
         public static string State(GameObject item, bool mixing = false)
         {
-            Component handler = Component(item, mixing ? "ServerMixingHandler" : "ServerCookingHandler");
+            Component handler = ProcessingHandler(item, mixing);
             if (handler == null) return null;
             object data = ActionObservations.Read<object>(handler, mixing ? "m_serverData" : "m_ServerData");
             return ActionObservations.Read<object>(data, mixing ? "m_mixingState" : "m_cookingState").ToString();
@@ -48,7 +48,7 @@ namespace SousChef.Plugin.Actions
                 if (System.Object.ReferenceEquals(holder.InspectItem(), item) && Equipment(holder.gameObject)) return holder.gameObject;
             return null;
         }
-        public static bool IsMixer(GameObject target) { return Component(StationFor(target), "MixingStation") != null; }
+        public static bool IsMixer(GameObject target) { return Component<MixingStation>(StationFor(target)) != null; }
         public static bool ReadyAt(GameObject target)
         {
             GameObject item = ActionObservations.Receiver(target);
@@ -62,15 +62,15 @@ namespace SousChef.Plugin.Actions
         public static bool Burnt(GameObject item) { return State(item) == "Ruined" || State(item, true) == "Ruined"; }
         public static float Remaining(GameObject item, bool mixing = false, bool untilRuined = false)
         {
-            Component h = Component(item, mixing ? "ServerMixingHandler" : "ServerCookingHandler");
+            Component h = ProcessingHandler(item, mixing);
             if (h == null) return Single.MaxValue;
             float progress = (float)Call(h, mixing ? "GetMixingProgress" : "GetCookingProgress");
             var property = h.GetType().GetProperty(mixing ? "AccessMixingTime" : "AccessCookingTime");
             return Math.Max(0, (float)property.GetValue(h, null) * (untilRuined ? 2 : 1) - progress);
         }
         public static bool Equipment(GameObject go)
-        { return go != null && (go.GetComponent<CookingStation>() != null || Component(go, "MixingStation") != null || Component(go, "HeatedCookingStation") != null || Component(go, "ServerCookingRegion") != null); }
-        public static bool Dirty(GameObject go) { return Component(go, "ServerDirtyPlateStack") != null; }
+        { return go != null && (go.GetComponent<CookingStation>() != null || go.GetComponent<MixingStation>() != null || go.GetComponent<ServerCookingRegion>() != null); }
+        public static bool Dirty(GameObject go) { return Component<ServerDirtyPlateStack>(go) != null; }
     }
     internal sealed partial class TaskActions
     {
@@ -171,7 +171,7 @@ namespace SousChef.Plugin.Actions
                 if ((!Counter(target) && !(burners && target.GetComponent<CookingStation>() != null)) ||
                     ActionObservations.Occupant(target) != null || !Reachable(target) || inventory.DistanceTo(target) > maxDistance || !CanDeliver(item, target)) continue;
                 // A conveyor is a transport, not stable storage for a hot pot.
-                if (TaskNative.Component(target, "ServerConveyorStation") != null) continue;
+                if (TaskNative.Component<ServerConveyorStation>(target) != null) continue;
                 float score = inventory.DistanceTo(target) + (target == preferred ? 0 : burners && target.GetComponent<CookingStation>() != null ? 1000 : 2000);
                 if (score < cost) { cost = score; best = target; }
             }

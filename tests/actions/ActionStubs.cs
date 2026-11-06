@@ -186,9 +186,16 @@ public class ServerFlammable : MonoBehaviour
 }
 
 public class ServerDirtyPlateStack : MonoBehaviour { }
-public class ServerFireExtinguishSpray : MonoBehaviour { }
+public class SprayingUtensil : MonoBehaviour { }
+public class ServerSprayingUtensil : MonoBehaviour { }
+public class ServerFireExtinguishSpray : ServerSprayingUtensil { }
+public class ServerWaterGunSpray : ServerFireExtinguishSpray { }
+public class ServerWashable : MonoBehaviour { }
 
 public class MixingStation : MonoBehaviour { }
+public class ServerMixingStation : MonoBehaviour { }
+public class ServerCookingStation : MonoBehaviour { }
+public class ServerCookingRegion : MonoBehaviour { }
 
 public class CookingHandler : MonoBehaviour { public UnityEngine.Object m_cookingType; }
 public class MixingHandler : MonoBehaviour { public UnityEngine.Object m_mixingType; }

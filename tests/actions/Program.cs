@@ -489,7 +489,8 @@ internal static class Program
                 "firefighting parks unrelated food before fetching the extinguisher");w.Tasks.Cancel("test_end");
             var held=new GameObject("held extinguisher");held.Add(new ServerFireExtinguishSpray());w.Hold(held);
             var flags=System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic;
-            var selected=(LogisticsItem)typeof(TaskActions).GetMethod("SprayTool",flags).Invoke(w.Tasks,new object[] {"ServerFireExtinguishSpray"});
+            var sprayTool = typeof(TaskActions).GetMethod("SprayTool",flags).MakeGenericMethod(typeof(ServerFireExtinguishSpray));
+            var selected = (LogisticsItem)sprayTool.Invoke(w.Tasks, null);
             Check(selected!=null && selected.Item==held,"a useful held extinguisher takes priority over another available tool");
         }
         {

@@ -5,12 +5,12 @@ namespace SousChef.Plugin.Actions
 {
     internal sealed partial class TaskActions
     {
-        private LogisticsItem SprayTool(string component)
+        private LogisticsItem SprayTool<T>() where T : Component
         {
             inventory.Refresh(chef);
             LogisticsItem best = null;
             foreach (LogisticsItem item in inventory.Items)
-                if (TaskNative.Component(item.Item, component) != null && LogisticsChecks.Collect(chef, item, "move_item", true) == null)
+                if (TaskNative.Component<T>(item.Item) != null && LogisticsChecks.Collect(chef, item, "move_item", true) == null)
                 {
                     if (System.Object.ReferenceEquals(item.Item, ActionObservations.Held(chef))) return item;
                     if (best == null) best = item;
@@ -20,7 +20,7 @@ namespace SousChef.Plugin.Actions
         private bool SprayStance(GameObject tool, GameObject target, out Vector3 stance)
         {
             stance = Vector3.zero; if (target == null) return false;
-            Component spray = TaskNative.Component(tool, "SprayingUtensil"); if (spray == null) return false;
+            Component spray = TaskNative.Component<SprayingUtensil>(tool); if (spray == null) return false;
             float range = ActionObservations.Read<float>(spray, "m_sprayDistance");
             float best = Single.MaxValue;
             foreach (float height in navigation.ReleaseHeights(target.transform.position, range + 1))
@@ -45,7 +45,7 @@ namespace SousChef.Plugin.Actions
                 if (!System.Object.ReferenceEquals(ActionObservations.Held(chef), tool)) throw new InvalidOperationException("spray_tool_changed");
                 if (complete()) { input(0); return true; }
                 if (navigation.Action.State == "navigating") return false;
-                Component spray = TaskNative.Component(tool, "ServerSprayingUtensil");
+                Component spray = TaskNative.Component<ServerSprayingUtensil>(tool);
                 if (target.activeInHierarchy && (bool)TaskNative.Call(spray, "IsInSpray", target.transform)) { input(2); return false; }
                 input(0);
                 if (Time.realtimeSinceStartup >= retry)

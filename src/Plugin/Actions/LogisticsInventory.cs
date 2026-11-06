@@ -68,12 +68,12 @@ namespace SousChef.Plugin.Actions
             // Native pots, pans and mixer bowls often lack item properties.
             // Their processing-step assets supply the actual utensil definition;
             // object names and level-specific prefab guesses are unnecessary.
-            if (definition == null && TaskNative.Component(item, "ServerFireExtinguishSpray") != null) return "extinguisher";
+            if (definition == null && TaskNative.Component<ServerFireExtinguishSpray>(item) != null) return "extinguisher";
             if (definition == null && item.GetComponent<PreparationContainer>() == null && item.GetComponent<ServerIngredientContainer>() != null)
             {
-                Component mixing = TaskNative.Component(item, "MixingHandler"), cooking = TaskNative.Component(item, "CookingHandler");
-                if (mixing != null && TaskNative.Component(item, "MixableContainer") != null) definition = ActionObservations.Read<UnityEngine.Object>(mixing, "m_mixingType");
-                else if (cooking != null && TaskNative.Component(item, "CookableContainer") != null) definition = ActionObservations.Read<UnityEngine.Object>(cooking, "m_cookingType");
+                Component mixing = TaskNative.Component<MixingHandler>(item), cooking = TaskNative.Component<CookingHandler>(item);
+                if (mixing != null && TaskNative.Component<MixableContainer>(item) != null) definition = ActionObservations.Read<UnityEngine.Object>(mixing, "m_mixingType");
+                else if (cooking != null && TaskNative.Component<CookableContainer>(item) != null) definition = ActionObservations.Read<UnityEngine.Object>(cooking, "m_cookingType");
             }
             return definition == null || String.IsNullOrEmpty(definition.name) ? null : CanonicalUtensil(definition.name);
         }

@@ -33,7 +33,7 @@ namespace SousChef.Plugin.Actions
             GameObject held = ActionObservations.Held(chef);
             GameObject sink = Sink();
             if (sink != null) return TaskNative.Dirty(held) || DirtySources().Count > 0 || ActionObservations.DirtyCount(sink) > 0;
-            LogisticsItem gun = SprayTool("ServerWaterGunSpray");
+            LogisticsItem gun = SprayTool<ServerWaterGunSpray>();
             return gun != null && WashableBatch(gun.Item).Count != 0;
         }
         private IEnumerable<TaskStep> CollectDirtyBatch(bool allowEmpty = false)
@@ -68,7 +68,7 @@ namespace SousChef.Plugin.Actions
             foreach (LogisticsItem item in inventory.Items)
             {
                 Vector3 stance;
-                if (!item.InUse && TaskNative.Dirty(item.Item) && TaskNative.Component(item.Item, "ServerWashable") != null &&
+                if (!item.InUse && TaskNative.Dirty(item.Item) && TaskNative.Component<ServerWashable>(item.Item) != null &&
                     SprayStance(gun, item.Item, out stance)) batch.Add(item.Item);
             }
             return batch;
@@ -93,7 +93,7 @@ namespace SousChef.Plugin.Actions
             LogisticsItem gun = null; List<GameObject> batch = null;
             yield return Until("waiting_for_wash_access", delegate {
                 sink = Sink(); if (sink != null) return true;
-                gun = SprayTool("ServerWaterGunSpray");
+                gun = SprayTool<ServerWaterGunSpray>();
                 return gun != null && (batch = WashableBatch(gun.Item)).Count != 0;
             });
             if (sink == null)
