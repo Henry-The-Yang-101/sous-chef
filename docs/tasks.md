@@ -45,7 +45,7 @@ Stop still cancels while suspended; raw manual input leases are not retained.
 
 The localhost Tasks panel uses `/api/task`, with the current `sessionId` and
 `arguments` containing `action`, `repetitions` (integer or null), and preparation
-parameters where required. The UI always lists all eight tasks, while
+or assembly parameters where required. The UI always lists all nine tasks, while
 `catalog.taskOptions` contains only currently eligible tasks and controls whether
 Start task is enabled. Preparation choices use the level-specific
 `catalog.displayOptions.preparationOptions`; the live eligibility lists remain
@@ -58,6 +58,27 @@ Wire: `task REQUEST ACTION 1..10|forever`; preparation additionally takes player
 `1|3|4`, followed by 1–10 triples of base64url selector, preparation state and
 quantity `1..10`. Task lines are bounded to 2048 ASCII bytes; legacy commands keep
 their 256-byte parser bound.
+
+## Assemble an assigned dish
+
+`assemble_dish` binds one exact live ticket and an explicit allocation of bases,
+components and equipment. It chooses among suitable plates, reuses partial
+assembly bases, combines prepared components, and can schedule recipe-derived
+mixing and cooking. It checks the intended recipe immediately before every
+addition and verifies the resulting native composition. Jev remains responsible
+for the intended order and resource allocation; no model is called here.
+
+```python
+catalog = chef.available_actions()
+# The caller chooses the ticket and IDs from this kitchen's catalogue.
+chef.assemble_dish(order_id, bases=[plate_a, plate_b],
+                   components=[prepared_fish, seaweed, rice],
+                   equipment=[pot, burner])
+```
+
+Assembly always handles **one ticket**. It neither repeats onto a different order
+nor serves the completed dish. See [dish assembly](dish-assembly.md) for the
+allocation contract, scheduler, safety checks, native evidence and limitations.
 
 ## Prepare and give
 

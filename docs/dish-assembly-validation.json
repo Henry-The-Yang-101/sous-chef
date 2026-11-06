@@ -1,0 +1,105 @@
+{
+  "recordedAt": "2026-11-05T23:11:27.745403-05:00",
+  "sourceCommit": "f9662867f535491f0dec3a607f89e43d2aa2464f",
+  "dllSha256": "8e784901ccd7ca831bb4d2c7bc30fff4ba19406a69833cfe24ec146d4deb67b1",
+  "checks": {
+    "coreAssertions": 2885,
+    "navigationChecks": 391,
+    "actionChecks": 1041,
+    "harnessCatalogChecks": 20,
+    "pythonTests": 133,
+    "browserFormTests": 7
+  },
+  "cases": [
+    {
+      "case": "prepared",
+      "level": "s_sushi_1_1",
+      "recipe": "Sushi_PlainFish",
+      "requestId": "8",
+      "result": {
+        "orderId": "-14380:One:1",
+        "recipe": "Sushi_PlainFish",
+        "baseInstanceId": 509946,
+        "verifiedAdditions": 1,
+        "compositionVerified": true,
+        "waitingReason": null,
+        "stages": [
+          {
+            "operation": "assemble",
+            "vesselInstanceId": 509946
+          }
+        ]
+      },
+      "report": ".local/assembly-validation-prepared/report.json"
+    },
+    {
+      "case": "cooked",
+      "level": "s_sushi_1_2",
+      "recipe": "Sushi_Fish",
+      "requestId": "6",
+      "result": {
+        "orderId": "-24484:One:1",
+        "recipe": "Sushi_Fish",
+        "baseInstanceId": 522950,
+        "verifiedAdditions": 4,
+        "compositionVerified": true,
+        "waitingReason": null,
+        "stages": [
+          {
+            "operation": "assemble",
+            "vesselInstanceId": 522950
+          },
+          {
+            "operation": "cook",
+            "vesselInstanceId": null
+          }
+        ]
+      },
+      "report": ".local/assembly-validation-cooked/report.json"
+    },
+    {
+      "case": "mixed",
+      "level": "s_wizard_school_3_4",
+      "recipe": "Pancake_Plain",
+      "requestId": "15",
+      "result": {
+        "orderId": "-39394:One:2",
+        "recipe": "Pancake_Plain",
+        "baseInstanceId": 548850,
+        "verifiedAdditions": 4,
+        "compositionVerified": true,
+        "waitingReason": null,
+        "stages": [
+          {
+            "operation": "assemble",
+            "vesselInstanceId": 548850
+          },
+          {
+            "operation": "cook",
+            "vesselInstanceId": null
+          },
+          {
+            "operation": "mix",
+            "vesselInstanceId": null
+          }
+        ]
+      },
+      "report": ".local/assembly-validation-mixed/report.json"
+    }
+  ],
+  "harness": {
+    "submittedThroughBrowser": true,
+    "requestId": "300",
+    "orderId": "-39394:One:2",
+    "baseInstanceId": 548850,
+    "verifiedAdditions": 0,
+    "compositionVerified": true,
+    "purpose": "Recognize the exact already-completed assigned dish without duplicate additions",
+    "screenshot": ".local/assembly-harness-verified.png"
+  },
+  "limits": [
+    "Isolated native runtime; normal game installation unchanged.",
+    "Fixtures provide prepared ingredient instances; execution uses native clocks and ordinary P2 inputs.",
+    "Coverage is representative, not every recipe or moving kitchen."
+  ]
+}

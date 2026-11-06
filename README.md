@@ -189,4 +189,5 @@ and with the same clients connected.
 Autonomous multi-step tasks, repeat counts, and indefinite environmental waiting
 are documented in [docs/tasks.md](docs/tasks.md). The localhost **Tasks** panel
 uses the same production task executor; voice/Jev integration is intentionally
-separate.
+separate. [Dish assembly](docs/dish-assembly.md) binds one ticket and its assigned
+resources, verifies exact-recipe additions, and schedules assembly, mixing and cooking.

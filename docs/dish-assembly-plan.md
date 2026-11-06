@@ -22,3 +22,15 @@
 ## Verification
 
 Exercise alternative bases; wrong recipe/native-compatible ingredient; duplicate ingredients and processing state; partial dishes; foreign/caught cargo; moved/replaced/taken resources; ticket expiry during navigation and at the input edge; interrupted/suppressed and ambiguous transfers; blocked dependency selection; and combined processing. Run the repository checks and native headless scenarios against the built DLL. Record waits as waits, and leave the user's normal game installation unchanged.
+
+## Implementation adjustments from native replays
+
+- Loaded mixer bowls cannot always be reinserted by the native client. Load them
+  on an assigned mixer, proving each addition against the mixing node's underlying
+  input multiset; verify completion against the actual processed output.
+- Active native portal transit can temporarily hide held cargo. Defer task
+  arbitration until transit finishes, then revalidate before any irreversible input.
+- Confirm a vessel still occupies its processing station before heat preemption;
+  a cached holder edge must not restart rescue after the exact vessel was picked up.
+
+The implemented contract and validation results are in [dish-assembly.md](dish-assembly.md).
