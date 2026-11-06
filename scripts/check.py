@@ -18,4 +18,5 @@ if __name__ == '__main__':
                     str(args.game.resolve() / 'Contents/Resources/Data/Managed')], cwd=ROOT, env=env, check=True)
     subprocess.run([str(bootstrap()), 'run', '--project', 'tests/navigation/Navigation.Tests.csproj'], cwd=ROOT, env=env, check=True)
     subprocess.run([str(bootstrap()), 'run', '--project', 'tests/actions/Actions.Tests.csproj'], cwd=ROOT, env=env, check=True)
+    subprocess.run([str(bootstrap()), 'run', '--project', 'tests/harness-options/HarnessOptions.Tests.csproj'], cwd=ROOT, env=env, check=True)
     subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_*.py', '-v'], cwd=ROOT, check=True)

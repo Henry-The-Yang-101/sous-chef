@@ -289,6 +289,7 @@ namespace SousChef.Plugin.Control
                 var identity = (Json.Record)navigation.TargetIdentity(go);
                 try
                 {
+                    HarnessOptions.Target(identity, go);
                     var offered = new System.Collections.Generic.List<string>(InteractionActions.Offered(target, go));
                     if (offered.Contains("throw_to"))
                     {
@@ -316,6 +317,7 @@ namespace SousChef.Plugin.Control
                 bool canPass = throwOptions.Check(player.gameObject, out preview);
                 players.Add(Json.Object("id", "p" + playerId, "playerId", playerId, "kind", "player", "label", "Player " + playerId,
                     "objectInstanceId", player.gameObject.GetInstanceID(), "position", Values.Vector(player.transform.position),
+                    "possibleOperations", new[] { "throw_to_player" },
                     "operations", canPass ? new[] { "throw_to_player" } : new string[0], "throw", preview));
             }
             var actions = (System.Collections.Generic.List<object>)catalog["actions"];

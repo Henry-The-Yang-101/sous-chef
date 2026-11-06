@@ -279,8 +279,9 @@ namespace SousChef.Plugin.Actions
             catalog["items"] = items; catalog["ingredients"] = ingredients; catalog["utensilTypes"] = utensils;
             catalog["deliveryDestinations"] = destinations; catalog["jobOptions"] = options;
             catalog["logisticsObservationErrors"] = Inventory.Errors;
-            if (parentBusy || Run.Running || child.Run.Running || navigation.Action.State != "idle") return;
             Inventory.Refresh(actor, catalog);
+            HarnessOptions.Decorate(catalog, navigation, Inventory);
+            if (parentBusy || Run.Running || child.Run.Running || navigation.Action.State != "idle") return;
             var reachable = new Dictionary<string, Json.Record>();
             foreach (Json.Record identity in (List<object>)catalog["destinations"]) reachable[(string)identity["id"]] = identity;
             var usedItems = new HashSet<string>(); var usedDestinations = new HashSet<string>();
