@@ -5,6 +5,7 @@ Only initial ingredients are supplied by fixtures. Recipes, plates, processing,
 navigation and all measured chef actions use the real production executor.
 """
 import argparse
+from collections import Counter
 import hashlib
 import json
 from pathlib import Path
@@ -28,6 +29,49 @@ def nodes(tree):
     yield tree
     for child in tree.get('components', []):
         yield from nodes(child)
+
+
+def review(directory):
+    """Index the retained trace for human review; these metrics are not a pass verdict."""
+    decisions = [json.loads(line) for line in (directory / 'decisions.ndjson').open()]
+    native = [json.loads(line) for line in (directory / 'kitchen.ndjson').open()]
+    events = [event for row in decisions for event in row.get('schedulerDecisions', [])]
+    initial = json.loads((directory / 'before.json').read_text())
+    processors = {o['unityInstanceId'] for o in initial['objects'] if any(c['type'] in
+                  ('ServerCookingStation', 'ServerCookingRegion', 'ServerMixingStation') for c in o['components'])}
+    waits = []; start = None
+    for row in decisions:
+        waiting = row['phase'].startswith('waiting_')
+        if waiting and start is None:
+            start = row
+        if not waiting and start is not None:
+            waits.append({'start': start['elapsed'], 'seconds': round(row['elapsed'] - start['elapsed'], 2), 'reason': start['phase']})
+            start = None
+    if start is not None:
+        waits.append({'start': start['elapsed'], 'seconds': round(decisions[-1]['elapsed'] - start['elapsed'], 2), 'reason': start['phase']})
+    heat = []; active = {}
+    for row in native:
+        for vessel in row['vessels']:
+            state = vessel['cooking']
+            ident = vessel['id']
+            if state and state['state'] in ('Completed', 'OverDoing', 'Ruined') and vessel['holder'] in processors and ident not in active:
+                active[ident] = {'vessel': ident, 'firstObservedAt': row['time'], 'holder': vessel['holder'], 'ruined': False}
+            exposure = active.get(ident)
+            if exposure is None:
+                continue
+            exposure['ruined'] |= state is not None and state['state'] == 'Ruined'
+            if vessel['holder'] != exposure['holder']:
+                exposure['removedAfterSeconds'] = round(row['time'] - exposure['firstObservedAt'], 2)
+                heat.append(exposure); del active[ident]
+    heat.extend(active.values())
+    first_time = native[0]['time'] if native else 0
+    for exposure in heat:
+        exposure['firstObservedAt'] = round(exposure['firstObservedAt'] - first_time, 2)
+    return {'decisionReasons': dict(Counter(e['reason'] for e in events)),
+            'waitingIntervals': sorted(waits, key=lambda row: -row['seconds']),
+            'completedVesselHolderChanges': heat,
+            'navigationReasons': dict(Counter(row['navigation'].get('reason') for row in decisions)),
+            'note': 'Intervals and holder changes need review against native processing and reachability; they do not independently prove unreasonable waiting.'}
 
 
 def processing(obj, mixing=False):
@@ -107,13 +151,17 @@ class NativeMonitor:
 
 class Sweep(Audit):
     def catalog(self, complete=True):
-        deadline = time.monotonic() + 35
+        started = time.monotonic(); deadline = started + 35; best = None
         while time.monotonic() < deadline:
             catalog = self.client.available_actions()
             # Moving kitchens can invalidate the full route tree continuously.
             # Require concrete observed resources, not a globally static map.
-            if catalog.get('items') and catalog.get('assemblyOrders'):
-                return catalog
+            if catalog.get('displayOptions', {}).get('items') and catalog.get('assemblyOrders'):
+                best = catalog
+                if catalog.get('complete'):
+                    return catalog
+                if time.monotonic() - started >= 12:
+                    return best
             time.sleep(.15)
         raise TimeoutError('No live assembly inventory: ' + str(catalog.get('reason')))
 
@@ -122,8 +170,9 @@ class Sweep(Audit):
         write(self.directory / 'catalog-before.json', catalog)
         snapshot = self.snap('before'); objects = {o['unityInstanceId']: o for o in snapshot['objects']}
         supplies = [i for i in catalog['items'] if i['supply']]
-        plates = [i for i in catalog['items'] if i['cleanPlate'] and i['routeDistance'] is not None]
-        equipment = [i for i in catalog['items'] if not i['supply'] and i['empty'] and i['routeDistance'] is not None and
+        observed = catalog['displayOptions']['items']
+        plates = [i for i in observed if i.get('cleanPlate') and i.get('routeDistance') is not None]
+        equipment = [i for i in observed if i.get('empty') and
                      any(c['type'] in ('ServerCookingHandler', 'ServerMixingHandler') for c in objects.get(i['objectInstanceId'], {}).get('components', []))]
         counters = [d for d in catalog['deliveryDestinations'] if d['kind'] == 'counter' and
                     d.get('routeDistance') is not None and
@@ -153,13 +202,13 @@ class Sweep(Audit):
             result = self.fixture(f"ingredient {leaf['id']} {counter['objectInstanceId']} chopped")
             time.sleep(.25); assigned.append((leaf,result['itemInstanceId']))
         catalog = self.catalog()
-        items = {i['objectInstanceId']: i for i in catalog['items']}
+        items = {i['objectInstanceId']: i for i in catalog['displayOptions']['items']}
         for leaf, ident in assigned:
             if items[ident]['ingredientId'] != leaf['id']:
                 raise ValueError('Supplied ingredient definition does not match recipe: ' + str((leaf, items[ident])))
         # All assigned equipment is explicit; stations are native capability
         # descriptors, not prefab names. The executor chooses appropriate ones.
-        stations = [t['id'] for t in catalog['targets'] if t.get('processingEquipment') and routes.get(t['id']) is not None]
+        stations = [t['id'] for t in catalog['targets'] if t.get('processingEquipment')]
         allocation = dict(order_id=order['id'], bases=[p['id'] for p in sorted(plates, key=lambda p: p['routeDistance'])[:4]],
                           components=[items[i]['id'] for _, i in assigned], equipment=list(dict.fromkeys([e['id'] for e in equipment] + stations)))
         write(self.directory / 'allocation.json', {'order': order, 'request': allocation, 'components': [items[i] for _, i in assigned], 'unassigned': unused})
@@ -169,20 +218,26 @@ class Sweep(Audit):
     def observe_decisions(self, order, allocation):
         self.client.assemble_dish(**allocation)
         request_id = self.client.last_response['control']['action']['requestId']
-        start = time.monotonic(); transitions = []; previous = None; warnings = []
+        start = time.monotonic(); transitions = []; previous = None; warnings = []; decision_sequence = 0
         result = None
         with NativeMonitor(self.args.port_base, self.client.hello['sessionId'], self.directory / 'kitchen.ndjson') as native, (self.directory / 'decisions.ndjson').open('w') as output:
             while time.monotonic() - start < self.args.seconds:
                 catalog = self.client.available_actions(); control = self.client.last_response['control']; action = control['action']
                 details = action.get('details') or {}; child = details.get('child') or {}; nav = control.get('navigation') or {}
+                assembly = dict(details.get('assembly') or {})
+                decisions = [d for d in assembly.pop('decisions', []) if d['sequence'] > decision_sequence]
+                if decisions:
+                    if decisions[0]['sequence'] != decision_sequence + 1:
+                        warnings.append('scheduler_decision_gap')
+                    decision_sequence = decisions[-1]['sequence']
                 event = {'elapsed': round(time.monotonic() - start, 3), 'requestId': action['requestId'],
                          'state': action['state'], 'reason': action.get('reason'), 'phase': action['phase'],
-                         'waiting': details.get('waitingReason'), 'assembly': details.get('assembly'),
+                         'waiting': details.get('waitingReason'), 'assembly': assembly, 'schedulerDecisions': decisions,
                          'child': child, 'navigation': {k:v for k,v in nav.items() if k != 'executionTrace'},
                          'motion': (nav.get('executionTrace') or [{}])[-1], 'owned': control.get('ownedByYou'),
-                         'resources': [{k:i.get(k) for k in ['id','objectInstanceId','sourceInstanceId','empty','inUse','routeDistance']} for i in catalog.get('items',[]) if not i['supply']]}
+                         'resources': [{k:i.get(k) for k in ['id','objectInstanceId','sourceInstanceId','empty','inUse','routeDistance']} for i in catalog.get('displayOptions', {}).get('items', [])]}
                 output.write(json.dumps(event)+'\n'); output.flush()
-                signature = (action['state'],action['phase'],details.get('waitingReason'),child.get('operation'),child.get('targetId'),child.get('phase'),child.get('reason'),json.dumps(details.get('assembly')))
+                signature = (action['state'],action['phase'],details.get('waitingReason'),child.get('operation'),child.get('targetId'),child.get('phase'),child.get('reason'),json.dumps(assembly))
                 if signature != previous:
                     transitions.append({k:event[k] for k in ['elapsed','state','reason','phase','waiting','assembly','child','navigation']}); previous = signature
                 if action['requestId'] != request_id:
@@ -209,7 +264,8 @@ class Sweep(Audit):
         after = self.snap('after')
         return {'order':order, 'allocation':allocation, 'elapsed':round(time.monotonic()-start,2), 'result':result,
                 'warnings':warnings,'observationErrors':errors,'transitions':len(transitions),
-                'nativeSamples':sum(1 for _ in (self.directory/'kitchen.ndjson').open()), 'afterSequence':after['sequence']}
+                'nativeSamples':sum(1 for _ in (self.directory/'kitchen.ndjson').open()), 'schedulerDecisions':decision_sequence,
+                'review':review(self.directory), 'afterSequence':after['sequence']}
 
 
 def main():
@@ -218,6 +274,10 @@ def main():
     parser.add_argument('--output',type=Path,required=True); parser.add_argument('--levels',nargs='+',default=DEFAULT_LEVELS)
     parser.add_argument('--recipe'); parser.add_argument('--seconds',type=float,default=140)
     args=parser.parse_args(); args.runtime=args.runtime.resolve(); args.output.mkdir(parents=True,exist_ok=False)
+    process=json.loads((args.runtime/'process.json').read_text())
+    if process['portBase'] != args.port_base:
+        raise ValueError('Port range does not belong to the selected native runtime')
+    sim.wait_ready(args.runtime)
     results=[]; root=args.output
     for level in args.levels:
         args.output=root/level; args.output.mkdir(); audit=Sweep(args)
