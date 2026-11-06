@@ -74,7 +74,7 @@ namespace SousChef.Plugin.Actions
             chef = actor; request = command.Task; inventory.Refresh(chef);
             if (!definition.Available()) return "task_not_available";
             pendingDeliveries.Clear(); nextDeliveryCheck = 0;
-            completed = completedSteps = 0; childStarted = false; waitingReason = null; observationError = null; handoffEvidence = null; step = null; plan = null; retryAt = 0;
+            completed = completedSteps = 0; childStarted = false; waitingReason = null; observationError = null; handoffEvidence = null; step = null; plan = definition.Plan().GetEnumerator(); retryAt = 0;
             command.Indefinite = true; Run.Start(owner, command, Time.realtimeSinceStartup); input(0); return null;
         }
         public void Tick()
@@ -117,18 +117,11 @@ namespace SousChef.Plugin.Actions
                 { if (step.Progress()) { input(0); completedSteps++; step = null; } return; }
                 input(0);
                 if (Time.realtimeSinceStartup < retryAt) return;
-                if (request.Repetitions != 0 && completed >= request.Repetitions)
-                {
-                    if (pendingDeliveries.Count == 0) Finish("succeeded", "task_complete");
-                    else { Run.Advance("waiting_for_transport_delivery"); Wait("waiting_for_transport_delivery"); }
-                    return;
-                }
                 if (plan == null)
                 {
-                    inventory.Refresh(chef);
-                    var definition = definitions[request.Action];
-                    if (!definition.Available()) { Wait("waiting_for_" + request.Action); return; }
-                    plan = definition.Plan().GetEnumerator();
+                    if (pendingDeliveries.Count == 0) Finish("succeeded", "task_complete");
+                    else Wait("waiting_for_transport_delivery");
+                    return;
                 }
                 if (step == null)
                 {
@@ -142,9 +135,10 @@ namespace SousChef.Plugin.Actions
                 {
                     if (!plan.MoveNext())
                     {
-                        plan.Dispose(); plan = null; completed++;
-                        if (request.Repetitions != 0 && completed >= request.Repetitions && pendingDeliveries.Count == 0) { Finish("succeeded", "task_complete"); return; }
-                        retryAt = Time.realtimeSinceStartup + .2f; Run.Advance("next_repetition"); return;
+                        plan.Dispose(); plan = null;
+                        if (pendingDeliveries.Count == 0) Finish("succeeded", "task_complete");
+                        else { Run.Advance("waiting_for_transport_delivery"); Wait("waiting_for_transport_delivery"); }
+                        return;
                     }
                     step = plan.Current;
                 }
@@ -174,6 +168,7 @@ namespace SousChef.Plugin.Actions
             catch (Exception e) { observationError = e.ToString(); Finish("failed", "task_observation_unavailable"); }
             finally { inventory.EndObservation(); }
         }
+        private bool MoreRequested { get { return request.Repetitions == 0 || completed < request.Repetitions; } }
         private void Wait(string reason) { waitingReason = reason; input(0); retryAt = Time.realtimeSinceStartup + .2f; }
         public void Cancel(string reason) { if (Run.Running) Finish("cancelled", reason); }
         public void ResumeAfterPause(float seconds)

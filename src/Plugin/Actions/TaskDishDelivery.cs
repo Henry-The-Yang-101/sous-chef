@@ -130,7 +130,7 @@ namespace SousChef.Plugin.Actions
 
         private IEnumerable<TaskStep> DeliverCompletedDishes()
         {
-            while (true)
+            while (MoreRequested)
             {
                 LogisticsItem dish = null; GameObject destination = null;
                 yield return Until("waiting_for_plated_dish", delegate { dish = PlatedDish(out destination); return dish != null; });
@@ -154,7 +154,7 @@ namespace SousChef.Plugin.Actions
                 Func<bool> canServe = serve.Ready;
                 serve.Ready = () => System.Object.ReferenceEquals(ActionObservations.Held(chef), item) && DishReady(item, destination) && canServe();
                 yield return serve;
-                if (serve.Succeeded) yield break;
+                if (serve.Succeeded) completed++;
             }
         }
     }

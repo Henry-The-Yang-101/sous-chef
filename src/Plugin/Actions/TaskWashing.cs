@@ -89,6 +89,15 @@ namespace SousChef.Plugin.Actions
         }
         private IEnumerable<TaskStep> WashDishes()
         {
+            while (MoreRequested)
+            {
+                yield return Until("waiting_for_wash_access", WashingAvailable);
+                foreach (TaskStep step in WashBatch()) yield return step;
+                completed++;
+            }
+        }
+        private IEnumerable<TaskStep> WashBatch()
+        {
             GameObject sink = null;
             LogisticsItem gun = null; List<GameObject> batch = null;
             yield return Until("waiting_for_wash_access", delegate {

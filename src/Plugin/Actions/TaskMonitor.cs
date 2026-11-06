@@ -14,12 +14,16 @@ namespace SousChef.Plugin.Actions
         }
         private IEnumerable<TaskStep> MonitorEquipment()
         {
-            GameObject station = null;
-            // Observe every accessible processor. Binding to the first unfinished
-            // pot would miss a blender/stove that finishes earlier elsewhere.
-            yield return Until("monitoring_equipment", delegate { station = ProcessingStation(true, true); return station != null; });
-            GameObject item = ActionObservations.Receiver(station);
-            foreach (TaskStep step in RemoveReady(station, item)) yield return step;
+            while (MoreRequested)
+            {
+                GameObject station = null;
+                // Observe every accessible processor. Binding to the first unfinished
+                // pot would miss a blender/stove that finishes earlier elsewhere.
+                yield return Until("monitoring_equipment", delegate { station = ProcessingStation(true, true); return station != null; });
+                GameObject item = ActionObservations.Receiver(station);
+                foreach (TaskStep step in RemoveReady(station, item)) yield return step;
+                completed++;
+            }
         }
     }
 }

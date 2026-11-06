@@ -15,6 +15,15 @@ namespace SousChef.Plugin.Actions
         }
         private IEnumerable<TaskStep> PutOutFire()
         {
+            while (MoreRequested)
+            {
+                yield return Until("waiting_for_fire", FireAvailable);
+                foreach (TaskStep step in ExtinguishReachableFires()) yield return step;
+                completed++;
+            }
+        }
+        private IEnumerable<TaskStep> ExtinguishReachableFires()
+        {
             LogisticsItem source = null;
             yield return Until("waiting_for_extinguisher", delegate { source = SprayTool<ServerFireExtinguishSpray>(); return source != null; });
             if (!System.Object.ReferenceEquals(ActionObservations.Held(chef), source.Item))

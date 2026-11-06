@@ -124,12 +124,16 @@ namespace SousChef.Plugin.Actions
         }
         private IEnumerable<TaskStep> TakeReady()
         {
-            GameObject station = null;
-            // Observe all burners until one becomes ready. Binding to the nearest
-            // unfinished pot could leave earlier batches burning on other stoves.
-            yield return Until("waiting_for_accessible_heat", delegate { station = ProcessingStation(false, true); return station != null; });
-            GameObject item = ActionObservations.Receiver(station);
-            foreach (TaskStep step in RemoveReady(station, item)) yield return step;
+            while (MoreRequested)
+            {
+                GameObject station = null;
+                // Observe all burners until one becomes ready. Binding to the nearest
+                // unfinished pot could leave earlier batches burning on other stoves.
+                yield return Until("waiting_for_accessible_heat", delegate { station = ProcessingStation(false, true); return station != null; });
+                GameObject item = ActionObservations.Receiver(station);
+                foreach (TaskStep step in RemoveReady(station, item)) yield return step;
+                completed++;
+            }
         }
     }
 }

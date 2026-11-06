@@ -28,6 +28,14 @@ namespace SousChef.Plugin.Actions
         }
         private IEnumerable<TaskStep> TossBurntFood()
         {
+            while (MoreRequested)
+            {
+                foreach (TaskStep step in DiscardBurntBatch()) yield return step;
+                completed++;
+            }
+        }
+        private IEnumerable<TaskStep> DiscardBurntBatch()
+        {
             LogisticsItem source = null;
             yield return Until("waiting_for_burnt_food", delegate { source = BurntSource(); return source != null; });
             GameObject item = source.Item;

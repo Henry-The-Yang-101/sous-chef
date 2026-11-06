@@ -170,6 +170,14 @@ namespace SousChef.Plugin.Actions
         }
         private IEnumerable<TaskStep> PrepareNearPlayer()
         {
+            while (MoreRequested)
+            {
+                foreach (TaskStep step in PrepareBatch()) yield return step;
+                completed++;
+            }
+        }
+        private IEnumerable<TaskStep> PrepareBatch()
+        {
             var units = new List<PreparationUnit>();
             foreach (PreparationRequest item in request.Items)
                 for (int n = 0; n < item.Quantity; n++) units.Add(new PreparationUnit { Request = item });
