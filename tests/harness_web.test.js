@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 const source = fs.readFileSync(path.join(__dirname, '../harness/web/app.js'), 'utf8');
-const helpers = source.slice(source.indexOf('const actionNames ='), source.indexOf('function nameOf('));
+const helpers = source.slice(source.indexOf('const capabilityContracts ='), source.indexOf('function nameOf('));
 const labels = source.slice(source.indexOf('const taskLabels ='), source.indexOf('function addTaskItem('));
 const tasks = source.slice(source.indexOf('function selectedResources('), source.indexOf("el('task-kind').addEventListener"));
 
@@ -32,6 +32,7 @@ function fixture() {
   el('task-player').replaceChildren({value: '1'}, {value: '3'});
   el('throw-kind').replaceChildren({value: 'throw_to_player'}, {value: 'throw_to'});
   const context = vm.createContext({
+    capabilityRegistry: JSON.parse(fs.readFileSync(path.join(__dirname, '../clients/capabilities.json'), 'utf8')),
     el, document: {createElement: () => ({})}, pending: false, displayedCatalog: {}, displayScope: null,
     state: {connected: true, fresh: true, sessionId: 'session', control: {available: true}, kitchenMap: {levelEpoch: 1}},
     nameOf: target => target.label, number: value => String(value), explain: reason => reason,
@@ -91,6 +92,33 @@ test('all tasks and jobs remain selectable while unavailable, pending or busy', 
   c.pending = false; c.state.control = {available: false, reason: 'paused'};
   c.renderTasks({taskOptions: [{name: 'wash_dishes'}]}, visible, false, true);
   assert.equal(el('task-run').disabled, true); assert.equal(el('task-kind').value, 'wash_dishes');
+});
+
+test('task labels, repetition limits and future operations come from shared registry', () => {
+  const {context: c, el} = fixture();
+  c.renderTasks({}, visible, true, true);
+  const expected = c.capabilityRegistry.contracts.filter(spec => spec.kind === 'task').map(spec => spec.name);
+  assert.deepEqual(el('task-kind').options.map(option => option.value).filter(Boolean), expected);
+  el('task-kind').value = 'assemble_dish'; c.renderTasks({}, visible, true, true);
+  assert.deepEqual(el('task-repeat').options.map(option => option.value), ['', '1']);
+  el('task-kind').value = 'wash_dishes'; c.renderTasks({}, visible, true, true);
+  assert.equal(el('task-repeat').options.at(-1).value, 'forever');
+  assert.equal(el('task-repeat').title, 'Each repetition: washing batch');
+  assert.equal(c.actionChoices({possibleOperations: ['transfer_contents', 'move_to_region']}).length, 0);
+});
+
+test('semantic choices survive suspension and never grant start eligibility', () => {
+  const {context: c, el} = fixture();
+  c.state.control = {available: false, reason: 'paused'};
+  const catalog = {semanticCatalog: {targets: [], assemblyOrders: [{id: 'current:7', recipe: 'Sushi'}],
+    displayOptions: {items: [], preparationOptions: []}}};
+  const display = c.displayChoices(catalog);
+  c.renderTasks(catalog, display, false, true); el('task-kind').value = 'assemble_dish';
+  c.renderTasks(catalog, display, false, true);
+  assert.ok(el('assembly-order').options.some(option => option.value === 'current:7'));
+  assert.equal(el('task-run').disabled, true);
+  c.state.connected = false; c.state.fresh = false;
+  assert.deepEqual(Object.keys(c.displayChoices({})), []);
 });
 
 test('preparation requires level choices, valid quantities and an observed recipient', () => {

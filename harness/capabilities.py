@@ -14,7 +14,8 @@ def snapshot(state):
     busy = control.get('action', {}).get('state') == 'running' or control.get('navigation', {}).get('state') == 'navigating'
     blocked = ('stale_observation' if not fresh else
                'capability_version_mismatch' if not compatible else
-               control.get('reason') if not control.get('available') else
+               (control.get('reason') or 'input_suspended') if control.get('suspended') else
+               (control.get('reason') or 'native_input_unavailable') if not control.get('available') else
                'action_in_progress' if busy else 'already_claimed' if control.get('claimed') else None)
     tasks = {t['name'] for t in catalog.get('taskOptions', [])}
     actions = {a['name'] for a in catalog.get('actions', [])}

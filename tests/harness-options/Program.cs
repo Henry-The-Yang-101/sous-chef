@@ -105,6 +105,9 @@ internal static class Program
         rawFish.GetComponent<WorkableItem>().Next = rawFish;
         Check((string)((Json.Record)((Json.Record)SemanticCatalog.Preparation(new PreparationIngredient { Id = "cycle", Name = "cycle", Prefab = rawFish }))["preparations"])["chopped"] == "unknown", "cyclic work chain is bounded and unknown");
         rawFish.GetComponent<WorkableItem>().Next = fish;
+        var unknownOutput = new GameObject("unknown work output");
+        var unknownRoot = new GameObject("unknown root"); unknownRoot.Add(new WorkableItem { Next = unknownOutput });
+        Check((string)((Json.Record)((Json.Record)SemanticCatalog.Preparation(new PreparationIngredient { Id = "unknown", Name = "unknown", Prefab = unknownRoot }))["preparations"])["chopped"] == "unknown", "unidentified work output never certifies preparation");
         // Native crates may change their output later in the round.
         supply.Add(new PickupItemSwitcher { m_itemPrefabs = new[] { raw, rice, null } });
         automatic.activeInHierarchy = false;

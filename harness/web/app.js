@@ -10,6 +10,7 @@ if (accessFromLink) {
 }
 const authHeaders = () => accessToken ? {'X-Page-Token': accessToken} : {};
 let token = null;
+let capabilityRegistry = null;
 let state = null;
 let receivedAt = 0;
 let pending = false;
@@ -54,12 +55,15 @@ const explain = reason => reasons[reason] || (reason ? reason.replaceAll('_', ' 
 const kindName = kind => (kind || 'destination').replaceAll('_', ' ');
 const number = value => Number.isFinite(value) ? value.toFixed(1) : '—';
 const contentsOf = d => d.contents?.summary || '';
-const actionNames = {navigate_to: 'Navigate', pick_up: 'Pick up', place_at: 'Place held item', add_ingredient: 'Add held ingredient',
-  collect_contents: 'Collect ready contents', work_at: 'Work', activate: 'Activate', discard: 'Discard held item', wait_until: 'Wait', throw_to: 'Throw held item', throw_to_player: 'Pass held item',
-  move_item: 'Move item', fetch_ingredient: 'Fetch ingredient', get_plate: 'Get clean plate', get_utensil: 'Get empty utensil', stage_item: 'Stage item', return_utensil: 'Return utensil', clear_station: 'Clear station'};
+const capabilityContracts = () => capabilityRegistry?.contracts || [];
+const capability = name => capabilityContracts().find(c => c.name === name);
+const parameter = (name, field) => capability(name)?.parameters.properties[field];
+const definition = field => field?.$ref ? {...capabilityRegistry.$defs[field.$ref.split('/').at(-1)], ...field} : field;
+const capabilityLabels = kind => Object.fromEntries(capabilityContracts().filter(c => c.kind === kind).map(c => [c.name, c.label]));
+const actionNames = new Proxy({}, {get: (_, name) => capability(name)?.label || String(name).replaceAll('_', ' ')});
 const phaseNames = {picking_up: 'collecting', drop_press: 'placing nearby', dropping: 'checking nearby handoff', throw_hold: 'aiming', flight: 'checking arrival'};
 const throwIdentity = target => JSON.stringify([state?.sessionId, target.id, target.objectInstanceId]);
-const jobNames = ['move_item', 'fetch_ingredient', 'get_plate', 'get_utensil', 'stage_item', 'return_utensil', 'clear_station'];
+const jobNames = () => capabilityContracts().filter(c => c.category === 'logistics').map(c => c.name);
 function displayChoices(catalog) {
   const session = state?.sessionId;
   const epoch = state?.kitchenMap?.levelEpoch ?? (displayScope?.session === session ? displayScope.epoch : null);
@@ -68,7 +72,12 @@ function displayChoices(catalog) {
   }
   // Pause/staleness may remove eligibility without removing kitchen choices.
   // A new session/round discards them; observed object removals replace the list.
-  if (fresh() && catalog.targets) displayedCatalog = catalog;
+  if (fresh() && catalog.semanticCatalog && !catalog.semanticCatalog.error) {
+    const semantic = catalog.semanticCatalog;
+    const merge = key => (semantic[key] || []).map(item => ({...item, ...(catalog[key] || []).find(live => live.id === item.id && live.objectInstanceId === item.objectInstanceId)}));
+    displayedCatalog = {...catalog, ...semantic, targets: merge('targets'), players: merge('players')};
+  }
+  else if (fresh() && catalog.targets) displayedCatalog = catalog;
   return displayedCatalog;
 }
 function displayOptions(catalog) { return catalog.displayOptions || catalog; }
@@ -121,7 +130,7 @@ function blockedReason(busy, live) {
 }
 function renderJobs(catalog, visible, busy, live) {
   const display = displayOptions(visible);
-  setJobOptions(el('job-kind'), jobNames.map(name => ({value: name, label: actionNames[name]})));
+  setJobOptions(el('job-kind'), jobNames().map(name => ({value: name, label: actionNames[name]})));
   const kind = el('job-kind').value;
   const options = catalog.jobOptions?.[kind] || [];
   const items = display.items || [];
@@ -156,6 +165,7 @@ function actionChoices(d) {
   for (const operation of d.operations || []) operations.add(operation);
   const choices = [];
   for (const operation of operations) {
+    if (!capability(operation) || capability(operation).kind !== 'action') continue;
     if (operation === 'work_at' || operation === 'wait_until') {
       const key = operation === 'work_at' ? 'WorkConditions' : 'WaitConditions';
       const conditions = new Set([...(d[`possible${key}`] || []), ...(d[key[0].toLowerCase() + key.slice(1)] || [])]);
@@ -260,7 +270,7 @@ function render() {
   el('connection').textContent = live ? 'Bridge connected' : state?.connected ? 'State stale' : 'Bridge disconnected';
   el('light').className = 'light ' + (live ? 'live' : 'offline');
   el('freshness').textContent = live ? `Updated ${Math.max(0, Math.round((state.ageMs || 0) + performance.now() - receivedAt))} ms ago` : 'Waiting for a fresh sample';
-  el('action').textContent = acting ? `${receipt.operation === 'task' ? taskLabels[receipt.details?.taskAction] || 'Task' : actionNames[receipt.operation] || receipt.operation} · ${phaseNames[receipt.phase] || receipt.phase.replaceAll('_', ' ')}` : moving ? `${nav.phase === 'aligning' ? 'Aligning with' : 'Walking to'} ${active ? nameOf(active) : nav.destinationId}` : live ? 'Player 2 is idle' : 'Waiting for the bridge';
+  el('action').textContent = acting ? `${receipt.operation === 'task' ? taskLabels()[receipt.details?.taskAction] || 'Task' : actionNames[receipt.operation] || receipt.operation} · ${phaseNames[receipt.phase] || receipt.phase.replaceAll('_', ' ')}` : moving ? `${nav.phase === 'aligning' ? 'Aligning with' : 'Walking to'} ${active ? nameOf(active) : nav.destinationId}` : live ? 'Player 2 is idle' : 'Waiting for the bridge';
   el('target').textContent = receipt.operation === 'task'
     ? `${receipt.details?.completedRepetitions || 0} repetitions completed${receipt.details?.infinite ? ' · until stopped' : ` of ${receipt.details?.repetitions || 1}`}`
     : active
@@ -411,7 +421,9 @@ async function poll() {
       const response = await fetch('/api/bootstrap', {headers: authHeaders(), signal: AbortSignal.timeout(2000)});
       if (response.status === 403) throw new Error('Scan the current QR code on the Mac to connect this phone.');
       if (!response.ok) throw new Error('Could not connect to the harness');
-      token = (await response.json()).token;
+      const bootstrap = await response.json();
+      capabilityRegistry = bootstrap.capabilityRegistry; token = bootstrap.token;
+      if (!el('task-items').children.length) addTaskItem();
     }
     const response = await fetch('/api/state', {headers: {...authHeaders(), 'X-Viewer-Id': viewerId}, signal: AbortSignal.timeout(2000)});
     if (!response.ok) throw new Error('Could not read live state');
@@ -510,19 +522,18 @@ setInterval(() => { if (!fresh()) render(); }, 250);
 poll();
 pollSharing();
 
-const taskLabels = {assemble_dish: 'Assemble assigned dish', prepare_near_player: 'Prepare and give to player', take_ready: 'Take ready food off heat',
-  wash_dishes: 'Wash dirty dishes', deliver_dirty_dishes: 'Deliver dirty dishes', put_out_fire: 'Put out fires',
-  toss_burnt_food: 'Toss burnt food', monitor_equipment: 'Monitor cooking and mixing', deliver_completed_dishes: 'Deliver completed dishes'};
+const taskLabels = () => capabilityLabels('task');
 function addTaskItem() {
-  if (el('task-items').children.length >= 10) return;
+  const items = parameter('prepare_near_player', 'items');
+  if (!items || el('task-items').children.length >= items.maxItems) return;
   const row = document.createElement('div'); row.className = 'task-item';
   const ingredient = document.createElement('select'); ingredient.required = true;
   ingredient.setAttribute('aria-label', 'Ingredient or utensil');
   ingredient.addEventListener('change', render);
   const preparation = document.createElement('select'); preparation.setAttribute('aria-label', 'Preparation');
-  for (const kind of ['raw', 'chopped', 'cooked', 'mixed', 'empty']) preparation.add(new Option(kind === 'empty' ? 'Empty utensil / plate' : kind, kind));
+  for (const kind of capabilityRegistry.$defs.preparation.enum) preparation.add(new Option(kind === 'empty' ? 'Empty utensil / plate' : kind, kind));
   preparation.addEventListener('change', render);
-  const quantity = document.createElement('input'); quantity.type = 'number'; quantity.min = '1'; quantity.max = '10'; quantity.value = '1'; quantity.required = true; quantity.setAttribute('aria-label', 'Quantity');
+  const quantity = document.createElement('input'); quantity.type = 'number'; quantity.min = capabilityRegistry.$defs.quantity.minimum; quantity.max = capabilityRegistry.$defs.quantity.maximum; quantity.value = definition(capabilityRegistry.$defs.preparation_item.properties.quantity).default; quantity.required = true; quantity.setAttribute('aria-label', 'Quantity');
   quantity.addEventListener('input', render);
   const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Remove'; remove.onclick = () => { row.remove(); render(); };
   row.append(ingredient, preparation, quantity, remove); el('task-items').append(row);
@@ -542,18 +553,23 @@ function setResourceOptions(id, options) {
 }
 function renderTasks(catalog, visible, busy, live) {
   const task = state?.control?.action;
-  setJobOptions(el('task-kind'), Object.entries(taskLabels).map(([value, label]) => ({value, label})));
+  setJobOptions(el('task-kind'), Object.entries(taskLabels()).map(([value, label]) => ({value, label})));
   const kind = el('task-kind').value;
   const preparing = kind === 'prepare_near_player', assembling = kind === 'assemble_dish';
   el('task-assembly').hidden = !assembling;
   el('task-preparation').hidden = !preparing;
+  const recipient = definition(parameter('prepare_near_player', 'player_id'));
+  if (recipient) {
+    setJobOptions(el('task-player'), recipient.enum.map(id => ({value: String(id), label: `Player ${id}`})));
+    if (!el('task-player').value) el('task-player').value = String(recipient.default);
+  }
   const preparationOptions = displayOptions(visible).preparationOptions || [];
   for (const row of el('task-items').children) {
     const utensil = row.children[1].value === 'empty';
-    setJobOptions(row.children[0], preparationOptions.filter(option => option.utensil === utensil)
+    setJobOptions(row.children[0], preparationOptions.filter(option => option.utensil === utensil && option.preparations?.[row.children[1].value] !== 'not_applicable')
       .map(option => ({value: option.id, label: option.label.replaceAll('_', ' ')})));
   }
-  const orders = catalog.assemblyOrders || visible.assemblyOrders || [];
+  const orders = catalog.semanticCatalog?.assemblyOrders || catalog.assemblyOrders || visible.assemblyOrders || [];
   setJobOptions(el('assembly-order'), orders.map(order => ({value: order.id, label: `${order.recipe.replaceAll('_', ' ')} · ticket ${order.id.split(':').at(-1)}`})));
   const resources = (displayOptions(visible).items || []).filter(item => !item.supply);
   const resourceLabel = item => `${nameOf(item)} · ${item.id}`;
@@ -564,17 +580,26 @@ function renderTasks(catalog, visible, busy, live) {
   for (const target of visible.targets || []) if (target.processingEquipment) equipment.set(target.id, target);
   setResourceOptions('assembly-equipment', Array.from(equipment.values()).map(item => ({value: item.id, label: resourceLabel(item)})));
   const assigned = ['assembly-bases', 'assembly-components', 'assembly-equipment'].map(selectedResources);
-  const validAssembly = !assembling || (el('assembly-order').value && assigned[0].length > 0 && assigned.every(group => group.length <= 24) && new Set(assigned.flat()).size === assigned.flat().length);
+  const validAssembly = !assembling || (el('assembly-order').value && assigned[0].length > 0 && assigned.every((group, i) => group.length <= parameter('assemble_dish', ['bases', 'components', 'equipment'][i]).maxItems) && new Set(assigned.flat()).size === assigned.flat().length);
   // Browsing and editing remain possible while execution is blocked.
   for (const field of el('task-form').querySelectorAll('input, select, button')) if (field.id !== 'task-run') field.disabled = false;
   for (const field of el('task-preparation').querySelectorAll('input, select, button')) field.disabled = !preparing;
   for (const field of el('task-assembly').querySelectorAll('select')) field.disabled = !assembling;
-  el('task-repeat').disabled = assembling;
-  el('task-add-item').disabled = !preparing || el('task-items').children.length >= 10;
+  const repetition = capability(kind)?.repeat;
+  const repeatSelect = el('task-repeat');
+  if (repetition) {
+    const choices = Array.from({length: repetition.maximum}, (_, i) => ({value: String(i + 1), label: String(i + 1)}));
+    if (repetition.until_cancelled) choices.push({value: 'forever', label: 'Until Stop'});
+    setJobOptions(repeatSelect, choices);
+    if (!repeatSelect.value) repeatSelect.value = String(repetition.default);
+  }
+  repeatSelect.disabled = !repetition || repetition.maximum === 1;
+  repeatSelect.title = repetition ? `Each repetition: ${repetition.unit.replaceAll('_', ' ')}` : '';
+  el('task-add-item').disabled = !preparing || el('task-items').children.length >= (parameter('prepare_near_player', 'items')?.maxItems || 0);
   const eligible = (catalog.taskOptions || []).some(t => t.name === kind);
   const validItems = !preparing || (el('task-items').children.length > 0 && Array.from(el('task-items').children).every(row =>
     row.children[0].value && row.children[2].checkValidity()));
-  const playerPresent = !preparing || (catalog.players || []).some(player => String(player.playerId) === el('task-player').value);
+  const playerPresent = !preparing || (catalog.semanticCatalog?.players || catalog.players || []).some(player => String(player.playerId) === el('task-player').value);
   el('task-run').disabled = actionBlocked(busy, live) || !eligible || !validItems || !playerPresent || !validAssembly;
   let message = blockedReason(busy, live);
   if (!message && !kind) message = 'Choose a task. All tasks stay listed; Start task enables when the selected task can run.';
@@ -583,7 +608,7 @@ function renderTasks(catalog, visible, busy, live) {
   else if (!message && !playerPresent) message = 'The selected receiving player is not in this kitchen.';
   else if (!message && !eligible) message = 'This task is currently unavailable. Start task enables automatically when the kitchen allows it.';
   el('task-run').title = message;
-  const progress = task?.operation === 'task' ? `${taskLabels[task.details?.taskAction] || 'Task'}: ${task.state} · ${(task.phase || '').replaceAll('_', ' ')} · ${task.details?.completedRepetitions || 0} repetitions completed${task.state === 'running' && task.details?.waitingReason ? ' · waiting: ' + explain(task.details.waitingReason) : ''}` : '';
+  const progress = task?.operation === 'task' ? `${taskLabels()[task.details?.taskAction] || 'Task'}: ${task.state} · ${(task.phase || '').replaceAll('_', ' ')} · ${task.details?.completedRepetitions || 0} repetitions completed${task.state === 'running' && task.details?.waitingReason ? ' · waiting: ' + explain(task.details.waitingReason) : ''}` : '';
   el('task-status').textContent = [progress, message].filter(Boolean).join(' · ');
 }
 el('task-kind').addEventListener('change', render);

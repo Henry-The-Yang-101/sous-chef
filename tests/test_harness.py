@@ -152,6 +152,18 @@ class HarnessTests(unittest.TestCase):
                         {'action': 'assemble_dish', 'repetitions': 1, **allocation})
         self.assertEqual(self.native.calls[-1], ('task', 'assemble_dish', 1, allocation))
 
+    def test_task_contract_errors_fail_before_focus_or_native_io(self):
+        self.native.tasks = [{'name': 'wash_dishes'}]
+        self.native.control.update(available=False, reason='game_unfocused')
+        self.bridge.focus = mock.Mock()
+        for arguments in ({'action': 'wash_dishes', 'items': []}, {'action': 'wash_dishes', 'player_id': 1},
+                          {'action': 'wash_dishes', 'repetitions': True}, {'action': 'stop'},
+                          {'action': 'assemble_dish', 'order_id': 'o', 'bases': ['d1'], 'components': ['d1']}):
+            with self.subTest(arguments=arguments), self.assertRaises(HarnessError):
+                self.bridge.act('viewer', 'test-session', 'task', 0, 'task', arguments)
+        self.bridge.focus.assert_not_called()
+        self.assertEqual(self.native.calls, [])
+
     def test_display_choices_do_not_authorize_tasks_or_supply_jobs(self):
         self.native.display_options = {
             'items': [{'id': 'd99', 'objectInstanceId': 999}],
@@ -446,6 +458,19 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertEqual(json.loads(body)['catalog']['destinations'][0]['id'], 'd7')
 
+    def test_capabilities_endpoint_is_read_only_and_uses_shared_registry(self):
+        from clients.capabilities import REGISTRY_HASH
+        code, body = self.request('GET', '/api/capabilities')
+        self.assertEqual(code, 200)
+        data = json.loads(body)
+        self.assertEqual(data['registry']['registry_hash'], REGISTRY_HASH)
+        self.assertEqual(len(data['state']['entries']), 28)
+        self.assertFalse(data['state']['compatible'])  # Legacy bridge has no manifest.
+        self.assertEqual(self.native.calls, [])
+        bootstrap = json.loads(self.request('GET', '/api/bootstrap')[1])
+        self.assertEqual(data['registry'], bootstrap['capabilityRegistry'])
+        self.assertEqual(self.request('GET', '/api/capabilities', headers={'Origin': 'https://evil.example'})[0], 403)
+
     def test_foreign_origin_host_and_missing_token_are_rejected(self):
         for headers in [{'Origin': 'https://example.com'}, {'Host': 'example.com'}]:
             self.assertEqual(self.request('GET', '/api/bootstrap', headers=headers)[0], 403)
@@ -464,7 +489,7 @@ class HttpTests(unittest.TestCase):
         for host in [f'192.168.1.23:{self.server.server_port}', 'test.trycloudflare.com']:
             headers = {'Host': host}
             self.assertEqual(self.request('GET', '/', headers=headers)[0], 200)
-            for path in ['/api/bootstrap', '/api/state', '/api/share']:
+            for path in ['/api/bootstrap', '/api/state', '/api/share', '/api/capabilities']:
                 self.assertEqual(self.request('GET', path, headers=headers)[0], 403)
                 headers['X-Page-Token'] = 'test-token'
                 code, body = self.request('GET', path, headers=headers)

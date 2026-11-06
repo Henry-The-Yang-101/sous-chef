@@ -1,4 +1,3 @@
-import copy
 import json
 import unittest
 
@@ -93,7 +92,7 @@ class RegistryTests(unittest.TestCase):
         # UTF-16 and UTF-8 bounds both matter to the native selector parser.
         for selector in ('😀' * 33, 'é' * 49, '\ud800', 'x\x00', '\n', ''):
             with self.assertRaises(ValidationError): wire_command('fetch_ingredient', {'ingredient': selector, 'destination': 'd1'})
-        for bad in (False, '60', float('nan'), float('inf'), .09, 121):
+        for bad in (False, '60', float('nan'), float('inf'), .09, 121, 10 ** 1000):
             with self.assertRaises(ValidationError): wire_command('work_at', {'target_id': 'd1', 'timeout': bad})
         with self.assertRaises(ValidationError): wire_command('move_item', {'item': 'd1', 'destination': 'd1'})
 

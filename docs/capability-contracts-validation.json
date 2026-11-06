@@ -1,0 +1,106 @@
+{
+  "date": "2026-11-06",
+  "milestone": 1,
+  "success": true,
+  "registryHash": "1bbd735d6d22423a40fc9b7ae9595a9b4878b8466c3765ad6f15e9d2459d2c00",
+  "pluginSha256": "ef261c02f5f2a8b82520538f5dc1685e4cf9f3656a735d70df3650ffd5b70972",
+  "validation": {
+    "fullCheck": "python3 scripts/check.py",
+    "coreAssertions": 2975,
+    "navigationChecks": 435,
+    "actionChecks": 1153,
+    "catalogueChecks": 30,
+    "pythonTests": 151,
+    "browserFormTests": 9,
+    "desktopUI": "passed",
+    "phoneUI": {
+      "width": 390,
+      "height": 844,
+      "result": "passed"
+    },
+    "browserConsoleErrors": 0
+  },
+  "native": {
+    "level": "s_sushi_1_2",
+    "runtime": ".local/milestone1-native",
+    "evidence": ".local/milestone1-capability-verified",
+    "sameActiveRequestAcrossLifecycle": true,
+    "activeRequestId": "23",
+    "explicitStopVerified": true,
+    "snapshots": [
+      {
+        "label": "idle",
+        "polls": 20,
+        "medianRttMs": 41.57364599086577,
+        "maxRttMs": 80.66145800694358,
+        "frameRate": 48.064496160056784,
+        "suspended": false,
+        "maximumChefDisplacement": 0.36194826084082815,
+        "tickets": 3,
+        "targets": 32
+      },
+      {
+        "label": "busy",
+        "polls": 20,
+        "medianRttMs": 31.206520994601306,
+        "maxRttMs": 46.71770799905062,
+        "frameRate": 52.45512380983852,
+        "suspended": false,
+        "maximumChefDisplacement": 0.0,
+        "tickets": 4,
+        "targets": 32
+      },
+      {
+        "label": "paused",
+        "polls": 20,
+        "medianRttMs": 16.74383350473363,
+        "maxRttMs": 26.046334009151906,
+        "frameRate": 55.29510169683648,
+        "suspended": true,
+        "maximumChefDisplacement": 0.0,
+        "tickets": 4,
+        "targets": 32
+      },
+      {
+        "label": "unfocused",
+        "polls": 20,
+        "medianRttMs": 32.57781250431435,
+        "maxRttMs": 48.360875007347204,
+        "frameRate": 49.43724153325982,
+        "suspended": true,
+        "maximumChefDisplacement": 0.0,
+        "tickets": 4,
+        "targets": 32
+      },
+      {
+        "label": "reconnected",
+        "polls": 20,
+        "medianRttMs": 31.62602100201184,
+        "maxRttMs": 47.2778749972349,
+        "frameRate": 49.326183084015426,
+        "suspended": true,
+        "maximumChefDisplacement": 0.0,
+        "tickets": 5,
+        "targets": 32
+      },
+      {
+        "label": "resumed",
+        "polls": 20,
+        "medianRttMs": 30.58383349707583,
+        "maxRttMs": 44.408583009499125,
+        "frameRate": 49.53571318947788,
+        "suspended": false,
+        "maximumChefDisplacement": 0.0,
+        "tickets": 5,
+        "targets": 32
+      }
+    ],
+    "limitations": [
+      "Empty equipment monitoring fixture; no task completion is claimed.",
+      "Native focus fixture, not an OS window-switch test.",
+      "Idle spawn settling is recorded; position invariance is asserted only for accepted monitoring work.",
+      "Concurrent harness polling and UI inspection were active; these timings have no baseline comparison.",
+      "Normal installed game plugin was not changed."
+    ]
+  }
+}

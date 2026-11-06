@@ -1210,6 +1210,9 @@ workspace changes. There is no automatic push or deployment implied.
 
 ### Milestone 1 — Shared capability contracts
 
+**Implemented 6 November 2026:** see [contracts and verification](capability-contracts.md).
+The remaining milestones below still describe future integration work.
+
 Deliver:
 
 - Versioned contracts for all currently implemented task families and supported

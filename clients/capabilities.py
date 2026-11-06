@@ -75,7 +75,7 @@ def validate(node, value, path='arguments'):
         return result
     if kind == 'integer' and type(value) is not int:
         raise ValidationError(path + ': expected an integer')
-    if kind == 'number' and (type(value) not in (int, float) or not math.isfinite(value)):
+    if kind == 'number' and (type(value) not in (int, float) or (type(value) is float and not math.isfinite(value))):
         raise ValidationError(path + ': expected a finite number')
     if kind in ('integer', 'number'):
         if ('minimum' in node and value < node['minimum']) or ('maximum' in node and value > node['maximum']):

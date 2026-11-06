@@ -42,7 +42,7 @@ namespace SousChef.Plugin.Actions
             {
                 if (!seen.Add(stage) || chain.Count >= 32) { complete = false; break; }
                 string id, label;
-                LogisticsInventory.IngredientIdentity(stage, out id, out label);
+                if (!LogisticsInventory.IngredientIdentity(stage, out id, out label)) complete = false;
                 chain.Add(Json.Object("ingredientId", id, "label", label));
                 var work = stage.GetComponent<WorkableItem>();
                 if (work == null) break;

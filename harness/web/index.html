@@ -72,9 +72,9 @@
       <p>All tasks stay listed. Start task enables when your selection can run. Run once, 2–10 times, or until Stop.</p>
       <form id="task-form" aria-describedby="task-status">
         <label>Task<select id="task-kind"></select></label>
-        <label>Repeat<select id="task-repeat"><option value="1">Once</option><option value="2">2 times</option><option value="3">3 times</option><option value="4">4 times</option><option value="5">5 times</option><option value="6">6 times</option><option value="7">7 times</option><option value="8">8 times</option><option value="9">9 times</option><option value="10">10 times</option><option value="forever">Until stopped</option></select></label>
+        <label>Repeat<select id="task-repeat"></select></label>
         <div id="task-preparation">
-          <label>Give to<select id="task-player"><option value="1">Player 1</option><option value="3">Player 3</option><option value="4">Player 4</option></select></label>
+          <label>Give to<select id="task-player"></select></label>
           <div id="task-items"></div>
           <button id="task-add-item" type="button">Add ingredient or utensil</button>
         </div>
@@ -93,7 +93,7 @@
       <h2 id="logistics-title">Move supplies</h2>
       <p>Choose any job and level item. Run job enables when the selected source and destination are currently usable together.</p>
       <form id="job-form" aria-describedby="job-status">
-        <label>Job<select id="job-kind"><option value="move_item">Move item</option><option value="fetch_ingredient">Fetch ingredient</option><option value="get_plate">Get clean plate</option><option value="get_utensil">Get empty utensil</option><option value="stage_item">Stage item</option><option value="return_utensil">Return utensil</option><option value="clear_station">Clear station</option></select></label>
+        <label>Job<select id="job-kind"></select></label>
         <label id="job-source-label"><span id="job-source-name">Item</span><select id="job-source"></select></label>
         <label id="job-destination-label">Destination<select id="job-destination"></select></label>
         <button id="job-run" type="submit" disabled>Run job</button>

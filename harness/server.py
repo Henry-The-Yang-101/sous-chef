@@ -14,7 +14,9 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from clients.actions import ActionClient
+from clients.capabilities import ACTION_NAMES, contract, registry, wire_command
 from clients.control import ControlError
+from harness.capabilities import snapshot as capability_snapshot, assess_arguments
 from harness.contents import ContentsObserver
 from harness.sharing import PhoneShare, lan_addresses
 
@@ -57,7 +59,7 @@ class HarnessBridge:
         self.generation = 0
         self.observed = None
         self.value = {'connected': False, 'sessionId': None, 'catalog': {},
-                      'bridgeVersion': None, 'supportedActions': None,
+                      'bridgeVersion': None, 'supportedActions': None, 'nativeCapabilities': None,
                       'control': {}, 'error': 'Connecting to the game bridge',
                       'lastCommand': None}
 
@@ -81,6 +83,7 @@ class HarnessBridge:
             self.value.update(connected=True, sessionId=self.client.hello['sessionId'],
                               bridgeVersion=self.client.hello.get('bridgeVersion'),
                               supportedActions=self.client.hello.get('actions'),
+                              nativeCapabilities=self.client.hello.get('capabilities'),
                               catalog=catalog, control=control, error=None,
                               updatedAt=time.time())
             if not control.get('ownedByYou'):
@@ -98,7 +101,7 @@ class HarnessBridge:
             self.observed = None
             self.owner = None
             self.value.update(connected=False, sessionId=None, bridgeVersion=None,
-                              supportedActions=None, catalog={}, control={}, error=str(error))
+                              supportedActions=None, nativeCapabilities=None, catalog={}, control={}, error=str(error))
 
     def poll(self):
         with self.io_lock:
@@ -118,6 +121,7 @@ class HarnessBridge:
             result['viewerOwnsAction'] = bool(viewer and viewer == self.owner)
             if not result['fresh']:
                 result['catalog'] = {}
+            result['capabilities'] = capability_snapshot(result)
             if self.contents:
                 self.contents.decorate(result)
             return result
@@ -126,21 +130,28 @@ class HarnessBridge:
         return self.act(viewer, session, destination, instance, 'navigate_to')
 
     def act(self, viewer, session, destination, instance, operation, arguments=None):
-        allowed = {'navigate_to', 'pick_up', 'place_at', 'add_ingredient', 'collect_contents', 'work_at',
-                   'activate', 'discard', 'wait_until', 'throw_to', 'throw_to_player',
-                   'move_item', 'fetch_ingredient', 'get_plate', 'get_utensil', 'stage_item', 'return_utensil', 'clear_station', 'task'}
-        jobs = {'move_item', 'fetch_ingredient', 'get_plate', 'get_utensil', 'stage_item', 'return_utensil', 'clear_station'}
+        allowed = (set(ACTION_NAMES) - {'stop'}) | {'task'}
+        jobs = {c['name'] for c in registry()['contracts'] if c.get('category') == 'logistics'}
         if not isinstance(operation, str):
             raise HarnessError('Unsupported action')
         arguments = {} if arguments is None else arguments
         keys = {'work_at': {'until', 'timeout'}, 'wait_until': {'condition', 'timeout'},
-                'activate': {'desired_state'}, 'task': {'action', 'repetitions', 'items', 'player_id', 'order_id', 'bases', 'components', 'equipment'}, 'move_item': {'item_id', 'source_instance_id'},
+                'activate': {'desired_state'}, 'task': {'action', 'repetitions'} | {key for c in registry()['contracts'] if c['kind'] == 'task' for key in c['parameters']['properties']}, 'move_item': {'item_id', 'source_instance_id'},
                 'stage_item': {'item_id', 'source_instance_id'}, 'clear_station': {'station_id', 'source_instance_id'},
                 'fetch_ingredient': {'ingredient'}, 'get_utensil': {'utensil_type'}}.get(operation, set())
         if operation not in allowed or not isinstance(arguments, dict) or arguments.keys() - keys:
             raise HarnessError('Unsupported action or arguments')
         if operation == 'wait_until' and 'condition' not in arguments:
             raise HarnessError('Choose a wait condition')
+        if operation == 'task':
+            try:
+                name = arguments.get('action')
+                if contract(name)['kind'] != 'task':
+                    raise ValueError('Choose a supported task')
+                task_arguments = {k: v for k, v in arguments.items() if k not in ('action', 'repetitions')}
+                wire_command(name, task_arguments, arguments.get('repetitions', 1))
+            except ValueError as error:
+                raise HarnessError(str(error)) from error
         with self.state_lock:
             generation = self.generation
         with self.io_lock:
@@ -174,6 +185,8 @@ class HarnessBridge:
                     catalog = self.client.available_actions()
                     self._publish(catalog, self.client.last_response['control'])
                 if operation == 'task':
+                    if assess_arguments(name, task_arguments, catalog.get('semanticCatalog', {}))['state'] == 'not_applicable':
+                        raise HarnessError('Those arguments contradict the observed native capability')
                     if arguments.get('action') not in [t.get('name') for t in catalog.get('taskOptions', [])]:
                         raise HarnessError('That task is no longer available')
                 options = [{'id': 'task', 'objectInstanceId': 0, 'operations': ['task']}] if operation == 'task' else catalog.get('destinations', []) if operation == 'navigate_to' else (
@@ -315,11 +328,13 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith('/api/') and not self.can_read():
             return
         if path == '/api/bootstrap':
-            self.send(200, {'token': self.server.token, 'pollMs': 250})
+            self.send(200, {'token': self.server.token, 'pollMs': 250, 'capabilityRegistry': registry()})
         elif path == '/api/share':
             self.send(200, self.server.sharing.describe())
         elif path == '/api/state':
             self.send(200, self.server.bridge.state(self.headers.get('X-Viewer-Id')))
+        elif path == '/api/capabilities':
+            self.send(200, {'registry': registry(), 'state': self.server.bridge.state()['capabilities']})
         elif path in {'/', '/app.js', '/visuals.js', '/style.css'}:
             name, content_type = {'/': ('index.html', 'text/html; charset=utf-8'),
                                   '/app.js': ('app.js', 'text/javascript; charset=utf-8'),
