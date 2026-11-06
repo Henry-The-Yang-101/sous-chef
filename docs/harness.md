@@ -127,7 +127,7 @@ from the connected plugin, independently of its currently available actions.
   `Arrived` includes the actions currently allowed by native predicates (pickup,
   place or use). An empty sink instead reports that the chef is positioned and
   facing it, with no action currently available. Navigation never performs the work.
-  All Run buttons are disabled while an action is active. Selectors remain usable
+  Immediate action buttons are disabled while an action is active; queued tasks can still be added. Selectors remain usable
   for inspecting and configuring another action. Interaction phases and terminal outcomes also appear in the status.
   Commands are never retried or redirected automatically.
 
@@ -205,7 +205,7 @@ describe a holder as empty. Content enrichment does not change navigation target
 or perform pickup, placement or cooking actions, and requires no plugin restart.
 Destinations are replaced on each observation, including removals caused by moving
 geometry. Run buttons are disabled when data is over 1.5 seconds old, the game is outside
-a round or Player 2 is missing. The eight tasks and seven jobs always stay listed.
+a round or Player 2 is missing. The nine tasks and seven jobs always stay listed.
 Previously observed level choices remain visible through temporary pause or
 staleness, but never authorize a command. Disconnects, round changes and observed
 object removals clear the corresponding level choices. During a budget-limited search, confirmed shortest
@@ -303,16 +303,32 @@ or game restart was needed.
 
 ## Autonomous tasks
 
-The Tasks panel runs the actions described in [tasks.md](tasks.md), with
-1–10 repetitions or Until stopped. Preparation supports multiple ingredient/utensil
-rows, states and quantities. All eight tasks stay selectable; Start task follows
-the live task eligibility, receiving player and required preparation fields.
-Ingredient roots come only from this kitchen’s native dispensers, and utensil
-types from observed items, including filled utensils, dirty dishes and items held
-by another chef. A task or job becoming unavailable keeps the selection and greys
-its Run button. While a task is
-running or waiting, its phase, completed repetitions and waiting reason remain
-visible; Stop cancels the parent and child together.
+The Tasks panel uses the [persistent local scheduler](scheduler.md) for all nine
+native task families. **Add to queue** appends a task; **Add step to plan** builds
+an atomic plan of up to five steps. **Run now** cancels the active assignment,
+waits for native cleanup and preserves independent pending entries. An unmet
+dependency must be removed/replaced with its plan before interruption.
+
+The queue holds one active task and ten pending entries. Repeat 1–10 times or
+Until Stop, except assembly, which binds one exact ticket and allocation.
+Unlimited work must be last in the entire queue. Preparation supports multiple
+ingredient/utensil rows, states, quantities and a receiving player. A task can be
+accepted while P2 is busy or suspended; actual dispatch revalidates native
+conditions and never starts while input is suspended. Add does not focus the
+game. Explicit Run now may focus it.
+
+**Pause dispatch** holds future tasks while the active task continues. Resume,
+clear pending, remove/reorder and Skip have distinct effects. Waiting is not
+success. Failure pauses dependent work; an unknown outcome remains reconciling.
+**Stop** cancels active and pending work and invalidates drafts/late dispatches.
+Reload/reconnect preserves the queue, and process restart consults native receipts
+before advancing. The SQLite journal defaults to `.local/queue-24703.sqlite3`;
+use `--queue-journal` for another path. One process owns each journal.
+
+The existing map, throw and supply controls retain immediate behavior and pause
+pending queue dispatch. All tabs, including phones, share the same scheduler.
+The installed plugin must advertise receipt protocol 1 (bridge 0.8.9); an older
+plugin can still use immediate controls but cannot dispatch queued plans.
 
 The plugin exports `displayOptions` separately from the live `jobOptions`,
 `taskOptions`, and per-target `operations`. Display options are read-only kitchen

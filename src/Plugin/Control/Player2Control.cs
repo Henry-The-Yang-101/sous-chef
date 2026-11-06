@@ -141,7 +141,6 @@ namespace SousChef.Plugin.Control
                 lease.Owner(Now) == 0 && navigation.Action.State == "idle" && !interactions.Run.Running && !logistics.Run.Running && !tasks.Run.Running)
                 throwOptions.Tick(target);
             else throwOptions.Reset();
-            CaptureReceipt();
         }
 
         private void Discover()

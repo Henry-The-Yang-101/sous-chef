@@ -682,7 +682,7 @@ async function submitPlan(edit) {
 function renderQueue() {
   const queue = state?.queue;
   const enabled = Boolean(token && queue && !pending && !queue.error);
-  el('queue-status').textContent = !queue ? 'Waiting for the queue…' : queue.error || (queue.barrier ? 'Stopping native work; dispatch held.' : queue.paused ? 'Dispatch paused.' : 'Dispatch enabled.') +
+  el('queue-status').textContent = !queue ? 'Waiting for the queue…' : queue.error || (queue.barrier ? 'Stopping native work; dispatch held.' : queue.active?.state === 'reconciling' ? 'Dispatch held: native outcome unknown.' : queue.paused ? 'Dispatch paused.' : 'Dispatch enabled.') +
     ` ${queue.pending.length} / ${queue.capacity} pending.` + (queue.reason ? ' ' + explain(queue.reason) : '');
   el('queue-active').textContent = queue?.active ? `${taskDescription(queue.active.spec)} · ${queue.active.state.replaceAll('_', ' ')}${queue.active.reason ? ' · ' + explain(queue.active.reason) : ''}` : 'No active queued task.';
   el('queue-pause').disabled = !enabled || queue.paused;

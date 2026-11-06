@@ -432,6 +432,13 @@ internal static partial class Program
             var request=AssemblyJob(w,new[]{plate},new GameObject[0],a);StartAssembly(w,request);DriveAssembly(w,20);
             Check(w.Tasks.Run.Running && !w.Inputs.Contains(1),"unallocated matching ingredient never stolen");w.Tasks.Cancel("test");
         }
+        {
+            var w=new World();var plate=AssemblyPlate(w,w.Delivery());
+            var request=AssemblyJob(w,new[]{plate},new GameObject[0],a);
+            AssemblyOrders.Observe()[0].Controller.m_activeOrders.Clear();
+            Check(w.Tasks.Start(w.Chef,1,new ControlCommand {Id="expired",Operation="task",Task=request})=="assembly_order_unavailable" && !w.Tasks.Run.Running,
+                "expired exact ticket rejects before generic empty-order availability can turn it into indefinite waiting");
+        }
         foreach(bool expire in new[]{false,true})
         {
             var w=new World();var plate=AssemblyPlate(w,w.Delivery());var food=AssemblyFood(w,w.Target,"fish");

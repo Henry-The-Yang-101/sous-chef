@@ -221,7 +221,7 @@ class SchedulerTests(unittest.TestCase):
             self.assertEqual(self.s.snapshot()['pending'][0]['state'], 'waiting_to_start')
         self.native.world['control'].update(available=True, claimed=False, reason=None)
         self.native.next_rejection = 'task_not_available'; self.s.tick()
-        self.assertIsNone(self.s.snapshot()['active'])
+        self.assertEqual(self.s.snapshot()['active']['state'], 'waiting_to_start')
         self.s.tick()
         self.assertEqual(self.s.snapshot()['active']['state'], 'running')
         ids = [c[1]['requestId'] for c in self.native.calls if c[0] == 'execute']
@@ -232,3 +232,104 @@ class SchedulerTests(unittest.TestCase):
         self.assertTrue(self.s.snapshot()['paused']); self.assertEqual(self.native.calls, [])
         self.edit('resume_pending'); self.s.tick()
         with self.assertRaises(QueueConflict): self.s.immediate()
+
+    def test_rejected_start_keeps_reserved_active_slot_at_capacity(self):
+        self.accept()
+        self.native.block = threading.Event()
+        self.native.next_rejection = 'action_in_progress'
+        worker = threading.Thread(target=self.s.tick)
+        worker.start(); self.assertTrue(self.native.arrived.wait(1))
+        self.accept([spec()] * 5); self.accept([spec()] * 5)
+        self.native.block.set(); worker.join(2)
+        self.assertEqual(len(self.s.snapshot()['pending']), 10)
+        self.assertEqual(self.s.snapshot()['active']['state'], 'waiting_to_start')
+        self.s.tick()
+        self.assertEqual(len(self.s.snapshot()['pending']), 10)
+        self.assertEqual(self.s.snapshot()['active']['state'], 'running')
+
+    def test_dispatch_intent_failure_never_sends_and_freezes(self):
+        from unittest.mock import patch
+        self.accept()
+        with patch.object(self.s.store, 'save', side_effect=OSError('disk full')):
+            with self.assertRaises(OSError): self.s.tick()
+        self.s.tick()
+        self.assertEqual(self.native.calls, [])
+        self.assertIn('disk full', self.s.snapshot()['error'])
+
+    def test_stop_invalidates_local_drafts_and_old_acceptance_is_not_replayed(self):
+        raw = plan()
+        result = self.s.accept(raw, context_of(self.native.state()))
+        self.s.stop()
+        self.assertEqual(self.s.snapshot()['commandGeneration'], 1)
+        self.assertEqual(self.s.accept(raw, context_of(self.native.state())), result)
+        self.assertEqual(self.s.snapshot()['pending'], [])
+
+    def test_expired_exact_ticket_fails_without_substitution_or_retry(self):
+        self.accept([spec('assemble_dish', arguments={'order_id': 'expired', 'bases': ['d1']}), spec()])
+        self.native.next_rejection = 'assembly_order_unavailable'
+        self.s.tick(); self.s.tick()
+        value = self.s.snapshot()
+        self.assertTrue(value['paused'])
+        self.assertEqual(value['outcomes'][-1]['spec']['arguments']['order_id'], 'expired')
+        self.assertEqual(value['outcomes'][-1]['state'], 'failed')
+        self.assertEqual(len([call for call in self.native.calls if call[0] == 'execute']), 1)
+        self.assertEqual(len(value['pending']), 1)
+
+    def test_rejected_unstarted_task_paused_at_restart_can_resume(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'queue.sqlite3'
+            first = Scheduler(self.native, path)
+            first.accept(plan(), context_of(self.native.state()))
+            self.native.next_rejection = 'task_not_available'; first.tick()
+            first.edit(dict(operation_id='pause', operation='pause_pending', expected_queue_revision=1))
+            first.close()
+            resumed = Scheduler(self.native, path)
+            try:
+                self.assertEqual(resumed.snapshot()['active']['state'], 'waiting_to_start')
+                resumed.edit(dict(operation_id='resume', operation='resume_pending', expected_queue_revision=2))
+                resumed.tick()
+                self.assertEqual(resumed.snapshot()['active']['state'], 'running')
+            finally: resumed.close()
+
+    def test_external_stop_during_replacement_defeats_retained_work(self):
+        self.accept(); self.s.tick(); self.accept(edit='replace_all')
+        original = self.native.queue_io
+        def race(operation, entry):
+            result = original(operation, entry)
+            if operation == 'cancel': self.native.world['control']['dispatchGeneration'] += 1
+            return result
+        self.native.queue_io = race
+        self.s.tick(); self.s.tick()
+        self.assertEqual(self.s.snapshot()['pending'], [])
+        self.assertTrue(self.s.snapshot()['paused'])
+        self.assertEqual(len([call for call in self.native.calls if call[0] == 'execute']), 1)
+
+    def test_outcome_retention_keeps_prerequisite_of_active_task(self):
+        self.accept([spec(), spec()]); self.s.tick(); self.native.finish(); self.s.tick(); self.s.tick()
+        for _ in range(11):
+            self.accept([spec()] * 5); self.edit('clear_pending')
+        self.accept()
+        self.assertEqual(self.s.snapshot()['active']['state'], 'running')
+        self.assertTrue(any(t['state'] == 'succeeded' for t in self.s.snapshot()['outcomes']))
+
+    def test_replace_pending_preserves_active_and_does_not_cancel_native(self):
+        self.accept([spec(), spec()]); self.s.tick()
+        active = self.s.snapshot()['active']['id']
+        replacement = self.accept([spec('take_ready')], 'replace_pending')['taskIds'][0]
+        self.s.tick()
+        self.assertEqual(self.s.snapshot()['active']['id'], active)
+        self.assertEqual([t['id'] for t in self.s.snapshot()['pending']], [replacement])
+        self.assertFalse(any(call[0] == 'cancel' for call in self.native.calls))
+
+    def test_conflicting_native_id_is_not_adopted_as_our_task(self):
+        from clients.control import ControlError
+        self.accept([spec(), spec()])
+        def conflict(operation, entry):
+            self.native.calls.append((operation, entry))
+            raise ControlError('request_id_conflict')
+        self.native.queue_io = conflict
+        self.s.tick(); self.s.tick()
+        self.assertTrue(self.s.snapshot()['paused'])
+        self.assertIsNone(self.s.snapshot()['active'])
+        self.assertEqual(self.s.snapshot()['outcomes'][-1]['state'], 'failed')
+        self.assertEqual(len(self.native.calls), 1)

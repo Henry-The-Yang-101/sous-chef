@@ -75,7 +75,8 @@ class HarnessBridge:
             try:
                 self.scheduler.tick()
             except Exception as error:
-                # A journal error must stop dispatch while leaving Stop usable.
+                # Any unexpected coordinator error fails closed; Stop stays usable.
+                self.scheduler.freeze('Queue unavailable: ' + str(error))
                 with self.state_lock:
                     self.value['error'] = 'Queue unavailable: ' + str(error)
             self.halt.wait(self.POLL_SECONDS)
@@ -234,12 +235,16 @@ class HarnessBridge:
                     if not any(p.get('sourceId') == selector and p.get('destinationIds') and
                                (operation == 'return_utensil' or destination in p['destinationIds']) for p in pairs):
                         raise HarnessError('That source and destination no longer form a valid job; choose again')
+                # Capture the fence from this connection's validation response,
+                # before the final local generation check. A concurrent Stop may
+                # publish a newer fence; this old command must never adopt it.
+                context = context_of({'fresh': True, 'sessionId': self.client.hello['sessionId'],
+                                      'control': self.client.last_response['control']})
                 with self.state_lock:
                     if generation != self.generation:
                         raise HarnessError('Cancelled by Stop')
                 target = chosen['playerId'] if operation == 'throw_to_player' else destination
                 # The same fence protects immediate actions from a racing Stop.
-                context = context_of(self.state())
                 if context and isinstance(self.client, ActionClient):
                     self.client.dispatch_context = context
                 control = (getattr(self.client, operation)(*job_args) if job_args is not None else getattr(self.client, operation)(target, **arguments))

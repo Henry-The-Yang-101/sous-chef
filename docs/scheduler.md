@@ -22,9 +22,6 @@ them; an absent or evicted receipt is **unknown**, never permission to replay.
 Waiting and suspension are nonterminal. Navigation success requires native
 arrival; task success retains the executor's completed repetition/step evidence.
 
-Initial validation: plugin compiled against the installed Unity assemblies;
-C# transport/core suite passed 2,541 assertions; Python action-client tests passed
-13 tests. Native end-to-end scheduler verification is recorded below as added.
 
 ## Coordinator and journal
 
@@ -62,14 +59,53 @@ It exposes active/waiting/suspended/reconciling status and the latest outcome.
 
 ## Verification
 
-- Python suite: 166 tests, including atomic acceptance, CAS conflicts, capacity,
+- Full `scripts/check.py` passed: plugin build and installed assembly audit,
+  2,989 core assertions, 435 navigator checks, 1,169 action checks and 30 harness
+  catalog checks. Navigator/action checks use analytical or mocked native state.
+- Final Python suite: 175 tests (including the production JavaScript form
+  regressions), covering atomic acceptance, CAS conflicts, capacity,
   dependencies, finite/unlimited ordering, waiting/failure, journal ownership,
   restart, lost acknowledgment, missing receipt, Stop race and HTTP protections.
+  Additional cases cover a full queue during start rejection, disk-write failure,
+  dependency retention, expired exact tickets, conflicting native IDs, and another
+  Stop winning a replacement race.
 - `scripts/scheduler_audit.py --runtime .local/milestone2-native --port 25313`
   passed against the actual windowless Unity game on `s_sushi_1_2`: two finite
   preparation tasks completed in sequence, with first acknowledgment discarded,
   harness restart, pause and focus loss preserving the same native request.
   Retrying a completed ID returned its receipt, conflicting payload was rejected,
-  Stop rejected a late fenced request, and round reset invalidated pending work.
+  replacement waited for cancellation and then completed, Stop rejected a late
+  fenced request, and round reset invalidated pending work. The recorded bridge
+  build hash and native receipts are in [scheduler-verification.json](scheduler-verification.json).
+- Chrome UI verified against that native harness: a two-step draft accepted
+  atomically, pending steps survived reload, dependency-breaking edits were
+  disabled, an unlimited monitor blocked append, and Stop returned the chef to
+  idle with no pending work. Desktop and 390×844 phone layout were inspected;
+  phone document width stayed within the viewport. This is responsive browser
+  verification, not a physical phone test.
 - This uses isolated runtime/ports. It does not install the plugin into the normal
   game or imply microphone/Jev integration (later milestones).
+
+## Review boundaries
+
+Receipt identity is bounded retention, not a claim of exactly-once physical
+side effects. A lost/evicted receipt requires reconciliation or explicit
+cancellation, never retransmission of an uncertain action. Queue progress does
+not change the edit revision; material edits, Stop and context invalidation do.
+A plan drafted against an old revision is rejected, while an exact duplicate
+accepted command retrieves its stored acceptance without executing again.
+
+Journal-write failures freeze dispatch and are visible in the queue. Stop still
+uses the native control connection if persistence fails. Startup refuses a
+journal already owned by another harness. No accepted-task deadline was added.
+The browser's Escape key remains a local Stop shortcut while the page is focused;
+this milestone does not install a system-wide hotkey, microphone service, or Jev.
+
+`/api/plan` takes `{plan, context, focus?}` in addition to the existing token and
+viewer ID. Context is the `queue.nativeContext` from `/api/state`. The plan uses
+the existing closed schema and supports append, insert_next, replace_active,
+replace_pending and replace_all. `/api/queue` takes `edit` with `operation_id`,
+`expected_queue_revision`, and `operation`; remove adds `task_id`, reorder adds
+all pending `task_ids` exactly once. Other edits are clear_pending, pause_pending,
+resume_pending and skip_active. The Stop endpoint remains separate and does not
+require a current queue revision. Native task clicks no longer use `/api/task`.

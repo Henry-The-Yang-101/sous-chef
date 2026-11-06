@@ -10,8 +10,9 @@ import threading
 import uuid
 
 from clients.capabilities import REGISTRY_VERSION, ValidationError, registry
+from clients.control import ControlError
 from harness.plan_store import PlanStore
-from harness.plans import closed, identity, validate_plan
+from harness.plans import NativeAction, closed, identity, validate_plan
 
 
 class QueueConflict(ValueError):
@@ -36,7 +37,7 @@ def same_kitchen(a, b):
 
 
 def task_spec(task):
-    return {'kind': 'native_action' if task.__class__.__name__ == 'NativeAction' else 'native_task',
+    return {'kind': 'native_action' if isinstance(task, NativeAction) else 'native_task',
             'action': task.action, 'arguments': task.arguments, 'capability_version': task.capability_version,
             'repeat': {'mode': task.repeat.mode, **({'count': task.repeat.count} if task.repeat.count is not None else {})}}
 
@@ -57,7 +58,7 @@ class Scheduler:
         self.data.setdefault('commandGeneration', 0)
         if self.data['version'] != 1:
             raise RuntimeError('Unsupported queue journal version')
-        if self.data['active']:
+        if self.data['active'] and self.data['active']['requestId']:
             self.data['active']['state'] = 'reconciling'
             self.data['active']['reason'] = 'Checking native receipt after harness restart'
             self.store.save(self.data)
@@ -88,7 +89,8 @@ class Scheduler:
 
     def _current(self, world, expected_context):
         current = context_of(world)
-        if current is None or expected_context != current:
+        if (current is None or expected_context != current or
+                world.get('control', {}).get('reason') in ('outside_local_round', 'player2_absent_or_ambiguous', 'player2_not_local')):
             raise QueueConflict('Kitchen or control changed; refresh the queue')
         if self.data['context'] is not None and self.data['context'] != current:
             raise QueueConflict('Kitchen is being reconciled; try again after the next observation')
@@ -165,7 +167,8 @@ class Scheduler:
     def _outcome(value, entry, state, reason):
         outcome = dict(copy.deepcopy(entry), state=state, reason=reason)
         value['outcomes'].append(outcome)
-        needed = {dep for t in value['pending'] for dep in t['dependsOn']}
+        retained = ([value['active']] if value['active'] else []) + value['pending']
+        needed = {dep for t in retained for dep in t['dependsOn']}
         value['outcomes'] = [t for i, t in enumerate(value['outcomes']) if i >= len(value['outcomes']) - 50 or t['id'] in needed]
 
     def edit(self, request):
@@ -282,10 +285,10 @@ class Scheduler:
     def _tick(self):
         if self.fault:
             return
-        world = self.bridge.state()
-        current = context_of(world)
         intent = None
         with self.lock:
+            world = self.bridge.state()
+            current = context_of(world)
             value = copy.deepcopy(self.data)
             if current is None:
                 if value['active']:
@@ -307,26 +310,30 @@ class Scheduler:
                 intent = ('cancel', copy.deepcopy(barrier))
             elif value['context'] and value['context']['fence'] != current['fence']:
                 self._invalidate(value, current, 'Native Stop invalidated the queue')
-            elif value['active']:
+            elif value['active'] and value['active']['requestId']:
                 intent = ('receipt', copy.deepcopy(value['active']))
-            elif not value['paused'] and value['pending']:
+            elif not value['paused'] and (value['active'] or value['pending']):
                 control = world['control']
-                first = value['pending'][0]
+                first = value['active'] or value['pending'][0]
                 if not control.get('available') or control.get('suspended') or control.get('claimed') or control.get('action', {}).get('state') == 'running' or control.get('navigation', {}).get('state') == 'navigating':
                     first.update(state='waiting_to_start', reason=control.get('reason') or 'Player 2 is busy')
                 else:
                     try:
-                        self._validate_order(None, value['pending'], value['outcomes'])
+                        self._validate_order(value['active'], value['pending'], value['outcomes'])
                         raw = dict(schema_version=registry()['plan_schema_version'], capability_version=REGISTRY_VERSION,
                             command_id=first['commandId'], expected_queue_revision=value['revision'], queue_edit='append',
                             tasks=[first['spec']], after_plan=first['after'], on_failure='pause_pending')
                         validate_plan(raw, capabilities=world['capabilities'])
                     except ValueError as error:
-                        value['pending'].pop(0)
+                        if value['active']:
+                            value['active'] = None
+                        else:
+                            value['pending'].pop(0)
                         self._outcome(value, first, 'failed', str(error))
                         value['paused'], value['reason'] = True, str(error)
                     else:
-                        first = value['pending'].pop(0)
+                        if value['active'] is None:
+                            first = value['pending'].pop(0)
                         first.update(state='dispatching', reason=None, requestId=unique_id(), context=current)
                         value['active'] = first
                         intent = ('execute', copy.deepcopy(first))
@@ -344,7 +351,12 @@ class Scheduler:
                 value = copy.deepcopy(self.data)
                 active = value['active']
                 if operation != 'cancel' and active and active['requestId'] == entry['requestId']:
-                    active.update(state='reconciling', reason='Native outcome unknown: ' + str(error))
+                    if isinstance(error, ControlError) and str(error) == 'request_id_conflict':
+                        self._outcome(value, active, 'failed', 'Native request ID conflicts with another payload')
+                        value['active'] = None
+                        value['paused'], value['reason'] = True, 'Conflicting native request identity; dispatch paused'
+                    else:
+                        active.update(state='reconciling', reason='Native outcome unknown: ' + str(error))
                 elif operation == 'cancel' and value['barrier'] and value['barrier']['id'] == entry['id']:
                     value['reason'] = 'Cancellation unconfirmed: ' + str(error)
                 self._save(value)
@@ -355,14 +367,17 @@ class Scheduler:
                 if not value['barrier'] or value['barrier']['id'] != entry['id']:
                     return
                 latest = context_of(self.bridge.state())
-                if latest and result and (result['state'] == 'succeeded' or
-                        (result['state'] == 'rejected' and result['reason'] == 'stale_dispatch_context' and
-                         same_kitchen(entry['context'], latest) and latest['fence'] > entry['context']['fence'])):
+                if latest and (not same_kitchen(entry['context'], latest) or latest['fence'] > entry['context']['fence'] + 1):
+                    self._invalidate(value, latest, 'Control changed again during cancellation; old work invalidated')
+                elif (latest and result and result.get('id') == entry['id'] and result.get('state') == 'succeeded'
+                      and latest['fence'] == entry['context']['fence'] + 1):
                     value['barrier'] = None
                     value['context'] = latest
                     if not value['paused']:
                         value['reason'] = None
                     value['lastOperation'] = {'message': 'Native cancellation confirmed', 'revision': value['revision']}
+                elif latest and result and result.get('state') == 'rejected' and result.get('reason') == 'stale_dispatch_context':
+                    self._invalidate(value, latest, 'Native Stop invalidated pending work during cancellation')
                 else:
                     value['reason'] = 'Cancellation outcome unknown; dispatch held'
                 self._save(value)
@@ -376,8 +391,9 @@ class Scheduler:
                 active.update(state=result['state'], reason=result.get('reason'), receipt=result)
             elif result['state'] == 'rejected' and result.get('reason') in self.RETRYABLE:
                 active.update(state='waiting_to_start', reason=result['reason'], receipt=result, requestId=None)
-                value['pending'].insert(0, active)
-                value['active'] = None
+                # Keep the active slot reserved: concurrent appends may already
+                # have filled all ten pending slots while this attempt ran.
+                value['active'] = active
             elif result['state'] in ('succeeded', 'failed', 'blocked', 'cancelled', 'rejected'):
                 success = result['state'] == 'succeeded'
                 active['receipt'] = result
@@ -391,5 +407,5 @@ class Scheduler:
             self._save(value)
 
     def close(self):
-        with self.lock:
+        with self.worker_lock, self.lock:
             self.store.close()

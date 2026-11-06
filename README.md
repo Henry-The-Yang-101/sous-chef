@@ -4,7 +4,7 @@ A local observation and Player 2 control bridge for couch co-op in the native ma
 Overcooked! 2. The target is two separate local players, each controlling their
 own chef simultaneously. Online multiplayer is outside the supported scope.
 
-Bridge **0.8.8** adds a compact observation stream for the harness map, FPS and station contents. It [preserves accepted jobs across focus loss and harness disconnects](docs/control-lifecycle.md). Unfocusing suspends P2 until the game accepts input again; Stop cancels the job. It includes the [held-item task recovery](docs/held-item-regressions.md), [raft handoff and board scheduling fixes](docs/raft-handoff-regressions.md), and earlier [preparation fixes](docs/preparation-regressions.md).
+Bridge **0.8.9** adds [fenced execution receipts and the durable local task queue](docs/scheduler.md). The previous 0.8.8 release added a compact observation stream for the harness map, FPS and station contents. It [preserves accepted jobs across focus loss and harness disconnects](docs/control-lifecycle.md). Unfocusing suspends P2 until the game accepts input again; Stop cancels the job. It includes the [held-item task recovery](docs/held-item-regressions.md), [raft handoff and board scheduling fixes](docs/raft-handoff-regressions.md), and earlier [preparation fixes](docs/preparation-regressions.md).
 
 Bridge 0.5 adds [first-layer interaction actions](docs/actions.md): pickup,
 placement, ingredient addition, work, activation, disposal, typed waits, and
@@ -188,6 +188,6 @@ and with the same clients connected.
 
 Autonomous multi-step tasks, repeat counts, and indefinite environmental waiting
 are documented in [docs/tasks.md](docs/tasks.md). The localhost **Tasks** panel
-uses the same production task executor; voice/Jev integration is intentionally
+accepts atomic plans through the [shared scheduler](docs/scheduler.md), with queue editing and restart recovery. It uses the same production task executor; voice/Jev integration is intentionally
 separate. [Dish assembly](docs/dish-assembly.md) binds one ticket and its assigned
 resources, verifies exact-recipe additions, and schedules assembly, mixing and cooking.

@@ -1211,7 +1211,7 @@ workspace changes. There is no automatic push or deployment implied.
 ### Milestone 1 — Shared capability contracts
 
 **Implemented 6 November 2026:** see [contracts and verification](capability-contracts.md).
-The remaining milestones below still describe future integration work.
+Milestone 2 is also implemented below; milestones 3–6 describe future integration work.
 
 Deliver:
 
@@ -1227,6 +1227,8 @@ unsupported fields and illegal combinations are rejected; busy/suspended P2 does
 not erase supported tasks; no guessed feature is advertised as executable.
 
 ### Milestone 2 — Local scheduler and harness UI
+
+**Implemented 6 November 2026:** see [scheduler and verification](scheduler.md).
 
 Deliver:
 

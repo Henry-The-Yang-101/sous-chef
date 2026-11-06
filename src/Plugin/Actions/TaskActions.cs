@@ -74,12 +74,14 @@ namespace SousChef.Plugin.Actions
             TaskDefinition definition;
             if (command.Task == null || !definitions.TryGetValue(command.Task.Action, out definition)) return "unsupported_task";
             chef = actor; request = command.Task; inventory.Refresh(chef);
-            if (!definition.Available()) return "task_not_available";
             assembly = null;
             if (request.Action == "assemble_dish")
             {
                 string error = BindAssembly(); if (error != null) return error;
             }
+            // Exact bindings must fail specifically even when no tickets remain;
+            // generic availability cannot turn an expired allocation into a wait.
+            if (!definition.Available()) return "task_not_available";
             pendingDeliveries.Clear(); nextDeliveryCheck = 0;
             preparation = null; completed = completedSteps = 0; childStarted = false; waitingReason = null; observationError = null; handoffEvidence = null; step = null; plan = definition.Plan().GetEnumerator(); retryAt = 0;
             command.Indefinite = true; Run.Start(owner, command, Time.realtimeSinceStartup); input(0); return null;

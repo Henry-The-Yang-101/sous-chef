@@ -58,7 +58,9 @@ lost_ack = [False]
 def audit(args):
     assert args.runtime.resolve() != sim.DEFAULT_RUNTIME.resolve(), 'Use an isolated runtime'
     assert sim.control_port(args.runtime) == args.port, 'Port/runtime mismatch'
-    report = {'runtime': str(args.runtime), 'port': args.port, 'scenarios': {}}
+    generation = sim.read_status(args.runtime)['generation'] + 1
+    sim.command(args.runtime, 'reset'); sim.wait_ready(args.runtime, generation)
+    report = {'runtime': str(args.runtime), 'port': args.port, 'build': json.loads((args.runtime / 'process.json').read_text()), 'scenarios': {}}
     with tempfile.TemporaryDirectory(prefix='sous-chef-queue-') as directory:
         path = Path(directory) / 'queue.sqlite3'
         factory = lambda: LostAckClient(args.port, timeout=2)
@@ -97,6 +99,18 @@ def audit(args):
                     assert 'request_id_conflict' in str(error)
                 else: raise AssertionError('Conflicting payload accepted')
                 report['scenarios']['deduplication'] = duplicate
+            # Run now is a fenced cancellation barrier, then a new dispatch.
+            bridge.poll()
+            accept(bridge, [task('monitor_equipment', count=None)])
+            state = pump(bridge, lambda s: s['queue']['active'] is not None)
+            replaced = state['queue']['active']['requestId']
+            accept(bridge, [prep], 'replace_active')
+            state = pump(bridge, lambda s: not s['queue']['active'] and not s['queue']['pending'] and not s['queue']['barrier'])
+            assert state['queue']['outcomes'][-1]['state'] == 'succeeded'
+            with ActionClient(args.port) as client:
+                cancelled = client.receipt(replaced)
+                assert cancelled['state'] == 'cancelled'
+            report['scenarios']['replacement_cleanup'] = {'cancelled': cancelled, 'replacement': state['queue']['outcomes'][-1]}
             # Unlimited tail survives socket lifetime and is cancelled explicitly.
             bridge.poll()
             accept(bridge, [task('prepare_near_player', prep['arguments'], None)])
