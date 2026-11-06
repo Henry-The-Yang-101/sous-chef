@@ -15,6 +15,8 @@ let receivedAt = 0;
 let pending = false;
 let lastError = '';
 let sessionId = null;
+let displayedCatalog = {};
+let displayScope = null;
 const rows = new Map();
 let mapSelection = null;
 const mapPicker = new KitchenPicker(target => {
@@ -31,7 +33,7 @@ const reasons = {
   outside_local_round: 'Enter an Arcade → Couch kitchen with two local players.',
   player2_absent_or_ambiguous: 'Add Player 2 with Split Controller.',
   player2_not_ready: 'Player 2 is not ready yet.',
-  paused: 'Unpause the round to see available destinations.',
+  paused: 'Unpause the round to run actions.',
   input_suppressed: 'The game is blocking input. Return focus to the unpaused kitchen.',
   game_unfocused: 'Choose a destination to bring the game forward and navigate.',
   planning_budget_exceeded: 'The planner reached its time limit. Waiting for a complete live route search.',
@@ -57,37 +59,47 @@ const actionNames = {navigate_to: 'Navigate', pick_up: 'Pick up', place_at: 'Pla
   move_item: 'Move item', fetch_ingredient: 'Fetch ingredient', get_plate: 'Get clean plate', get_utensil: 'Get empty utensil', stage_item: 'Stage item', return_utensil: 'Return utensil', clear_station: 'Clear station'};
 const phaseNames = {picking_up: 'collecting', drop_press: 'placing nearby', dropping: 'checking nearby handoff', throw_hold: 'aiming', flight: 'checking arrival'};
 const throwIdentity = target => JSON.stringify([state?.sessionId, target.id, target.objectInstanceId]);
-function throwTargets(catalog, operation) {
-  return (operation === 'throw_to_player' ? catalog.players || [] : catalog.targets || [])
-    .filter(target => target.operations?.includes(operation));
+const jobNames = ['move_item', 'fetch_ingredient', 'get_plate', 'get_utensil', 'stage_item', 'return_utensil', 'clear_station'];
+function displayChoices(catalog) {
+  const session = state?.sessionId;
+  const epoch = state?.kitchenMap?.levelEpoch ?? (displayScope?.session === session ? displayScope.epoch : null);
+  if (session !== displayScope?.session || epoch !== displayScope?.epoch || !state?.connected || state?.control?.reason === 'outside_local_round') {
+    displayedCatalog = {}; displayScope = {session, epoch};
+  }
+  // Pause/staleness may remove eligibility without removing kitchen choices.
+  // A new session/round discards them; observed object removals replace the list.
+  if (fresh() && catalog.targets) displayedCatalog = catalog;
+  return displayedCatalog;
 }
-function renderThrows(catalog, busy, live) {
-  const control = state?.control || {};
+function displayOptions(catalog) { return catalog.displayOptions || catalog; }
+function actionBlocked(busy, live) {
+  return !live || pending || busy || (!state?.control?.available && state?.control?.reason !== 'game_unfocused');
+}
+function throwTargets(catalog, operation, availableOnly = false) {
+  const targets = operation === 'throw_to_player' ? catalog.players || [] : catalog.targets || [];
+  return availableOnly ? targets.filter(target => target.operations?.includes(operation))
+    : targets.filter(target => target.possibleOperations?.includes(operation) || target.operations?.includes(operation) ||
+      (operation === 'throw_to_player' || ['counter', 'workstation', 'cooking_station', 'plate_station'].includes(target.kind)));
+}
+function renderThrows(catalog, visible, busy, live) {
   const operation = el('throw-kind').value;
   const toPlayer = operation === 'throw_to_player';
-  const targets = throwTargets(catalog, operation);
-  const inputBlocked = !control.available && control.reason !== 'game_unfocused';
-  const blocked = !live || pending || busy || inputBlocked;
+  const targets = throwTargets(visible, operation);
+  const available = throwTargets(catalog, operation, true);
   el('throw-target-name').textContent = toPlayer ? 'Player' : 'Place';
   el('throw-run').textContent = toPlayer ? 'Throw to player' : 'Throw to place';
   setJobOptions(el('throw-target'), targets.map(target => ({value: throwIdentity(target),
     label: toPlayer ? nameOf(target) : `${nameOf(target)} · x ${number(target.position?.[0])}, z ${number(target.position?.[2])}, height ${number(target.position?.[1])}`})));
-  el('throw-kind').disabled = blocked;
-  el('throw-target').disabled = blocked || !targets.length;
-  el('throw-run').disabled = blocked || !targets.some(target => throwIdentity(target) === el('throw-target').value);
-  const previews = [...(catalog.targets || []), ...(catalog.players || [])].map(target => target.throw);
-  let message = '';
-  if (!live) message = 'Waiting for fresh game state before throwing.';
-  else if (pending) message = 'Sending the selected action…';
-  else if (busy) message = 'Player 2 is running an action. Wait for it to finish or press Stop.';
-  else if (inputBlocked) message = explain(control.reason) || 'The game is not accepting Player 2 actions.';
-  else if (previews.some(preview => preview?.reason === 'hands_empty')) message = 'Pick up an ingredient with Player 2 to see throw targets.';
-  else if (catalog.throwOptionsComplete === false) message = 'Checking throw paths. Safe targets appear as they are verified.';
-  else if (!targets.length) message = toPlayer ? 'No player can receive this item from a reachable release position. Try a place or change position.'
-    : 'No place can receive this item from a reachable release position. Pick up a throwable ingredient or change position.';
-  else if (!el('throw-target').value) message = toPlayer ? 'Choose a player to receive the held item.' : 'Choose a place to receive the held item.';
+  el('throw-kind').disabled = false;
+  el('throw-target').disabled = !targets.length;
+  el('throw-run').disabled = actionBlocked(busy, live) || !available.some(target => throwIdentity(target) === el('throw-target').value);
+  let message = blockedReason(busy, live);
+  if (!message && !el('throw-target').value) message = toPlayer ? 'Choose a player to receive the held item.' : 'Choose a place to receive the held item.';
+  else if (!message && el('throw-run').disabled) message = catalog.throwOptionsComplete === false
+    ? 'Checking the selected throw path…' : 'This throw is currently unavailable. Hold a throwable item and wait for a safe release path.';
   el('throw-status').textContent = message;
   el('throw-status').hidden = !message;
+  el('throw-run').title = message;
 }
 function setJobOptions(select, choices) {
   const signature = JSON.stringify(choices);
@@ -100,59 +112,75 @@ function setJobOptions(select, choices) {
   select.value = choices.some(choice => choice.value === selected) ? selected : '';
   select.dataset.choices = signature;
 }
-function renderJobs(catalog, busy, live) {
-  const control = state?.control || {};
-  const inputBlocked = !control.available && control.reason !== 'game_unfocused';
-  const jobOptions = catalog.jobOptions || {};
-  const jobs = Object.keys(jobOptions).filter(name => jobOptions[name].length);
-  setJobOptions(el('job-kind'), jobs.map(name => ({value: name, label: actionNames[name]})));
+function blockedReason(busy, live) {
+  if (!live) return 'Waiting for fresh game state.';
+  if (pending) return 'Sending the selected action…';
+  if (busy) return 'Player 2 is running an action. Wait for it to finish or press Stop.';
+  if (!state?.control?.available && state?.control?.reason !== 'game_unfocused') return explain(state?.control?.reason) || 'The game is not accepting Player 2 actions.';
+  return '';
+}
+function renderJobs(catalog, visible, busy, live) {
+  const display = displayOptions(visible);
+  setJobOptions(el('job-kind'), jobNames.map(name => ({value: name, label: actionNames[name]})));
   const kind = el('job-kind').value;
-  const options = jobOptions[kind] || [];
-  const sourceIds = new Set(options.map(option => option.sourceId));
-  const unsupported = live && !busy && !inputBlocked && !catalog.jobOptions;
-  const blocked = !live || pending || busy || unsupported || inputBlocked || !jobs.includes(kind);
-  el('job-kind').disabled = !live || pending || busy || !jobs.length;
-  const items = catalog.items || [];
+  const options = catalog.jobOptions?.[kind] || [];
+  const items = display.items || [];
   let sources = items.map(item => ({value: item.id, label: nameOf(item)}));
   el('job-source-name').textContent = kind === 'fetch_ingredient' ? 'Ingredient' : kind === 'get_utensil' ? 'Utensil type' : kind === 'clear_station' ? 'Station' : 'Item';
-  if (kind === 'fetch_ingredient') sources = (catalog.ingredients || []).map(item => ({value: item.id, label: item.label.replaceAll('_', ' ')}));
-  if (kind === 'get_utensil') sources = (catalog.utensilTypes || []).map(type => ({value: type, label: type.replaceAll('_', ' ')}));
-  if (kind === 'clear_station') sources = (catalog.targets || []).map(item => ({value: item.id, label: nameOf(item)}));
-  sources = sources.filter(source => sourceIds.has(source.value));
+  if (kind === 'fetch_ingredient') sources = (display.ingredients || []).map(item => ({value: item.id, label: item.label.replaceAll('_', ' ')}));
+  if (kind === 'get_utensil') sources = (display.utensilTypes || []).filter(type => type !== 'plate').map(type => ({value: type, label: type.replaceAll('_', ' ')}));
+  if (kind === 'clear_station') sources = (visible.targets || []).filter(item => ['counter', 'workstation', 'cooking_station', 'plate_station', 'washing_station'].includes(item.kind) || item.possibleOperations?.includes('place_at'))
+    .map(item => ({value: item.id, label: nameOf(item)}));
+  if (kind === 'return_utensil') sources = items.filter(item => item.utensilType).map(item => ({value: item.id, label: nameOf(item)}));
   setJobOptions(el('job-source'), sources);
   const source = kind === 'get_plate' ? '' : el('job-source').value;
-  const destinationIds = new Set(options.find(option => option.sourceId === source)?.destinationIds || []);
-  const destinations = (catalog.deliveryDestinations || []).filter(item => destinationIds.has(item.id)).map(item => ({value: item.id, label: nameOf(item)}));
+  const destinations = (display.deliveryDestinations || []).map(item => ({value: item.id, label: nameOf(item)}));
   setJobOptions(el('job-destination'), destinations);
+  const pair = options.find(option => option.sourceId === source);
+  const runnable = pair?.destinationIds?.length && (kind === 'return_utensil' || pair.destinationIds.includes(el('job-destination').value));
   el('job-source-label').hidden = kind === 'get_plate';
   el('job-destination-label').hidden = kind === 'return_utensil';
-  el('job-source').disabled = blocked || !sources.length; el('job-destination').disabled = blocked || !destinations.length;
-  el('job-run').disabled = blocked || (kind !== 'get_plate' && !el('job-source').value) || (kind !== 'return_utensil' && !el('job-destination').value);
-  let message = '';
-  if (!live) message = 'Waiting for fresh bridge state before jobs can run.';
-  else if (unsupported) message = `The running bridge${state.bridgeVersion ? ` (${state.bridgeVersion})` : ''} needs current job options. Quit Overcooked! 2, run python3 scripts/install.py, then relaunch with python3 scripts/launch.py and refresh this page.`;
-  else if (pending) message = 'Sending the selected job…';
-  else if (busy) message = 'Player 2 is running an action. Wait for it to finish or press Stop to choose another job.';
-  else if (inputBlocked) message = explain(control.reason) || 'The game is not accepting Player 2 actions.';
-  else if (!jobs.length) message = explain(catalog.reason || catalog.navigation?.catalogReason) || 'No supply jobs are currently possible. Options update as the kitchen changes.';
-  else if (!kind) message = 'Choose an available job.';
-  else if (el('job-run').disabled) message = 'Choose the required fields to run this job.';
+  el('job-kind').disabled = false;
+  el('job-source').disabled = !sources.length; el('job-destination').disabled = !destinations.length;
+  el('job-run').disabled = actionBlocked(busy, live) || !runnable;
+  let message = blockedReason(busy, live);
+  if (!message && !kind) message = 'Choose a job.';
+  else if (!message && ((kind !== 'get_plate' && !source) || (kind !== 'return_utensil' && !el('job-destination').value))) message = 'Choose the required fields to run this job.';
+  else if (!message && !runnable) message = 'This source and destination are currently unavailable or incompatible. Run job enables when they form a valid job.';
   el('job-status').textContent = message;
   el('job-status').hidden = !message;
+  el('job-run').title = message;
 }
 function actionChoices(d) {
-  const choices = d.walkReachable ? [{value: 'navigate_to', label: 'Navigate'}] : [];
-  for (const operation of d.operations || []) {
+  const operations = new Set(d.possibleOperations || ['navigate_to', ...(d.operations || [])]);
+  for (const operation of d.operations || []) operations.add(operation);
+  const choices = [];
+  for (const operation of operations) {
     if (operation === 'work_at' || operation === 'wait_until') {
-      for (const condition of d[operation === 'work_at' ? 'workConditions' : 'waitConditions'] || []) {
-        const label = condition.replaceAll('_', ' ');
-        choices.push({value: `${operation}|${condition}`, label: `${actionNames[operation]}: ${label}`});
-      }
+      const key = operation === 'work_at' ? 'WorkConditions' : 'WaitConditions';
+      const conditions = new Set([...(d[`possible${key}`] || []), ...(d[key[0].toLowerCase() + key.slice(1)] || [])]);
+      for (const condition of conditions) choices.push({value: `${operation}|${condition}`, label: `${actionNames[operation]}: ${condition.replaceAll('_', ' ')}`});
     } else if (operation === 'activate') {
       for (const desired of d.activationStates || ['trigger']) choices.push({value: `activate|${desired}`, label: `Activate: ${desired}`});
     } else choices.push({value: operation, label: actionNames[operation] || operation.replaceAll('_', ' ')});
   }
   return choices;
+}
+function canPerform(d, choice) {
+  if (!d || !choice) return false;
+  const [operation, condition] = choice.split('|');
+  if (operation === 'navigate_to') return !!d.walkReachable;
+  if (!d.operations?.includes(operation)) return false;
+  if (!['wait_until', 'throw_to', 'throw_to_player'].includes(operation) && !d.walkReachable) return false;
+  if (operation === 'work_at') return d.workConditions?.includes(condition);
+  if (operation === 'wait_until') return d.waitConditions?.includes(condition);
+  if (operation === 'activate') return (d.activationStates || ['trigger']).includes(condition);
+  return true;
+}
+function targetsWithRoutes(catalog) {
+  const byId = new Map((catalog.destinations || []).map(d => [d.id, {...d, walkReachable: true}]));
+  for (const d of [...(catalog.targets || []), ...(catalog.players || [])]) byId.set(d.id, {...byId.get(d.id), ...d});
+  return Array.from(byId.values());
 }
 function nameOf(d) {
   if (d.foodName) return `${d.foodName.replaceAll('_', ' ')} dispenser`;
@@ -170,43 +198,44 @@ function chooseOnMap(mode) {
   render();
   el('map-title').closest('.kitchen').scrollIntoView({block: 'start'});
 }
-function renderMap(catalog, destinations, busy, live) {
+function renderMap(catalog, visible, destinations, busy, live) {
   if (document.hidden) return;
   renderFps(state, live && performance.now() - receivedAt + (state?.gamePerformance?.ageMs || 0) <= 1500);
   const mode = el('map-mode').value;
   const control = state?.control || {};
   const blocked = !live || pending || busy || (!control.available && control.reason !== 'game_unfocused');
   let choices = destinations.filter(d => actionChoices(d).length), selected = null;
-  let description = 'Choose an available target on the map.';
-  if (mapSelection && (!live || mapSelection.session !== state.sessionId || mapSelection.epoch !== state.kitchenMap?.levelEpoch ||
+  let description = 'Choose a target on the map to inspect its actions.';
+  if (mapSelection && (mapSelection.session !== state.sessionId || mapSelection.epoch !== displayScope?.epoch ||
       !destinations.some(d => d.id === mapSelection.id && d.objectInstanceId === mapSelection.objectInstanceId))) mapSelection = null;
   if (mode === 'throw') {
-    choices = throwTargets(catalog, el('throw-kind').value);
+    choices = throwTargets(visible, el('throw-kind').value);
     selected = choices.find(d => throwIdentity(d) === el('throw-target').value);
     description = selected ? `Throw to ${nameOf(selected)}. Use the throw button below to send it.` : el('throw-status').textContent || 'Choose a throw recipient on the map.';
   } else if (mode === 'job') {
     const ids = new Set(Array.from(el('job-destination').options).map(option => option.value).filter(Boolean));
-    choices = (catalog.deliveryDestinations || []).filter(d => ids.has(d.id));
+    choices = (displayOptions(visible).deliveryDestinations || []).filter(d => ids.has(d.id));
     selected = choices.find(d => d.id === el('job-destination').value);
     description = el('job-kind').value === 'return_utensil' ? 'Return utensil uses its observed home. Choose the utensil below.'
-      : selected ? `Deliver to ${nameOf(selected)}. Use Run job below to start.` : 'Choose a job and source below, then select an available delivery target here.';
+      : selected ? `Deliver to ${nameOf(selected)}. Use Run job below to start.` : 'Choose a job and source below, then select a delivery target here.';
     if (el('job-kind').value === 'return_utensil') choices = [];
   } else {
     selected = choices.find(d => d.id === mapSelection?.id && d.objectInstanceId === mapSelection?.objectInstanceId);
     description = selected ? `${nameOf(selected)} · height ${number(selected.position?.[1])}${contentsOf(selected) ? ` · ${contentsOf(selected)}` : ''}` : description;
   }
-  // Include every observed target as context, but enable only the exact current
-  // operation/source-compatible catalogue. Map clicks never issue commands.
-  const all = new Map([...destinations, ...(catalog.deliveryDestinations || []), ...choices].map(d => [d.id, d]));
+  // Choosing an unavailable target is useful for inspecting its options.
+  // Only Run dispatches, using the current live eligibility catalogue.
+  const all = new Map([...destinations, ...(displayOptions(visible).deliveryDestinations || []), ...choices].map(d => [d.id, d]));
   const map = state?.kitchenMap;
   const mapLive = live && map && performance.now() - receivedAt + (map.ageMs || 0) <= 1500;
-  mapPicker.render(mapLive ? map : null, Array.from(all.values()), blocked ? [] : choices, selected?.id, live);
+  mapPicker.render(mapLive ? map : null, Array.from(all.values()), choices, selected?.id, live);
   el('map-action-controls').hidden = mode !== 'action';
   setJobOptions(el('map-action'), selected ? actionChoices(selected) : []);
   if (selected && !el('map-action').value) el('map-action').selectedIndex = 1;
-  el('map-action').disabled = blocked || !selected || !mapLive;
-  el('map-run').disabled = blocked || !selected || !el('map-action').value || !mapLive;
-  el('map-selection').textContent = !mapLive ? 'Waiting for a fresh kitchen map.' : busy ? 'Player 2 is running an action. Press Stop to choose another.' : description;
+  el('map-action').disabled = !selected;
+  const current = targetsWithRoutes(catalog).find(d => d.id === selected?.id && d.objectInstanceId === selected?.objectInstanceId);
+  el('map-run').disabled = blocked || !canPerform(current, el('map-action').value) || !mapLive;
+  el('map-selection').textContent = !mapLive ? 'Waiting for a fresh kitchen map.' : `${description}${mode === 'action' && selected && el('map-run').disabled ? ' This action is currently unavailable.' : ''}`;
 }
 function render() {
   const live = fresh();
@@ -217,12 +246,12 @@ function render() {
   const acting = live && receipt.state === 'running';
   const busy = moving || acting;
   const catalog = live ? state.catalog || {} : {};
-  renderThrows(catalog, busy, live);
-  renderJobs(catalog, busy, live);
-  renderTasks(catalog, busy, live);
-  const byId = new Map((catalog.destinations || []).map(d => [d.id, {...d, walkReachable: true}]));
-  for (const d of [...(catalog.targets || []), ...(catalog.players || [])]) byId.set(d.id, {...byId.get(d.id), ...d});
-  const destinations = Array.from(byId.values());
+  const visible = displayChoices(catalog);
+  renderThrows(catalog, visible, busy, live);
+  renderJobs(catalog, visible, busy, live);
+  renderTasks(catalog, visible, busy, live);
+  const destinations = targetsWithRoutes(visible);
+  const currentTargets = targetsWithRoutes(catalog);
   const catalogReason = catalog.reason || catalog.navigation?.catalogReason || control.reason;
   const useReceipt = receipt.operation && (acting || (!moving && state?.lastCommand?.operation !== 'navigate_to'));
   const recorded = useReceipt ? (destinations.find(d => d.id === receipt.targetId || (receipt.operation === 'throw_to_player' && String(d.playerId) === receipt.targetId)) || state?.lastCommand?.target)
@@ -307,15 +336,17 @@ function render() {
       row.choiceSignature = signature;
     }
     row.select.setAttribute('aria-label', `Action for ${nameOf(destination)}`);
-    row.select.disabled = pending || busy || !live || !choices.length;
+    row.select.disabled = !choices.length;
     row.button.textContent = busy && active?.id === destination.id ? 'Running…' : 'Run';
     row.button.setAttribute('aria-label', `${choices.find(c => c.value === row.select.value)?.label || 'Run'}: ${nameOf(destination)}`);
-    row.button.disabled = pending || busy || !choices.length || (!control.available && control.reason !== 'game_unfocused') || !live;
+    const current = currentTargets.find(d => d.id === destination.id && d.objectInstanceId === destination.objectInstanceId);
+    row.button.disabled = actionBlocked(busy, live) || !canPerform(current, row.select.value);
+    row.button.title = row.button.disabled ? blockedReason(busy, live) || 'This action is currently unavailable for this target.' : '';
     row.tr.classList.toggle('active', busy && active?.id === destination.id);
     const atIndex = el('rows').children[index];
     if (atIndex !== row.tr) el('rows').insertBefore(row.tr, atIndex || null);
   }
-  renderMap(catalog, destinations, busy, live);
+  renderMap(catalog, visible, destinations, busy, live);
   el('details').textContent = JSON.stringify({sessionId: state?.sessionId, bridgeVersion: state?.bridgeVersion, supportedActions: state?.supportedActions, pad: control.pad, side: control.side, navigation: nav, action: receipt, error: state?.error}, null, 2);
 }
 
@@ -327,7 +358,8 @@ async function post(path, data = {}) {
   return result;
 }
 async function perform(d, choice) {
-  if (pending || !fresh()) return;
+  if (actionBlocked(state?.control?.navigation?.state === 'navigating' || state?.control?.action?.state === 'running', fresh()) ||
+      !canPerform(targetsWithRoutes(state.catalog || {}).find(target => target.id === d.id && target.objectInstanceId === d.objectInstanceId), choice)) return;
   pending = true; lastError = ''; render();
   try {
     const [operation, option] = choice.split('|');
@@ -341,7 +373,7 @@ async function runThrow(event) {
   event.preventDefault();
   if (pending || !fresh() || el('throw-run').disabled) return;
   const operation = el('throw-kind').value;
-  const target = throwTargets(state.catalog || {}, operation).find(target => throwIdentity(target) === el('throw-target').value);
+  const target = throwTargets(state.catalog || {}, operation, true).find(target => throwIdentity(target) === el('throw-target').value);
   if (target) await perform(target, operation);
 }
 async function runJob(event) {
@@ -486,37 +518,48 @@ function addTaskItem() {
   const row = document.createElement('div'); row.className = 'task-item';
   const ingredient = document.createElement('select'); ingredient.required = true;
   ingredient.setAttribute('aria-label', 'Ingredient or utensil');
+  ingredient.addEventListener('change', render);
   const preparation = document.createElement('select'); preparation.setAttribute('aria-label', 'Preparation');
   for (const kind of ['raw', 'chopped', 'cooked', 'mixed', 'empty']) preparation.add(new Option(kind === 'empty' ? 'Empty utensil / plate' : kind, kind));
   preparation.addEventListener('change', render);
   const quantity = document.createElement('input'); quantity.type = 'number'; quantity.min = '1'; quantity.max = '10'; quantity.value = '1'; quantity.required = true; quantity.setAttribute('aria-label', 'Quantity');
-  const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Remove'; remove.onclick = () => row.remove();
+  quantity.addEventListener('input', render);
+  const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Remove'; remove.onclick = () => { row.remove(); render(); };
   row.append(ingredient, preparation, quantity, remove); el('task-items').append(row);
 }
-function renderTasks(catalog, busy, live) {
-  const task = state.control?.action;
-  const choices = [...(catalog.taskOptions || [])];
-  if (task?.operation === 'task' && task.state === 'running' && !choices.some(t => t.name === task.details?.taskAction)) choices.push({name: task.details.taskAction});
-  setJobOptions(el('task-kind'), choices.map(t => ({value: t.name, label: taskLabels[t.name] || t.name})));
-  if (task?.operation === 'task' && task.state === 'running') { el('task-kind').value = task.details.taskAction; el('task-repeat').value = task.details.infinite ? 'forever' : String(task.details.repetitions); }
-  el('task-preparation').hidden = el('task-kind').value !== 'prepare_near_player';
+function renderTasks(catalog, visible, busy, live) {
+  const task = state?.control?.action;
+  setJobOptions(el('task-kind'), Object.entries(taskLabels).map(([value, label]) => ({value, label})));
+  const kind = el('task-kind').value;
+  const preparing = kind === 'prepare_near_player';
+  el('task-preparation').hidden = !preparing;
+  const preparationOptions = displayOptions(visible).preparationOptions || [];
   for (const row of el('task-items').children) {
     const utensil = row.children[1].value === 'empty';
-    if (catalog.preparationOptions) {
-      const options = catalog.preparationOptions.filter(option => option.utensil === utensil)
-        .map(option => ({value: option.id, label: option.label.replaceAll('_', ' ')}));
-      setJobOptions(row.children[0], options);
-    }
+    setJobOptions(row.children[0], preparationOptions.filter(option => option.utensil === utensil)
+      .map(option => ({value: option.id, label: option.label.replaceAll('_', ' ')})));
   }
-  const blocked = !live || pending || busy || (!state.control?.available && state.control?.reason !== 'game_unfocused');
-  el('task-run').disabled = blocked || !choices.length || !el('task-kind').value;
-  for (const field of el('task-form').querySelectorAll('input, select, button')) if (field.id !== 'task-run') field.disabled = blocked;
-  for (const field of el('task-preparation').querySelectorAll('input, select, button')) field.disabled = blocked || el('task-kind').value !== 'prepare_near_player';
-  el('task-status').textContent = task?.operation === 'task' ? `${taskLabels[task.details?.taskAction] || 'Task'}: ${task.state} · ${task.phase.replaceAll('_', ' ')} · ${task.details?.completedRepetitions || 0} repetitions completed${task.state === 'running' && task.details?.waitingReason ? ' · waiting: ' + explain(task.details.waitingReason) : ''}`
-    : !choices.length ? 'No tasks currently available. Options update with the kitchen.' : '';
+  // Browsing and editing remain possible while execution is blocked.
+  for (const field of el('task-form').querySelectorAll('input, select, button')) if (field.id !== 'task-run') field.disabled = false;
+  for (const field of el('task-preparation').querySelectorAll('input, select, button')) field.disabled = !preparing;
+  el('task-add-item').disabled = !preparing || el('task-items').children.length >= 10;
+  const eligible = (catalog.taskOptions || []).some(t => t.name === kind);
+  const validItems = !preparing || (el('task-items').children.length > 0 && Array.from(el('task-items').children).every(row =>
+    row.children[0].value && row.children[2].checkValidity()));
+  const playerPresent = !preparing || (catalog.players || []).some(player => String(player.playerId) === el('task-player').value);
+  el('task-run').disabled = actionBlocked(busy, live) || !eligible || !validItems || !playerPresent;
+  let message = blockedReason(busy, live);
+  if (!message && !kind) message = 'Choose a task. All tasks stay listed; Start task enables when the selected task can run.';
+  else if (!message && !validItems) message = 'Choose a level ingredient or utensil and quantity for every preparation row.';
+  else if (!message && !playerPresent) message = 'The selected receiving player is not in this kitchen.';
+  else if (!message && !eligible) message = 'This task is currently unavailable. Start task enables automatically when the kitchen allows it.';
+  el('task-run').title = message;
+  const progress = task?.operation === 'task' ? `${taskLabels[task.details?.taskAction] || 'Task'}: ${task.state} · ${(task.phase || '').replaceAll('_', ' ')} · ${task.details?.completedRepetitions || 0} repetitions completed${task.state === 'running' && task.details?.waitingReason ? ' · waiting: ' + explain(task.details.waitingReason) : ''}` : '';
+  el('task-status').textContent = [progress, message].filter(Boolean).join(' · ');
 }
 el('task-kind').addEventListener('change', render);
-el('task-add-item').addEventListener('click', addTaskItem);
+el('task-add-item').addEventListener('click', () => { addTaskItem(); render(); });
+el('task-player').addEventListener('change', render);
 el('task-form').addEventListener('submit', async event => {
   event.preventDefault(); if (el('task-run').disabled) return;
   const action = el('task-kind').value;

@@ -160,6 +160,6 @@ class KitchenPicker {
     }
     for (const [key, node] of this.nodes) if (!wanted.has(key)) { node.remove(); this.nodes.delete(key); }
     this.showOverlaps();
-    visualEl('map-note').textContent = `${this.enabled.size} available targets · Dimmed targets are unavailable for this choice. Numbers group nearby or stacked targets.${map.approximateShapes ? ` ${map.approximateShapes} shapes use approximate bounds.` : ''}${map.truncated ? ' Geometry display limit reached.' : ''}`;
+    visualEl('map-note').textContent = `${this.enabled.size} selectable targets · Choose a target to inspect its options; Run enables when available. Numbers group nearby or stacked targets.${map.approximateShapes ? ` ${map.approximateShapes} shapes use approximate bounds.` : ''}${map.truncated ? ' Geometry display limit reached.' : ''}`;
   }
 }

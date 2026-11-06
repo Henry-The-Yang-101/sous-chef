@@ -10,6 +10,7 @@
   <ItemGroup>
     <Compile Remove="navigation/**/*.cs" />
     <Compile Remove="actions/**/*.cs" />
+    <Compile Remove="harness-options/**/*.cs" />
     <Compile Include="../src/Core/*.cs" />
     <Compile Include="../src/Plugin/Adapters/AdapterCatalog.cs" />
   </ItemGroup>

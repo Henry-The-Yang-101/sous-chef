@@ -45,8 +45,11 @@ Stop still cancels while suspended; raw manual input leases are not retained.
 
 The localhost Tasks panel uses `/api/task`, with the current `sessionId` and
 `arguments` containing `action`, `repetitions` (integer or null), and preparation
-parameters where required. `catalog.taskOptions` contains only currently eligible
-tasks. The server and executor both revalidate before starting. Stop works while
+parameters where required. The UI always lists all eight tasks, while
+`catalog.taskOptions` contains only currently eligible tasks and controls whether
+Start task is enabled. Preparation choices use the level-specific
+`catalog.displayOptions.preparationOptions`; the live eligibility lists remain
+separate. The server and executor both revalidate before starting. Stop works while
 waiting, working, suspended or between repetitions, including from a new tab
 or a reconnected client. Reconnection observes the original job without replaying
 its command. There is no task queue or voice/Jev integration yet.

@@ -48,7 +48,7 @@
         <div id="map-markers" role="group" aria-label="Kitchen destinations"></div>
       </div>
       <p id="map-empty" class="map-empty">Waiting for the current kitchen map…</p>
-      <div class="map-legend"><span><i class="ground-key"></i>Floor</span><span><i class="counter-key"></i>Counter / wall</span><span><i class="target-key"></i>Available target</span><span><i class="player-key"></i>Player</span></div>
+      <div class="map-legend"><span><i class="ground-key"></i>Floor</span><span><i class="counter-key"></i>Counter / wall</span><span><i class="target-key"></i>Selectable target</span><span><i class="player-key"></i>Player</span></div>
       <p id="map-note"></p>
       <div id="map-overlaps" class="map-overlaps" hidden></div>
       <div class="map-selection">
@@ -69,8 +69,8 @@
     </section>
     <section class="logistics" aria-labelledby="tasks-title">
       <h2 id="tasks-title">Tasks</h2>
-      <p>Run a complete task once, 2–10 times, or until you press Stop. Blocked tasks wait for the kitchen to allow progress.</p>
-      <form id="task-form">
+      <p>All tasks stay listed. Start task enables when your selection can run. Run once, 2–10 times, or until Stop.</p>
+      <form id="task-form" aria-describedby="task-status">
         <label>Task<select id="task-kind"></select></label>
         <label>Repeat<select id="task-repeat"><option value="1">Once</option><option value="2">2 times</option><option value="3">3 times</option><option value="4">4 times</option><option value="5">5 times</option><option value="6">6 times</option><option value="7">7 times</option><option value="8">8 times</option><option value="9">9 times</option><option value="10">10 times</option><option value="forever">Until stopped</option></select></label>
         <div id="task-preparation">
@@ -84,7 +84,7 @@
     </section>
     <section class="logistics" aria-labelledby="logistics-title">
       <h2 id="logistics-title">Move supplies</h2>
-      <p>Choose a job. Player 2 collects and delivers the item, then checks that it reached the destination.</p>
+      <p>Choose any job and level item. Run job enables when the selected source and destination are currently usable together.</p>
       <form id="job-form" aria-describedby="job-status">
         <label>Job<select id="job-kind"><option value="move_item">Move item</option><option value="fetch_ingredient">Fetch ingredient</option><option value="get_plate">Get clean plate</option><option value="get_utensil">Get empty utensil</option><option value="stage_item">Stage item</option><option value="return_utensil">Return utensil</option><option value="clear_station">Clear station</option></select></label>
         <label id="job-source-label"><span id="job-source-name">Item</span><select id="job-source"></select></label>
@@ -111,7 +111,7 @@
     </section>
     <footer>
       <p>Live catalogue: up to 5 Hz · Outcome-checked Player 2 actions</p>
-      <p>Stale targets disappear. Stop cancels immediately when the bridge receives it. Jobs survive closing this tab and wait while the game is unfocused.</p>
+      <p>Run buttons follow live availability; choices stay visible during temporary blocks. Stop cancels when the bridge receives it. Jobs survive closing this tab.</p>
       <details><summary>Bridge details</summary><pre id="details">Waiting for a connection.</pre></details>
     </footer>
   </main>

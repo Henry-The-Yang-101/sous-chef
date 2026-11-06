@@ -27,6 +27,7 @@ class FakeBridge:
         self.items, self.ingredients, self.utensil_types, self.delivery_destinations, self.jobs = [], [], [], [], []
         self.job_options = None
         self.tasks = []
+        self.display_options = {}
 
     def available_actions(self):
         if self.failure:
@@ -39,7 +40,7 @@ class FakeBridge:
                        'get_plate': [''], 'clear_station': [t['id'] for t in targets]}
             job_options = {name: [{'sourceId': source, 'destinationIds': [d['id'] for d in self.delivery_destinations]}
                                   for source in sources.get(name, [i['id'] for i in self.items])] for name in self.jobs}
-        return {'taskOptions': copy.deepcopy(self.tasks), 'destinations': copy.deepcopy(self.destinations), 'targets': copy.deepcopy(targets),
+        return {'displayOptions': copy.deepcopy(self.display_options), 'taskOptions': copy.deepcopy(self.tasks), 'destinations': copy.deepcopy(self.destinations), 'targets': copy.deepcopy(targets),
                 'players': copy.deepcopy(self.players), 'navigation': self.control['navigation'],
                 'items': copy.deepcopy(self.items), 'ingredients': copy.deepcopy(self.ingredients),
                 'utensilTypes': self.utensil_types[:], 'deliveryDestinations': copy.deepcopy(self.delivery_destinations),
@@ -141,6 +142,29 @@ class HarnessTests(unittest.TestCase):
         self.bridge.poll()
         self.bridge.act('viewer', 'test-session', 'task', 0, 'task', {'action': 'deliver_completed_dishes', 'repetitions': 2})
         self.assertEqual(self.native.calls[-1], ('task', 'deliver_completed_dishes', 2, {}))
+
+    def test_display_choices_do_not_authorize_tasks_or_supply_jobs(self):
+        self.native.display_options = {
+            'items': [{'id': 'd99', 'objectInstanceId': 999}],
+            'ingredients': [{'id': 'tomato', 'label': 'Tomato'}],
+            'deliveryDestinations': [{'id': 'd7', 'objectInstanceId': 77}],
+            'taskOptions': [{'name': 'wash_dishes'}],
+        }
+        self.bridge.poll()
+        self.assertEqual(self.bridge.state()['catalog']['displayOptions'], self.native.display_options)
+        with self.assertRaisesRegex(HarnessError, 'task is no longer available'):
+            self.bridge.act('viewer', 'test-session', 'task', 0, 'task', {'action': 'wash_dishes'})
+        with self.assertRaises(HarnessError):
+            self.bridge.act('viewer', 'test-session', 'd7', 77, 'fetch_ingredient', {'ingredient': 'tomato'})
+        self.assertEqual(self.native.calls, [])
+
+    def test_display_choices_follow_current_observations_without_global_items(self):
+        self.native.display_options = {'ingredients': [{'id': 'tomato', 'label': 'Tomato'}]}
+        self.bridge.poll()
+        self.assertEqual(self.bridge.state()['catalog']['displayOptions']['ingredients'][0]['id'], 'tomato')
+        self.native.display_options = {'ingredients': [{'id': 'rice', 'label': 'Rice'}]}
+        self.bridge.poll()
+        self.assertEqual(self.bridge.state()['catalog']['displayOptions']['ingredients'], [{'id': 'rice', 'label': 'Rice'}])
 
     def test_implemented_actions_remain_visible_when_paused_catalogue_hides_jobs(self):
         self.native.hello.update(bridgeVersion='0.6.0', actions=['navigate_to', 'move_item', 'stop'])

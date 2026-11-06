@@ -28,8 +28,9 @@ never dispatch an action. For placing, select an action target and choose **Plac
 held item**. The throw and supplies forms also have **Choose on map** buttons;
 choose the throw kind or job/source first, then pick its destination on the map.
 
-Only targets in the current operation/source-compatible catalogue are enabled.
-Other observed targets remain dimmed for context. Numbers group nearby or stacked
+All observed targets relevant to the selected form can be selected, including
+currently unavailable targets. The Run/Throw button checks the live operation
+and exact source/destination pair and stays grey until that choice can run. Numbers group nearby or stacked
 targets; clicking a group offers explicit choices with height and identity. This
 also keeps markers usable at phone width. Moving platforms update from each sample,
 and removed, stale or replaced targets cannot remain runnable. The detailed
@@ -46,8 +47,8 @@ exports frame counters in kitchens only, so the graph waits in menus/lobbies.
 The **Throw held item** form uses the item already in Player 2's hands. Choose
 **Player** or **Place**, choose the recipient/destination, then click **Throw to
 player** or **Throw to place**. There is no separate source-item selector.
-Only targets with a checked throw arc and reachable release position appear.
-Raised or obstructed targets are withheld unless a valid release stance exists;
+All observed player recipients and potential receiving surfaces stay listed.
+The throw button enables only with a checked arc and reachable release position;
 P2 can walk, climb or descend before releasing. Place labels include position
 and height to distinguish similar counters on different decks.
 
@@ -60,11 +61,11 @@ selections clear. Both throw operations also remain in the per-target row menus.
 
 The **Move supplies** form exposes the seven finite logistics jobs. Choose the
 job, an observed item/ingredient/type/station where required, and its delivery
-surface. The job selector contains only jobs with a currently usable source and
-compatible reachable delivery. Ingredient/item/type choices depend on the job;
-delivery choices then depend on the selected source. Full hands, items in use,
-native pickup/placement restrictions, occupied surfaces and unconfirmed walking
-routes all affect the options. Empty delivery counters are checked before pickup.
+surface. All seven jobs remain selectable. Ingredient/item/type choices come from this
+kitchen, and observed delivery surfaces stay listed independently of the chosen
+source. Full hands, items in use, native pickup/placement restrictions, occupied
+surfaces and unconfirmed routes disable Run job for the selected pair. The button
+enables automatically when the pair becomes usable, without clearing the choice. Empty delivery counters are checked before pickup.
 Return utensil chooses an observed reachable home or compatible empty station.
 Source/destination compatibility and object identities are rechecked before dispatch;
 removed selections clear rather than silently switching to another item.
@@ -77,7 +78,7 @@ chopping output. Filled buns are distinct from empty supplies.
 Parent and child phases remain visible through pickup and delivery. Stop cancels
 the entire job. Focus loss suspends it until the game is focused again.
 
-If the job fields are disabled, the message below the form explains whether the
+If Run job is disabled, the message below the form explains whether the
 bridge needs an update, the game is paused, another action is running, or the
 required items/destinations are missing. The page can be newer than the plugin
 loaded by the game. After building new actions, **quit the game**, run
@@ -126,8 +127,8 @@ from the connected plugin, independently of its currently available actions.
   `Arrived` includes the actions currently allowed by native predicates (pickup,
   place or use). An empty sink instead reports that the chef is positioned and
   facing it, with no action currently available. Navigation never performs the work.
-  All action buttons are disabled while an action is active; stop it before choosing
-  another. Interaction phases and terminal outcomes also appear in the status.
+  All Run buttons are disabled while an action is active. Selectors remain usable
+  for inspecting and configuring another action. Interaction phases and terminal outcomes also appear in the status.
   Commands are never retried or redirected automatically.
 
 ## Open on your phone
@@ -203,10 +204,13 @@ changes. A disconnected, missing or over-1.5-second-old contents sample cannot
 describe a holder as empty. Content enrichment does not change navigation targets
 or perform pickup, placement or cooking actions, and requires no plugin restart.
 Destinations are replaced on each observation, including removals caused by moving
-geometry. No options are shown when data is over 1.5 seconds old, the game is outside
-a round or Player 2 is missing. During a budget-limited search, confirmed shortest
+geometry. Run buttons are disabled when data is over 1.5 seconds old, the game is outside
+a round or Player 2 is missing. The eight tasks and seven jobs always stay listed.
+Previously observed level choices remain visible through temporary pause or
+staleness, but never authorize a command. Disconnects, round changes and observed
+object removals clear the corresponding level choices. During a budget-limited search, confirmed shortest
 routes remain clickable while the count says **still checking**; uncertified
-destinations are withheld until the planner reaches them. A partial catalogue is
+destinations stay selectable but cannot run until the planner reaches them. A partial catalogue is
 not a claim that omitted locations are physically unreachable.
 
 Clicking rechecks the bridge session, destination ID, object instance and current
@@ -301,6 +305,28 @@ or game restart was needed.
 
 The Tasks panel runs the actions described in [tasks.md](tasks.md), with
 1–10 repetitions or Until stopped. Preparation supports multiple ingredient/utensil
-rows, states and quantities. Only eligible tasks are selectable. While a task is
+rows, states and quantities. All eight tasks stay selectable; Start task follows
+the live task eligibility, receiving player and required preparation fields.
+Ingredient roots come only from this kitchen’s native dispensers, and utensil
+types from observed items, including filled utensils, dirty dishes and items held
+by another chef. A task or job becoming unavailable keeps the selection and greys
+its Run button. While a task is
 running or waiting, its phase, completed repetitions and waiting reason remain
 visible; Stop cancels the parent and child together.
+
+The plugin exports `displayOptions` separately from the live `jobOptions`,
+`taskOptions`, and per-target `operations`. Display options are read-only kitchen
+observations and cannot authorize dispatch. `possibleOperations` and possible
+work/wait conditions keep per-target menus available even on empty equipment.
+The server still revalidates the live catalogue and exact identities on each click.
+Update the installed plugin for the complete level choices; older plugins only
+provide their smaller live lists.
+
+Choice/availability checks on November 5, 2026 passed the full plugin build,
+2,869 core assertions, 359 navigator checks, 873 action checks, 14 native display
+checks and 131 Python tests (including six JavaScript form regressions). Isolated
+browser fixtures verified automatic enable/disable transitions for tasks, jobs,
+throws, map actions and target rows; retained selections through pause, busy and
+stale states; level-change removal; level-only preparation choices; and a
+390-pixel phone layout without horizontal overflow. These UI checks used a test
+server, not a live game kitchen.

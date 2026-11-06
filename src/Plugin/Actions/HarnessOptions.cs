@@ -10,6 +10,11 @@ namespace SousChef.Plugin.Actions
     // Keep the existing live operations/jobOptions/taskOptions as the authority.
     internal static class HarnessOptions
     {
+        private static string Utensil(GameObject item)
+        {
+            return item.GetComponent<ServerPlate>() != null || item.GetComponent<ServerDirtyPlateStack>() != null ||
+                item.GetComponent<CleanPlateStack>() != null ? "plate" : LogisticsInventory.UtensilType(item);
+        }
         public static void Target(Json.Record identity, GameObject go)
         {
             var operations = new List<string> { "navigate_to", "wait_until" };
@@ -41,13 +46,26 @@ namespace SousChef.Plugin.Actions
             var items = new List<object>(); var ingredients = new List<object>(); var utensils = new List<string>();
             var preparation = new List<object>(); var destinations = new List<object>();
             var ingredientIds = new HashSet<string>(); var roots = new HashSet<string>();
+            var seenItems = new HashSet<int>();
             foreach (LogisticsItem item in inventory.Items)
             {
-                if (!item.Supply) items.Add(item.Describe());
+                if (!item.Supply) { items.Add(item.Describe()); seenItems.Add(item.Item.GetInstanceID()); }
                 if (item.IngredientId != null && ingredientIds.Add(item.IngredientId))
                     ingredients.Add(Json.Object("id", item.IngredientId, "label", item.IngredientName));
-                string type = item.CleanPlate ? "plate" : item.UtensilType;
+                string type = Utensil(item.Item);
                 if (type != null && !utensils.Contains(type)) utensils.Add(type);
+            }
+            foreach (GameObject item in inventory.OtherHeldItems)
+            {
+                if (item == null) continue;
+                string type = Utensil(item), ingredientId, ingredientName;
+                if (type != null && !utensils.Contains(type)) utensils.Add(type);
+                LogisticsInventory.IngredientIdentity(item, out ingredientId, out ingredientName);
+                if (ingredientId != null && ingredientIds.Add(ingredientId)) ingredients.Add(Json.Object("id", ingredientId, "label", ingredientName));
+                if (!seenItems.Add(item.GetInstanceID())) continue;
+                string id = navigation.RegisterItem(item);
+                items.Add(Json.Object("id", id, "label", item.name, "objectInstanceId", item.GetInstanceID(),
+                    "utensilType", type == "plate" ? null : type, "inUse", true));
             }
             // Supplies remain selectable regardless of route, free hands, or the
             // current contents of a station. No global ingredient registry is used.
