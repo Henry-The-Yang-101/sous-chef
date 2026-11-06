@@ -339,6 +339,8 @@ def main():
             result = waiting_frames(audit) if case == 'waiting_frames' else runner(audit, case)
             row = dict(case=case, success=True, **result)
         except Exception as exc:
+            if audit.client:
+                audit.snap('failure')
             row = dict(case=case, success=False, error=repr(exc))
         finally:
             if audit.client:

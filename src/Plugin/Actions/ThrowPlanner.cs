@@ -453,6 +453,8 @@ namespace SousChef.Plugin.Actions
                 if (ground)
                 {
                     if (!GroundSupported(arrival - velocity * time, direction, stanceUncertainty)) return Reject("unsupported_ground_landing");
+                    if (!GroundRunoutSupported(arrival - velocity * time, direction,
+                        path.Velocities[lastStep] - velocity, stanceUncertainty)) return Reject("unsupported_ground_runout");
                 }
                 else
                 {

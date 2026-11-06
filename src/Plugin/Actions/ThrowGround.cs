@@ -147,17 +147,7 @@ namespace SousChef.Plugin.Actions
         private bool GroundSupported(Vector3 arrival, Vector3 direction, float uncertainty)
         {
             Bounds body = itemBody.BoundsAt(arrival, direction);
-            // Check the entire landing footprint, including release uncertainty;
-            // a point over the edge of a raft is not a supported delivery.
-            float x = body.extents.x + uncertainty + .025f, z = body.extents.z + uncertainty + .025f;
-            for (int n = 0; n < 5; n++)
-            {
-                Vector3 point = new Vector3(body.center.x + (n == 0 ? 0 : (n % 2 == 0 ? x : -x)), body.min.y,
-                    body.center.z + (n == 0 ? 0 : (n <= 2 ? z : -z)));
-                RaycastHit contact;
-                if (!GroundAt(point, out contact)) { lastObstruction = "ground_support:" + (contact.collider == null ? "missing" : contact.collider.gameObject.name); return Reject(lastObstruction); }
-                if (contact.collider != receivingSupport) return Reject("different_receiving_floor");
-            }
+            if (!GroundFootprintSupported(body, uncertainty)) return false;
             int count = itemBody.Overlap(arrival, direction, overlaps, ~0, .025f, uncertainty);
             if (count == overlaps.Length) return false;
             for (int i = 0; i < count; i++)
@@ -169,6 +159,31 @@ namespace SousChef.Plugin.Actions
                     !((groundMask & (1 << c.gameObject.layer)) != 0 && c.bounds.max.y <= body.min.y + .08f))
                 { lastObstruction = "ground_collision:" + c.gameObject.name; return Reject(lastObstruction); }
             }
+            return true;
+        }
+        private bool GroundFootprintSupported(Bounds body, float uncertainty)
+        {
+            // Check the entire landing footprint, including release uncertainty;
+            // a point over the edge of a raft is not a supported delivery.
+            float x = body.extents.x + uncertainty + .025f, z = body.extents.z + uncertainty + .025f;
+            for (int n = 0; n < 5; n++)
+            {
+                Vector3 point = new Vector3(body.center.x + (n == 0 ? 0 : (n % 2 == 0 ? x : -x)), body.min.y,
+                    body.center.z + (n == 0 ? 0 : (n <= 2 ? z : -z)));
+                RaycastHit contact;
+                if (!GroundAt(point, out contact)) { lastObstruction = "ground_support:" + (contact.collider == null ? "missing" : contact.collider.gameObject.name); return Reject(lastObstruction); }
+                if (contact.collider != receivingSupport) return Reject("different_receiving_floor");
+            }
+            return true;
+        }
+        private bool GroundRunoutSupported(Vector3 arrival, Vector3 direction, Vector3 velocity, float uncertainty)
+        {
+            // Reserve support for a short post-impact slide in the observed
+            // touchdown direction. This is an edge margin, not another flight
+            // simulation: native friction/contact still determine the receipt.
+            velocity.y = 0;
+            for (int i = 1; i <= 3; i++)
+                if (!GroundFootprintSupported(itemBody.BoundsAt(arrival + velocity * (.35f * i / 3), direction), uncertainty)) return false;
             return true;
         }
     }

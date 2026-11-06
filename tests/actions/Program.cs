@@ -1971,9 +1971,20 @@ internal static class Program
         float flight;ThrowTrajectory.FlightTime(.1f-1,8*Mathf.Tan(15*Mathf.Deg2Rad),-9.81f,0,.02f,out flight);
         w.Chef.transform.position=new Vector3(0,0,-1.25f-8*flight-.4f);item.transform.position=w.Chef.transform.position+new Vector3(0,1,.4f);w.Hold(item);
         Physics.Nearby=(p,r)=>w.Colliders.Where(c=>Vector3.Distance(p,c.bounds.ClosestPoint(p))<=r).ToArray();
-        var planner=new ThrowPlanner();ThrowPlan plan;
+        var planner=new ThrowPlanner();ThrowPlan plan=null;
         Check(planner.Prepare(w.Chef,item,human)=="player_cannot_catch","ordinary player passes retain their native catch preconditions");
         Check(planner.Prepare(w.Chef,item,human,groundHandoff:true)==null && FindPlan(planner,w.Navigation,out plan)==null && plan.Ground,"a checked floor throw works with full human hands and without a catcher");
+        {
+            var supported=Physics.Ray;
+            Vector3 landing=plan.GroundSupport.transform.TransformPoint(plan.GroundLocalPoint), direction=plan.Direction;
+            float gap=Vector3.Dot(landing,direction)+.8f;
+            Physics.Ray=(p,d,length,mask)=>Vector3.Dot(p,direction)<gap || Vector3.Dot(p,direction)>gap+.25f ? supported(p,d,length,mask) : new RaycastHit[0];
+            ThrowPlan attempted;
+            Check(planner.Prepare(w.Chef,item,human,groundHandoff:true)==null && planner.RestoreGround(plan) &&
+                !planner.From(plan.CurrentStance,false,out attempted) && Json.Encode(planner.Diagnostics).Contains("unsupported_ground_runout"),
+                "a supported impact point cannot authorize a throw whose touchdown momentum crosses an unsupported gap: "+Json.Encode(planner.Diagnostics));
+            Physics.Ray=supported;
+        }
         var groundAccess=new GroundPassAccess((receiver,landing)=>false,(receiver,cargo)=>false);
         var receiverChef=human.GetComponent<PlayerControls>();
         var rejected=new ThrowPlan {Stance=w.Chef.transform.position};

@@ -114,8 +114,11 @@ the current delivery round, so repeated easy raw handoffs cannot starve chopping
 Items already handed to the human stay reserved.
 
 Cooking and mixing reserve one unit of demand per occupied container. The
-scheduler compares native time remaining with estimated travel and chopping
-time. It can chop a second chicken while the first cooks, even with only one pan:
+scheduler compares native time before burning with estimated travel and chopping
+time, reserving travel back to the oldest pot plus a collection margin. Food
+already ready is still collected first. A nearly finished pot does not prevent
+nearby loose rice from filling another empty pot. It can chop a second chicken
+while the first cooks, even with only one pan:
 the second portion stays on its board until it can be loaded. When equipment is
 full, one prepared successor shared across cooking entries (and independently
 across mixing entries) stops further speculative chopping. Available equipment
@@ -152,10 +155,17 @@ it. If P2 is positioned at its target but the game selects a different loose
 object, waiting cannot help. Before any press, the task sets down P2's cargo,
 moves that object to a counter, and reschedules.
 
-Delivery preference: a compatible counter within five walking units of the human,
-then a checked pass/drop at the human, then a directed conveyor or returning
-counter. Both chefs use the same navigator implementation in independent read-only
-observers. Throw plans check actual throwability. Conveyor traversal follows the
+Delivery compares walking, checked throws to counters or the receiving floor,
+and direct passes/drops using estimated travel and action time. Throws compete
+even when walking is possible. A soft spacing preference peaks at **three tiles**
+from the human and decreases both closer and farther away; counter candidates
+must still be within five walking units. Floor candidates retain nearby and
+more distant fallbacks when the preferred ring is obstructed. Both chefs use the
+same navigator implementation in independent read-only observers. Low loose food
+uses a sight ray at food height so thin ingredients on the floor remain valid
+pickup targets. Actual pickups and throwability still use native checks.
+Directed conveyors and returning counters remain transport fallbacks.
+Conveyor traversal follows the
 native next receiver, including rotation/direction, and rejects loops/dead ends.
 Moving-counter forecasts require an observed human-accessible stop, then motion
 toward that stop or an observed complete return cycle. Unknown/one-way motion
@@ -165,6 +175,11 @@ stance while the receiver and support stay in the same relative positions.
 Transport delivery completes only after the
 exact item reaches a human-accessible holder or the human's hands. Safe empty
 countertops are used when putting equipment down; conveyor belts are not storage.
+Handoff comparison runs at most ten times per second, previews at most four
+counter throws plus player/floor options, and gives pending previews a bounded
+0.4-second comparison window before using an already proven alternative.
+Flight work keeps the existing sliced worker-backed planner. See the
+[rice and spaced-handoff checks](rice-handoffs.md).
 An armed native throw is committed: releasing its use button also launches during
 cleanup. The executor keeps observing that cargo if its final proof changes or a
 native launch arrives early. A failed primitive handoff can still fulfill the task
