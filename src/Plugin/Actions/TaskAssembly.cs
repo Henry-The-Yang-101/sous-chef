@@ -73,6 +73,31 @@ namespace SousChef.Plugin.Actions
             }
             return best;
         }
+        private void SelectAssemblyWorkspace()
+        {
+            if (assembly.Root.Vessel != null || assembly.Base == null) return;
+            assembly.Root.Vessel = assembly.Base;
+            // Keep a partially plated dish intact. For an empty plate, an
+            // assigned preparation base retains the native addition rules and
+            // is plated only once its complete recipe has been assembled.
+            if (!RecipeProof.Empty(RecipeProof.Composition(assembly.Base))) return;
+            GameObject best = null; int progress = -1; float distance = Single.MaxValue;
+            var candidates = new List<GameObject>(assembly.Bases); candidates.AddRange(assembly.Components);
+            foreach (var item in candidates)
+            {
+                if (item == null || item.GetComponent<PreparationContainer>() == null || !AssemblyReady(item) ||
+                    !RecipeProof.Subset(RecipeProof.Composition(item), assembly.Order.Goal)) continue;
+                var entry = AssemblyEntry(item);
+                if (entry == null || !Obtainable(entry, "move_item")) continue;
+                int parts = RecipeProof.Parts(RecipeProof.Composition(item)).Count;
+                if (parts > progress || parts == progress && entry.Distance < distance)
+                { best = item; progress = parts; distance = entry.Distance; }
+            }
+            if (best == null) return;
+            assembly.Root.Vessel = best;
+            assembly.Plating = new AssemblySchedule.Stage { Goal = assembly.Order.Goal, Inputs = assembly.Order.Goal, Vessel = assembly.Base };
+            assembly.Stages.Add(assembly.Plating);
+        }
         private bool AssemblyReady(GameObject item)
         {
             if (item == null || TaskNative.Burnt(item)) return false;
@@ -114,7 +139,7 @@ namespace SousChef.Plugin.Actions
             {
                 inventory.Refresh(chef);
                 if (System.Object.ReferenceEquals(assembly.Base, null)) assembly.Base = SelectAssemblyBase();
-                assembly.Root.Vessel = assembly.Base;
+                SelectAssemblyWorkspace();
                 var plate = assembly.Base;
                 if (AssemblyEntry(plate) != null && AssemblyBaseValid(plate))
                 {

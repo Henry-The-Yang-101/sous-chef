@@ -18,12 +18,15 @@ namespace SousChef.Plugin.Actions
         private bool StageFits(AssemblySchedule.Stage stage)
         {
             if (stage.Vessel == null || TaskNative.Burnt(stage.Vessel)) return false;
-            if (!stage.Processing) return AssemblyBaseValid(stage.Vessel);
+            if (!stage.Processing) return AssemblyBaseValid(stage.Vessel) ||
+                stage == assembly.Root && stage.Vessel.GetComponent<PreparationContainer>() != null &&
+                RecipeProof.Subset(RecipeProof.Composition(stage.Vessel), stage.Goal);
             var contents = StageContents(stage);
             return RecipeProof.Subset(contents, stage.Inputs) || RecipeProof.Equal(contents, stage.Goal);
         }
         private bool StageComplete(AssemblySchedule.Stage stage)
-        { return stage.Vessel != null && RecipeProof.Equal(RecipeProof.Composition(stage.Vessel), stage.Goal) && TaskNative.Ready(stage.Vessel, stage.Mixing); }
+        { return stage.Vessel != null && RecipeProof.Equal(RecipeProof.Composition(stage.Vessel), stage.Goal) &&
+                (!stage.Processing || TaskNative.Ready(stage.Vessel, stage.Mixing)); }
         private bool VesselFor(AssemblySchedule.Stage stage, GameObject item)
         {
             if (item == null || item.GetComponent<ServerIngredientContainer>() == null || TaskNative.ProcessingHandler(item, stage.Mixing) == null) return false;
@@ -95,13 +98,18 @@ namespace SousChef.Plugin.Actions
             {
                 if (!stage.Processing || !StageComplete(stage)) continue;
                 var entry = AssemblyEntry(stage.Vessel);
-                if (entry == null || !OnProcessor(stage, entry) || !Obtainable(entry, "move_item")) continue;
+                // A moving kitchen may keep the broad catalogue frontier
+                // incomplete. Let the active, bounded destination planner try
+                // the exact hot vessel instead of waiting until it burns.
+                if (entry == null || !OnProcessor(stage, entry) || AssemblyDeferred(stage.Vessel) ||
+                    !LogisticsChecks.CanCollectEmpty(chef, entry.Source)) continue;
                 float margin = TaskNative.Remaining(stage.Vessel, stage.Mixing, true);
                 if (margin < earliest)
                 { earliest = margin; rescue = new AssemblyJob { Stage = stage, Source = stage.Vessel, Destination = entry.Source, Operation = "pick_up", Rescue = true }; }
             }
             if (rescue != null) return rescue;
             if (AssemblyEntry(assembly.Base) == null || !AssemblyBaseValid(assembly.Base)) return null;
+            if (assembly.Plating != null && StageComplete(assembly.Root)) return SelectStageWork(assembly.Plating);
             return SelectStageWork(assembly.Root);
         }
         private AssemblyJob SelectStageWork(AssemblySchedule.Stage stage)

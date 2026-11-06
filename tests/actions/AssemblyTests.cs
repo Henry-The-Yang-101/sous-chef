@@ -85,8 +85,37 @@ internal static partial class Program
             return result;
         }
     }
+    private sealed class CookableBaseComposition : MonoBehaviour, IOrderDefinition
+    {
+        public CookingStepData Step;
+        public AssembledDefinitionNode GetOrderComposition()
+        {
+            var parts=new[]{Leaf("dough")}.Concat(gameObject.GetComponent<ServerIngredientContainer>().GetContents()).ToArray();
+            if(gameObject.GetComponent<ServerCookingHandler>().m_ServerData.m_cookingState==ProcessingState.Completed)
+                return new CookedCompositeAssembledNode {m_composition=parts,m_cookingStep=Step,m_progress=CookedCompositeOrderNode.CookingProgress.Cooked};
+            return Recipe(parts);
+        }
+    }
     private static void AssemblyProcessing()
     {
+        {
+            var w=new World();var plate=AssemblyPlate(w,w.Delivery());var doughCounter=w.Delivery();
+            var dough=new GameObject("assigned cookable dough base");dough.Add(new PreparationContainer());
+            dough.Add(new PhysicalAttachment());dough.Add(new Pickup());dough.Add(new IngredientTransfer());dough.Add(new ServerIngredientContainer());
+            var step=new CookingStepData {m_uID=71};dough.Add(new CookingHandler {m_cookingType=step});dough.Add(new CookableContainer());
+            var handler=dough.Add(new ServerCookingHandler());dough.Add(new CookableBaseComposition {Step=step});
+            doughCounter.GetComponent<ServerAttachStation>().Item=dough;doughCounter.Add(new Pickup());
+            var tomato=AssemblyFood(w,w.Target,"tomato");var oven=w.Delivery();oven.Add(new ServerCookingStation());oven.Add(new Pickup());
+            var goal=new CookedCompositeAssembledNode {m_composition=new[]{Leaf("dough"),Leaf("tomato")},m_cookingStep=step,m_progress=CookedCompositeOrderNode.CookingProgress.Cooked};
+            var request=AssemblyJob(w,new[]{plate},new[]{dough,tomato},goal);request.Assembly.Equipment.Add(w.IdOf(oven));
+            StartAssembly(w,request);bool cooked=false;
+            int additions=DriveAssembly(w,onTick:()=>{
+                if(ActionObservations.Occupant(oven)!=dough)return;
+                Check(dough.GetComponent<ServerIngredientContainer>().GetContentsCount()==1,"cookable base goes into oven only after its recipe inputs are assembled");
+                cooked=true;handler.m_ServerData.m_cookingState=ProcessingState.Completed;
+            });
+            Check(cooked && additions==2 && w.Tasks.Run.State=="succeeded","assigned preparation base supplies the vessel for its cooking dependency without duplicate allocation");
+        }
         {
             var w=new World();var plate=AssemblyPlate(w,w.Delivery());var raw=AssemblyFood(w,w.Target,"rice");
             var step=new CookingStepData {m_uID=31};
@@ -160,8 +189,12 @@ internal static partial class Program
         bun.Add(new PreparationContainer {m_ingredientOrderNode=new Definition {name="bun",m_uID=1}});bun.Add(new BaseComposition());
         bun.Add(new ServerIngredientContainer()).Contents.Add(Leaf("lettuce"));holder.GetComponent<ServerAttachStation>().Item=bun;
         var cheese=AssemblyFood(w,w.Target,"cheese");var request=AssemblyJob(w,new[]{plate,bun},new[]{cheese},Leaf("bun"),Leaf("lettuce"),Leaf("cheese"));
-        StartAssembly(w,request);int additions=DriveAssembly(w);
-        Check(w.Tasks.Run.State=="succeeded" && additions==2,"assigned partial assembly base is reused and plated before completing its exact recipe: "+Json.Encode(w.Tasks.Describe()));
+        bool platedCompleteBase=false;
+        StartAssembly(w,request);int additions=DriveAssembly(w,beforeArrival:(target,op)=>{
+            if(op=="transfer_contents" && ActionObservations.Receiver(target)==plate)
+            { platedCompleteBase=true;Check(RecipeProof.Equal(RecipeProof.Composition(bun),Recipe(Leaf("bun"),Leaf("lettuce"),Leaf("cheese"))),"preparation base is complete before final plating"); }
+        });
+        Check(platedCompleteBase && w.Tasks.Run.State=="succeeded" && additions==2,"assigned partial assembly base is completed and then plated: "+Json.Encode(w.Tasks.Describe()));
         w=new World();plate=AssemblyPlate(w,w.Delivery());var food=AssemblyFood(w,w.Target,"fish");request=AssemblyJob(w,new[]{plate},new[]{food},Leaf("fish"));
         StartAssembly(w,request);
         // Reach the first transfer, suppress its input, then allow a retry only

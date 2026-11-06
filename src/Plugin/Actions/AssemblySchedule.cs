@@ -24,7 +24,7 @@ namespace SousChef.Plugin.Actions
         public string Waiting;
         public bool Verified;
         public readonly Dictionary<GameObject, float> RetryAt = new Dictionary<GameObject, float>();
-        public Stage Root;
+        public Stage Root, Plating;
         public readonly List<Stage> Stages = new List<Stage>();
         private readonly List<object> decisions = new List<object>();
         private long decisionSequence;
