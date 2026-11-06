@@ -1,0 +1,1935 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-06",
+  "environment": "Isolated native headless Overcooked! 2 runtime. Production executor and PhysX; fixture-supplied prepared ingredients before measurement. P1 stationary. Normal installed game unchanged.",
+  "selection": "Latest retained completed measured observation per kitchen from sweeps 06 through 14. A timeout is not a completed dish. Each case carries its runtime DLL hash; earlier successes are not presented as reruns of the final binary.",
+  "coverage": {
+    "newKitchens": 18,
+    "verifiedComplete": 14,
+    "observationTimeouts": 4,
+    "additionalStaircaseRegressions": 1,
+    "schedulerDecisions": 1204,
+    "controlObservations": 4873,
+    "nativeSamples": 2183
+  },
+  "checks": {
+    "log": ".local/assembly-final-check-08.log",
+    "sourceCommit": "16af0b0",
+    "coreAssertions": 2885,
+    "navigationChecks": 429,
+    "actionChecks": 1149,
+    "harnessChecks": 20,
+    "pythonTests": 136
+  },
+  "cases": [
+    {
+      "level": "s_balloon_1_5",
+      "newAssemblyKitchen": true,
+      "recipe": "Pasta_TomatoOnly_New",
+      "outcome": "verified_complete",
+      "seconds": 53.44,
+      "runtimeState": "succeeded",
+      "reason": "task_complete",
+      "verifiedAdditions": 4,
+      "independentComposition": {
+        "matched": true,
+        "plateInstanceId": 530758,
+        "parts": [
+          [
+            "cooked",
+            20068,
+            [
+              [
+                "ingredient",
+                "i26686"
+              ]
+            ]
+          ],
+          [
+            "cooked",
+            20294,
+            [
+              [
+                "ingredient",
+                "i16506"
+              ]
+            ]
+          ]
+        ]
+      },
+      "warnings": [],
+      "observationErrors": [],
+      "error": null,
+      "schedulerDecisions": 105,
+      "controlObservations": 230,
+      "nativeSamples": 104,
+      "decisionReview": {
+        "decisionReasons": {
+          "waiting_for_assembly_dependency": 11,
+          "pick_up": 4,
+          "press_authorized": 34,
+          "place_at": 20,
+          "replan_uncompleted_step": 19,
+          "pick_component": 4,
+          "transfer_contents": 5,
+          "transfer_verified": 4,
+          "rescue_finished_batch": 3,
+          "composition_verified": 1
+        },
+        "waitingIntervals": [
+          {
+            "start": 29.546,
+            "seconds": 8.21,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 9.802,
+            "seconds": 1.22,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 0.07,
+            "seconds": 0.94,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 5.204,
+            "seconds": 0.93,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 2.157,
+            "seconds": 0.72,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 45.473,
+            "seconds": 0.7,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 14.225,
+            "seconds": 0.24,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 8.889,
+            "seconds": 0.23,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 6.828,
+            "seconds": 0.22,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 7.96,
+            "seconds": 0.22,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 13.306,
+            "seconds": 0.22,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 41.816,
+            "seconds": 0.22,
+            "reason": "waiting_for_safe_counter"
+          }
+        ],
+        "completedVesselHolderChanges": [
+          {
+            "vessel": 530310,
+            "firstObservedAt": 37.81,
+            "holder": 529516,
+            "overdoing": false,
+            "ruined": false,
+            "removedAfterSeconds": 1.8
+          },
+          {
+            "vessel": 529500,
+            "firstObservedAt": 41.43,
+            "holder": 529858,
+            "overdoing": true,
+            "ruined": false,
+            "removedAfterSeconds": 9.39
+          }
+        ],
+        "navigationReasons": {
+          "round_changed": 4,
+          "null": 68,
+          "arrived": 142,
+          "task_replan_before_press": 16
+        },
+        "note": "Intervals and holder changes need review against native processing and reachability; they do not independently prove unreasonable waiting."
+      },
+      "trace": ".local/assembly-sweep-13-moving_pasta/s_balloon_1_5",
+      "dllSha256": "7ba56b6b3705b06a07f6dce0473b05ead282085c161aba0ee0a2db6681da76dc"
+    },
+    {
+      "level": "s_balloon_2_2",
+      "newAssemblyKitchen": true,
+      "recipe": "Pasta_MushroomOnly_New",
+      "outcome": "observation_timeout",
+      "seconds": 140.45,
+      "runtimeState": "running",
+      "reason": null,
+      "verifiedAdditions": 0,
+      "independentComposition": null,
+      "warnings": [
+        "observation_timeout"
+      ],
+      "observationErrors": [],
+      "error": null,
+      "schedulerDecisions": 1,
+      "controlObservations": 610,
+      "nativeSamples": 262,
+      "decisionReview": {
+        "decisionReasons": {
+          "waiting_for_assigned_base": 1
+        },
+        "waitingIntervals": [
+          {
+            "start": 0.024,
+            "seconds": 139.81,
+            "reason": "waiting_for_assigned_base"
+          }
+        ],
+        "completedVesselHolderChanges": [],
+        "navigationReasons": {
+          "round_changed": 610
+        },
+        "note": "Intervals and holder changes need review against native processing and reachability; they do not independently prove unreasonable waiting."
+      },
+      "trace": ".local/assembly-sweep-12-pasta_access/s_balloon_2_2",
+      "dllSha256": "dbe29a63b81aab87e7d2d91c33a5874b2f9fb25e6819890c6ce8d9a9342d8da0"
+    },
+    {
+      "level": "s_balloon_2_3",
+      "newAssemblyKitchen": true,
+      "recipe": "Pasta_Marinara_New",
+      "outcome": "verified_complete",
+      "seconds": 36.89,
+      "runtimeState": "succeeded",
+      "reason": "task_complete",
+      "verifiedAdditions": 6,
+      "independentComposition": {
+        "matched": true,
+        "plateInstanceId": 515220,
+        "parts": [
+          [
+            "cooked",
+            20068,
+            [
+              [
+                "ingredient",
+                "i26686"
+              ]
+            ]
+          ],
+          [
+            "cooked",
+            20294,
+            [
+              [
+                "ingredient",
+                "i10848"
+              ]
+            ]
+          ],
+          [
+            "cooked",
+            20294,
+            [
+              [
+                "ingredient",
+                "i21874"
+              ]
+            ]
+          ]
+        ]
+      },
+      "warnings": [],
+      "observationErrors": [],
+      "error": null,
+      "schedulerDecisions": 87,
+      "controlObservations": 158,
+      "nativeSamples": 73,
+      "decisionReview": {
+        "decisionReasons": {
+          "pick_up": 6,
+          "press_authorized": 52,
+          "place_at": 6,
+          "pick_component": 3,
+          "transfer_contents": 6,
+          "transfer_verified": 6,
+          "rescue_finished_batch": 3,
+          "park_empty_utensil": 2,
+          "waiting_for_assembly_dependency": 2,
+          "composition_verified": 1
+        },
+        "waitingIntervals": [
+          {
+            "start": 23.888,
+            "seconds": 5.32,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 33.904,
+            "seconds": 0.71,
+            "reason": "waiting_for_assembly_dependency"
+          }
+        ],
+        "completedVesselHolderChanges": [
+          {
+            "vessel": 514120,
+            "firstObservedAt": 22.42,
+            "holder": 515704,
+            "overdoing": false,
+            "ruined": false,
+            "removedAfterSeconds": 0.6
+          },
+          {
+            "vessel": 517406,
+            "firstObservedAt": 29.02,
+            "holder": 516236,
+            "overdoing": false,
+            "ruined": false,
+            "removedAfterSeconds": 1.01
+          },
+          {
+            "vessel": 517270,
+            "firstObservedAt": 34.22,
+            "holder": 513736,
+            "overdoing": false,
+            "ruined": false,
+            "removedAfterSeconds": 1.81
+          }
+        ],
+        "navigationReasons": {
+          "null": 123,
+          "arrived": 34,
+          "no_safe_start": 1
+        },
+        "note": "Intervals and holder changes need review against native processing and reachability; they do not independently prove unreasonable waiting."
+      },
+      "trace": ".local/assembly-sweep-12-pasta_heat/s_balloon_2_3",
+      "dllSha256": "dbe29a63b81aab87e7d2d91c33a5874b2f9fb25e6819890c6ce8d9a9342d8da0"
+    },
+    {
+      "level": "s_mine_2_5",
+      "newAssemblyKitchen": true,
+      "recipe": "Chicken_Burrito",
+      "outcome": "verified_complete",
+      "seconds": 40.91,
+      "runtimeState": "succeeded",
+      "reason": "task_complete",
+      "verifiedAdditions": 5,
+      "independentComposition": {
+        "matched": true,
+        "plateInstanceId": 535680,
+        "parts": [
+          [
+            "cooked",
+            20068,
+            [
+              [
+                "ingredient",
+                "i17454"
+              ]
+            ]
+          ],
+          [
+            "cooked",
+            20294,
+            [
+              [
+                "ingredient",
+                "i34294"
+              ]
+            ]
+          ],
+          [
+            "ingredient",
+            "i11428"
+          ]
+        ]
+      },
+      "warnings": [],
+      "observationErrors": [],
+      "error": null,
+      "schedulerDecisions": 66,
+      "controlObservations": 171,
+      "nativeSamples": 77,
+      "decisionReview": {
+        "decisionReasons": {
+          "pick_up": 4,
+          "press_authorized": 38,
+          "place_at": 4,
+          "pick_component": 3,
+          "transfer_contents": 5,
+          "transfer_verified": 5,
+          "waiting_for_assembly_dependency": 3,
+          "rescue_finished_batch": 2,
+          "park_empty_utensil": 1,
+          "composition_verified": 1
+        },
+        "waitingIntervals": [
+          {
+            "start": 24.407,
+            "seconds": 5.98,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 18.048,
+            "seconds": 2.38,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 36.727,
+            "seconds": 0.24,
+            "reason": "waiting_for_assembly_dependency"
+          }
+        ],
+        "completedVesselHolderChanges": [
+          {
+            "vessel": 530664,
+            "firstObservedAt": 20.03,
+            "holder": 532178,
+            "overdoing": false,
+            "ruined": false,
+            "removedAfterSeconds": 3.0
+          },
+          {
+            "vessel": 534610,
+            "firstObservedAt": 30.01,
+            "holder": 533106,
+            "overdoing": false,
+            "ruined": false,
+            "removedAfterSeconds": 3.03
+          }
+        ],
+        "navigationReasons": {
+          "null": 123,
+          "arrived": 48
+        },
+        "note": "Intervals and holder changes need review against native processing and reachability; they do not independently prove unreasonable waiting."
+      },
+      "trace": ".local/assembly-sweep-12-burrito/s_mine_2_5",
+      "dllSha256": "dbe29a63b81aab87e7d2d91c33a5874b2f9fb25e6819890c6ce8d9a9342d8da0"
+    },
+    {
+      "level": "s_mine_2_6",
+      "newAssemblyKitchen": true,
+      "recipe": "BeefBurgerCheese",
+      "outcome": "verified_complete",
+      "seconds": 62.43,
+      "runtimeState": "succeeded",
+      "reason": "task_complete",
+      "verifiedAdditions": 4,
+      "independentComposition": {
+        "matched": true,
+        "plateInstanceId": 576790,
+        "parts": [
+          [
+            "cooked",
+            20294,
+            [
+              [
+                "ingredient",
+                "i12958"
+              ]
+            ]
+          ],
+          [
+            "ingredient",
+            "i16088"
+          ],
+          [
+            "ingredient",
+            "i18636"
+          ]
+        ]
+      },
+      "warnings": [],
+      "observationErrors": [],
+      "error": null,
+      "schedulerDecisions": 51,
+      "controlObservations": 263,
+      "nativeSamples": 121,
+      "decisionReview": {
+        "decisionReasons": {
+          "pick_component": 3,
+          "press_authorized": 24,
+          "transfer_contents": 6,
+          "transfer_verified": 4,
+          "waiting_for_assembly_dependency": 6,
+          "pick_up": 2,
+          "place_at": 2,
+          "rescue_finished_batch": 1,
+          "replan_uncompleted_step": 2,
+          "composition_verified": 1
+        },
+        "waitingIntervals": [
+          {
+            "start": 26.23,
+            "seconds": 23.87,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 8.484,
+            "seconds": 12.23,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 51.066,
+            "seconds": 0.99,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 1.131,
+            "seconds": 0.26,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 6.622,
+            "seconds": 0.26,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 59.049,
+            "seconds": 0.23,
+            "reason": "waiting_for_safe_counter"
+          },
+          {
+            "start": 3.43,
+            "seconds": 0.22,
+            "reason": "waiting_for_assembly_dependency"
+          }
+        ],
+        "completedVesselHolderChanges": [],
+        "navigationReasons": {
+          "null": 55,
+          "arrived": 208
+        },
+        "note": "Intervals and holder changes need review against native processing and reachability; they do not independently prove unreasonable waiting."
+      },
+      "trace": ".local/assembly-sweep-06/s_mine_2_6",
+      "dllSha256": "84625ba1df4af419608393a95a1a8636e39ce60f2692d418184cc383e2e76a93"
+    },
+    {
+      "level": "s_wizard_3_1",
+      "newAssemblyKitchen": true,
+      "recipe": "MargheritaPizza",
+      "outcome": "verified_complete",
+      "seconds": 50.52,
+      "runtimeState": "succeeded",
+      "reason": "task_complete",
+      "verifiedAdditions": 3,
+      "independentComposition": {
+        "matched": true,
+        "plateInstanceId": 576218,
+        "parts": [
+          [
+            "cooked",
+            16364,
+            [
+              [
+                "ingredient",
+                "i15580"
+              ],
+              [
+                "ingredient",
+                "i18636"
+              ],
+              [
+                "ingredient",
+                "i9398"
+              ]
+            ]
+          ]
+        ]
+      },
+      "warnings": [],
+      "observationErrors": [],
+      "error": null,
+      "schedulerDecisions": 30,
+      "controlObservations": 221,
+      "nativeSamples": 99,
+      "decisionReview": {
+        "decisionReasons": {
+          "pick_component": 2,
+          "press_authorized": 16,
+          "transfer_contents": 3,
+          "transfer_verified": 3,
+          "waiting_for_assembly_dependency": 2,
+          "pick_up": 1,
+          "place_at": 1,
+          "rescue_finished_batch": 1,
+          "composition_verified": 1
+        },
+        "waitingIntervals": [
+          {
+            "start": 2.518,
+            "seconds": 32.93,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 36.388,
+            "seconds": 12.19,
+            "reason": "waiting_for_assembly_dependency"
+          }
+        ],
+        "completedVesselHolderChanges": [
+          {
+            "vessel": -80168,
+            "firstObservedAt": 48.23,
+            "holder": 572626,
+            "overdoing": false,
+            "ruined": false,
+            "removedAfterSeconds": 0.58
+          }
+        ],
+        "navigationReasons": {
+          "null": 19,
+          "arrived": 202
+        },
+        "note": "Intervals and holder changes need review against native processing and reachability; they do not independently prove unreasonable waiting."
+      },
+      "trace": ".local/assembly-sweep-07-extra/s_wizard_3_1",
+      "dllSha256": "6cac255cfc54d0360ccbf893df1a39ae5caf1f58d788bfa903c8d666493e8519"
+    },
+    {
+      "level": "s_wizard_3_2",
+      "newAssemblyKitchen": true,
+      "recipe": "PeperoniPizza",
+      "outcome": "observation_timeout",
+      "seconds": 140.48,
+      "runtimeState": "running",
+      "reason": null,
+      "verifiedAdditions": 3,
+      "independentComposition": null,
+      "warnings": [
+        "observation_timeout"
+      ],
+      "observationErrors": [],
+      "error": null,
+      "schedulerDecisions": 39,
+      "controlObservations": 603,
+      "nativeSamples": 267,
+      "decisionReview": {
+        "decisionReasons": {
+          "pick_component": 3,
+          "press_authorized": 14,
+          "transfer_contents": 3,
+          "transfer_verified": 3,
+          "waiting_for_assembly_dependency": 5,
+          "pick_up": 1,
+          "place_at": 5,
+          "replan_uncompleted_step": 5
+        },
+        "waitingIntervals": [
+          {
+            "start": 78.349,
+            "seconds": 38.49,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 44.681,
+            "seconds": 32.0,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 11.54,
+            "seconds": 31.52,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 117.558,
+            "seconds": 22.3,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 77.391,
+            "seconds": 0.25,
+            "reason": "waiting_for_assembly_dependency"
+          }
+        ],
+        "completedVesselHolderChanges": [],
+        "navigationReasons": {
+          "null": 49,
+          "arrived": 554
+        },
+        "note": "Intervals and holder changes need review against native processing and reachability; they do not independently prove unreasonable waiting."
+      },
+      "trace": ".local/assembly-sweep-12-pizza/s_wizard_3_2",
+      "dllSha256": "dbe29a63b81aab87e7d2d91c33a5874b2f9fb25e6819890c6ce8d9a9342d8da0"
+    },
+    {
+      "level": "s_wizard_3_3",
+      "newAssemblyKitchen": true,
+      "recipe": "BeefBurgerWithGreensNCheese",
+      "outcome": "verified_complete",
+      "seconds": 57.7,
+      "runtimeState": "succeeded",
+      "reason": "task_complete",
+      "verifiedAdditions": 5,
+      "independentComposition": {
+        "matched": true,
+        "plateInstanceId": 552456,
+        "parts": [
+          [
+            "cooked",
+            20294,
+            [
+              [
+                "ingredient",
+                "i12958"
+              ]
+            ]
+          ],
+          [
+            "ingredient",
+            "i16088"
+          ],
+          [
+            "ingredient",
+            "i18636"
+          ],
+          [
+            "ingredient",
+            "i19478"
+          ]
+        ]
+      },
+      "warnings": [],
+      "observationErrors": [],
+      "error": null,
+      "schedulerDecisions": 53,
+      "controlObservations": 246,
+      "nativeSamples": 110,
+      "decisionReview": {
+        "decisionReasons": {
+          "pick_component": 4,
+          "press_authorized": 28,
+          "transfer_contents": 5,
+          "transfer_verified": 5,
+          "pick_up": 2,
+          "place_at": 2,
+          "waiting_for_assembly_dependency": 3,
+          "rescue_finished_batch": 2,
+          "replan_uncompleted_step": 1,
+          "composition_verified": 1
+        },
+        "waitingIntervals": [
+          {
+            "start": 33.819,
+            "seconds": 13.01,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 47.319,
+            "seconds": 1.17,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 54.214,
+            "seconds": 0.23,
+            "reason": "waiting_for_assembly_dependency"
+          }
+        ],
+        "completedVesselHolderChanges": [
+          {
+            "vessel": 554158,
+            "firstObservedAt": 46.7,
+            "holder": 551806,
+            "overdoing": false,
+            "ruined": false,
+            "removedAfterSeconds": 1.68
+          }
+        ],
+        "navigationReasons": {
+          "null": 183,
+          "arrived": 57,
+          "unsafe_update_interval": 6
+        },
+        "note": "Intervals and holder changes need review against native processing and reachability; they do not independently prove unreasonable waiting."
+      },
+      "trace": ".local/assembly-sweep-12-burger/s_wizard_3_3",
+      "dllSha256": "dbe29a63b81aab87e7d2d91c33a5874b2f9fb25e6819890c6ce8d9a9342d8da0"
+    },
+    {
+      "level": "s_sushi_1_3",
+      "newAssemblyKitchen": true,
+      "recipe": "Sushi_Cucumber",
+      "outcome": "verified_complete",
+      "seconds": 18.68,
+      "runtimeState": "succeeded",
+      "reason": "task_complete",
+      "verifiedAdditions": 4,
+      "independentComposition": {
+        "matched": true,
+        "plateInstanceId": 774160,
+        "parts": [
+          [
+            "cooked",
+            20068,
+            [
+              [
+                "ingredient",
+                "i19296"
+              ]
+            ]
+          ],
+          [
+            "ingredient",
+            "i29396"
+          ],
+          [
+            "ingredient",
+            "i37422"
+          ]
+        ]
+      },
+      "warnings": [],
+      "observationErrors": [],
+      "error": null,
+      "schedulerDecisions": 42,
+      "controlObservations": 81,
+      "nativeSamples": 35,
+      "decisionReview": {
+        "decisionReasons": {
+          "pick_component": 3,
+          "press_authorized": 24,
+          "transfer_contents": 4,
+          "transfer_verified": 4,
+          "pick_up": 2,
+          "place_at": 2,
+          "waiting_for_assembly_dependency": 1,
+          "rescue_finished_batch": 1,
+          "composition_verified": 1
+        },
+        "waitingIntervals": [
+          {
+            "start": 5.681,
+            "seconds": 12.16,
+            "reason": "waiting_for_assembly_dependency"
+          }
+        ],
+        "completedVesselHolderChanges": [
+          {
+            "vessel": 774486,
+            "firstObservedAt": 17.6,
+            "holder": 775400,
+            "overdoing": false,
+            "ruined": false
+          }
+        ],
+        "navigationReasons": {
+          "null": 25,
+          "arrived": 56
+        },
+        "note": "Intervals and holder changes need review against native processing and reachability; they do not independently prove unreasonable waiting."
+      },
+      "trace": ".local/assembly-sweep-06/s_sushi_1_3",
+      "dllSha256": "84625ba1df4af419608393a95a1a8636e39ce60f2692d418184cc383e2e76a93"
+    },
+    {
+      "level": "s_sushi_1_4",
+      "newAssemblyKitchen": true,
+      "recipe": "Sushi_Cucumber",
+      "outcome": "verified_complete",
+      "seconds": 28.3,
+      "runtimeState": "succeeded",
+      "reason": "task_complete",
+      "verifiedAdditions": 4,
+      "independentComposition": {
+        "matched": true,
+        "plateInstanceId": 792520,
+        "parts": [
+          [
+            "cooked",
+            20068,
+            [
+              [
+                "ingredient",
+                "i19296"
+              ]
+            ]
+          ],
+          [
+            "ingredient",
+            "i29396"
+          ],
+          [
+            "ingredient",
+            "i37422"
+          ]
+        ]
+      },
+      "warnings": [],
+      "observationErrors": [],
+      "error": null,
+      "schedulerDecisions": 42,
+      "controlObservations": 119,
+      "nativeSamples": 56,
+      "decisionReview": {
+        "decisionReasons": {
+          "pick_component": 3,
+          "press_authorized": 24,
+          "transfer_contents": 4,
+          "transfer_verified": 4,
+          "pick_up": 2,
+          "place_at": 2,
+          "waiting_for_assembly_dependency": 1,
+          "rescue_finished_batch": 1,
+          "composition_verified": 1
+        },
+        "waitingIntervals": [
+          {
+            "start": 13.526,
+            "seconds": 11.98,
+            "reason": "waiting_for_assembly_dependency"
+          }
+        ],
+        "completedVesselHolderChanges": [],
+        "navigationReasons": {
+          "null": 66,
+          "arrived": 53
+        },
+        "note": "Intervals and holder changes need review against native processing and reachability; they do not independently prove unreasonable waiting."
+      },
+      "trace": ".local/assembly-sweep-06/s_sushi_1_4",
+      "dllSha256": "84625ba1df4af419608393a95a1a8636e39ce60f2692d418184cc383e2e76a93"
+    },
+    {
+      "level": "s_sushi_4_1",
+      "newAssemblyKitchen": true,
+      "recipe": "Sushi_Cucumber",
+      "outcome": "verified_complete",
+      "seconds": 21.28,
+      "runtimeState": "succeeded",
+      "reason": "task_complete",
+      "verifiedAdditions": 4,
+      "independentComposition": {
+        "matched": true,
+        "plateInstanceId": 536852,
+        "parts": [
+          [
+            "cooked",
+            20068,
+            [
+              [
+                "ingredient",
+                "i19296"
+              ]
+            ]
+          ],
+          [
+            "ingredient",
+            "i29396"
+          ],
+          [
+            "ingredient",
+            "i37422"
+          ]
+        ]
+      },
+      "warnings": [],
+      "observationErrors": [],
+      "error": null,
+      "schedulerDecisions": 42,
+      "controlObservations": 91,
+      "nativeSamples": 40,
+      "decisionReview": {
+        "decisionReasons": {
+          "pick_component": 3,
+          "press_authorized": 24,
+          "transfer_contents": 4,
+          "transfer_verified": 4,
+          "pick_up": 2,
+          "place_at": 2,
+          "waiting_for_assembly_dependency": 1,
+          "rescue_finished_batch": 1,
+          "composition_verified": 1
+        },
+        "waitingIntervals": [
+          {
+            "start": 7.596,
+            "seconds": 12.12,
+            "reason": "waiting_for_assembly_dependency"
+          }
+        ],
+        "completedVesselHolderChanges": [],
+        "navigationReasons": {
+          "null": 37,
+          "arrived": 54
+        },
+        "note": "Intervals and holder changes need review against native processing and reachability; they do not independently prove unreasonable waiting."
+      },
+      "trace": ".local/assembly-sweep-07-sushi/s_sushi_4_1",
+      "dllSha256": "6cac255cfc54d0360ccbf893df1a39ae5caf1f58d788bfa903c8d666493e8519"
+    },
+    {
+      "level": "s_space_6_2",
+      "newAssemblyKitchen": true,
+      "recipe": "Pancake_Chocolate",
+      "outcome": "verified_complete",
+      "seconds": 31.28,
+      "runtimeState": "succeeded",
+      "reason": "task_complete",
+      "verifiedAdditions": 5,
+      "independentComposition": {
+        "matched": true,
+        "plateInstanceId": 591564,
+        "parts": [
+          [
+            "cooked",
+            20294,
+            [
+              [
+                "mixed",
+                null,
+                [
+                  [
+                    "ingredient",
+                    "i16620"
+                  ],
+                  [
+                    "ingredient",
+                    "i18448"
+                  ],
+                  [
+                    "ingredient",
+                    "i22804"
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      },
+      "warnings": [],
+      "observationErrors": [],
+      "error": null,
+      "schedulerDecisions": 53,
+      "controlObservations": 133,
+      "nativeSamples": 58,
+      "decisionReview": {
+        "decisionReasons": {
+          "pick_component": 4,
+          "press_authorized": 30,
+          "transfer_contents": 5,
+          "transfer_verified": 5,
+          "waiting_for_assembly_dependency": 2,
+          "rescue_finished_batch": 2,
+          "pick_up": 2,
+          "place_at": 2,
+          "composition_verified": 1
+        },
+        "waitingIntervals": [
+          {
+            "start": 18.314,
+            "seconds": 12.02,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 3.035,
+            "seconds": 11.37,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 17.153,
+            "seconds": 0.21,
+            "reason": "waiting_for_safe_counter"
+          }
+        ],
+        "completedVesselHolderChanges": [
+          {
+            "vessel": 594762,
+            "firstObservedAt": 29.98,
+            "holder": 592440,
+            "overdoing": false,
+            "ruined": false,
+            "removedAfterSeconds": 0.6
+          }
+        ],
+        "navigationReasons": {
+          "null": 31,
+          "arrived": 102
+        },
+        "note": "Intervals and holder changes need review against native processing and reachability; they do not independently prove unreasonable waiting."
+      },
+      "trace": ".local/assembly-sweep-06/s_space_6_2",
+      "dllSha256": "84625ba1df4af419608393a95a1a8636e39ce60f2692d418184cc383e2e76a93"
+    },
+    {
+      "level": "s_mine_4_3",
+      "newAssemblyKitchen": true,
+      "recipe": "BeefBurgerWithGreensNCheese",
+      "outcome": "verified_complete",
+      "seconds": 30.08,
+      "runtimeState": "succeeded",
+      "reason": "task_complete",
+      "verifiedAdditions": 5,
+      "independentComposition": {
+        "matched": true,
+        "plateInstanceId": 679116,
+        "parts": [
+          [
+            "cooked",
+            20294,
+            [
+              [
+                "ingredient",
+                "i12958"
+              ]
+            ]
+          ],
+          [
+            "ingredient",
+            "i16088"
+          ],
+          [
+            "ingredient",
+            "i18636"
+          ],
+          [
+            "ingredient",
+            "i19478"
+          ]
+        ]
+      },
+      "warnings": [],
+      "observationErrors": [],
+      "error": null,
+      "schedulerDecisions": 51,
+      "controlObservations": 129,
+      "nativeSamples": 58,
+      "decisionReview": {
+        "decisionReasons": {
+          "pick_component": 4,
+          "press_authorized": 28,
+          "transfer_contents": 5,
+          "transfer_verified": 5,
+          "waiting_for_assembly_dependency": 3,
+          "pick_up": 2,
+          "place_at": 2,
+          "rescue_finished_batch": 1,
+          "composition_verified": 1
+        },
+        "waitingIntervals": [
+          {
+            "start": 10.446,
+            "seconds": 12.11,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 23.954,
+            "seconds": 0.46,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 7.565,
+            "seconds": 0.21,
+            "reason": "waiting_for_assembly_dependency"
+          }
+        ],
+        "completedVesselHolderChanges": [],
+        "navigationReasons": {
+          "null": 71,
+          "arrived": 58
+        },
+        "note": "Intervals and holder changes need review against native processing and reachability; they do not independently prove unreasonable waiting."
+      },
+      "trace": ".local/assembly-sweep-06/s_mine_4_3",
+      "dllSha256": "84625ba1df4af419608393a95a1a8636e39ce60f2692d418184cc383e2e76a93"
+    },
+    {
+      "level": "s_mine_5_3",
+      "newAssemblyKitchen": true,
+      "recipe": "ChickenNuggetsAndChips_All",
+      "outcome": "observation_timeout",
+      "seconds": 140.48,
+      "runtimeState": "running",
+      "reason": null,
+      "verifiedAdditions": 0,
+      "independentComposition": null,
+      "warnings": [
+        "observation_timeout"
+      ],
+      "observationErrors": [],
+      "error": null,
+      "schedulerDecisions": 124,
+      "controlObservations": 608,
+      "nativeSamples": 272,
+      "decisionReview": {
+        "decisionReasons": {
+          "pick_up": 1,
+          "press_authorized": 2,
+          "place_at": 61,
+          "replan_uncompleted_step": 60
+        },
+        "waitingIntervals": [],
+        "completedVesselHolderChanges": [],
+        "navigationReasons": {
+          "null": 4,
+          "arrived": 604
+        },
+        "note": "Intervals and holder changes need review against native processing and reachability; they do not independently prove unreasonable waiting."
+      },
+      "trace": ".local/assembly-sweep-14-fryer/s_mine_5_3",
+      "dllSha256": "7ba56b6b3705b06a07f6dce0473b05ead282085c161aba0ee0a2db6681da76dc"
+    },
+    {
+      "level": "s_balloon_5_2",
+      "newAssemblyKitchen": true,
+      "recipe": "BeefBurgerMax",
+      "outcome": "verified_complete",
+      "seconds": 24.1,
+      "runtimeState": "succeeded",
+      "reason": "task_complete",
+      "verifiedAdditions": 5,
+      "independentComposition": {
+        "matched": true,
+        "plateInstanceId": 609800,
+        "parts": [
+          [
+            "cooked",
+            20294,
+            [
+              [
+                "ingredient",
+                "i12958"
+              ]
+            ]
+          ],
+          [
+            "ingredient",
+            "i15580"
+          ],
+          [
+            "ingredient",
+            "i16088"
+          ],
+          [
+            "ingredient",
+            "i19478"
+          ]
+        ]
+      },
+      "warnings": [],
+      "observationErrors": [],
+      "error": null,
+      "schedulerDecisions": 49,
+      "controlObservations": 102,
+      "nativeSamples": 47,
+      "decisionReview": {
+        "decisionReasons": {
+          "pick_component": 4,
+          "press_authorized": 28,
+          "transfer_contents": 5,
+          "transfer_verified": 5,
+          "pick_up": 2,
+          "place_at": 2,
+          "waiting_for_assembly_dependency": 1,
+          "rescue_finished_batch": 1,
+          "composition_verified": 1
+        },
+        "waitingIntervals": [
+          {
+            "start": 6.916,
+            "seconds": 12.15,
+            "reason": "waiting_for_assembly_dependency"
+          }
+        ],
+        "completedVesselHolderChanges": [
+          {
+            "vessel": 611384,
+            "firstObservedAt": 18.61,
+            "holder": 612324,
+            "overdoing": false,
+            "ruined": false,
+            "removedAfterSeconds": 0.4
+          }
+        ],
+        "navigationReasons": {
+          "null": 47,
+          "arrived": 55
+        },
+        "note": "Intervals and holder changes need review against native processing and reachability; they do not independently prove unreasonable waiting."
+      },
+      "trace": ".local/assembly-sweep-06/s_balloon_5_2",
+      "dllSha256": "84625ba1df4af419608393a95a1a8636e39ce60f2692d418184cc383e2e76a93"
+    },
+    {
+      "level": "s_city_h2",
+      "newAssemblyKitchen": true,
+      "recipe": "SteamedSpecial_Carrot",
+      "outcome": "verified_complete",
+      "seconds": 42.77,
+      "runtimeState": "succeeded",
+      "reason": "task_complete",
+      "verifiedAdditions": 4,
+      "independentComposition": {
+        "matched": true,
+        "plateInstanceId": 757064,
+        "parts": [
+          [
+            "cooked",
+            42750,
+            [
+              [
+                "mixed",
+                null,
+                [
+                  [
+                    "ingredient",
+                    "i17708"
+                  ],
+                  [
+                    "ingredient",
+                    "i18448"
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      },
+      "warnings": [],
+      "observationErrors": [],
+      "error": null,
+      "schedulerDecisions": 46,
+      "controlObservations": 180,
+      "nativeSamples": 83,
+      "decisionReview": {
+        "decisionReasons": {
+          "pick_component": 3,
+          "press_authorized": 26,
+          "transfer_contents": 4,
+          "transfer_verified": 4,
+          "waiting_for_assembly_dependency": 2,
+          "rescue_finished_batch": 2,
+          "pick_up": 2,
+          "place_at": 2,
+          "composition_verified": 1
+        },
+        "waitingIntervals": [
+          {
+            "start": 25.745,
+            "seconds": 12.2,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 7.285,
+            "seconds": 10.37,
+            "reason": "waiting_for_assembly_dependency"
+          }
+        ],
+        "completedVesselHolderChanges": [
+          {
+            "vessel": 755428,
+            "firstObservedAt": 37.63,
+            "holder": 753064,
+            "overdoing": false,
+            "ruined": false,
+            "removedAfterSeconds": 1.57
+          }
+        ],
+        "navigationReasons": {
+          "null": 71,
+          "arrived": 109
+        },
+        "note": "Intervals and holder changes need review against native processing and reachability; they do not independently prove unreasonable waiting."
+      },
+      "trace": ".local/assembly-sweep-06/s_city_h2",
+      "dllSha256": "84625ba1df4af419608393a95a1a8636e39ce60f2692d418184cc383e2e76a93"
+    },
+    {
+      "level": "s_city_h3",
+      "newAssemblyKitchen": true,
+      "recipe": "SteamedSpecial_Carrot",
+      "outcome": "observation_timeout",
+      "seconds": 140.45,
+      "runtimeState": "running",
+      "reason": null,
+      "verifiedAdditions": 2,
+      "independentComposition": null,
+      "warnings": [
+        "observation_timeout"
+      ],
+      "observationErrors": [],
+      "error": null,
+      "schedulerDecisions": 213,
+      "controlObservations": 603,
+      "nativeSamples": 276,
+      "decisionReview": {
+        "decisionReasons": {
+          "pick_component": 2,
+          "press_authorized": 10,
+          "transfer_contents": 2,
+          "transfer_verified": 2,
+          "waiting_for_assembly_dependency": 66,
+          "rescue_finished_batch": 1,
+          "pick_up": 65,
+          "replan_uncompleted_step": 65
+        },
+        "waitingIntervals": [
+          {
+            "start": 6.214,
+            "seconds": 10.4,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 21.471,
+            "seconds": 1.4,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 91.995,
+            "seconds": 1.38,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 27.217,
+            "seconds": 1.37,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 31.101,
+            "seconds": 1.37,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 80.73,
+            "seconds": 1.2,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 94.08,
+            "seconds": 1.2,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 71.202,
+            "seconds": 1.19,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 78.633,
+            "seconds": 1.19,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 84.503,
+            "seconds": 1.19,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 48.219,
+            "seconds": 1.18,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 57.699,
+            "seconds": 1.18,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 65.615,
+            "seconds": 1.18,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 73.082,
+            "seconds": 1.18,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 82.633,
+            "seconds": 1.18,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 109.228,
+            "seconds": 1.18,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 114.821,
+            "seconds": 1.18,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 132.213,
+            "seconds": 1.18,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 33.17,
+            "seconds": 1.17,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 46.353,
+            "seconds": 1.17,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 52.157,
+            "seconds": 1.17,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 59.811,
+            "seconds": 1.17,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 63.52,
+            "seconds": 1.17,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 69.328,
+            "seconds": 1.17,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 97.805,
+            "seconds": 1.17,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 99.875,
+            "seconds": 1.17,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 107.346,
+            "seconds": 1.17,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 118.779,
+            "seconds": 1.17,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 122.486,
+            "seconds": 1.17,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 130.127,
+            "seconds": 1.17,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 134.092,
+            "seconds": 1.17,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 137.785,
+            "seconds": 1.17,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 36.885,
+            "seconds": 1.16,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 40.785,
+            "seconds": 1.16,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 44.512,
+            "seconds": 1.16,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 54.011,
+            "seconds": 1.16,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 88.269,
+            "seconds": 1.16,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 101.737,
+            "seconds": 1.16,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 105.494,
+            "seconds": 1.16,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 111.101,
+            "seconds": 1.16,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 112.953,
+            "seconds": 1.16,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 116.912,
+            "seconds": 1.16,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 126.422,
+            "seconds": 1.16,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 128.266,
+            "seconds": 1.16,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 135.935,
+            "seconds": 1.16,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 17.786,
+            "seconds": 1.15,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 29.252,
+            "seconds": 1.15,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 42.673,
+            "seconds": 1.15,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 50.098,
+            "seconds": 1.15,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 61.681,
+            "seconds": 1.15,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 74.935,
+            "seconds": 1.15,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 76.787,
+            "seconds": 1.15,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 90.12,
+            "seconds": 1.15,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 95.964,
+            "seconds": 1.15,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 103.64,
+            "seconds": 1.15,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 124.571,
+            "seconds": 1.15,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 23.544,
+            "seconds": 1.14,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 67.487,
+            "seconds": 1.14,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 86.414,
+            "seconds": 1.14,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 120.658,
+            "seconds": 1.14,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 19.64,
+            "seconds": 1.13,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 25.383,
+            "seconds": 1.13,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 35.044,
+            "seconds": 1.13,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 38.951,
+            "seconds": 1.13,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 55.883,
+            "seconds": 1.12,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 139.664,
+            "seconds": 0.23,
+            "reason": "waiting_for_assembly_dependency"
+          }
+        ],
+        "completedVesselHolderChanges": [],
+        "navigationReasons": {
+          "null": 26,
+          "arrived": 577
+        },
+        "note": "Intervals and holder changes need review against native processing and reachability; they do not independently prove unreasonable waiting."
+      },
+      "trace": ".local/assembly-sweep-12-steamer/s_city_h3",
+      "dllSha256": "dbe29a63b81aab87e7d2d91c33a5874b2f9fb25e6819890c6ce8d9a9342d8da0"
+    },
+    {
+      "level": "s_city_h4",
+      "newAssemblyKitchen": true,
+      "recipe": "SteamedSpecial_Prawns",
+      "outcome": "verified_complete",
+      "seconds": 36.92,
+      "runtimeState": "succeeded",
+      "reason": "task_complete",
+      "verifiedAdditions": 4,
+      "independentComposition": {
+        "matched": true,
+        "plateInstanceId": 545828,
+        "parts": [
+          [
+            "cooked",
+            42750,
+            [
+              [
+                "mixed",
+                null,
+                [
+                  [
+                    "ingredient",
+                    "i18448"
+                  ],
+                  [
+                    "ingredient",
+                    "i21874"
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      },
+      "warnings": [
+        "fire:-53296",
+        "fire:-53874",
+        "fire:-54412",
+        "fire:-54996",
+        "fire:-55256"
+      ],
+      "observationErrors": [],
+      "error": null,
+      "schedulerDecisions": 51,
+      "controlObservations": 160,
+      "nativeSamples": 71,
+      "decisionReview": {
+        "decisionReasons": {
+          "pick_component": 4,
+          "press_authorized": 28,
+          "transfer_contents": 4,
+          "transfer_verified": 4,
+          "waiting_for_assembly_dependency": 3,
+          "rescue_finished_batch": 2,
+          "pick_up": 2,
+          "place_at": 2,
+          "replan_uncompleted_step": 1,
+          "composition_verified": 1
+        },
+        "waitingIntervals": [
+          {
+            "start": 22.786,
+            "seconds": 12.13,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 6.393,
+            "seconds": 10.5,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 20.549,
+            "seconds": 1.11,
+            "reason": "waiting_for_assembly_dependency"
+          }
+        ],
+        "completedVesselHolderChanges": [],
+        "navigationReasons": {
+          "null": 43,
+          "arrived": 117
+        },
+        "note": "Intervals and holder changes need review against native processing and reachability; they do not independently prove unreasonable waiting."
+      },
+      "trace": ".local/assembly-sweep-08-canary/s_city_h4",
+      "dllSha256": "454f54b14b30d7f69a9527b1023592f1cf594ebb13f39d63a4b492c1ff8a3c36"
+    },
+    {
+      "level": "s_wizard_school_3_4",
+      "newAssemblyKitchen": false,
+      "recipe": "Pancake_Chocolate",
+      "outcome": "verified_complete",
+      "seconds": 39.12,
+      "runtimeState": "succeeded",
+      "reason": "task_complete",
+      "verifiedAdditions": 5,
+      "independentComposition": {
+        "matched": true,
+        "plateInstanceId": 568568,
+        "parts": [
+          [
+            "cooked",
+            20294,
+            [
+              [
+                "mixed",
+                null,
+                [
+                  [
+                    "ingredient",
+                    "i16620"
+                  ],
+                  [
+                    "ingredient",
+                    "i18448"
+                  ],
+                  [
+                    "ingredient",
+                    "i22804"
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      },
+      "warnings": [],
+      "observationErrors": [],
+      "error": null,
+      "schedulerDecisions": 59,
+      "controlObservations": 165,
+      "nativeSamples": 74,
+      "decisionReview": {
+        "decisionReasons": {
+          "pick_component": 4,
+          "press_authorized": 30,
+          "transfer_contents": 7,
+          "transfer_verified": 5,
+          "waiting_for_assembly_dependency": 4,
+          "rescue_finished_batch": 2,
+          "pick_up": 2,
+          "place_at": 2,
+          "replan_uncompleted_step": 2,
+          "composition_verified": 1
+        },
+        "waitingIntervals": [
+          {
+            "start": 18.906,
+            "seconds": 12.02,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 3.439,
+            "seconds": 11.09,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 31.904,
+            "seconds": 1.44,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 34.34,
+            "seconds": 0.96,
+            "reason": "waiting_for_assembly_dependency"
+          }
+        ],
+        "completedVesselHolderChanges": [
+          {
+            "vessel": 569028,
+            "firstObservedAt": 30.82,
+            "holder": 569776,
+            "overdoing": false,
+            "ruined": false,
+            "removedAfterSeconds": 0.43
+          }
+        ],
+        "navigationReasons": {
+          "null": 46,
+          "arrived": 119
+        },
+        "note": "Intervals and holder changes need review against native processing and reachability; they do not independently prove unreasonable waiting."
+      },
+      "trace": ".local/assembly-sweep-12-stairs/s_wizard_school_3_4",
+      "dllSha256": "dbe29a63b81aab87e7d2d91c33a5874b2f9fb25e6819890c6ce8d9a9342d8da0"
+    }
+  ],
+  "setupErrors": [
+    {
+      "level": "s_balloon_2_2",
+      "trace": ".local/assembly-sweep-06/s_balloon_2_2",
+      "error": "No fixture-feasible recipe: {\"orders\": [\"Pasta_MeatOnly_New\", \"Pasta_MushroomOnly_New\"], \"plates\": 0, \"counters\": 1, \"supplies\": [\"BurritoMeat\", \"Mushroom\", \"Pasta\"]}"
+    },
+    {
+      "level": "s_wizard_3_1",
+      "trace": ".local/assembly-sweep-06/s_wizard_3_1",
+      "error": "'generation'"
+    },
+    {
+      "level": "s_mine_5_3",
+      "trace": ".local/assembly-sweep-06/s_mine_5_3",
+      "error": "No fixture-feasible recipe: {\"orders\": [\"ChickenNuggetsAndChips_ChickenOnly\", \"ChickenNuggetsAndChips_ChipsOnly\"], \"plates\": 0, \"counters\": 4, \"supplies\": []}"
+    },
+    {
+      "level": "s_mine_5_3",
+      "trace": ".local/assembly-sweep-13-fryer/s_mine_5_3",
+      "error": "No fixture-feasible recipe: {\"orders\": [\"ChickenNuggetsAndChips_ChipsOnly\", \"ChickenNuggetsAndChips_ChickenOnly\", \"ChickenNuggetsAndChips_All\"], \"plates\": 3, \"counters\": 1, \"supplies\": []}"
+    }
+  ],
+  "finalBuild": {
+    "sourceCommit": "16af0b0",
+    "dllSha256": "7ba56b6b3705b06a07f6dce0473b05ead282085c161aba0ee0a2db6681da76dc",
+    "builtAndAuditRuntimeMatch": true
+  }
+}

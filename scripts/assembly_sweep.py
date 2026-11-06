@@ -98,11 +98,12 @@ def review(directory):
             state = vessel['cooking']
             ident = vessel['id']
             if state and state['state'] in ('Completed', 'OverDoing', 'Ruined') and vessel['holder'] in processors and ident not in active:
-                active[ident] = {'vessel': ident, 'firstObservedAt': row['time'], 'holder': vessel['holder'], 'ruined': False}
+                active[ident] = {'vessel': ident, 'firstObservedAt': row['time'], 'holder': vessel['holder'], 'overdoing': False, 'ruined': False}
             exposure = active.get(ident)
             if exposure is None:
                 continue
             exposure['ruined'] |= state is not None and state['state'] == 'Ruined'
+            exposure['overdoing'] |= state is not None and state['state'] == 'OverDoing'
             if vessel['holder'] != exposure['holder']:
                 exposure['removedAfterSeconds'] = round(row['time'] - exposure['firstObservedAt'], 2)
                 heat.append(exposure); del active[ident]

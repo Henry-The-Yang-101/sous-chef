@@ -31,7 +31,10 @@ All resources are IDs from the current catalogue:
 - `bases`: 1–24 alternative plates and optional preparation bases such as buns or
   tortillas. Include at least one compatible plate. A suitable partial plate is
   preferred, then distance. The selected plate stays pinned. Partial preparation
-  bases can contribute their existing exact components.
+  bases can contribute their existing exact components. With an empty selected
+  plate, a suitable assigned preparation base is completed before final plating.
+  Cookable preparation bases, such as dough, can also supply a processing vessel
+  without appearing a second time in the equipment allocation.
 - `components`: up to 24 exact prepared ingredient/container instances. These are
   **item IDs**, not dispenser selectors or station IDs. An assigned raw rice,
   flour or egg is usable when that is the recipe's required input; unchopped
@@ -105,6 +108,22 @@ heuristics or successful button presses as dish-completion evidence.
 Scheduling waits through an active native portal transit because its animation
 can temporarily hide carried objects. It revalidates after arrival, before input.
 Heat rescue checks the live station occupant, not just the cached inventory holder.
+When moving geometry invalidates the broad catalogue, rescue uses the bounded
+destination planner instead of waiting for that catalogue to finish. Useful held
+components likewise retain their next recipe addition while its directed route is
+proved. Native navigation and placement checks still apply before input.
+Independent mixing/cooking continues while the allocated plate is unavailable.
+Empty allocated cookware is parked before it can delay another batch's rescue.
+If no known/local work is executable, the scheduler probes other allocated
+resources against an incomplete catalogue. Stored food is collected only when
+its receiving route is usable; ordinary stalled route recovery yields before
+input so another recipe branch can run.
+
+`details.assembly.decisions` contains the last 96 scheduler events with monotonic
+sequence numbers, native time, stage, and exact source/destination instance IDs.
+It records selections, final authorization checks, verified transfers, replanning,
+waiting transitions, heat rescue, and completion. Authorization events are checks,
+not a count of button presses.
 
 ## Scope
 
@@ -120,6 +139,10 @@ timing. Native input checks remain authoritative even when the structural recipe
 proof succeeds. See the validation section below for the scenarios actually run.
 
 ## Validation
+
+The original three-case baseline follows. The broader decision audit and its
+remaining failures are recorded separately in
+[dish-assembly-sweep.md](dish-assembly-sweep.md).
 
 The final plugin and isolated runtime DLL have the same SHA-256:
 `8e784901ccd7ca831bb4d2c7bc30fff4ba19406a69833cfe24ec146d4deb67b1`.
