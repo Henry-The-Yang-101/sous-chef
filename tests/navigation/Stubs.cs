@@ -60,7 +60,7 @@ namespace UnityEngine
         public float yaw;
         public Quaternion rotation { get { return new Quaternion {Yaw=yaw}; } }
         public Transform parent;
-        public Vector3 up { get { return Vector3.up; } }
+        public Vector3 up { get { return TransformVector(Vector3.up).normalized; } }
         public Vector3 forward { get { return Rotate(Vector3.forward, yaw); } }
         public Vector3 right { get { return Rotate(Vector3.right, yaw); } }
         public Matrix4x4 localToWorldMatrix { get { return new Matrix4x4 { Position = position, Yaw = yaw }; } }

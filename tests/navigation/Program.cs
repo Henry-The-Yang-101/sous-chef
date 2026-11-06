@@ -609,6 +609,24 @@ internal static class Program
         Check(!physics.Segment(w.Chef.transform.position,new Vector3(16.4f,-1.74191f,4.4f)), "planner rejects captured corner shortcut instead of bridging its blocked strip");
         Check(physics.Segment(new Vector3(15,-1.835624f,3.9f),new Vector3(15,-1.505f,4.9f)), "same captured wedge remains traversable through its front");
     }
+    private static void CapturedFloorCorner()
+    {
+        var w = new World();
+        var shape = w.Chef.GetComponent<CapsuleCollider>(); shape.radius = .4f; shape.height = 2; shape.center = Vector3.up;
+        var boxes = RecordedBox.Install("mine-floor-corner.json"); w.Chef.GroundCollider = boxes[0];
+        w.Chef.transform.position = new Vector3(14, 0, 0);
+        var physics = w.Ready(); Vector3 point; Collider ground;
+        Check(!physics.Stand(new Vector3(12.4f, -.053588f, -1.2f), out point, out ground),
+            "captured L-shaped floor corner cannot support the chef centre despite rounded sphere contact");
+        Check(!physics.Segment(new Vector3(13.2f, 0, -.4f), new Vector3(12.4f, -.053588f, -1.2f)),
+            "rice-carrying route cannot shortcut over the captured floor corner");
+        Check(physics.Segment(new Vector3(13.2f, 0, -2.4f), new Vector3(11.6f, 0, -2.4f)),
+            "adjacent coplanar boxes remain connected through their supported seam");
+        boxes[0].gameObject.Add(new Steppable()); boxes[1].gameObject.Add(new Steppable()); Time.realtimeSinceStartup += .21f;
+        physics.Refresh(w.Chef);
+        Check(physics.Stand(new Vector3(12.4f, -.053588f, -1.2f), out point, out ground),
+            "explicit native step support retains spherical contact semantics");
+    }
     private static void CapturedStairContact()
     {
         var w = new World();
@@ -1336,7 +1354,7 @@ internal static class Program
     }
     private static void Main()
     {
-        WalkingStallRecovery(); StallAvoidanceGeometry(); DoorwayChanges(); StationConnectorReuse(); FocusedPlanning(); SearchContinuity(); ShallowCeilingContacts(); EquivalentVerticalStarts(); ConveyorSearchContinuity(); CertifiedStart(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); DirectedConveyors(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
+        WalkingStallRecovery(); StallAvoidanceGeometry(); DoorwayChanges(); StationConnectorReuse(); FocusedPlanning(); SearchContinuity(); ShallowCeilingContacts(); EquivalentVerticalStarts(); ConveyorSearchContinuity(); CertifiedStart(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedFloorCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); DirectedConveyors(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
         WorkerStartingStateChanges(); LoosePickupBodies(); StationaryThrowStances();
         Console.WriteLine("PASS: " + checks + " navigator integration checks (analytical geometry; not PhysX)");
     }

@@ -411,6 +411,7 @@ namespace SousChef.Plugin.Navigation
             // on its top rather than shortcut around an overhanging corner.
             if (MovingSurface(support) is Travelator && !ConveyorSupport(point, hit.normal, clearance))
                 return Fail("conveyor_side_support", point, support);
+            if (!FloorCentreSupported(point, support)) return Fail("floor_centre_unsupported", point, support);
             if (!SlopeInterior(point, support, clearance)) return Fail("slope_side_clearance", point, support);
             // GroundCast supports the rounded capsule across narrow tread seams.
             // Requiring a ray under every footprint edge rejects real stairs even
@@ -421,6 +422,26 @@ namespace SousChef.Plugin.Navigation
             if (count == overlaps.Length) { Overflow = true; return false; }
             for (int i = 0; i < count; i++) if (BlocksWalkingBody(overlaps[i], point.y, point.y, low.y - clearance, high.y + clearance)) return Fail("body_overlap", point, overlaps[i]);
             return true;
+        }
+        private bool FloorCentreSupported(Vector3 point, Collider support)
+        {
+            var box = support as BoxCollider;
+            if (box == null || NativeStep(support) || Mathf.Abs(box.transform.up.y) < .9999f) return true;
+            Vector3 local = box.transform.InverseTransformPoint(point) - box.center;
+            if (Mathf.Abs(local.x) <= box.size.x * .5f && Mathf.Abs(local.z) <= box.size.z * .5f) return true;
+            // A sphere grazing a horizontal floor's outside edge reports a
+            // sloping normal. It must not turn an unsupported inside corner into
+            // a walkable ramp. Adjacent coplanar floors and real stair wedges can
+            // still support the centre; native Steppable contact is kept above.
+            int count = Physics.RaycastNonAlloc(point + Vector3.up * (nativeRadius + .01f), Vector3.down,
+                hits, 2 * nativeRadius + .02f, groundMask, QueryTriggerInteraction.Ignore); Queries++;
+            if (count == hits.Length) { Overflow = true; return false; }
+            float closest = Single.MaxValue; RaycastHit plane = new RaycastHit();
+            for (int i = 0; i < count; i++)
+                if (hits[i].collider != null && !Own(hits[i].collider) && hits[i].distance < closest)
+                { closest = hits[i].distance; plane = hits[i]; }
+            if (plane.collider == null || Dangerous(plane.collider) || plane.normal.y < .52992f) return false;
+            return plane.normal.y < .99f || Mathf.Abs(plane.point.y - box.bounds.max.y) < .0025f;
         }
         // A sphere can touch a ramp while its centre is outside the side face.
         // That diagonal approach is standable in isolation but native slope

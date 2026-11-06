@@ -61,6 +61,23 @@ internal sealed class RecordedBox : BoxCollider
         }
         return null;
     }
+    public RaycastHit? Ray(Vector3 p, Vector3 direction, float length)
+    {
+        float near = 0, far = length; Vector3 normal = Vector3.zero;
+        for (int i = 0; i < 3; i++)
+        {
+            float origin = Vector3.Dot(p - Centre, Axes[i]), delta = Vector3.Dot(direction, Axes[i]);
+            float half = Axis(Half, i);
+            if (Math.Abs(delta) < .000001f) { if (Math.Abs(origin) > half) return null; continue; }
+            float a = (-half - origin) / delta, b = (half - origin) / delta;
+            Vector3 face = Axes[i] * (delta > 0 ? -1 : 1);
+            if (a > b) { float swap = a; a = b; b = swap; }
+            if (a > near) { near = a; normal = face; }
+            far = Math.Min(far, b);
+            if (near > far) return null;
+        }
+        return near > 0 ? new RaycastHit { collider = this, point = p + direction * near, normal = normal, distance = near } : (RaycastHit?)null;
+    }
     public bool Cast(Vector3 a, Vector3 b, float radius, Vector3 direction, float length)
     {
         Vector3 endA = a + direction * length, endB = b + direction * length;
@@ -104,6 +121,7 @@ internal sealed class RecordedBox : BoxCollider
             }
         Physics.Nearby = (p, r) => boxes.Cast<Collider>().ToArray();
         Physics.GroundSphere = (p, r, d, length) => boxes.Where(b => b.Ground).Select(b => b.Sphere(p, r, d, length)).Where(h => h.HasValue).Select(h => h.Value).ToArray();
+        Physics.Ray = (p, d, length, mask) => boxes.Where(b => b.Ground).Select(b => b.Ray(p, d, length)).Where(h => h.HasValue).Select(h => h.Value).ToArray();
         Physics.Overlap = (a, b, r) => boxes.Where(c => c.CapsuleOverlap(a,b,r)).Cast<Collider>().ToArray();
         Physics.Cast = (a, b, r, d, length) => boxes.Where(c => c.Cast(a, b, r, d, length)).Select(c => new RaycastHit { collider = c }).ToArray();
         Physics.Penetration = (a, ap, ar, b, bp, br) =>
