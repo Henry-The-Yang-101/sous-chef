@@ -163,6 +163,10 @@ namespace SousChef.Plugin.Actions
             if (board == null)
             {
                 var pickup = Reschedulable("pick_up", ActionObservations.PickupTarget(source.Source, source.Supply ? null : source.Item));
+                // A moving item can leave native pickup range after selection.
+                // Once verification ends, select again from observed inventory;
+                // UseHeld reconciles any acquired cargo before another press.
+                pickup.ReplanAfterPress = true;
                 GameObject initialCargo = ActionObservations.Held(chef);
                 pickup.UseHeld = held => HeldPreparation(held, order) &&
                     (NeedsWork(order, source.Item) || !NeedsWork(order, held));

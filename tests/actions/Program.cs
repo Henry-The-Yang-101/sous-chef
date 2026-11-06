@@ -859,6 +859,7 @@ internal static class Program
             Check(destroyed.Skills.Run.State=="blocked" && destroyed.Skills.Run.Reason=="pickup_item_destroyed",
                 "permanently destroyed pickup cargo terminates instead of waiting indefinitely, pressed="+pressed);
         }
+        foreach(bool destroyed in new[] {false,true})
         {
             var retry=new World();var human=new GameObject("human");human.Add(new PlayerIDProvider {Id=0});
             human.Add(new PlayerControls {GroundCollider=retry.Chef.GroundCollider});human.Add(new ServerPlayerAttachmentCarrier());
@@ -867,10 +868,12 @@ internal static class Program
             Check(retry.Tasks.Start(retry.Chef,1,new ControlCommand {Id="survives-belt-bin",Operation="task",Task=request})==null,"preparation starts with finite belt cargo");
             for(int i=0;i<10 && !retry.Skills.Run.Running;i++)retry.Tick();
             retry.Arrive();retry.Tick(.2f);Check(!retry.Skills.CanRetry,"preparation issued its original pickup edge");
-            food.Destroyed=true;retry.Target.GetComponent<ServerAttachStation>().Item=null;retry.Tick();
+            if(destroyed) food.Destroyed=true;
+            retry.Target.GetComponent<ServerAttachStation>().Item=null;
+            retry.Tick(2.5f);
             for(int i=0;i<10;i++)retry.Tick(.25f);
             Check(retry.Tasks.Run.Running && retry.Tasks.Run.Phase=="waiting_for_ingredient" && retry.Tasks.Run.RequestId=="survives-belt-bin",
-                "preparation abandons destroyed cargo and waits under the same request");
+                "preparation reselects after a missed pickup or destroyed cargo under the same request");
             var next=retry.Ingredient("fish");retry.Target.GetComponent<ServerAttachStation>().Item=next;
             for(int i=0;i<10 && !retry.Skills.Run.Running;i++)retry.Tick(.25f);
             Check(retry.Skills.Run.Running && retry.Skills.Run.Operation=="pick_up" && retry.Tasks.Run.RequestId=="survives-belt-bin" && retry.Releases==0,
