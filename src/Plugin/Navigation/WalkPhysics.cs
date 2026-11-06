@@ -59,6 +59,7 @@ namespace SousChef.Plugin.Navigation
         public bool Changed { get; private set; }
         public float Radius { get { return radius; } }
         public bool OnConveyor { get { return MovingSurface(chef.GroundCollider) is Travelator; } }
+        public bool HasPortals { get { return portals.Count != 0; } }
         public float StepHeight { get { return Mathf.Min(.65f, chef.Movement.StepHeightMax); } }
         public Vector3 Position { get { Vector3 p = chef.transform.position; p.y -= pivotToFoot; return p; } }
         public IEnumerable<Collider> Colliders { get { for (int i = 0; i < nearbyCount; i++) yield return nearby[i]; } }

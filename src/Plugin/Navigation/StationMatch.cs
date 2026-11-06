@@ -56,6 +56,31 @@ namespace SousChef.Plugin.Navigation
 
             public float CertificationCost { get { return preferRetained ? preferred.Cost : best.Cost; } }
 
+            // Distance to the union of candidate cell rectangles is a consistent
+            // lower bound on ordinary walking distance to any usable stance.
+            // Portal graphs use Dijkstra because a portal can bypass this bound.
+            public float LowerBound(WalkCell cell)
+            {
+                float best = float.PositiveInfinity;
+                foreach (Region r in regions)
+                {
+                    float x = Mathf.Max(r.Left - cell.X, Mathf.Max(0, cell.X - r.Right));
+                    float z = Mathf.Max(r.Bottom - cell.Z, Mathf.Max(0, cell.Z - r.Top));
+                    best = Mathf.Min(best, (float)System.Math.Sqrt(x * x + z * z) * WalkPhysics.Spacing);
+                }
+                return regions.Count == 0 ? 0 : best;
+            }
+            public bool SameRegion(StationMatch other)
+            {
+                if (other == null || destination != other.destination || regions.Count != other.regions.Count) return false;
+                for (int i = 0; i < regions.Count; i++)
+                {
+                    var a = regions[i]; var b = other.regions[i];
+                    if (a.Left != b.Left || a.Right != b.Right || a.Bottom != b.Bottom || a.Top != b.Top) return false;
+                }
+                return true;
+            }
+
             public void Visit(WalkCell cell, float distance)
             {
                 if (cell.Portal != 0) return;

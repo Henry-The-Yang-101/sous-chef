@@ -461,6 +461,12 @@ internal static class Program
 
         w=new World(); w.AddFloor((x,z) => Math.Abs(x)<3 && Math.Abs(z)<3 ? 0 : (float?)null);
         w.Chef.transform.position=new Vector3(0,0,-1); station=w.AddStation(); navigation=w.Navigate(station);
+        w.Chef.WindReceiver.Velocity=new Vector3(.5f,0,0);
+        for (int i=0; i<4; i++) { Time.realtimeSinceStartup += .06f; navigation.Tick(w.Chef); }
+        Check(navigation.Action.Reason == "arrived","reported wind without actual native displacement does not prevent a settled station interaction");
+
+        w=new World(); w.AddFloor((x,z) => Math.Abs(x)<3 && Math.Abs(z)<3 ? 0 : (float?)null);
+        w.Chef.transform.position=new Vector3(0,0,-1); station=w.AddStation(); navigation=w.Navigate(station);
         w.Chef.SurfaceMovable.Velocity=new Vector3(.5f,0,0);
         for (int i=0; i<4; i++)
         {

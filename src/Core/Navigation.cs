@@ -95,21 +95,26 @@ namespace SousChef.Core
     // distance and silently trades a longer route for a faster one.
     public sealed class WalkSearch : WalkTree
     {
-        private struct Pending { public WalkCell Cell; public float Cost; }
+        private struct Pending { public WalkCell Cell; public float Cost, Priority; }
         private readonly List<Pending> heap = new List<Pending>();
         private readonly Func<WalkCell, IEnumerable<WalkEdge>> expand;
+        private readonly Func<WalkCell, float> heuristic;
         private readonly int maxNodes;
         public override bool NodeLimitReached { get { return Distances.Count > maxNodes; } set { } }
-        public override float MinimumPendingDistance { get { return heap.Count == 0 ? Single.PositiveInfinity : heap[0].Cost; } set { } }
+        public override float MinimumPendingDistance { get { return heap.Count == 0 ? Single.PositiveInfinity : heap[0].Priority; } set { } }
         public WalkSearch(IEnumerable<WalkEdge> starts, Func<WalkCell, IEnumerable<WalkEdge>> expand,
             int maxNodes, Func<bool> budgetAvailable) : this(starts, expand, maxNodes)
         {
             Continue(budgetAvailable);
         }
 
-        public WalkSearch(IEnumerable<WalkEdge> starts, Func<WalkCell, IEnumerable<WalkEdge>> expand, int maxNodes)
+        // An optional consistent lower bound focuses A* on one goal region.
+        // Then MinimumPendingDistance certifies that region only; callers must
+        // not reuse it as the all-destination Dijkstra frontier.
+        public WalkSearch(IEnumerable<WalkEdge> starts, Func<WalkCell, IEnumerable<WalkEdge>> expand, int maxNodes,
+            Func<WalkCell, float> heuristic = null)
         {
-            this.expand = expand; this.maxNodes = maxNodes;
+            this.expand = expand; this.maxNodes = maxNodes; this.heuristic = heuristic;
             foreach (WalkEdge start in starts)
             {
                 if (!Valid(start.Distance)) throw new ArgumentException("invalid_distance");
@@ -147,15 +152,19 @@ namespace SousChef.Core
         private static bool Valid(float cost) { return cost >= 0 && !Single.IsNaN(cost) && !Single.IsInfinity(cost); }
         private void Push(WalkCell cell, float cost)
         {
-            var item = new Pending { Cell = cell, Cost = cost }; int at = heap.Count; heap.Add(item);
+            float estimate = heuristic == null ? 0 : heuristic(cell);
+            if (!Valid(estimate)) throw new ArgumentException("invalid_heuristic");
+            var item = new Pending { Cell = cell, Cost = cost, Priority = cost + estimate }; int at = heap.Count; heap.Add(item);
             while (at > 0)
             {
                 int parent = (at - 1) / 2;
-                if (heap[parent].Cost <= cost) break;
+                if (!Before(item, heap[parent])) break;
                 heap[at] = heap[parent]; at = parent;
             }
             heap[at] = item;
         }
+        private static bool Before(Pending a, Pending b)
+        { return a.Priority < b.Priority || a.Priority == b.Priority && a.Cost > b.Cost; }
         private Pending Pop()
         {
             Pending result = heap[0], tail = heap[heap.Count - 1]; heap.RemoveAt(heap.Count - 1);
@@ -164,8 +173,8 @@ namespace SousChef.Core
             while (at * 2 + 1 < heap.Count)
             {
                 int child = at * 2 + 1;
-                if (child + 1 < heap.Count && heap[child + 1].Cost < heap[child].Cost) child++;
-                if (heap[child].Cost >= tail.Cost) break;
+                if (child + 1 < heap.Count && Before(heap[child + 1], heap[child])) child++;
+                if (!Before(heap[child], tail)) break;
                 heap[at] = heap[child]; at = child;
             }
             heap[at] = tail; return result;

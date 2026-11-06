@@ -155,6 +155,7 @@ namespace SousChef.Plugin.Adapters
             Add(s, "triggers", "TriggerAfterRandomTime", "m_timer MinValue MaxValue TriggerName");
             Add(s, "triggers", "TriggerAnimatorSetVariable", "m_triggerToReceive m_targetAnimator m_variableName m_variableType m_randomValue m_boolValue m_intValue m_minIntValue m_maxIntValue m_floatValue m_minFloatValue m_maxFloatValue");
             Add(s, "triggers", "ServerTriggerZone", "m_collidersOccupying");
+            Add(s, "triggers", "TriggerOnObject", "m_trigger m_triggerToFire m_targetObject m_targetObjects");
 
             Add(s, "portals", "Teleportal", "m_teleportPoint m_exitPortal m_receiveDelay m_cooldownTime m_allowImmediateReteleport m_teleportArc");
             Add(s, "portals", "ServerTeleportal", "m_teleporting m_cooldown m_recentlyTeleported");

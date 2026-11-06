@@ -34,3 +34,27 @@ Optional navigation traces now identify changed collider geometry for diagnosis.
 rescue priority, clearing hands before completion, approach without premature
 pickup, persistent retry history, and waking after occupancy or position changes.
 Native validation is pending; these tests use mocked native state.
+
+## Native findings and navigation milestone
+
+The first moving-pasta replay completed in 49.71 seconds of decision observation.
+Cold work did not interrupt heat rescue, but three alignment failures still
+delayed tomato removal. During those failures, the chef's observed position was
+stationary and the native cooker selected while the wind accumulator reported
+roughly 2 units/second. Arrival now measures actual environmental displacement
+relative to the target, retaining the Rigidbody walking-velocity guard, stable
+arrival interval, and projected-footing check.
+
+The first fryer replay staged both baskets and collected a component, then
+stalled on the return route. Its moving carts repeatedly invalidated the broad
+search. Station-directed searches now use A* with a consistent lower bound to
+the candidate stance regions. Native edges and minimum-cost certification are
+unchanged. Portal graphs retain Dijkstra, and changing the focus or restoring
+the full catalogue starts the appropriate search rather than reusing a frontier
+whose bound certifies a different target.
+
+`scripts/check.py` passes with these changes
+(`.local/assembly-recovery-check-03.log`). Tests compare sliced focused search
+with Dijkstra, including a forced detour, and preserve moving-platform, wind
+drift, pending-walking, and full-catalogue restoration checks. Native replays
+of this navigation milestone are pending.

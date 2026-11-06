@@ -64,6 +64,30 @@ internal static class NavigationTests
         { allowance = 5; progressive.Continue(() => allowance-- > 0); slices++; }
         check(progressive.Complete && slices == 20 && expandedChain == 100 && progressive.Distances[new WalkCell(99,0,0)] == 99,
             "twenty five-node slices fill the entire catalogue instead of repeating the first five nodes");
+        for (int blocked = 0; blocked < 2; blocked++)
+        {
+            var destination = new WalkCell(20,0,0);
+            Func<WalkCell, IEnumerable<WalkEdge>> grid = node => {
+                var result = new List<WalkEdge>();
+                foreach (var delta in new[] {new[]{1,0},new[]{-1,0},new[]{0,1},new[]{0,-1}})
+                {
+                    int x=node.X+delta[0], z=node.Z+delta[1];
+                    if (Math.Abs(x)>24 || Math.Abs(z)>24 || blocked==1 && x==10 && z<10) continue;
+                    result.Add(new WalkEdge(new WalkCell(x,0,z),1));
+                }
+                return result;
+            };
+            var reference = new WalkSearch(new[]{new WalkEdge(a,0)},grid,5000,()=>true);
+            var directed = new WalkSearch(new[]{new WalkEdge(a,0)},grid,5000,
+                heuristic: cell => Math.Abs(cell.X-destination.X)+Math.Abs(cell.Z-destination.Z));
+            int iterations=0;
+            while (!directed.Settled.Contains(destination) && iterations++<2000)
+            { int sliceBudget=3; directed.Continue(()=>sliceBudget-->0 && !directed.Settled.Contains(destination)); }
+            check(directed.Route(destination)!=null && directed.Distances[destination]==reference.Distances[destination],
+                "sliced focused search preserves the shortest route with and without a detour");
+            check(directed.MinimumPendingDistance>=directed.Distances[destination],"focused frontier certifies its goal cost");
+            check(directed.Settled.Count<reference.Settled.Count/2,"focused search avoids exploring unrelated floor space");
+        }
         Func<WalkCell, IEnumerable<WalkEdge>> fireDetour = delegate(WalkCell node)
         {
             if (node.Equals(a)) return new[] { new WalkEdge(b, 1), new WalkEdge(c, 1.4f) };

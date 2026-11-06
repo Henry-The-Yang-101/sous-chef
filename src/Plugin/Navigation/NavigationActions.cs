@@ -53,6 +53,7 @@ namespace SousChef.Plugin.Navigation
         private int nodeCount, candidateCount, startCount;
         private string observationError;
         private bool planning, focusedPlan, fullCatalogueRequested;
+        private StationMatch searchFocus;
         private const double PlanningBudgetMilliseconds = 12;
         private const double RecoveryBudgetMilliseconds = 25;
         private const double IncrementalBudgetMilliseconds = 3;
@@ -292,7 +293,7 @@ namespace SousChef.Plugin.Navigation
                     "searchMilliseconds", searchMilliseconds, "matchMilliseconds", matchMilliseconds, "searchNodes", nodeCount,
                     "searchGeneration", searchGeneration, "searchSlices", searchSlices, "searchReused", searchReused,
                     "searchReuseFailure", physics.ContinuityFailure, "startProofRevalidations", physics.StartProofRevalidations,
-                    "searchBackend", remoteSearch != null ? "worker_process" : "in_process",
+                    "searchBackend", remoteSearch != null ? "worker_process" : "in_process", "goalDirected", searchFocus != null,
                     "workerPid", WorkerHost.Current == null ? 0 : WorkerHost.Current.ProcessId,
                     "searchComplete", search != null && search.Complete,
                     "physicsQueries", physics.Queries, "candidateCount", candidateCount, "startCount", startCount, "observationError", observationError,
@@ -725,8 +726,12 @@ namespace SousChef.Plugin.Navigation
             bool selected = target.IsPoint || Selected(target.Object), canPickup, canPlace, canUse;
             Readiness(out canPickup, out canPlace, out canUse);
             bool ready = target.IsPoint || canPickup || canPlace || canUse;
-            Vector3 relativeVelocity = velocity + drift + parentVelocity - targetVelocity; relativeVelocity.y = 0;
-            float relativeSpeed = target.IsPoint && motionSampleValid ? observedRelativeSpeed : Mathf.Max(observedRelativeSpeed, relativeVelocity.magnitude);
+            // Wind and surface velocities describe requested displacement; native
+            // contacts and MovePosition integration can suppress it. Require a
+            // sustained observed rest relative to the target, not zero ambient
+            // force. Pending Rigidbody walking still prevents station arrival.
+            // The projected drift above independently retains the footing check.
+            float relativeSpeed = target.IsPoint && motionSampleValid ? observedRelativeSpeed : Mathf.Max(observedRelativeSpeed, velocity.magnitude);
             // Throw certification reserves PositionTolerance, not the wider
             // station-settling hysteresis. Refine an overshot generated stance.
             if (target.StrictPointArrival && distance > ArrivalCheck.PositionTolerance) arrival.Reset();
@@ -853,8 +858,10 @@ namespace SousChef.Plugin.Navigation
                 var candidates = target != null && target.IsPoint ? new List<Destination> { target } : Discover(player, focusedPlan ? station : null);
                 candidateCount = candidates.Count;
                 StationMatch focused = focusedPlan && candidates.Count == 1 ? new StationMatch(this, station) : null;
+                StationMatch nextFocus = physics.HasPortals ? null : focused;
                 bool hadIncremental = incrementalSearch;
-                searchReused = incremental && incrementalSearch && search != null && physics.CanContinueSearch();
+                bool sameFocus = nextFocus == null ? searchFocus == null : nextFocus.SameRegion(searchFocus);
+                searchReused = incremental && incrementalSearch && search != null && sameFocus && physics.CanContinueSearch();
                 List<WalkEdge> starts = null;
                 if (!searchReused)
                 {
@@ -876,14 +883,22 @@ namespace SousChef.Plugin.Navigation
                     searchGeneration++; searchSlices = 0;
                     // A fresh native slice keeps immediate certified options when
                     // animation/held-object motion invalidates continuity each frame.
-                    var local = new WalkSearch(starts, physics.Neighbours, 16000);
+                    searchFocus = nextFocus;
+                    var local = new WalkSearch(starts, physics.Neighbours, 16000,
+                        heuristic: nextFocus == null ? (Func<WalkCell, float>)null : nextFocus.LowerBound);
                     search = local;
                     if (focused == null) local.Continue(hasBudget);
                     else local.Continue(() => hasBudget() && local.MinimumPendingDistance < focused.CertificationCost, focused.Visit);
                 }
                 else if (remoteSearch == null)
                 {
-                    if (incremental && workerReady && !search.Complete && !search.NodeLimitReached)
+                    if (nextFocus != null)
+                    {
+                        focused.VisitIndexed();
+                        var local = (WalkSearch)search;
+                        local.Continue(() => hasBudget() && local.MinimumPendingDistance < focused.CertificationCost, focused.Visit);
+                    }
+                    else if (incremental && workerReady && !search.Complete && !search.NodeLimitReached)
                     {
                         starts = new List<WalkEdge>(physics.Starts());
                         remoteSearch = new RemoteWalk(worker, ++searchGeneration, starts.ToArray());
@@ -928,7 +943,7 @@ namespace SousChef.Plugin.Navigation
                         continue;
                     }
                     var match = focused ?? new StationMatch(this, d);
-                    if (focused == null) match.VisitIndexed();
+                    match.VisitIndexed();
                     match.Publish();
 
                 }
