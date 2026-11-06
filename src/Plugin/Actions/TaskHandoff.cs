@@ -166,7 +166,21 @@ namespace SousChef.Plugin.Actions
                     if (!HumanCanCollect(item, player, true, choice.Ground ? Single.MaxValue : 5)) return false;
                     ((Json.Record)handoffEvidence)["reconciledOutcome"] = child.Run.Reason; return true;
                 };
-                if (defer != null) delivery.AbandonBeforePress = () => child.RouteUnavailable;
+                if (defer != null)
+                {
+                    // Two chefs can block a counter stance. On a raft the chef
+                    // then moves in world space without getting closer. Give
+                    // the unpressed walk a new destination after sustained lack
+                    // of progress relative to the counter, even as it drifts.
+                    float closest = Single.MaxValue, replanAt = Time.realtimeSinceStartup + 6;
+                    delivery.AbandonBeforePress = delegate {
+                        if (child.RouteUnavailable) return true;
+                        if (choice.Target == null || choice.Throw || child.Run.Phase != "navigating") return false;
+                        float distance = Vector3.Distance(chef.transform.position, choice.Target.transform.position);
+                        if (distance + .15f < closest) { closest = distance; replanAt = Time.realtimeSinceStartup + 6; }
+                        return Time.realtimeSinceStartup >= replanAt;
+                    };
+                }
                 delivery.ReplanOnBlock = true; delivery.ReplanAfterPress = lossTolerant; yield return delivery;
                 if (!delivery.Succeeded)
                 {
