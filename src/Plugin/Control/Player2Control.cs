@@ -17,6 +17,45 @@ namespace SousChef.Plugin.Control
         private readonly ThrowOptions throwOptions;
         private readonly TaskActions tasks;
         private bool lastWasTask;
+        private readonly ReceiptBook receipts = new ReceiptBook();
+        private ReceiptBook.Entry activeReceipt;
+        private string kitchenEpoch = Guid.NewGuid().ToString("N");
+        private long dispatchGeneration;
+        private string receiptOperation;
+        private void ChangeEpoch()
+        {
+            CaptureReceipt(); activeReceipt = null; receipts.Clear();
+            kitchenEpoch = Guid.NewGuid().ToString("N"); dispatchGeneration++;
+        }
+        private void CaptureReceipt()
+        {
+            if (activeReceipt == null) return;
+            string state, reason; object evidence;
+            if (receiptOperation == "navigate_to")
+            {
+                reason = navigation.Action.Reason;
+                state = navigation.Action.State == "navigating" ? "running" :
+                    reason == "arrived" || reason == "positioned_no_action" ? "succeeded" : reason == "stopped" ? "cancelled" : "failed";
+                evidence = navigation.Describe();
+            }
+            else
+            {
+                ActionRun run = receiptOperation == "task" ? tasks.Run : LogisticsActions.Handles(receiptOperation) ? logistics.Run : interactions.Run;
+                state = run.State; reason = run.Reason;
+                var description = (Json.Record)(receiptOperation == "task" ? tasks.Describe() : run.Describe(null));
+                evidence = Json.Object("requestId", run.RequestId, "phase", run.Phase, "revision", run.Revision);
+                if (receiptOperation == "task")
+                {
+                    var details = (Json.Record)description["details"];
+                    ((Json.Record)evidence)["completedRepetitions"] = details["completedRepetitions"];
+                    ((Json.Record)evidence)["completedSteps"] = details["completedSteps"];
+                    if (state == "running" && details["waitingReason"] != null) { state = "waiting"; reason = (string)details["waitingReason"]; }
+                }
+            }
+            if ((state == "running" || state == "waiting") && suspendedAt >= 0) { state = "suspended"; reason = unavailable; }
+            activeReceipt.State = state; activeReceipt.Reason = reason; activeReceipt.Evidence = evidence;
+            if (activeReceipt.Terminal) activeReceipt = null;
+        }
         private readonly SemanticCatalog semanticCatalog;
         private bool lastWasLogistics;
         private long navigationSequence;
@@ -54,7 +93,7 @@ namespace SousChef.Plugin.Control
             throwOptions = new ThrowOptions(navigation);
             semanticCatalog = new SemanticCatalog(navigation);
             server = new ControlServer(port, Json.Object("type", "hello", "controlProtocolVersion", 1,
-                "sessionId", session, "bridgeVersion", BridgePlugin.Version, "player", 2, "mode", "direct_logical_input", "maxHoldMs", 1000, "actions", ActionRun.AllNames, "capabilities", CapabilityRegistry.Describe()),
+                "sessionId", session, "bridgeVersion", BridgePlugin.Version, "player", 2, "mode", "direct_logical_input", "maxHoldMs", 1000, "actions", ActionRun.AllNames, "capabilities", CapabilityRegistry.Describe(), "receiptProtocolVersion", 1),
                 delegate(int client) { lease.Disconnect(client); });
             server.Start();
         }
@@ -63,7 +102,7 @@ namespace SousChef.Plugin.Control
         {
             if (disposed) return;
             KitchenGate gate = KitchenGate.Inspect();
-            if (flow != gate.Flow) { Revoke("round_changed"); logistics.Reset("round_changed"); tasks.Reset("round_changed"); throwOptions.Reset(); semanticCatalog.Reset(); navigation.Reset("round_changed"); flow = gate.Flow; nextScan = 0; }
+            if (flow != gate.Flow) { Revoke("round_changed"); logistics.Reset("round_changed"); tasks.Reset("round_changed"); throwOptions.Reset(); semanticCatalog.Reset(); navigation.Reset("round_changed"); flow = gate.Flow; ChangeEpoch(); nextScan = 0; }
             if (Now >= nextScan) { Discover(); nextScan = Now + 0.25; }
             string reason = Check(gate);
             bool preservingSuspension = PreservingSuspension(reason);
@@ -102,6 +141,7 @@ namespace SousChef.Plugin.Control
                 lease.Owner(Now) == 0 && navigation.Action.State == "idle" && !interactions.Run.Running && !logistics.Run.Running && !tasks.Run.Running)
                 throwOptions.Tick(target);
             else throwOptions.Reset();
+            CaptureReceipt();
         }
 
         private void Discover()
@@ -117,7 +157,7 @@ namespace SousChef.Plugin.Control
             var inputConfig = PlayerInputLookup.GetInputConfig();
             var entry = inputConfig == null ? null : inputConfig.GetInputConfigEntry(PlayerInputLookup.Player.Two);
             if (target != found || config != entry || (scheme != null && (found == null || found.ControlScheme != scheme)))
-                Revoke("player_assignment_changed");
+                { Revoke("player_assignment_changed"); ChangeEpoch(); }
             target = found; config = entry;
         }
 
@@ -175,9 +215,35 @@ namespace SousChef.Plugin.Control
 
         private object Handle(int client, ControlCommand command)
         {
+            CaptureReceipt();
             string error = null;
             object actions = null;
-            if (command.Operation == "stop") { Revoke("stopped"); navigation.Stop("stopped"); }
+            ReceiptBook.Entry receipt = null;
+            if (command.Operation == "receipt")
+            {
+                receipt = receipts.Find(command.ReceiptId);
+                return Json.Object("type", "reply", "id", command.Id, "ok", true, "control", Describe(client), "receipt", receipt == null ? null : receipt.Describe());
+            }
+            if (command.Fenced)
+            {
+                // A retransmission never reacquires input or repeats physical effects.
+                receipt = receipts.Find(command.Id);
+                if (receipt != null)
+                    return Json.Object("type", "reply", "id", command.Id, "ok", receipt.Payload == command.Payload,
+                        "error", receipt.Payload == command.Payload ? null : "request_id_conflict", "control", Describe(client), "receipt", receipt.Describe());
+                Discover();
+                receipt = receipts.Add(command.Id, command.Payload, kitchenEpoch);
+                if (command.Epoch != kitchenEpoch || command.DispatchGeneration != dispatchGeneration)
+                {
+                    receipt.State = "rejected"; receipt.Reason = "stale_dispatch_context";
+                    return Json.Object("type", "reply", "id", command.Id, "ok", true, "control", Describe(client), "receipt", receipt.Describe());
+                }
+            }
+            if (command.Operation == "stop" || command.Operation == "cancel")
+            {
+                dispatchGeneration++; Revoke("stopped"); navigation.Stop("stopped"); CaptureReceipt();
+                if (receipt != null) { receipt.State = "succeeded"; receipt.Reason = "stopped"; }
+            }
             else if (command.Operation == "actions")
             {
                 Discover(); KitchenGate gate = KitchenGate.Inspect(); unavailable = Check(gate);
@@ -241,14 +307,19 @@ namespace SousChef.Plugin.Control
                 if (lease.Owner(Now) != client) error = "not_owner";
                 else if (!Autonomous) Revoke("released");
             }
-            return Json.Object("type", "reply", "id", command.Id, "ok", error == null,
-                "error", error, "control", Describe(client), "availableActions", actions);
+            if (receipt != null && command.Operation != "cancel")
+            {
+                if (error != null) { receipt.State = "rejected"; receipt.Reason = error; }
+                else { activeReceipt = receipt; receiptOperation = command.Operation; CaptureReceipt(); }
+            }
+            return Json.Object("type", "reply", "id", command.Id, "ok", receipt != null || error == null,
+                "error", error, "control", Describe(client), "availableActions", actions, "receipt", receipt == null ? null : receipt.Describe());
         }
 
         public object Describe(int client)
         {
             int owner = lease.Owner(Now);
-            return Json.Object("player", 2, "navigation", navigation.Describe(), "action", lastWasTask ? tasks.Describe() : lastWasLogistics ? logistics.Describe() : interactions.Describe(), "available", unavailable == null, "reason", unavailable,
+            return Json.Object("kitchenEpoch", kitchenEpoch, "dispatchGeneration", dispatchGeneration, "receiptProtocolVersion", 1, "player", 2, "navigation", navigation.Describe(), "action", lastWasTask ? tasks.Describe() : lastWasLogistics ? logistics.Describe() : interactions.Describe(), "available", unavailable == null, "reason", unavailable,
                 "worker", WorkerHost.Current == null ? Json.Object("state", "disabled") : Json.Object("state", WorkerHost.Current.Ready ? "ready" : "fallback", "pid", WorkerHost.Current.ProcessId, "error", WorkerHost.Current.Error, "encodedMessages", WorkerHost.Current.EncodedMessages, "throwBatches", WorkerHost.Current.Flights == null ? 0L : WorkerHost.Current.Flights.CompletedBatches),
                 "claimed", owner != 0, "ownedByYou", client != 0 && owner == client, "suspended", suspendedAt >= 0,
                 "lastRelease", lease.LastRelease, "inputTrace", traceInput ? inputTrace.ToArray() : null,

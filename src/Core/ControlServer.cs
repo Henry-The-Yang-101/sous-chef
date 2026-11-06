@@ -21,6 +21,7 @@ namespace SousChef.Core
         }
         private readonly object sync = new object();
         private readonly Queue<Request> pending = new Queue<Request>();
+        private readonly Queue<Request> priority = new Queue<Request>();
         private readonly List<TcpClient> clients = new List<TcpClient>();
         private readonly TcpListener listener;
         private readonly Action<int> disconnect;
@@ -67,7 +68,7 @@ namespace SousChef.Core
                     var line = new StringBuilder(); int b;
                     while ((b = stream.ReadByte()) != -1 && b != 10)
                     {
-                        if (b < 32 || b > 126 || line.Length >= 2048) throw new IOException("invalid line");
+                        if (b < 32 || b > 126 || line.Length >= 2304) throw new IOException("invalid line");
                         line.Append((char)b);
                     }
                     if (b == -1) break;
@@ -75,7 +76,7 @@ namespace SousChef.Core
                     try { command = ControlCommand.Parse(line.ToString()); }
                     catch (ArgumentException e) { Write(stream, Json.Encode(Json.Object("type", "reply", "ok", false, "error", e.Message))); continue; }
                     var request = new Request { Client = id, Command = command };
-                    lock (sync) { if (pending.Count >= 32) throw new IOException("control queue full"); pending.Enqueue(request); }
+                    lock (sync) { if (pending.Count + priority.Count >= 32) throw new IOException("control queue full"); if (command.Operation == "stop" || command.Operation == "cancel") priority.Enqueue(request); else pending.Enqueue(request); }
                     object response;
                     lock (request)
                     {
@@ -102,7 +103,7 @@ namespace SousChef.Core
             for (int i = 0; i < 8; i++)
             {
                 Request request;
-                lock (sync) { if (pending.Count == 0) break; request = pending.Dequeue(); }
+                lock (sync) { if (pending.Count + priority.Count == 0) break; request = priority.Count > 0 ? priority.Dequeue() : pending.Dequeue(); }
                 lock (request)
                 {
                     if (request.Cancelled) continue;

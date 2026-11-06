@@ -28,6 +28,18 @@ def reply(n, **fields):
 
 
 class ActionsTests(unittest.TestCase):
+    def test_stable_fenced_dispatch_and_receipt_lookup(self):
+        c = client(reply('a' * 32, receipt={'state': 'running'}), reply(2, receipt={'state': 'succeeded'}), reply('stopid', receipt={'state': 'succeeded'}))
+        self.assertEqual(c.execute('a' * 32, 'epoch', 7, 'wash_dishes', {})['state'], 'running')
+        self.assertEqual(c.receipt('a' * 32)['state'], 'succeeded')
+        c.cancel('stopid', 'epoch', 7)
+        self.assertEqual(c.socket.sent, [b'execute ' + b'a' * 32 + b' epoch 7 task wash_dishes 1\n',
+                                        b'receipt 2 ' + b'a' * 32 + b'\n', b'cancel stopid epoch 7\n'])
+        for ident in ('bad id', 'a' * 33, ''):
+            with self.assertRaises(ValueError): c.execute(ident, 'epoch', 7, 'wash_dishes', {})
+        with self.assertRaises(ValueError): c.execute('valid', 'bad epoch', 7, 'wash_dishes', {})
+        self.assertEqual(len(c.socket.sent), 3)
+
     def test_assembly_preserves_explicit_ticket_and_resource_allocation(self):
         c = client(reply(1))
         c.assemble_dish('order_A', bases=['d1', 'd2'], components=['d3'], equipment=['d4', 'd5'])

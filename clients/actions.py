@@ -21,6 +21,31 @@ class ActionClient(ControlClient):
         operation, tokens = wire_command(name, arguments, repetitions, version)
         return self._request(operation, *tokens)
 
+    def execute(self, request_id, epoch, generation, name, arguments, repetitions=1, *, version=None):
+        """Fenced, deduplicated dispatch. An absent receipt is never a retry signal."""
+        self._context(epoch, generation)
+        operation, tokens = wire_command(name, arguments, repetitions, version)
+        if name == 'stop':
+            raise ValueError('Stop uses the independent cancellation path')
+        self._request('execute', epoch, generation, operation, *tokens, request_id=request_id)
+        return self.last_response['receipt']
+
+    @staticmethod
+    def _context(epoch, generation):
+        import re
+        if not isinstance(epoch, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,32}', epoch) or type(generation) is not int or generation < 0:
+            raise ValueError('Invalid native dispatch context')
+
+    def receipt(self, request_id):
+        self._context(request_id, 0)
+        self._request('receipt', request_id)
+        return self.last_response['receipt']
+
+    def cancel(self, request_id, epoch, generation):
+        self._context(epoch, generation)
+        self._request('cancel', epoch, generation, request_id=request_id)
+        return self.last_response['receipt']
+
     def run_task(self, action, repetitions=1, *, items=None, player_id=1, order_id=None, bases=None, components=None, equipment=None):
         """Run one task. None means until Stop; assembly accepts exactly one ticket."""
         if contract(action)['kind'] != 'task':

@@ -8,6 +8,9 @@ namespace SousChef.Core
     {
         public string Operation, Id, Destination, Source, Selector, Condition, DesiredState;
         public long Sequence;
+        public string Epoch, Payload, ReceiptId;
+        public long DispatchGeneration;
+        public bool Fenced;
         public int Milliseconds, Buttons;
         public float X, Y;
         public bool Indefinite;
@@ -21,11 +24,31 @@ namespace SousChef.Core
         // Small, bounded ASCII command grammar; replies are NDJSON.
         public static ControlCommand Parse(string line)
         {
-            if (line == null || line.Length > (line.StartsWith("task ", StringComparison.Ordinal) ? 2048 : 256)) throw new ArgumentException("command_too_long");
+            if (line == null || line.Length > (line.StartsWith("execute ", StringComparison.Ordinal) ? 2304 : line.StartsWith("task ", StringComparison.Ordinal) ? 2048 : 256)) throw new ArgumentException("command_too_long");
             string[] p = line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
             if (p.Length < 2 || p[1].Length > 32) throw new ArgumentException("invalid_command");
             foreach (char c in p[1]) if (!Char.IsLetterOrDigit(c) && c != '-' && c != '_') throw new ArgumentException("invalid_id");
             var result = new ControlCommand { Operation = p[0], Id = p[1] };
+            if (p[0] == "receipt")
+            {
+                if (p.Length != 3 || !WireId(p[2])) throw new ArgumentException("invalid_receipt_id");
+                result.ReceiptId = p[2]; return result;
+            }
+            if (p[0] == "execute" || p[0] == "cancel")
+            {
+                long generation;
+                if (p.Length < 4 || !WireId(p[2]) || !Int64.TryParse(p[3], NumberStyles.None, CultureInfo.InvariantCulture, out generation) || generation < 0)
+                    throw new ArgumentException("invalid_dispatch_context");
+                if (p[0] == "cancel") { if (p.Length != 4) throw new ArgumentException("invalid_arguments"); }
+                else
+                {
+                    if (p.Length < 5 || (p[4] != "task" && (Array.IndexOf(ActionRun.AllNames, p[4]) < 0 || p[4] == "stop")))
+                        throw new ArgumentException("invalid_scheduled_action");
+                    result = Parse(p[4] + " " + p[1] + (p.Length == 5 ? "" : " " + String.Join(" ", p, 5, p.Length - 5)));
+                }
+                result.Fenced = true; result.Epoch = p[2]; result.DispatchGeneration = generation;
+                result.Payload = String.Join(" ", p); return result;
+            }
             if (p[0] == "task") { result.Task = TaskRequest.Parse(p); result.Indefinite = true; return result; }
             if (Array.IndexOf(ActionRun.LogisticsNames, p[0]) >= 0)
             {
@@ -87,6 +110,12 @@ namespace SousChef.Core
             float length = (float)Math.Sqrt(result.X * result.X + result.Y * result.Y);
             if (length > 1) { result.X /= length; result.Y /= length; }
             return result;
+        }
+        private static bool WireId(string value)
+        {
+            if (value.Length < 1 || value.Length > 32) return false;
+            foreach (char c in value) if (!(c >= 'a' && c <= 'z') && !(c >= 'A' && c <= 'Z') && !(c >= '0' && c <= '9') && c != '-' && c != '_') return false;
+            return true;
         }
         private static bool DestinationId(string value)
         {

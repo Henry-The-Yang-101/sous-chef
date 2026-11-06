@@ -3,6 +3,7 @@
 import argparse
 import json
 import math
+import re
 import socket
 import time
 
@@ -34,9 +35,11 @@ class ControlClient:
             raise ControlError('Disconnected or invalid control reply')
         return json.loads(line)
 
-    def _request(self, operation, *args):
+    def _request(self, operation, *args, request_id=None):
         self.request_id += 1
-        ident = str(self.request_id)
+        ident = str(self.request_id) if request_id is None else request_id
+        if not isinstance(ident, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,32}", ident):
+            raise ValueError("Invalid native request ID")
         line = ' '.join(map(str, (operation, ident, *args))) + '\n'
         self.socket.sendall(line.encode('ascii'))
         response = self._read()
