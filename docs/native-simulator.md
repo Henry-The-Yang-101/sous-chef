@@ -220,6 +220,9 @@ See [task verification](task-verification.md) for preparation, utensils, ready-f
 serving, mixer monitoring, dishes, firefighting, disposal and repetition tests.
 See [preparation regressions](preparation-regressions.md) for story 4-2 floor-food,
 chopping-board, available-work scheduling and repeat-handoff checks.
+See [automatic ingredient preparation](automatic-ingredients.md) for conveyor
+spawn catalogues, story 4-1 preparation, and pickup recovery when belt cargo moves
+out of reach or is destroyed.
 The opt-in task fixtures create native initial conditions; measured actions still
 use normal logical inputs. The previous 500 ms recovery window is now indefinite.
 

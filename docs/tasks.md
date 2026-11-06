@@ -74,12 +74,26 @@ Processed requests also recognize later stages in that native work-output chain:
 supplied chopped food can go directly into compatible equipment. Sources needing
 less chopping take priority. Raw requests retain exact raw identities.
 
-The localhost ingredient chooser is a dropdown populated from
-`catalog.preparationOptions`: native dispenser roots for this kitchen, or observed
-utensil types when `empty` is selected. The executor remembers exact objects it
+The localhost ingredient chooser uses `catalog.displayOptions.preparationOptions`:
+native dispenser prefabs, every output in the kitchen's automatic attached-food
+spawn tables, and every variant of switching dispensers. The idle task catalogue
+uses the same ingredient roots. These choices include food that has not spawned
+yet or is temporarily out of reach; unrelated loaded prefab assets and processed
+copies do not create extra ingredient choices. Automatic sources are discovered
+without requiring a pickup handler or navigable destination. New sources are
+discovered within one second; round reset clears the discovery cache.
+
+Selecting a type does not make its prefab a pickup source. The executor still
+waits for an actual obtainable item, follows its exact identity as it moves along
+a belt, and resolves chopped outputs through the same native work chain used by
+dispensers. Observed utensil types appear when `empty` is selected.
+The executor remembers exact objects it
 successfully handed off until the round resets; later preparation requests and
-repetitions leave those objects for the human and fetch a new dispenser item.
+repetitions leave those objects for the human and find another available source.
 This reservation does not alter the explicit low-level pickup commands.
+
+See [automatic ingredient regressions](automatic-ingredients.md) for the story
+4-1 traffic-kitchen native verification and its road-navigation limitation.
 
 Storage/handoff destinations must have an empty native holder. An empty plate on
 a counter is occupied: placing food there may transfer contents while retaining

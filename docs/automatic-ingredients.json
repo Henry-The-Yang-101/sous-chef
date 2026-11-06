@@ -1,0 +1,558 @@
+{
+  "source": "527ede8",
+  "runtimeHashes": [
+    "82bd3f20aabc771207cc24afe869d9327a25ab1fbd150af58e6644dad08cfc56"
+  ],
+  "passed": 12,
+  "attempts": 12,
+  "cases": [
+    {
+      "case": "rice_raw",
+      "fps": 60,
+      "success": true,
+      "seconds": 2.35,
+      "handoff": "counter_near_player",
+      "initialChefStaging": false,
+      "waitingReasons": [],
+      "evidence": ".local/prepare-belt-verified-default-60/rice_raw"
+    },
+    {
+      "case": "seaweed_raw",
+      "fps": 60,
+      "success": true,
+      "seconds": 5.91,
+      "handoff": "counter_near_player",
+      "initialChefStaging": false,
+      "waitingReasons": [],
+      "evidence": ".local/prepare-belt-verified-default-60/seaweed_raw"
+    },
+    {
+      "case": "cucumber_chopped",
+      "fps": 60,
+      "success": true,
+      "seconds": 4.24,
+      "handoff": "counter_near_player",
+      "initialChefStaging": false,
+      "waitingReasons": [],
+      "evidence": ".local/prepare-belt-verified-default-60/cucumber_chopped"
+    },
+    {
+      "case": "rice_cooked",
+      "fps": 60,
+      "success": true,
+      "seconds": 18.2,
+      "handoff": "counter_near_player",
+      "initialChefStaging": false,
+      "waitingReasons": [],
+      "evidence": ".local/prepare-belt-verified-default-60/rice_cooked"
+    },
+    {
+      "case": "fish_raw",
+      "fps": 60,
+      "success": true,
+      "seconds": 3.85,
+      "handoff": "at_player",
+      "initialChefStaging": true,
+      "waitingReasons": [
+        "settling_for_handoff"
+      ],
+      "evidence": ".local/prepare-belt-verified-seafood-60/fish_raw"
+    },
+    {
+      "case": "prawn_raw",
+      "fps": 60,
+      "success": true,
+      "seconds": 3.93,
+      "handoff": "at_player",
+      "initialChefStaging": true,
+      "waitingReasons": [
+        "settling_for_handoff"
+      ],
+      "evidence": ".local/prepare-belt-verified-seafood-60/prawn_raw"
+    },
+    {
+      "case": "rice_raw",
+      "fps": 20,
+      "success": true,
+      "seconds": 1.97,
+      "handoff": "counter_near_player",
+      "initialChefStaging": false,
+      "waitingReasons": [],
+      "evidence": ".local/prepare-belt-verified-default-20/rice_raw"
+    },
+    {
+      "case": "seaweed_raw",
+      "fps": 20,
+      "success": true,
+      "seconds": 5.8,
+      "handoff": "counter_near_player",
+      "initialChefStaging": false,
+      "waitingReasons": [
+        "waiting_for_ingredient"
+      ],
+      "evidence": ".local/prepare-belt-verified-default-20/seaweed_raw"
+    },
+    {
+      "case": "cucumber_chopped",
+      "fps": 20,
+      "success": true,
+      "seconds": 5.03,
+      "handoff": "counter_near_player",
+      "initialChefStaging": false,
+      "waitingReasons": [],
+      "evidence": ".local/prepare-belt-verified-default-20/cucumber_chopped"
+    },
+    {
+      "case": "rice_cooked",
+      "fps": 20,
+      "success": true,
+      "seconds": 18.32,
+      "handoff": "counter_near_player",
+      "initialChefStaging": false,
+      "waitingReasons": [
+        "waiting_for_prepared_ingredients"
+      ],
+      "evidence": ".local/prepare-belt-verified-default-20/rice_cooked"
+    },
+    {
+      "case": "fish_raw",
+      "fps": 20,
+      "success": true,
+      "seconds": 5.45,
+      "handoff": "drop_at_player",
+      "initialChefStaging": true,
+      "waitingReasons": [
+        "settling_for_handoff",
+        "waiting_for_ingredient"
+      ],
+      "evidence": ".local/prepare-belt-verified-seafood-20-recheck/fish_raw"
+    },
+    {
+      "case": "prawn_raw",
+      "fps": 20,
+      "success": true,
+      "seconds": 10.28,
+      "handoff": "drop_at_player",
+      "initialChefStaging": true,
+      "waitingReasons": [
+        "pickup_item_destroyed",
+        "settling_for_handoff",
+        "waiting_for_ingredient"
+      ],
+      "evidence": ".local/prepare-belt-verified-seafood-20-recheck/prawn_raw"
+    }
+  ],
+  "catalogues": [
+    {
+      "bridgeSha256": "82bd3f20aabc771207cc24afe869d9327a25ab1fbd150af58e6644dad08cfc56",
+      "dlc": -1,
+      "level": "s_sushi_4_1",
+      "options": [
+        "Cucumber",
+        "SushiRice",
+        "Seaweed",
+        "SushiPrawn",
+        "SushiFish"
+      ],
+      "sources": [
+        {
+          "source": "AttachingFoodSpawner (Rice)",
+          "active": true,
+          "sequential": true,
+          "prefabs": [
+            "SushiRice",
+            "Seaweed"
+          ]
+        },
+        {
+          "source": "AttachingFoodSpawner (1)",
+          "active": true,
+          "sequential": true,
+          "prefabs": [
+            "SushiPrawn",
+            "SushiFish"
+          ]
+        }
+      ],
+      "errors": [],
+      "unobservedAutomaticNames": [],
+      "evidence": ".local/prepare-belt-catalogues/s_sushi_4_1/"
+    },
+    {
+      "bridgeSha256": "82bd3f20aabc771207cc24afe869d9327a25ab1fbd150af58e6644dad08cfc56",
+      "dlc": -1,
+      "level": "s_sushi_5_1",
+      "options": [
+        "Flour",
+        "Chocolate",
+        "Honeycomb",
+        "Egg"
+      ],
+      "sources": [
+        {
+          "source": "AttachingFoodSpawner",
+          "active": true,
+          "sequential": false,
+          "prefabs": [
+            "Chocolate"
+          ]
+        },
+        {
+          "source": "AttachingFoodSpawner (1)",
+          "active": true,
+          "sequential": false,
+          "prefabs": [
+            "Flour"
+          ]
+        },
+        {
+          "source": "AttachingFoodSpawner (1)",
+          "active": true,
+          "sequential": false,
+          "prefabs": [
+            "Honeycomb"
+          ]
+        },
+        {
+          "source": "AttachingFoodSpawner",
+          "active": true,
+          "sequential": false,
+          "prefabs": [
+            "Egg"
+          ]
+        }
+      ],
+      "errors": [],
+      "unobservedAutomaticNames": [],
+      "evidence": ".local/prepare-belt-catalogues/s_sushi_5_1/"
+    },
+    {
+      "bridgeSha256": "82bd3f20aabc771207cc24afe869d9327a25ab1fbd150af58e6644dad08cfc56",
+      "dlc": -1,
+      "level": "s_city_h8",
+      "options": [
+        "Meat",
+        "Flour",
+        "Prawn",
+        "Fish",
+        "Carrot"
+      ],
+      "sources": [
+        {
+          "source": "AttachingFoodSpawner (1)",
+          "active": true,
+          "sequential": false,
+          "prefabs": [
+            "Fish"
+          ]
+        },
+        {
+          "source": "AttachingFoodSpawner (2)",
+          "active": true,
+          "sequential": false,
+          "prefabs": [
+            "Carrot"
+          ]
+        },
+        {
+          "source": "AttachingFoodSpawner (3)",
+          "active": true,
+          "sequential": false,
+          "prefabs": [
+            "Flour"
+          ]
+        },
+        {
+          "source": "AttachingFoodSpawner (4)",
+          "active": true,
+          "sequential": false,
+          "prefabs": [
+            "Prawn"
+          ]
+        },
+        {
+          "source": "AttachingFoodSpawner (5)",
+          "active": true,
+          "sequential": false,
+          "prefabs": [
+            "Meat"
+          ]
+        }
+      ],
+      "errors": [],
+      "unobservedAutomaticNames": [],
+      "evidence": ".local/prepare-belt-catalogues/s_city_h8/"
+    },
+    {
+      "bridgeSha256": "82bd3f20aabc771207cc24afe869d9327a25ab1fbd150af58e6644dad08cfc56",
+      "dlc": -1,
+      "level": "s_dynamic_Stage_01",
+      "options": [
+        "Lettuce",
+        "Tomato",
+        "Cucumber"
+      ],
+      "sources": [
+        {
+          "source": "AttachingFoodSpawner",
+          "active": false,
+          "sequential": false,
+          "prefabs": [
+            "SushiFish"
+          ]
+        },
+        {
+          "source": "AttachingFoodSpawner (1)",
+          "active": false,
+          "sequential": false,
+          "prefabs": [
+            "SushiRice"
+          ]
+        },
+        {
+          "source": "AttachingFoodSpawner (2)",
+          "active": false,
+          "sequential": false,
+          "prefabs": [
+            "Seaweed"
+          ]
+        }
+      ],
+      "errors": [],
+      "unobservedAutomaticNames": [],
+      "evidence": ".local/prepare-belt-catalogues/s_dynamic_Stage_01/"
+    },
+    {
+      "bridgeSha256": "82bd3f20aabc771207cc24afe869d9327a25ab1fbd150af58e6644dad08cfc56",
+      "dlc": -1,
+      "level": "s_wizard_5_5",
+      "options": [
+        "Cheese_Raw",
+        "Meat",
+        "Lettuce",
+        "Bun"
+      ],
+      "sources": [],
+      "errors": [],
+      "unobservedAutomaticNames": [],
+      "evidence": ".local/prepare-belt-catalogues/s_wizard_5_5/"
+    },
+    {
+      "bridgeSha256": "a51566424a18b622e7176c2c42161f0c5fac1d503981736ffc0159b37af43482",
+      "dlc": 5,
+      "level": "s_city_h12",
+      "options": [
+        "Flour",
+        "Meat",
+        "Carrot",
+        "Prawn"
+      ],
+      "sources": [
+        {
+          "source": "AttachingFoodSpawner",
+          "active": true,
+          "sequential": false,
+          "prefabs": [
+            "Prawn",
+            "Flour",
+            "Meat",
+            "Carrot"
+          ]
+        },
+        {
+          "source": "AttachingFoodSpawner (1)",
+          "active": true,
+          "sequential": false,
+          "prefabs": [
+            "Meat",
+            "Prawn",
+            "Flour",
+            "Carrot"
+          ]
+        },
+        {
+          "source": "AttachingFoodSpawner (2)",
+          "active": true,
+          "sequential": false,
+          "prefabs": [
+            "Flour",
+            "Meat",
+            "Carrot",
+            "Prawn"
+          ]
+        }
+      ],
+      "errors": [],
+      "unobservedAutomaticNames": [],
+      "evidence": ".local/prepare-belt-catalogues/s_city_h12/"
+    },
+    {
+      "bridgeSha256": "a51566424a18b622e7176c2c42161f0c5fac1d503981736ffc0159b37af43482",
+      "dlc": 5,
+      "level": "s_treehouse_3_2",
+      "options": [
+        "DLC05_Dough",
+        "Pepperoni",
+        "Tomato",
+        "Cheese_Raw",
+        "Olive",
+        "Chicken"
+      ],
+      "sources": [
+        {
+          "source": "AttachingFoodSpawner",
+          "active": true,
+          "sequential": false,
+          "prefabs": [
+            "DLC05_Dough",
+            "Pepperoni",
+            "Tomato",
+            "Cheese_Raw",
+            "Olive",
+            "Chicken"
+          ]
+        },
+        {
+          "source": "AttachingFoodSpawner (1)",
+          "active": true,
+          "sequential": false,
+          "prefabs": [
+            "DLC05_Dough",
+            "Pepperoni",
+            "Tomato",
+            "Cheese_Raw",
+            "Olive",
+            "Chicken"
+          ]
+        },
+        {
+          "source": "AttachingFoodSpawner (2)",
+          "active": true,
+          "sequential": false,
+          "prefabs": [
+            "DLC05_Dough",
+            "Pepperoni",
+            "Tomato",
+            "Cheese_Raw",
+            "Olive",
+            "Chicken"
+          ]
+        },
+        {
+          "source": "AttachingFoodSpawner (3)",
+          "active": true,
+          "sequential": false,
+          "prefabs": [
+            "DLC05_Dough",
+            "Pepperoni",
+            "Tomato",
+            "Cheese_Raw",
+            "Olive",
+            "Chicken"
+          ]
+        }
+      ],
+      "errors": [],
+      "unobservedAutomaticNames": [],
+      "evidence": ".local/prepare-belt-catalogues/s_treehouse_3_2/"
+    },
+    {
+      "bridgeSha256": "b41421364db66b4465aca18469b0c59b9386eb779582222c05114cb4c67da323",
+      "dlc": 3,
+      "level": "s_chinatown_1_5",
+      "options": [
+        "Flour",
+        "Prawn",
+        "Carrot",
+        "Meat"
+      ],
+      "sources": [
+        {
+          "source": "AttachingFoodSpawner",
+          "active": true,
+          "sequential": false,
+          "prefabs": [
+            "Prawn"
+          ]
+        },
+        {
+          "source": "AttachingFoodSpawner (1)",
+          "active": true,
+          "sequential": false,
+          "prefabs": [
+            "Meat"
+          ]
+        },
+        {
+          "source": "AttachingFoodSpawner (2)",
+          "active": true,
+          "sequential": false,
+          "prefabs": [
+            "Flour"
+          ]
+        },
+        {
+          "source": "AttachingFoodSpawner (3)",
+          "active": true,
+          "sequential": false,
+          "prefabs": [
+            "Carrot"
+          ]
+        }
+      ],
+      "errors": [],
+      "unobservedAutomaticNames": [],
+      "evidence": ".local/prepare-belt-catalogues/s_chinatown_1_5/"
+    }
+  ],
+  "additionalPreparation": {
+    "success": true,
+    "scene": "s_city_h8",
+    "ingredient": "Carrot",
+    "requestId": "4",
+    "handoff": {
+      "mode": "throw_ground_near_player",
+      "itemInstanceId": -257372,
+      "player": 1,
+      "predictedArrivalSeconds": null,
+      "targetInstanceId": null
+    },
+    "nativeItem": "Chopped_Carrot",
+    "fixtures": [],
+    "evidence": ".local/prepare-belt-chopped-carrot/"
+  },
+  "phaseActivation": {
+    "success": true,
+    "fixture": "native phase prerequisites advanced; no food or chef pose changes",
+    "observations": [
+      {
+        "phase": 0,
+        "options": [
+          "Lettuce",
+          "Tomato",
+          "Cucumber"
+        ]
+      },
+      {
+        "phase": 1,
+        "options": [
+          "Lettuce",
+          "Tomato",
+          "Cucumber"
+        ]
+      },
+      {
+        "phase": 2,
+        "options": [
+          "Lettuce",
+          "Tomato",
+          "Cucumber",
+          "Seaweed",
+          "SushiRice",
+          "SushiFish"
+        ]
+      }
+    ],
+    "evidence": ".local/prepare-belt-phase/"
+  }
+}
