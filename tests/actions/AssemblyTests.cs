@@ -201,6 +201,16 @@ internal static partial class Program
 
     private static void AssemblyProofs()
     {
+        {
+            var w=new World();var plate=AssemblyPlate(w,w.Delivery());var fish=AssemblyFood(w,w.Target,"fish");
+            var rice=AssemblyFood(w,w.Delivery(),"rice");
+            plate.Add(new ClientPlate {Accepts=item=>item==rice || !RecipeProof.Empty(RecipeProof.Composition(plate))});
+            var request=AssemblyJob(w,new[]{plate},new[]{fish,rice},Leaf("fish"),Leaf("rice"));StartAssembly(w,request);
+            GameObject firstPickup=null;
+            int additions=DriveAssembly(w,beforeArrival:(target,op)=>{if(op=="pick_up" && firstPickup==null)firstPickup=ActionObservations.Receiver(target);});
+            Check(firstPickup==rice && additions==2 && w.Tasks.Run.State=="succeeded",
+                "native intermediate plating constraints select executable recipe work before collecting blocked food");
+        }
         var a=Leaf("fish");var b=Leaf("rice");var goal=Recipe(a,b);
         Check(RecipeProof.Advances(Recipe(a),b,goal),"missing exact component advances recipe");
         Check(!RecipeProof.Advances(Recipe(a),a,goal),"native-compatible duplicate cannot advance recipe");

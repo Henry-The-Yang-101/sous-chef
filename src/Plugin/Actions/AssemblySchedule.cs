@@ -26,6 +26,19 @@ namespace SousChef.Plugin.Actions
         public readonly Dictionary<GameObject, float> RetryAt = new Dictionary<GameObject, float>();
         public Stage Root;
         public readonly List<Stage> Stages = new List<Stage>();
+        private readonly List<object> decisions = new List<object>();
+        private long decisionSequence;
+        private string lastDecision;
+        public void Record(string reason, Stage stage = null, GameObject source = null, GameObject destination = null)
+        {
+            if (reason.StartsWith("waiting_") && lastDecision == reason) return;
+            lastDecision = reason;
+            decisions.Add(Json.Object("sequence", ++decisionSequence, "time", Time.realtimeSinceStartup,
+                "reason", reason, "stage", stage == null ? -1 : Stages.IndexOf(stage),
+                "sourceInstanceId", source == null ? null : (object)source.GetInstanceID(),
+                "destinationInstanceId", destination == null ? null : (object)destination.GetInstanceID()));
+            if (decisions.Count > 96) decisions.RemoveAt(0);
+        }
         public void Initialize()
         {
             Root = new Stage { Goal = Order.Goal, Inputs = Order.Goal };
@@ -49,7 +62,8 @@ namespace SousChef.Plugin.Actions
             foreach (var stage in Stages) stages.Add(Json.Object("operation", stage.Processing ? stage.Mixing ? "mix" : "cook" : "assemble",
                 "vesselInstanceId", stage.Vessel == null ? null : (object)stage.Vessel.GetInstanceID()));
             return Json.Object("orderId", Order.Id, "recipe", Order.Recipe.name, "baseInstanceId", Base == null ? null : (object)Base.GetInstanceID(),
-                "verifiedAdditions", Additions, "compositionVerified", Verified, "waitingReason", Waiting, "stages", stages);
+                "verifiedAdditions", Additions, "compositionVerified", Verified, "waitingReason", Waiting, "stages", stages,
+                "decisions", decisions.ToArray());
         }
     }
 }

@@ -90,7 +90,12 @@ namespace SousChef.Plugin.Actions
             if (!AssemblyReady(source) || recipient == null || !RecipeProof.Advances(mixingInputs ? RecipeProof.MixingInputs(recipient) : RecipeProof.Composition(recipient), RecipeProof.Composition(source), goal)) return false;
             var container = recipient.GetComponent<ServerIngredientContainer>();
             var transfer = GameObjectUtils.RequestInterface<IContainerTransferBehaviour>(source);
-            return container != null && transfer != null && transfer.CanTransferToContainer(container);
+            if (container == null || transfer == null || !transfer.CanTransferToContainer(container)) return false;
+            // Plating may forward into a preparation base inside the plate.
+            // Its native recipe/prefab constraints can reject a structurally
+            // valid intermediate, even though the generic container accepts it.
+            var plate = recipient.GetComponent<ClientPlate>();
+            return plate == null || (bool)TaskNative.Call(plate, "CanPlaceOnPlate", source, new PlacementContext(PlacementContext.Source.Player));
         }
         private bool AssemblyDeferred(GameObject item)
         { float at; return assembly.RetryAt.TryGetValue(item, out at) && Time.realtimeSinceStartup < at; }
@@ -117,6 +122,7 @@ namespace SousChef.Plugin.Actions
                     if (RecipeProof.Equal(contents, assembly.Order.Goal) && AssembledDefinitionNode.Matching(contents, assembly.Order.Recipe))
                     {
                         assembly.Verified = true; assembly.Waiting = null; completed = 1;
+                        assembly.Record("composition_verified", assembly.Root, null, plate);
                         deliveredItems.Add(plate); yield break;
                     }
                 }
@@ -128,6 +134,7 @@ namespace SousChef.Plugin.Actions
         }
         private TaskStep AssemblyWait(string reason)
         {
+            assembly.Record(reason);
             assembly.Waiting = reason; float retry = Time.realtimeSinceStartup + .2f;
             return Until(reason, () => Time.realtimeSinceStartup >= retry);
         }

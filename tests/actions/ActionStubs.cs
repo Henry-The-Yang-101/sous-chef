@@ -86,6 +86,11 @@ public class ServerStack : MonoBehaviour
     public GameObject InspectTopOfStack() { return m_stackItems.Count==0 ? null : m_stackItems[m_stackItems.Count-1]; }
 }
 public class PlatingStepData : UnityEngine.Object { }
+public class ClientPlate : MonoBehaviour
+{
+    public Func<GameObject,bool> Accepts = item => true;
+    public bool CanPlaceOnPlate(GameObject item, PlacementContext context) { return Accepts(item); }
+}
 public class ServerPlate : MonoBehaviour
 {
     public ServerIngredientContainer m_ingredientContainer;

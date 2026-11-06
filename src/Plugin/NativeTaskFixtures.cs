@@ -22,9 +22,11 @@ namespace SousChef.Plugin
                 int required = loose ? 5 : 3;
                 bool chopped = args.Length == required + 1 && args[required] == "chopped";
                 if (args.Length != required && !chopped) throw new ArgumentException("invalid_ingredient_fixture");
-                GameObject source = FixtureObject(Int32.Parse(args[1]));
+                bool definition = args[1].StartsWith("i", StringComparison.Ordinal);
+                GameObject source = FixtureObject(Int32.Parse(definition ? args[2] : args[1]));
                 var supply = source.GetComponent<PickupItemSpawner>();
-                if (supply == null || supply.m_itemPrefab == null) throw new ArgumentException("fixture_requires_ingredient_supply");
+                GameObject prefab = definition ? FixturePreparedIngredient(args[1]) : supply == null ? null : supply.m_itemPrefab;
+                if (prefab == null || definition && loose) throw new ArgumentException("fixture_requires_configured_ingredient");
                 GameObject target = loose ? source : FixtureObject(Int32.Parse(args[2]));
                 var station = target.GetComponent<ServerAttachStation>();
                 var carrier = target.GetComponent<ServerPlayerAttachmentCarrier>();
@@ -38,7 +40,6 @@ namespace SousChef.Plugin
                         if (Single.IsNaN(value) || Single.IsInfinity(value) || Math.Abs(value) > 1000) throw new ArgumentException("invalid_fixture_position");
                         point[n] = value;
                     }
-                GameObject prefab = supply.m_itemPrefab;
                 if (chopped)
                 {
                     var seen = new HashSet<GameObject>();
@@ -60,6 +61,7 @@ namespace SousChef.Plugin
                 result["itemInstanceId"] = food.GetInstanceID(); result["sourceInstanceId"] = source.GetInstanceID();
                 result["preparation"] = chopped ? "chopped" : "raw";
                 result["targetInstanceId"] = loose ? null : (object)target.GetInstanceID();
+                if (definition) result["ingredientDefinitionId"] = args[1];
             }
             else if (args[0] == "serving-order")
             {
@@ -268,6 +270,24 @@ namespace SousChef.Plugin
                 else throw new ArgumentException("unknown_task_fixture");
             }
             Write("task-fixture.json", result);
+        }
+        private static GameObject FixturePreparedIngredient(string id)
+        {
+            // Resolve only native food configured in this kitchen, including
+            // automatic/conveyor sources. This is supplied initial stock, not
+            // a production replacement for a lost allocation.
+            var sources = new List<GameObject>();
+            foreach (var supply in UnityEngine.Object.FindObjectsOfType<PickupItemSpawner>()) sources.Add(supply.gameObject);
+            foreach (var switcher in UnityEngine.Object.FindObjectsOfType<PickupItemSwitcher>()) sources.Add(switcher.gameObject);
+            foreach (var root in new Actions.PreparationIngredients().Observe(sources))
+            {
+                GameObject prefab = root.Prefab; var seen = new HashSet<GameObject>();
+                while (prefab != null && prefab.GetComponent<WorkableItem>() != null && seen.Add(prefab))
+                    prefab = prefab.GetComponent<WorkableItem>().GetNextPrefab();
+                string ingredient, name;
+                if (prefab != null && Actions.LogisticsInventory.IngredientIdentity(prefab, out ingredient, out name) && ingredient == id) return prefab;
+            }
+            return null;
         }
         private static GameObject FixtureObject(int id)
         {

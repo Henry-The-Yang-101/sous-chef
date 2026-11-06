@@ -42,7 +42,12 @@ namespace SousChef.Plugin.Actions
         private GameObject SelectStageVessel(AssemblySchedule.Stage stage)
         {
             GameObject best = null; int progress = -1; float distance = Single.MaxValue;
-            foreach (var item in assembly.Equipment)
+            var vessels = new List<GameObject>(assembly.Equipment);
+            foreach (var item in assembly.Components)
+                if (item != null && item.GetComponent<PreparationContainer>() != null) vessels.Add(item);
+            foreach (var item in assembly.Bases)
+                if (item != null && item.GetComponent<PreparationContainer>() != null) vessels.Add(item);
+            foreach (var item in vessels)
             {
                 if (AssemblyDeferred(item) || !VesselFor(stage, item) || TaskNative.Burnt(item)) continue;
                 var entry = AssemblyEntry(item); var contents = stage.Mixing ? RecipeProof.MixingInputs(item) : RecipeProof.Composition(item);
@@ -232,6 +237,7 @@ namespace SousChef.Plugin.Actions
         private IEnumerable<TaskStep> ExecuteAssembly(AssemblyJob job)
         {
             var stage = job.Stage; var item = job.Source; var target = job.Destination;
+            assembly.Record(job.Rescue ? "rescue_finished_batch" : job.Operation, stage, item, target);
             Func<bool> valid = () => StageFits(stage);
             string operation = job.Operation;
             if (operation == "pick_component")
@@ -253,12 +259,19 @@ namespace SousChef.Plugin.Actions
                     RecipeProof.Equal(before, StageContents(stage)) && RecipeProof.Equal(addition, RecipeProof.Composition(item)) &&
                     AssemblyTransfer(item, stage.Vessel, stage.Inputs, stage.Processing && stage.Mixing);
             var next = AssemblyStep(operation, target, valid, operation == "transfer_contents" && stage.Processing && stage.Mixing ? "assembly_mixing_inputs" : null);
+            var beforePress = next.BeforePress;
+            next.BeforePress = () => {
+                bool allowed = beforePress();
+                assembly.Record(allowed ? "press_authorized" : "press_rejected", stage, item, target);
+                return allowed;
+            };
             if (operation == "pick_up") next.UseHeld = cargo => System.Object.ReferenceEquals(cargo, item);
             var abandon = next.AbandonBeforePress;
             next.AbandonBeforePress = () => abandon() || !job.Rescue && AssemblyHeatDue();
             yield return next;
             if (!next.Succeeded)
             {
+                assembly.Record("replan_uncompleted_step", stage, item, target);
                 assembly.RetryAt[operation == "place_at" ? target : item] = Time.realtimeSinceStartup + 1;
                 yield break;
             }
@@ -267,6 +280,7 @@ namespace SousChef.Plugin.Actions
                 if (!RecipeProof.Equal(RecipeProof.Combine(before, addition), StageContents(stage)))
                     throw new InvalidOperationException("assembly_composition_changed_after_transfer");
                 assembly.Additions++;
+                assembly.Record("transfer_verified", stage, item, target);
                 foreach (var owner in assembly.Stages)
                     if (owner != stage && System.Object.ReferenceEquals(owner.Vessel, item)) owner.Vessel = null;
             }
