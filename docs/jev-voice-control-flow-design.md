@@ -1211,7 +1211,7 @@ workspace changes. There is no automatic push or deployment implied.
 ### Milestone 1 — Shared capability contracts
 
 **Implemented 6 November 2026:** see [contracts and verification](capability-contracts.md).
-Milestones 2 and 3 are also implemented below; milestones 4–6 describe future integration work.
+Milestones 2–4 are also implemented below; milestones 5–6 describe future integration work.
 
 Deliver:
 
@@ -1269,13 +1269,23 @@ real microphone input and game sound, not only generated test audio.
 Implementation status, 6 November 2026: the Python adapter, compiler, inbox,
 clarification flow and preview controls are implemented. See the
 [setup and runtime boundaries](jev-interpreter.md) and
-[Chrome playground evaluation](jev-playground-evaluation.md). The default remains
-Preview. No Python Jev API/SDK call was made. The frozen eight-command evaluation
-produced three correct complete plans, four clarifications and one unsupported
-rejection; six deliberately incorrect plans were all blocked. This establishes
+[paired Chrome playground evaluation](jev-playground-round2.md). The default remains
+Preview. No Python Jev API/SDK call was made. The second round recorded 505
+additional playground observations. On 29 held-out commands, the revised
+interpreter completed 7/21 supported requests versus 5/21 previously; both blocked
+all eight unsupported/ambiguous requests. Sixteen deliberately incorrect or
+ambiguous final-plan proposals were also blocked. Frequent clarifications and
+some regressions remain. This establishes
 the implemented review flow, not reliable unattended acceptance. Live Python
 connectivity, microphone-to-game execution and broader confidence calibration
 remain unverified.
+
+The evaluated implementation separates intent from execution-constraint vetoes,
+binds preparation before quantity, and uses an equivalent/different/unclear
+Choice plus an independent ambiguity Noul for final coverage. These supersede
+the initial single-Noul coverage proposal above. Ordinary choice/completion/
+coverage gates are .85; critical gates are .97. Neither threshold was lowered
+during the second round or after viewing its holdout.
 
 Deliver:
 

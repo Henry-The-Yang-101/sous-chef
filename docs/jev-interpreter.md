@@ -26,7 +26,14 @@ The `.env` file is ignored by Git; the key is absent from browser state and logs
 - Complete simple plans use a candidate Choice with a companion coverage Noul.
   Other commands discover task occurrences until explicit `done`; preparation
   discovers item occurrences in the same way. Repeated families/ingredients stay
-  distinct. Every final plan has a separate coverage and ambiguity check.
+  distinct. Quantity is resolved after preparation so repeated ingredients in
+  different states have separate count context. Every final plan has a Choice
+  comparing equivalent/different/unclear meanings and an independent ambiguity
+  Noul; both gates must pass.
+- Intent routing uses a queue summary and separate early vetoes for concurrent
+  duties, external deadlines and region destinations. These vetoes do not replace
+  full-plan verification. Later stages retain exact queue entries and target
+  bindings for scoped edits and native arguments.
 - Counts are locally extracted candidates, never Score values or generated JSON.
   Contract defaults apply only to omitted fields; unspecified preparation asks
   for clarification. Counts outside native limits are not clamped.
@@ -57,9 +64,12 @@ The provisional gates after playground tuning are .85 for ordinary choices,
 destructive edits and explicit spoken clarification answers. Destructive edits
 also require separate deletion/interruption evidence or a direct scoped answer.
 These are policy thresholds, not calibrated probabilities of correctness.
-The [playground evaluation](jev-playground-evaluation.md) found frequent
-clarifications even for correct interpretations. Preview remains the recommended
-mode; automatic acceptance is an explicit experimental opt-in.
+The [paired playground evaluation](jev-playground-round2.md) completed 7/21
+supported held-out requests without clarification, versus 5/21 previously. Both
+versions blocked all eight unsupported/ambiguous requests; no wrong complete
+result passed in that sample. Clarifications remain frequent, including correct
+drafts. Preview remains the recommended mode; automatic acceptance is an explicit
+experimental opt-in.
 
 ## Bounds and diagnostics
 
@@ -93,5 +103,8 @@ accuracy.
 `scripts/jev_playground.py` exports exact production requests and replays copied
 playground responses without any network code. Its kitchen is explicitly synthetic.
 Playground observations, tuning, fixed-prompt holdout results and limitations are
-recorded in the [evaluation report](jev-playground-evaluation.md) and its
-[raw request/response evidence](jev-playground-evaluation.json).
+recorded in the [current evaluation report](jev-playground-round2.md) and its
+[raw request/response evidence](jev-playground-round2.json). The paired corpus
+runner, `scripts/jev_evaluate.py`, also keeps completion, clarification and safe
+blocking scores separate. The [first round](jev-playground-evaluation.md) remains
+available as historical evidence.

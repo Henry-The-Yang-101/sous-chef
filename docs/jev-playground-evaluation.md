@@ -1,5 +1,11 @@
 # Jev playground evaluation — 6 November 2026
 
+This is the **historical first round**, recorded against the implementation at
+`8df24b5`. See the [second-round generalization report](jev-playground-round2.md)
+for the current prompts, 505 additional observations and the paired 29-command
+holdout. The results and raw evidence below are retained unchanged as history;
+they are not current-prompt scores.
+
 Milestone 4 is implemented and works as a bounded interpretation and review
 flow. The current prompts often select the right actions and arguments, but
 still ask for clarification frequently. **Use Preview. These results do not
@@ -33,11 +39,12 @@ establish reliable unattended automatic acceptance.**
 
 The [machine-readable evidence](jev-playground-evaluation.json) includes complete
 requests, distributions, Noul values, model IDs, token usage, evaluation times,
-source hashes, final-case outcomes and provenance. `tests/test_jev_playground.py`
-replays all 21 final command cases against the exact current request builder,
-checks every recorded wire response, replays the final verifier probes and sends
-the eight recorded dialogue responses through the local interpreter service.
-Changing a prompt makes the replay fail instead of silently using stale answers.
+source hashes, final-case outcomes and provenance. At this round's commit,
+`tests/test_jev_playground.py` replayed its 21 final command cases, eight verifier
+probes and eight dialogue probes against those exact builders. The current suite
+still validates these archived wire responses and replays the second round's
+cases against current production prompts. Changing a prompt makes that replay
+fail instead of silently using stale answers.
 
 ## Frozen-prompt holdout
 
