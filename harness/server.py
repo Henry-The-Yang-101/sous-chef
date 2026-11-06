@@ -134,7 +134,7 @@ class HarnessBridge:
             raise HarnessError('Unsupported action')
         arguments = {} if arguments is None else arguments
         keys = {'work_at': {'until', 'timeout'}, 'wait_until': {'condition', 'timeout'},
-                'activate': {'desired_state'}, 'task': {'action', 'repetitions', 'items', 'player_id'}, 'move_item': {'item_id', 'source_instance_id'},
+                'activate': {'desired_state'}, 'task': {'action', 'repetitions', 'items', 'player_id', 'order_id', 'bases', 'components', 'equipment'}, 'move_item': {'item_id', 'source_instance_id'},
                 'stage_item': {'item_id', 'source_instance_id'}, 'clear_station': {'station_id', 'source_instance_id'},
                 'fetch_ingredient': {'ingredient'}, 'get_utensil': {'utensil_type'}}.get(operation, set())
         if operation not in allowed or not isinstance(arguments, dict) or arguments.keys() - keys:

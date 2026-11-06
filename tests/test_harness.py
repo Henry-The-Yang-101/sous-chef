@@ -143,6 +143,15 @@ class HarnessTests(unittest.TestCase):
         self.bridge.act('viewer', 'test-session', 'task', 0, 'task', {'action': 'deliver_completed_dishes', 'repetitions': 2})
         self.assertEqual(self.native.calls[-1], ('task', 'deliver_completed_dishes', 2, {}))
 
+    def test_assembly_forwards_explicit_ticket_and_resource_allocation(self):
+        self.native.tasks = [{'name': 'assemble_dish'}]
+        self.bridge.poll()
+        allocation = {'order_id': 'flow:One:7', 'bases': ['d1', 'd2'],
+                      'components': ['d3'], 'equipment': ['d4', 'd5']}
+        self.bridge.act('viewer', 'test-session', 'task', 0, 'task',
+                        {'action': 'assemble_dish', 'repetitions': 1, **allocation})
+        self.assertEqual(self.native.calls[-1], ('task', 'assemble_dish', 1, allocation))
+
     def test_display_choices_do_not_authorize_tasks_or_supply_jobs(self):
         self.native.display_options = {
             'items': [{'id': 'd99', 'objectInstanceId': 999}],
