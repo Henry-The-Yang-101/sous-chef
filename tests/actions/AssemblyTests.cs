@@ -126,6 +126,7 @@ internal static partial class Program
             pan.Add(new ServerIngredientContainer()).Contents.Add(Leaf("rice"));var step=new CookingStepData {m_uID=31};
             pan.Add(new CookingHandler {m_cookingType=step});pan.Add(new CookableContainer());pan.Add(new ServerCookingHandler());pan.Add(new ProcessorComposition {Step=step});
             counter.GetComponent<ServerAttachStation>().Item=pan;var burner=w.Delivery();burner.Add(new ServerCookingStation());burner.Add(new Pickup());
+            w.Delivery().transform.position=new Vector3(-3,0,0);
             var goal=new CookedCompositeAssembledNode {m_composition=new[]{Leaf("rice")},m_cookingStep=step,m_progress=CookedCompositeOrderNode.CookingProgress.Cooked};
             var request=AssemblyJob(w,new[]{plate},new GameObject[0],goal);request.Assembly.Equipment.Add(w.Navigation.RegisterItem(pan));request.Assembly.Equipment.Add(w.IdOf(burner));StartAssembly(w,request);
             var flags=System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic;
@@ -137,7 +138,16 @@ internal static partial class Program
             Check(job!=null && (GameObject)job.GetType().GetField("Source").GetValue(job)==pan,
                 "complete assigned batch on a counter can start targeted processor planning while the broad map rebuilds");
             catalog["complete"]=true;
-            Check(select.Invoke(w.Tasks,null)==null,"known unreachable processor is not treated as an unfinished discovery frontier");inventory.EndObservation();
+            Check(select.Invoke(w.Tasks,null)==null,"known unreachable processor is not treated as an unfinished discovery frontier");
+            inventory.EndObservation();counter.GetComponent<ServerAttachStation>().Item=null;pan.GetComponent<ServerIngredientContainer>().Contents.Clear();w.Hold(pan);
+            catalog["complete"]=false;inventory.BeginObservation();inventory.Refresh(w.Chef,catalog);
+            var parkingJob=select.Invoke(w.Tasks,null);
+            Check(parkingJob!=null && (string)parkingJob.GetType().GetField("Operation").GetValue(parkingJob)=="place_at","empty processing vessel seeks staging before its recipe additions");
+            var rejected=(GameObject)parkingJob.GetType().GetField("Destination").GetValue(parkingJob);schedule.RetryAt[rejected]=Time.realtimeSinceStartup+1;
+            parkingJob=select.Invoke(w.Tasks,null);
+            Check(parkingJob!=null && (GameObject)parkingJob.GetType().GetField("Destination").GetValue(parkingJob)!=rejected,
+                "processing-vessel staging tries another counter while the failed destination is deferred");
+            inventory.EndObservation();w.Tasks.Cancel("test");
         }
         {
             var w=new World();var plate=AssemblyPlate(w,w.Delivery());var doughCounter=w.Delivery();

@@ -138,11 +138,15 @@ namespace SousChef.Plugin.Actions
                 held.GetComponent<PreparationContainer>() != null || held.GetComponent<ServerPlate>() != null) return null;
             // Returning an empty assigned utensil while food cooks avoids
             // spending the next ready batch's spoil window freeing our hands.
-            var excluded = new HashSet<GameObject>();
-            foreach (var pair in assembly.RetryAt) if (AssemblyDeferred(pair.Key)) excluded.Add(pair.Key);
-            var counter = Parking(held, excluded: excluded, probeUnknown: true);
+            var counter = AssemblyParking(held, true);
             return counter == null ? null : new AssemblyJob { Stage = assembly.Root, Source = held,
                 Destination = counter, Operation = "place_at", Storage = true };
+        }
+        private GameObject AssemblyParking(GameObject item, bool probeUnknown)
+        {
+            var excluded = new HashSet<GameObject>();
+            foreach (var pair in assembly.RetryAt) if (AssemblyDeferred(pair.Key)) excluded.Add(pair.Key);
+            return Parking(item, excluded: excluded, probeUnknown: probeUnknown);
         }
         private AssemblyJob SelectStageWork(AssemblySchedule.Stage stage, bool probeUnknown = false)
         {
@@ -191,7 +195,7 @@ namespace SousChef.Plugin.Actions
                 {
                     if (entry.Holder == null || !(Counter(entry.Holder) || stage.Processing && stage.Mixing && ProcessingStationFor(stage, entry.Holder)) || TaskNative.Component<ServerConveyorStation>(entry.Holder) != null)
                     {
-                        var counter = Parking(stage.Vessel, probeUnknown: probeUnknown);
+                        var counter = AssemblyParking(stage.Vessel, probeUnknown);
                         if (counter != null) return MoveAssembly(stage, entry, counter);
                     }
                     else
