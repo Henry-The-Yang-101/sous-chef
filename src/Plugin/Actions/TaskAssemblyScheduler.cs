@@ -42,7 +42,7 @@ namespace SousChef.Plugin.Actions
                     !(other.Parent == stage && StageComplete(other))) return false;
             return true;
         }
-        private GameObject SelectStageVessel(AssemblySchedule.Stage stage)
+        private GameObject SelectStageVessel(AssemblySchedule.Stage stage, bool probeUnknown)
         {
             GameObject best = null; int progress = -1; float distance = Single.MaxValue;
             var vessels = new List<GameObject>(assembly.Equipment);
@@ -54,7 +54,7 @@ namespace SousChef.Plugin.Actions
             {
                 if (AssemblyDeferred(item) || !VesselFor(stage, item) || TaskNative.Burnt(item)) continue;
                 var entry = AssemblyEntry(item); var contents = stage.Mixing ? RecipeProof.MixingInputs(item) : RecipeProof.Composition(item);
-                if (entry == null || !Obtainable(entry, "move_item") || !RecipeProof.Subset(contents, stage.Inputs)) continue;
+                if (entry == null || !AssemblyObtainable(entry, "move_item", probeUnknown) || !RecipeProof.Subset(contents, stage.Inputs)) continue;
                 int count = RecipeProof.Parts(contents).Count;
                 // Do not reserve the only empty bowl for an oven dependency
                 // whose mixture still needs that bowl at the mixer.
@@ -123,8 +123,12 @@ namespace SousChef.Plugin.Actions
             // Keep its selection pending (or its identity pinned) while owned
             // processing dependencies advance and finished food is rescued.
             if (!System.Object.ReferenceEquals(assembly.Base, null) && (assembly.Base == null || !AssemblyBaseValid(assembly.Base))) return null;
-            if (assembly.Plating != null && StageComplete(assembly.Root)) return SelectStageWork(assembly.Plating);
-            return SelectStageWork(assembly.Root) ?? StoreEmptyAssemblyUtensil();
+            if (assembly.Plating != null && StageComplete(assembly.Root))
+                return SelectStageWork(assembly.Plating) ?? SelectStageWork(assembly.Plating, true);
+            // Exhaust work with known routes before probing another allocated
+            // dependency. Missing entries in an incomplete catalogue are not
+            // evidence that every assigned source is unreachable.
+            return SelectStageWork(assembly.Root) ?? SelectStageWork(assembly.Root, true) ?? StoreEmptyAssemblyUtensil();
         }
         private AssemblyJob StoreEmptyAssemblyUtensil()
         {
@@ -140,11 +144,11 @@ namespace SousChef.Plugin.Actions
             return counter == null ? null : new AssemblyJob { Stage = assembly.Root, Source = held,
                 Destination = counter, Operation = "place_at", Storage = true };
         }
-        private AssemblyJob SelectStageWork(AssemblySchedule.Stage stage)
+        private AssemblyJob SelectStageWork(AssemblySchedule.Stage stage, bool probeUnknown = false)
         {
             if (stage.Processing && stage.Vessel == null)
             {
-                stage.Vessel = SelectStageVessel(stage);
+                stage.Vessel = SelectStageVessel(stage, probeUnknown);
                 if (stage.Vessel != null)
                     foreach (var childStage in stage.Children)
                         if (System.Object.ReferenceEquals(childStage.Vessel, stage.Vessel)) childStage.Vessel = null;
@@ -187,13 +191,13 @@ namespace SousChef.Plugin.Actions
                 {
                     if (entry.Holder == null || !(Counter(entry.Holder) || stage.Processing && stage.Mixing && ProcessingStationFor(stage, entry.Holder)) || TaskNative.Component<ServerConveyorStation>(entry.Holder) != null)
                     {
-                        var counter = Parking(stage.Vessel);
+                        var counter = Parking(stage.Vessel, probeUnknown: probeUnknown);
                         if (counter != null) return MoveAssembly(stage, entry, counter);
                     }
                     else
                     {
-                        var source = AssemblySource(stage);
-                        if (source != null && AssemblyApproachCost(entry.Holder, source.Item) != Single.MaxValue)
+                        var source = AssemblySource(stage, probeUnknown);
+                        if (source != null && AssemblyApproachCost(entry.Holder, source.Item, probeUnknown) != Single.MaxValue)
                             return new AssemblyJob { Stage = stage, Source = source.Item, Destination = entry.Holder,
                             Operation = System.Object.ReferenceEquals(ActionObservations.Held(chef), source.Item) ? "transfer_contents" : "pick_component" };
                     }
@@ -215,7 +219,7 @@ namespace SousChef.Plugin.Actions
                 // by someone else or unreachable. Do not cook a replacement.
                 int ready = prepared.FindIndex(candidate => RecipeProof.Equal(candidate, childStage.Goal));
                 if (ready >= 0) { prepared.RemoveAt(ready); continue; }
-                var work = SelectStageWork(childStage); if (work != null) return work;
+                var work = SelectStageWork(childStage, probeUnknown); if (work != null) return work;
             }
             return null;
         }
@@ -230,7 +234,7 @@ namespace SousChef.Plugin.Actions
             bool held = System.Object.ReferenceEquals(ActionObservations.Held(chef), stage.Vessel);
             return new AssemblyJob { Stage = stage, Source = stage.Vessel, Destination = held ? destination : entry.Source, Operation = held ? "place_at" : "pick_up" };
         }
-        private LogisticsItem AssemblySource(AssemblySchedule.Stage stage)
+        private LogisticsItem AssemblySource(AssemblySchedule.Stage stage, bool probeUnknown)
         {
             LogisticsItem best = null; int mostParts = -1; bool bestHeld = false; float score = Single.MaxValue;
             var candidates = new List<GameObject>(assembly.Components); candidates.AddRange(assembly.Equipment);
@@ -240,7 +244,7 @@ namespace SousChef.Plugin.Actions
             {
                 if (System.Object.ReferenceEquals(source, stage.Vessel) || AssemblyDeferred(source) || !AssemblyTransfer(source, stage.Vessel, stage.Inputs, stage.Processing && stage.Mixing)) continue;
                 var entry = AssemblyEntry(source);
-                if (entry == null || !Obtainable(entry, "move_item")) continue;
+                if (entry == null || !AssemblyObtainable(entry, "move_item", probeUnknown)) continue;
                 // A staged partial batch belongs to its own dependency, even if
                 // a parent could physically accept the same raw components.
                 bool reserved = false;
@@ -253,6 +257,12 @@ namespace SousChef.Plugin.Actions
                 { best = entry; mostParts = parts; bestHeld = held; score = entry.Distance; }
             }
             return best;
+        }
+        private bool AssemblyPlanningStalled(ref float since)
+        {
+            if (child.Run.Phase != "recovering_navigation") { since = -1; return false; }
+            if (since < 0) since = Time.realtimeSinceStartup;
+            return Time.realtimeSinceStartup - since >= 2;
         }
         private bool AssemblyHeatDue()
         {
@@ -304,7 +314,9 @@ namespace SousChef.Plugin.Actions
             };
             if (operation == "pick_up") next.UseHeld = cargo => System.Object.ReferenceEquals(cargo, item);
             var abandon = next.AbandonBeforePress;
-            next.AbandonBeforePress = () => abandon() || !job.Rescue && !job.Storage && AssemblyHeatDue();
+            float planningSince = -1;
+            next.AbandonBeforePress = () => abandon() || !job.Rescue &&
+                (!job.Storage && AssemblyHeatDue() || AssemblyPlanningStalled(ref planningSince));
             yield return next;
             if (!next.Succeeded)
             {

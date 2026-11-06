@@ -283,6 +283,36 @@ internal static partial class Program
     private static void AssemblyProofs()
     {
         {
+            var w=new World();var plateCounter=w.Delivery();var plate=AssemblyPlate(w,plateCounter);
+            var fish=AssemblyFood(w,w.Target,"fish");var riceCounter=w.Delivery();var rice=AssemblyFood(w,riceCounter,"rice");
+            var request=AssemblyJob(w,new[]{plate},new[]{fish,rice},Leaf("fish"),Leaf("rice"));StartAssembly(w,request);
+            var flags=System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic;
+            var schedule=(AssemblySchedule)typeof(TaskActions).GetField("assembly",flags).GetValue(w.Tasks);
+            schedule.Base=plate;schedule.Root.Vessel=plate;
+            var inventory=(LogisticsInventory)typeof(TaskActions).GetField("inventory",flags).GetValue(w.Tasks);
+            var catalog=(Json.Record)w.Navigation.Available(w.Chef);catalog["complete"]=false;
+            catalog["destinations"]=((List<object>)catalog["destinations"]).Cast<Json.Record>()
+                .Where(d=>(int)d["objectInstanceId"]==riceCounter.GetInstanceID() || (int)d["objectInstanceId"]==plateCounter.GetInstanceID()).Cast<object>().ToList();
+            inventory.BeginObservation();inventory.Refresh(w.Chef,catalog);w.Chef.GroundCollider=null;
+            var select=typeof(TaskActions).GetMethod("SelectAssemblyWork",flags);var job=select.Invoke(w.Tasks,null);
+            Check(job!=null && (GameObject)job.GetType().GetField("Source").GetValue(job)==rice,
+                "known executable recipe work precedes an earlier allocated source with an unknown route");
+            inventory.EndObservation();catalog["destinations"]=new List<object>();inventory.BeginObservation();inventory.Refresh(w.Chef,catalog);
+            job=select.Invoke(w.Tasks,null);
+            Check(job!=null && (string)job.GetType().GetField("Operation").GetValue(job)=="pick_component",
+                "an incomplete catalogue with no certified source routes still probes an exact allocated addition");
+            var step=((IEnumerable<TaskStep>)typeof(TaskActions).GetMethod("ExecuteAssembly",flags).Invoke(w.Tasks,new[]{job})).First();
+            Check(w.Skills.Start(w.Chef,1,new ControlCommand {Id="route-probe",Operation="pick_up",Destination=w.Navigation.RegisterItem(w.Target)})==null,
+                "allocated pickup route probe starts");
+            w.Skills.Run.Advance("recovering_navigation");
+            Check(!step.AbandonBeforePress(),"a transient route rebuild retains its bounded opportunity");
+            Time.realtimeSinceStartup+=2.1f;
+            Check(step.AbandonBeforePress() && !w.Inputs.Contains(1),"stalled planning yields to other assembly work before any irreversible input");
+            w.Skills.Cancel("test");catalog["complete"]=true;
+            Check(select.Invoke(w.Tasks,null)==null,"a complete catalogue proving no source route withholds speculative pickup");
+            inventory.EndObservation();w.Tasks.Cancel("test");
+        }
+        {
             var w=new World();var counter=w.Delivery();var plate=AssemblyPlate(w,counter);
             var fish=AssemblyFood(w,w.Target,"fish");var rice=AssemblyFood(w,w.Delivery(),"rice");
             var request=AssemblyJob(w,new[]{plate},new[]{fish,rice},Leaf("fish"),Leaf("rice"));StartAssembly(w,request);

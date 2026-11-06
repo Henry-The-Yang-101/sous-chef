@@ -20,8 +20,9 @@ from harness.contents import ingredient_names
 
 
 DEFAULT_LEVELS = ['s_balloon_1_5', 's_balloon_2_2', 's_balloon_2_3',
-                  's_mine_2_5', 's_wizard_3_1', 's_wizard_3_2', 's_wizard_3_3',
-                  's_sushi_4_1', 's_mine_4_3', 's_mine_5_3', 's_balloon_5_2',
+                  's_mine_2_5', 's_mine_2_6', 's_wizard_3_1', 's_wizard_3_2', 's_wizard_3_3',
+                  's_sushi_1_3', 's_sushi_1_4', 's_sushi_4_1', 's_space_6_2',
+                  's_mine_4_3', 's_mine_5_3', 's_balloon_5_2',
                   's_city_h2', 's_city_h3', 's_city_h4']
 
 
@@ -228,6 +229,13 @@ class Sweep(Audit):
             counters = [d for d in catalog['deliveryDestinations'] if d['kind'] == 'counter' and routes.get(d['id']) is not None and
                         fields(objects[d['objectInstanceId']], 'ServerAttachStation').get('m_item') is None and
                         not any(c['type'] in ('ServerPlateStation', 'ServerConveyorStation', 'ServerMixingStation') for c in objects[d['objectInstanceId']]['components'])]
+        # A small kitchen can start with one assigned prepared component in P2's
+        # hands. This is an explicit initial condition, before measured inputs.
+        for obj in snapshot['objects']:
+            carrier = fields(obj, 'ServerPlayerAttachmentCarrier')
+            if obj['name'] == 'Player 2' and carrier and not any(carrier.get('m_carriedObjects', [])):
+                counters.append({'objectInstanceId': obj['unityInstanceId'], 'kind': 'chef'})
+                break
         candidates = []
         for order in catalog['assemblyOrders']:
             recipe = list(nodes(order['composition'])); leaves = [n for n in recipe if n['kind'] == 'ingredient']

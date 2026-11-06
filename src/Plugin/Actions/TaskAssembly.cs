@@ -61,6 +61,12 @@ namespace SousChef.Plugin.Actions
             return plate != null && !plate.IsReserved() && plate.GetPlatingStep() == assembly.Order.Recipe.m_platingStep &&
                 RecipeProof.Subset(RecipeProof.Composition(item), assembly.Order.Goal);
         }
+        private bool AssemblyObtainable(LogisticsItem entry, string operation, bool probeUnknown)
+        {
+            return Obtainable(entry, operation) || probeUnknown && !(bool)inventory.Catalog["complete"] &&
+                LogisticsChecks.Collect(chef, entry, operation, true) == "source_unreachable" &&
+                LogisticsChecks.CanCollectEmpty(chef, entry.Source);
+        }
         private GameObject SelectAssemblyBase()
         {
             GameObject best = null; int progress = -1; float distance = Single.MaxValue;
@@ -68,10 +74,11 @@ namespace SousChef.Plugin.Actions
             {
                 if (!AssemblyBaseValid(item)) continue;
                 var entry = AssemblyEntry(item);
-                if (entry == null || !Obtainable(entry, entry.CleanPlate ? "get_plate" : "move_item")) continue;
+                if (entry == null || !AssemblyObtainable(entry, entry.CleanPlate ? "get_plate" : "move_item", true)) continue;
+                float cost = AssemblyApproachCost(entry.Source, item, true);
                 int parts = RecipeProof.Parts(RecipeProof.Composition(item)).Count;
-                if (parts > progress || parts == progress && entry.Distance < distance)
-                { best = item; progress = parts; distance = entry.Distance; }
+                if (parts > progress || parts == progress && cost < distance)
+                { best = item; progress = parts; distance = cost; }
             }
             return best;
         }
@@ -90,10 +97,11 @@ namespace SousChef.Plugin.Actions
                 if (item == null || item.GetComponent<PreparationContainer>() == null || !AssemblyReady(item) ||
                     !RecipeProof.Subset(RecipeProof.Composition(item), assembly.Order.Goal)) continue;
                 var entry = AssemblyEntry(item);
-                if (entry == null || !Obtainable(entry, "move_item")) continue;
+                if (entry == null || !AssemblyObtainable(entry, "move_item", true)) continue;
+                float cost = AssemblyApproachCost(entry.Source, item, true);
                 int parts = RecipeProof.Parts(RecipeProof.Composition(item)).Count;
-                if (parts > progress || parts == progress && entry.Distance < distance)
-                { best = item; progress = parts; distance = entry.Distance; }
+                if (parts > progress || parts == progress && cost < distance)
+                { best = item; progress = parts; distance = cost; }
             }
             if (best == null) return;
             assembly.Root.Vessel = best;
