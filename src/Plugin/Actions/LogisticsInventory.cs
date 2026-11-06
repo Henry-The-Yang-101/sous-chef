@@ -31,13 +31,17 @@ namespace SousChef.Plugin.Actions
         private readonly NavigationActions navigation;
         private readonly Dictionary<int, float> distances = new Dictionary<int, float>();
         private readonly List<GameObject> otherHeldItems = new List<GameObject>();
+        private readonly PreparationIngredients preparationIngredients = new PreparationIngredients();
+        private List<PreparationIngredient> ingredientRoots;
+        public List<PreparationIngredient> IngredientRoots
+        { get { return ingredientRoots ?? (ingredientRoots = preparationIngredients.Observe(navigation.Targets())); } }
         public IEnumerable<GameObject> OtherHeldItems { get { return otherHeldItems; } }
         private bool snapshot, refreshed;
         public Json.Record Catalog { get; private set; }
         public void BeginObservation() { snapshot = true; refreshed = false; }
         public void EndObservation() { snapshot = false; }
         public LogisticsInventory(NavigationActions nav) { navigation = nav; }
-        public void Reset() { Items.Clear(); Errors.Clear(); homes.Clear(); homeItems.Clear(); distances.Clear(); otherHeldItems.Clear(); }
+        public void Reset() { Items.Clear(); Errors.Clear(); homes.Clear(); homeItems.Clear(); distances.Clear(); otherHeldItems.Clear(); ingredientRoots = null; preparationIngredients.Reset(); }
         public float DistanceTo(GameObject target)
         { float cost; return target != null && distances.TryGetValue(target.GetInstanceID(), out cost) ? cost : Single.MaxValue; }
         public static string Normalize(string text)
@@ -127,7 +131,7 @@ namespace SousChef.Plugin.Actions
         public void Refresh(PlayerControls chef, Json.Record currentCatalog = null)
         {
             if (snapshot && refreshed) return;
-            Items.Clear(); Errors.Clear(); distances.Clear();
+            Items.Clear(); Errors.Clear(); distances.Clear(); ingredientRoots = null;
             var catalog = currentCatalog ?? (Json.Record)navigation.Available(chef);
             Catalog = catalog; refreshed = true;
             // One synchronous observation pass: discover carriers once, rather
@@ -198,10 +202,12 @@ namespace SousChef.Plugin.Actions
                 System.Object.ReferenceEquals(recorded, item) && home != null && home.activeInHierarchy ? home : null;
         }
         public static bool IngredientMatches(LogisticsItem entry, string selector)
+        { return IngredientMatches(entry.IngredientId, entry.IngredientName, selector); }
+        public static bool IngredientMatches(string id, string label, string selector)
         {
-            if (entry.IngredientId == null) return false;
-            if (String.Equals(entry.IngredientId, selector, StringComparison.Ordinal)) return true;
-            string name = Normalize(entry.IngredientName), requested = Normalize(selector);
+            if (id == null) return false;
+            if (String.Equals(id, selector, StringComparison.Ordinal)) return true;
+            string name = Normalize(label), requested = Normalize(selector);
             return name == requested || (name.EndsWith("raw") && name.Substring(0, name.Length - 3) == requested);
         }
     }

@@ -216,6 +216,35 @@ internal static class Program
         var work=typeof(TaskActions).GetMethod("PreparationWork",System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.NonPublic);
         Check((int)work.Invoke(null,new object[] {root})==2,"preparation follows every native work stage");
     }
+    private static void AutomaticPreparationSources()
+    {
+        var w=new World();var chopped=w.Ingredient("Fish");
+        var root=new GameObject("Fish");root.Add(new WorkableItem {Next=chopped});
+        var automatic=new GameObject("automatic source with no pickup handler");
+        automatic.Add(new TriggerAttachedSpawn {m_attachmentPrefabs=new[] {new TriggerAttachedSpawn.WeightedPrefab {AttachmentPrefab=root}}});
+        var catalog=(Json.Record)w.Navigation.Available(w.Chef);w.Tasks.Decorate(catalog,w.Chef);
+        string rootId,label;LogisticsInventory.IngredientIdentity(root,out rootId,out label);
+        Check(((List<object>)catalog["preparationOptions"]).Cast<Json.Record>().Any(item=>(string)item["id"]==rootId),"task catalogue includes automatic food before its first spawn");
+        var flags=System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic;
+        var source=typeof(TaskActions).GetMethod("PreparationSource",flags);
+        Func<string,string,LogisticsItem> select=(selector,state)=>(LogisticsItem)source.Invoke(w.Tasks,new object[] {new PreparationRequest {Selector=selector,Preparation=state}});
+        Check(select(rootId,"raw")==null,"configured automatic prefab cannot be collected before a real item exists");
+        var counter=w.Delivery();counter.Add(new Pickup());counter.GetComponent<ServerAttachStation>().Item=chopped;
+        foreach(string state in new[] {"chopped","cooked","mixed"})
+            Check(select(rootId,state)?.Item==chopped,"automatic root recognizes native work output even with no raw item present: "+state);
+        Check(select(rootId,"raw")==null && select("Fish","raw")==null,"raw ID and same-name alias cannot substitute chopped belt food");
+        w.Hold(chopped);
+        var held=typeof(TaskActions).GetMethod("HeldPreparation",flags);
+        Check((bool)held.Invoke(w.Tasks,new object[] {chopped,new PreparationRequest {Selector=rootId,Preparation="chopped"}}),"caught processed belt ingredient retains its original selector");
+        Check(!(bool)held.Invoke(w.Tasks,new object[] {chopped,new PreparationRequest {Selector="Fish",Preparation="raw"}}),"held processed belt food does not satisfy a raw alias");
+        var delivered=(HashSet<GameObject>)typeof(TaskActions).GetField("deliveredItems",flags).GetValue(w.Tasks);delivered.Add(chopped);
+        Check(select(rootId,"chopped")==null,"automatic food preserves handoff reservations");
+        w.Hold(null);counter.GetComponent<ServerAttachStation>().Item=null;
+        var spawned=new GameObject("Fish");spawned.Add(new WorkableItem {Next=chopped});
+        counter.GetComponent<ServerAttachStation>().Item=spawned;
+        var selected=select(rootId,"raw");
+        Check(selected!=null && selected.Item==spawned && !selected.Supply,"later belt cargo becomes an exact-item pickup, never a dispenser interaction");
+    }
     private static void AvailablePreparationWork()
     {
         foreach(string preparation in new[] {"raw","chopped","cooked"})
@@ -1861,6 +1890,6 @@ internal static class Program
         Check(planner.Prepare(w.Chef,item,human,groundHandoff:true)==null && planner.RestoreGround(plan),
             "a selected landing stays valid while the chef faces elsewhere; the cargo lands along its planned throw");
     }
-    private static void Main() { CounterForecasts();PersistentTasks();HumanSinkEligibility();NativeUtensilDefinitions();PreparationEquipmentDiscovery();PreparedIngredientSources();AvailablePreparationWork();OccupiedBoards();HeldItemTasks();ReconciledHandoffs();MixerReadiness();ReadyFoodTasks();DishDeliveryTasks();PauseTimers();MovingPickups();Transactions();IngredientsAndDisposal();WorkAndWait();ImmediateNativeWork();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();GroundThrows();RaftLandingFallback();CurrentPoseLandingClearance();SupportedLandingArea();WalkingLandingClearance();LandingFootprintOrientation();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
+    private static void Main() { CounterForecasts();PersistentTasks();HumanSinkEligibility();NativeUtensilDefinitions();PreparationEquipmentDiscovery();PreparedIngredientSources();AutomaticPreparationSources();AvailablePreparationWork();OccupiedBoards();HeldItemTasks();ReconciledHandoffs();MixerReadiness();ReadyFoodTasks();DishDeliveryTasks();PauseTimers();MovingPickups();Transactions();IngredientsAndDisposal();WorkAndWait();ImmediateNativeWork();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();GroundThrows();RaftLandingFallback();CurrentPoseLandingClearance();SupportedLandingArea();WalkingLandingClearance();LandingFootprintOrientation();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
     private static ClientInteractable GetCurrentlyInteractingForTest(this PlayerControls chef) { return chef.GetComponent<ClientPlayerControlsImpl_Default>().Current; }
 }

@@ -45,7 +45,7 @@ namespace SousChef.Plugin.Actions
         {
             var items = new List<object>(); var ingredients = new List<object>(); var utensils = new List<string>();
             var preparation = new List<object>(); var destinations = new List<object>();
-            var ingredientIds = new HashSet<string>(); var roots = new HashSet<string>();
+            var ingredientIds = new HashSet<string>();
             var seenItems = new HashSet<int>();
             foreach (LogisticsItem item in inventory.Items)
             {
@@ -67,17 +67,15 @@ namespace SousChef.Plugin.Actions
                 items.Add(Json.Object("id", id, "label", item.name, "objectInstanceId", item.GetInstanceID(),
                     "utensilType", type == "plate" ? null : type, "inUse", true));
             }
-            // Supplies remain selectable regardless of route, free hands, or the
-            // current contents of a station. No global ingredient registry is used.
+            // Include all configured outputs, even between automatic spawns.
+            // This is a type choice, never a claim that cargo is obtainable now.
+            foreach (PreparationIngredient root in inventory.IngredientRoots)
+            {
+                preparation.Add(Json.Object("id", root.Id, "label", root.Name, "utensil", false));
+                if (ingredientIds.Add(root.Id)) ingredients.Add(Json.Object("id", root.Id, "label", root.Name));
+            }
             foreach (GameObject go in navigation.Targets())
             {
-                var spawner = go.GetComponent<PickupItemSpawner>();
-                string id, label;
-                if (spawner != null && LogisticsInventory.IngredientIdentity(spawner.m_itemPrefab, out id, out label))
-                {
-                    if (roots.Add(id)) preparation.Add(Json.Object("id", id, "label", label, "utensil", false));
-                    if (ingredientIds.Add(id)) ingredients.Add(Json.Object("id", id, "label", label));
-                }
                 if (PlayerControlsHelper.GetControllingPlacementHandler_Client(go) != null)
                     destinations.Add(navigation.TargetIdentity(go));
             }

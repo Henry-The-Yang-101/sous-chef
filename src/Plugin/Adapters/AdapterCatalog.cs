@@ -105,6 +105,9 @@ namespace SousChef.Plugin.Adapters
             Add(s, "dishes", "ServerPlateStation", "m_data");
             Add(s, "dishes", "PlateStationMessage", "m_delivered m_success");
             Add(s, "spawners", "PickupItemSpawner", "m_itemPrefab m_pickupPriority m_spawnCost");
+            Add(s, "spawners", "PickupItemSwitcher", "m_itemPrefabs m_switchTrigger");
+            Add(s, "spawners", "TriggerAttachedSpawn", "m_attachmentPrefabs m_spawnInOrder m_maxNumber m_gridPointSelector");
+            Add(s, "spawners", "TriggerAttachedSpawn+WeightedPrefab", "AttachmentPrefab m_weight");
             Add(s, "spawners", "ServerPlacementItemSpawner", "m_orderDefinition m_attachStation");
             Add(s, "spawners", "ServerLimitedQuantityItem", "m_fLastActivity m_Manager");
             Add(s, "spawners", "ServerLimitedQuantityItemManager", "m_AllObjects");

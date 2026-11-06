@@ -105,6 +105,12 @@ public class ClientTriggerToggleOnAnimator : MonoBehaviour { public bool Current
 public class ClientToggleSwitchCosmeticDecisions : MonoBehaviour { public ClientTriggerToggleOnAnimator m_toggleOnAnimator; }
 public class ServerWorkableItem : MonoBehaviour { public bool Finished; public int m_subProgress; public float Progress; public bool HasFinished() { return Finished; } public float GetProgress() { return Progress; } }
 public class WorkableItem : MonoBehaviour { public int m_stages=3; public GameObject Next; public GameObject GetNextPrefab() { return Next; } }
+public class TriggerAttachedSpawn : MonoBehaviour
+{
+    public class WeightedPrefab { public GameObject AttachmentPrefab; }
+    public WeightedPrefab[] m_attachmentPrefabs;
+}
+public class PickupItemSwitcher : MonoBehaviour { public GameObject[] m_itemPrefabs; }
 public class ServerRubbishBin : MonoBehaviour { }
 public class ServerInteractable : MonoBehaviour
 {

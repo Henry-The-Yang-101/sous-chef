@@ -57,6 +57,32 @@ internal static class Program
         Check(((string[])identity["possibleOperations"]).Contains("work_at"), "empty board retains work action");
         Check(((string[])identity["possibleWorkConditions"]).Contains("work_complete"), "empty board retains its completion condition");
         Check(!InteractionActions.Offered(chef, board).Contains("work_at"), "visible work action remains unavailable on an empty board");
+        var fish = new GameObject("Fish");
+        fish.Add(new IngredientPropertiesComponent { m_ingredientOrderNode = new Definition { name = "Fish", m_uID = 456 } });
+        var rawFish = new GameObject("Fish"); rawFish.Add(new WorkableItem { Next = fish });
+        var rice = new GameObject("Rice");
+        rice.Add(new IngredientPropertiesComponent { m_ingredientOrderNode = new Definition { name = "Rice", m_uID = 789 } });
+        var automatic = new GameObject("non-interactive belt source");
+        automatic.Add(new TriggerAttachedSpawn { m_attachmentPrefabs = new[] {
+            new TriggerAttachedSpawn.WeightedPrefab { AttachmentPrefab = rawFish },
+            new TriggerAttachedSpawn.WeightedPrefab { AttachmentPrefab = rice },
+            new TriggerAttachedSpawn.WeightedPrefab { AttachmentPrefab = raw },
+            new TriggerAttachedSpawn.WeightedPrefab { AttachmentPrefab = pot }, null,
+            new TriggerAttachedSpawn.WeightedPrefab() } });
+        Time.realtimeSinceStartup += 1.1f;
+        jobs.Decorate(catalog, chef, true); display = (Json.Record)catalog["displayOptions"];
+        prep = ((List<object>)display["preparationOptions"]).Cast<Json.Record>().Where(item => !(bool)item["utensil"]).ToList();
+        Check(prep.Count == 3 && prep.Any(item => (string)item["label"] == "Fish") && prep.Any(item => (string)item["label"] == "Rice"),
+            "all automatic variants appear before any cargo exists, without a navigable spawner; duplicates, tools and nulls excluded");
+        Check(((List<object>)display["ingredients"]).Cast<Json.Record>().Any(item => (string)item["label"] == "Rice"), "automatic types also appear in the ingredient chooser");
+        Check(!jobs.Inventory.Items.Any(item => item.Item == rawFish || item.Item == rice), "automatic prefabs never become obtainable inventory");
+        Check(((List<object>)((Json.Record)catalog["jobOptions"])["fetch_ingredient"]).Count == 0, "unspawned types do not authorize fetch jobs");
+        // Native crates may change their output later in the round.
+        supply.Add(new PickupItemSwitcher { m_itemPrefabs = new[] { raw, rice, null } });
+        automatic.activeInHierarchy = false;
+        jobs.Decorate(catalog, chef, true); display = (Json.Record)catalog["displayOptions"];
+        prep = ((List<object>)display["preparationOptions"]).Cast<Json.Record>().Where(item => !(bool)item["utensil"]).ToList();
+        Check(prep.Count == 2 && prep.Any(item => (string)item["label"] == "Rice"), "switching dispenser includes its future outputs and removed belt source disappears immediately");
         supply.activeInHierarchy = counter.activeInHierarchy = pot.activeInHierarchy = false;
         humanCarrier.Item = null; dirty.activeInHierarchy = false;
         catalog = Json.Object("destinations", new List<object>(), "actions", new List<object>());
@@ -64,6 +90,12 @@ internal static class Program
         display = (Json.Record)catalog["displayOptions"];
         Check(((List<object>)display["preparationOptions"]).Count == 0, "removed level objects disappear even while busy");
         Check(((List<object>)display["items"]).Count == 0, "removed exact items are not retained");
+        // A new level must not wait for the old scan deadline or retain its food.
+        var newSource = new GameObject("new level source");
+        newSource.Add(new TriggerAttachedSpawn { m_attachmentPrefabs = new[] { new TriggerAttachedSpawn.WeightedPrefab { AttachmentPrefab = unrelated } } });
+        jobs.Reset("round_changed"); jobs.Decorate(catalog, chef, true); display = (Json.Record)catalog["displayOptions"];
+        prep = ((List<object>)display["preparationOptions"]).Cast<Json.Record>().ToList();
+        Check(prep.Count == 1 && (string)prep[0]["label"] == "Chocolate", "reset discovers the new kitchen immediately without leaking old ingredient types");
         Console.WriteLine("PASS: " + checks + " harness display checks (production catalog, mocked native state)");
     }
 }

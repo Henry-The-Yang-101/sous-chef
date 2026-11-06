@@ -229,12 +229,12 @@ namespace SousChef.Plugin.Actions
             if (parentBusy || Run.Running || child.Run.Running || navigation.Action.State != "idle") return;
             chef = actor; inventory.Refresh(chef, catalog);
             var preparation = new List<object>(); var selectors = new HashSet<string>();
-            // Dispenser prefabs are the roots of the level's ingredient trees.
+            // Dispensers and automatic spawns define the ingredient trees.
             // Loose processed food must not change the set of selectable roots.
+            foreach (PreparationIngredient root in inventory.IngredientRoots)
+                preparation.Add(Json.Object("id", root.Id, "label", root.Name, "utensil", false));
             foreach (LogisticsItem item in inventory.Items)
             {
-                if (item.Supply && item.IngredientId != null && selectors.Add(item.IngredientId))
-                    preparation.Add(Json.Object("id", item.IngredientId, "label", item.IngredientName, "utensil", false));
                 string type = item.CleanPlate ? "plate" : item.UtensilType;
                 if (type != null && selectors.Add("utensil:" + type))
                     preparation.Add(Json.Object("id", type, "label", type, "utensil", true));

@@ -9,16 +9,16 @@ namespace SousChef.Plugin.Actions
     {
         partial void RegisterPreparation()
         { Register("prepare_near_player", PreparationAvailable, PrepareNearPlayer); }
-        // Resolve aliases against the native dispenser tree once per selector
+        // Resolve aliases against the native spawn trees once per selector
         // observation, not once per candidate (raw and chopped may share a name).
         private HashSet<string> PreparationIdentities(string selector, bool processed)
         {
             var ids = new HashSet<string>();
-            foreach (LogisticsItem root in inventory.Items)
+            foreach (PreparationIngredient root in inventory.IngredientRoots)
             {
-                if (!root.Supply || !LogisticsInventory.IngredientMatches(root, selector) || !ids.Add(root.IngredientId) || !processed) continue;
+                if (!LogisticsInventory.IngredientMatches(root.Id, root.Name, selector) || !ids.Add(root.Id) || !processed) continue;
                 var seen = new HashSet<GameObject>();
-                for (GameObject stage = root.Item; stage != null && seen.Add(stage); )
+                for (GameObject stage = root.Prefab; stage != null && seen.Add(stage); )
                 {
                     var workable = stage.GetComponent<WorkableItem>();
                     stage = workable == null ? null : workable.GetNextPrefab();
