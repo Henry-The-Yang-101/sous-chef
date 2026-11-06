@@ -48,6 +48,21 @@ const visible = {displayOptions: {
   deliveryDestinations: [{id: 'counter', label: 'Counter'}, {id: 'board', label: 'Board'}],
 }};
 
+test('interpreter preview exposes exact native arguments and blocks accept during a correction', () => {
+  const {context: c, el} = fixture();
+  Object.assign(c, {token: 'fixture', interpreterBusy: false, interpreterFailure: '', interpreterAnswers: ''});
+  Object.assign(c.state, {voice: {muted: false}, interpreter: {configured: true, mode: 'preview', status: 'preview',
+    pending: {id: 'preview', kind: 'preview'}, result: {plan: {queue_edit: 'append', after_plan: 'continue_pending',
+      tasks: [{action: 'navigate_to', arguments: {destination_id: 'd1'}, repeat: {mode: 'finite', count: 1}}]}}}});
+  c.state.capabilities.semantic_catalog = {targets: [{id: 'd1', label: 'Sink'}]};
+  vm.runInContext(source.slice(source.indexOf('function renderInterpreter()'), source.indexOf('async function interpreterControl(')), c);
+  c.renderInterpreter();
+  assert.match(el('interpreter-plan').options[0].textContent, /destination id: Sink \(d1\)/);
+  assert.equal(el('interpreter-accept').disabled, false);
+  c.state.interpreter.status = 'interpreting_followup'; c.renderInterpreter();
+  assert.equal(el('interpreter-accept').disabled, true);
+});
+
 test('assembly keeps allocation explicit, preserves choices and rejects overlaps', () => {
   const {context: c, el} = fixture();
   const catalog = {taskOptions: [{name: 'assemble_dish'}], assemblyOrders: [{id: 'flow:One:7', recipe: 'Sushi_Fish'}]};

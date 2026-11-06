@@ -143,8 +143,13 @@ frame-rate tests, saved traces, and current limitations.
 Read [architecture and coverage](docs/architecture.md) and the
 [validation record](docs/validation.md) before relying on an untested mechanic.
 The [original investigation](overcooked2-bridge-investigation.md) provides context.
+The [Jev interpreter](docs/jev-interpreter.md) adds typed or finalized voice
+commands with clarification and a reviewable plan preview. Set `JEV_API_KEY` in
+`.env`, restart the harness and explicitly enable it. See the
+[playground evaluation](docs/jev-playground-evaluation.md) for measured results
+and limitations; live Python API connectivity remains untested.
 The [decision-model and voice study](docs/ai-stack-research.md) compares hosted and
-local options for a future voice-directed sous chef, with latency evaluation criteria.
+local options and defines latency evaluation criteria.
 Game assemblies are local build inputs and are never included in this repository.
 The bridge implementation is original. The harness bundles Project Nayuki's
 MIT-licensed QR encoder; see [its attribution](harness/vendor/README.md).

@@ -1266,6 +1266,17 @@ real microphone input and game sound, not only generated test audio.
 
 ### Milestone 4 — Jev interpreter
 
+Implementation status, 6 November 2026: the Python adapter, compiler, inbox,
+clarification flow and preview controls are implemented. See the
+[setup and runtime boundaries](jev-interpreter.md) and
+[Chrome playground evaluation](jev-playground-evaluation.md). The default remains
+Preview. No Python Jev API/SDK call was made. The frozen eight-command evaluation
+produced three correct complete plans, four clarifications and one unsupported
+rejection; six deliberately incorrect plans were all blocked. This establishes
+the implemented review flow, not reliable unattended acceptance. Live Python
+connectivity, microphone-to-game execution and broader confidence calibration
+remain unverified.
+
 Deliver:
 
 - Pinned Jev adapter, bounded timeout/retry logic, request/response validation.

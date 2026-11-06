@@ -162,13 +162,7 @@ class InterpreterService:
                                         'outcome': outcome, 'expires': time.monotonic() + self.settings.preview_seconds}
                     break
         except Clarification as clarification:
-            with self.gate.lock:
-                if self.active is not active: return
-                self.status = 'clarification'
-                self.pending = {'kind': 'clarification', 'id': uuid.uuid4().hex, 'active': active,
-                                'clarification': clarification, 'expires': time.monotonic() + self.settings.clarification_seconds}
-                self.result = {'message': clarification.message, 'metrics': self._metrics(active)}
-                self.revision += 1
+            self._clarify(active, clarification)
         except asyncio.CancelledError:
             raise
         except Exception as error:
@@ -181,6 +175,15 @@ class InterpreterService:
                 # Later independent utterances retain FIFO order and get fresh state.
                 self.revision += 1
                 self._advance()
+
+    def _clarify(self, active, clarification):
+        with self.gate.lock:
+            if self.active is not active: return
+            self.status = 'clarification'
+            self.pending = {'kind': 'clarification', 'id': uuid.uuid4().hex, 'active': active,
+                            'clarification': clarification, 'expires': time.monotonic() + self.settings.clarification_seconds}
+            self.result = {'message': clarification.message, 'metrics': self._metrics(active)}
+            self.revision += 1
 
     async def _arrivals(self, active):
         """Classify buffered follow-ups before the unfinished draft can be accepted.
@@ -235,11 +238,13 @@ class InterpreterService:
             if await self._arrivals(active):
                 with self.gate.lock:
                     if self.pending is pending: self.status = 'preview'
+        except Clarification as clarification:
+            self._clarify(active, clarification)
         except Exception as error:
             with self.gate.lock:
                 if self.active is active:
                     self.pending = self.active = None
-                    self.status, self.result = 'error', {'message': str(error) if isinstance(error, (ValueError, Clarification)) else 'Follow-up interpretation failed; restate the command'}
+                    self.status, self.result = 'error', {'message': str(error) if isinstance(error, ValueError) else 'Follow-up interpretation failed; restate the command'}
 
     def _answer(self, pending, key):
         active = pending['active']

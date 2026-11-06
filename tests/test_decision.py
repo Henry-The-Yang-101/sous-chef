@@ -160,6 +160,18 @@ class CompilerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result['edit']['task_id'], 'queued')
         self.assertEqual(result['edit']['expected_queue_revision'], 4)
         self.assertNotIn('next_task', str(s.requests))
+        self.assertIn('Remove pending task 1: Wash dirty dishes', result['message'])
+
+    async def test_uncertain_removal_confirmation_names_the_exact_pending_task(self):
+        ctx = build_context(world(), {'revision': 4, 'pending': [
+            {'id': 'first', 'spec': spec(), 'state': 'pending'},
+            {'id': 'second', 'spec': spec('take_ready'), 'state': 'pending'}]})
+        c, _ = compiler('Remove the second pending task', [{'route': 'queue_only', 'queue_edit': 'remove_pending'},
+            {'target': 'pending_2'}, {'coverage': .6}], ctx)
+        with self.assertRaises(Clarification) as caught: await c.compile()
+        self.assertIn('Remove pending task 2: Take ready food off heat', caught.exception.options['confirm_plan'])
+        c.resolve(caught.exception, 'confirm_plan')
+        self.assertEqual((await c.compile())['edit']['task_id'], 'second')
 
     async def test_replacement_requires_explicit_scope(self):
         c, _ = compiler('Do washing instead', [{'simple': 'wash_dishes_once', 'queue_edit': 'replace_all', 'deletion': .1}])

@@ -6,7 +6,7 @@ and uses only Choice and Noul, pinned to `jev-1.14.0`.
 
 ## Start using it
 
-1. Copy `.env.example` to `.env` in the repository root.
+1. Open `.env` in the repository root (copy `.env.example` if it does not exist).
 2. Set `JEV_API_KEY=your_key` (or supply it in the server environment).
 3. Restart with `python3 -m harness.server`.
 4. Use **Enable typed Jev commands**, or enable the Mac microphone with its
@@ -34,6 +34,10 @@ The `.env` file is ignored by Git; the key is absent from browser state and logs
   exact options; spoken/typed replies distinguish an answer, cancellation and new
   commands. Buffered follow-ups are checked for corrections before accepting the
   unfinished command. Ordinary separate commands stay FIFO.
+- If all fields are resolved but the final semantic check is uncertain, a button
+  shows the complete interpretation, including quantities, recipient and queue
+  effect. Explicitly confirming it binds that exact plan; restating or discarding
+  it remains available. Confirmation still leads to Preview in Preview mode.
 - The inbox permits three pending utterances. Five tasks and ten preparation
   entries are the compilation limits. Oversized contexts, missing candidates and
   incomplete/uncertain coverage produce no partial acceptance.
@@ -48,10 +52,14 @@ The `.env` file is ignored by Git; the key is absent from browser state and logs
   high-level responsibilities and event/timed work are not approximated as FIFO.
   Existing exact-target native action contracts can be selected when grounded.
 
-The initial probability gates are .90 for ordinary choices and coverage, .97 for
-`done`, unlimited work and destructive edits, with separate explicit deletion /
-interruption evidence. They are conservative starting policies, not calibrated
-probabilities of end-to-end correctness. Preview remains the recommended mode.
+The provisional gates after playground tuning are .85 for ordinary choices,
+`done` and coverage, and .97 for unlimited work, complete simple-plan selection,
+destructive edits and explicit spoken clarification answers. Destructive edits
+also require separate deletion/interruption evidence or a direct scoped answer.
+These are policy thresholds, not calibrated probabilities of correctness.
+The [playground evaluation](jev-playground-evaluation.md) found frequent
+clarifications even for correct interpretations. Preview remains the recommended
+mode; automatic acceptance is an explicit experimental opt-in.
 
 ## Bounds and diagnostics
 
@@ -77,9 +85,13 @@ relevant semantic choices are sent only after enabling Jev.
 Offline tests cover typed compilation, repeated tasks/items, corrections, limits,
 clarification replay, invalid provider data, explicit queue scope, mute before
 actual transmission and during backoff, preview acceptance, stale manual edits,
-round changes, target identity and unlimited queue policies. They do not establish
-real Jev accuracy, native execution or microphone accuracy.
+round changes, target identity and unlimited queue policies. Recorded playground
+responses also replay through the exact production request builder. These checks
+do not establish live Python API connectivity, native execution or microphone
+accuracy.
 
 `scripts/jev_playground.py` exports exact production requests and replays copied
 playground responses without any network code. Its kitchen is explicitly synthetic.
-Playground observations and tuning are recorded separately in the evaluation report.
+Playground observations, tuning, fixed-prompt holdout results and limitations are
+recorded in the [evaluation report](jev-playground-evaluation.md) and its
+[raw request/response evidence](jev-playground-evaluation.json).

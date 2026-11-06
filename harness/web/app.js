@@ -759,6 +759,7 @@ let interpreterAnswers = '';
 function renderInterpreter() {
   const current = state?.interpreter;
   const armed = !!current?.configured && state?.voice && !state.voice.muted && !!token;
+  const resolvingReply = ['interpreting_reply', 'interpreting_followup'].includes(current?.status);
   el('interpreter-status').textContent = !current?.configured
     ? current?.configurationError || 'Jev is not configured. Add JEV_API_KEY to .env and restart the harness.'
     : `${current.mode === 'preview' ? 'Preview · acceptance requires your click' : 'Automatic · validated plans enter the queue'} · ${current.status.replaceAll('_', ' ')}${current.inbox ? ` · ${current.inbox} waiting` : ''}`;
@@ -775,24 +776,32 @@ function renderInterpreter() {
     const li = document.createElement('li');
     const repeat = task.repeat.mode === 'until_cancelled' ? 'until cancelled' : `${task.repeat.count} ×`;
     const items = task.arguments.items?.map(item => `${item.quantity} ${item.preparation} ${item.ingredient}`).join(', ');
-    li.textContent = `${repeat} ${capability(task.action)?.label || task.action.replaceAll('_', ' ')}${items ? `: ${items} for Player ${task.arguments.player_id}` : ''}`;
+    const semantic = state.capabilities?.semantic_catalog || state.catalog?.semanticCatalog || {};
+    const targets = [...(semantic.targets || []), ...(semantic.players || []), ...(semantic.displayOptions?.items || [])];
+    const argumentsText = Object.entries(task.arguments).map(([field, value]) => {
+      const target = targets.find(target => target.id === value);
+      const label = target ? `${target.label || value} (${value})` : typeof value === 'object' ? JSON.stringify(value) : String(value).replaceAll('_', ' ');
+      return `${field.replaceAll('_', ' ')}: ${label}`;
+    }).join('; ');
+    const detail = items ? `${items} for Player ${task.arguments.player_id}` : argumentsText;
+    li.textContent = `${repeat} ${capability(task.action)?.label || task.action.replaceAll('_', ' ')}${detail ? `: ${detail}` : ''}`;
     return li;
   }));
   if (tasks.length) el('interpreter-message').textContent = `Queue change: ${edit.replaceAll('_', ' ')}${outcome.plan.after_plan === 'pause_pending' ? ' · pause retained work afterwards' : ''}`;
   const waiting = current?.pending;
   el('interpreter-question').textContent = waiting?.kind === 'clarification' ? `${waiting.question} (${waiting.remainingSeconds}s remaining)` : '';
-  const signature = JSON.stringify([waiting?.id, waiting?.options, armed, interpreterBusy]);
+  const signature = JSON.stringify([waiting?.id, waiting?.options, armed, interpreterBusy, resolvingReply]);
   if (signature !== interpreterAnswers) {
     interpreterAnswers = signature;
     el('interpreter-answers').replaceChildren(...Object.entries(waiting?.options || {}).map(([key, label]) => {
       const button = document.createElement('button'); button.type = 'button'; button.textContent = label;
-      button.disabled = !armed || interpreterBusy;
+      button.disabled = !armed || interpreterBusy || resolvingReply;
       button.addEventListener('click', () => interpreterControl('answer', {id: waiting.id, key}));
       return button;
     }));
   }
   el('interpreter-accept').hidden = waiting?.kind !== 'preview';
-  el('interpreter-accept').disabled = !armed || interpreterBusy;
+  el('interpreter-accept').disabled = !armed || interpreterBusy || resolvingReply;
   el('interpreter-discard').hidden = !waiting;
   el('interpreter-discard').disabled = !armed || interpreterBusy;
   el('interpreter-error').textContent = interpreterFailure;

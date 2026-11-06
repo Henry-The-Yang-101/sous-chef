@@ -275,7 +275,8 @@ class Compiler:
                 key = self.select('remove', 'target', result, options, 'Which pending task should be removed?', critical=True)
                 mutation['task_id'] = pending[int(key.split('_')[1])-1]['id']
             await self.coverage({'queue_edit': mutation})
-            return {'kind': 'queue_edit', 'edit': mutation}
+            return {'kind': 'queue_edit', 'edit': mutation,
+                    **({'message': self.describe_edit(mutation)} if edit == 'remove_pending' else {})}
         if edit not in PLAN_EDITS:
             self.clarify('route', 'queue_edit', 'Choose how to schedule the new tasks.', {k:v for k,v in QUEUE_EDITS.items() if k in PLAN_EDITS})
         if simple and answers['simple_coverage']['noul'] >= self.settings.coverage_probability:
@@ -476,11 +477,22 @@ class Compiler:
             self.clarify(stage, 'recipient', 'Choose a player present in this kitchen.', options)
         return {'items': items, 'player_id': recipient}
 
+    def describe_edit(self, edit):
+        operation = edit['operation'] if isinstance(edit, dict) else edit
+        meaning = QUEUE_EDITS[operation]
+        if operation == 'remove_pending':
+            selected = next(((index, task) for index, task in enumerate(self.context['scheduler']['pending'], 1)
+                             if task['id'] == edit['task_id']), None)
+            if selected is None:
+                raise DecisionError('The selected pending task is no longer available')
+            index, task = selected
+            meaning += f' Remove pending task {index}: {self.describe([task["spec"]])}.'
+        return meaning
+
     async def coverage(self, proposed):
         edit = proposed.get('queue_edit')
-        if isinstance(edit, dict): edit = edit['operation']
         meaning = self.describe(self.tasks) if self.tasks else 'No new tasks.'
-        meaning += ' Queue effect: ' + QUEUE_EDITS[edit]
+        meaning += ' Queue effect: ' + self.describe_edit(edit)
         # Correlation IDs and queue revisions are local fences, not semantic
         # evidence. In particular, changing a random command UUID must not
         # change the verifier's input or distract it from the actual work.

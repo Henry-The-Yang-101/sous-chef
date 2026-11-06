@@ -353,6 +353,13 @@ The **Voice commands** panel implements [milestone 3's Apple speech service](app
 Mac microphone capture, shared mute, push-to-talk, optional audio pause endpointing,
 and local transcript inspection with an optional fake model transport. It starts
 muted, preserves the accepted queue on mute, and discards unfinished speech on
-Stop. Jev interpretation and voice plan acceptance remain milestone 4. See the
-service document for settings, protocol, privacy bounds and the explicitly
-unverified microphone/UI acceptance work.
+Stop. See the service document for microphone settings, protocol and privacy
+bounds; real microphone-to-game acceptance remains unverified.
+
+The [milestone 4 Jev interpreter](jev-interpreter.md) accepts finalized speech or
+typed commands after explicit enabling. Add `JEV_API_KEY` to the repository's
+`.env` and restart the harness. It starts in Preview, supports bounded
+clarification and scoped queue edits, and shares the mute/Stop gate. The
+[playground evaluation](jev-playground-evaluation.md) records actual provider
+responses and the remaining interpretation limitations. Python API connectivity
+was intentionally not exercised during implementation.
