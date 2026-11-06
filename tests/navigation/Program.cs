@@ -649,6 +649,20 @@ internal static class Program
         Check(!physics.Segment(new Vector3(7.2f,.111535f,-10.8f),new Vector3(5.2f,1,-10.8f)),
             "removing the actual ramps cannot turn bare tread lips into a certified staircase");
     }
+    private static void CapturedFryerEdge()
+    {
+        var w=new World();var shape=w.Chef.GetComponent<CapsuleCollider>();shape.radius=.4f;shape.height=2;shape.center=Vector3.up;
+        var boxes=RecordedBox.Install("fryer-floor-edge.json");
+        w.Chef.GroundCollider=boxes.Single(b=>b.gameObject.name=="Col_Floor (3)");
+        w.Chef.transform.position=new Vector3(10.612249f,-.000188f,-3.917242f);var physics=w.Ready();
+        Check(physics.Segment(w.Chef.transform.position,new Vector3(10.4f,0,-4)),
+            "a grounded chef can recover inward from the captured centimetre floor overhang");
+        Check(!physics.Segment(w.Chef.transform.position,new Vector3(10.8f,0,-4)),
+            "live floor-edge recovery cannot increase the overhang toward a hole");
+        w.Chef.transform.position=new Vector3(10.4f,0,-4);physics.Refresh(w.Chef);Vector3 point;Collider ground;
+        Check(!physics.Stand(new Vector3(10.612249f,0,-3.917242f),out point,out ground),
+            "the same unsupported point is not offered as a new route from inside the floor");
+    }
     private static void CapturedStairContact()
     {
         var w = new World();
@@ -1406,7 +1420,7 @@ internal static class Program
     }
     private static void Main()
     {
-        WalkingStallRecovery(); StallAvoidanceGeometry(); DoorwayChanges(); StationConnectorReuse(); FocusedPlanning(); SearchContinuity(); ShallowCeilingContacts(); EquivalentVerticalStarts(); ConveyorSearchContinuity(); CertifiedStart(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedPizzaStairs(); CapturedStairCorner(); CapturedFloorCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); DirectedConveyors(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
+        WalkingStallRecovery(); StallAvoidanceGeometry(); DoorwayChanges(); StationConnectorReuse(); FocusedPlanning(); SearchContinuity(); ShallowCeilingContacts(); EquivalentVerticalStarts(); ConveyorSearchContinuity(); CertifiedStart(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedFryerEdge(); CapturedPizzaStairs(); CapturedStairCorner(); CapturedFloorCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); DirectedConveyors(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
         WorkerStartingStateChanges(); LoosePickupBodies(); StationaryThrowStances();
         Console.WriteLine("PASS: " + checks + " navigator integration checks (analytical geometry; not PhysX)");
     }

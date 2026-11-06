@@ -53,7 +53,20 @@ namespace SousChef.Plugin.Navigation
             "collider", failureCollider == null ? null : failureCollider.gameObject.name,
             "colliderId", failureCollider == null ? 0 : failureCollider.GetInstanceID(), "support", failureSupport); } }
         private bool Fail(string reason, Vector3 point, Collider collider = null)
-        { failureReason = reason; failurePoint = point; failureCollider = collider; failureSupport = null; return false; }
+        {
+            failureReason = reason; failurePoint = point; failureCollider = collider; failureSupport = null;
+            if (TraceEnabled && collider != null && capsule != null &&
+                (reason == "body_overlap" || reason == "body_sweep") && Vector3.Distance(point, Position) < .02f)
+            {
+                Vector3 direction; float depth;
+                bool penetrating = Physics.ComputePenetration(capsule, capsule.transform.position + point - Position,
+                    capsule.transform.rotation, collider, collider.transform.position, collider.transform.rotation, out direction, out depth);
+                Queries++;
+                failureSupport = Json.Object("nativePenetration", penetrating, "depth", depth, "direction", Values.Vector(direction),
+                    "boundsCentre", Values.Vector(collider.bounds.center), "boundsSize", Values.Vector(collider.bounds.size));
+            }
+            return false;
+        }
         public bool Overflow { get; private set; }
         public int Queries { get; private set; }
         public bool Changed { get; private set; }
@@ -441,7 +454,7 @@ namespace SousChef.Plugin.Navigation
             // on its top rather than shortcut around an overhanging corner.
             if (MovingSurface(support) is Travelator && !ConveyorSupport(point, hit.normal, clearance))
                 return Fail("conveyor_side_support", point, support);
-            if (!FloorCentreSupported(point, support)) return Fail("floor_centre_unsupported", point, support);
+            if (!FloorCentreSupported(point, support, clearance < radius - .0001f)) return Fail("floor_centre_unsupported", point, support);
             if (!SlopeInterior(point, support, clearance)) return Fail("slope_side_clearance", point, support);
             // GroundCast supports the rounded capsule across narrow tread seams.
             // Requiring a ray under every footprint edge rejects real stairs even
@@ -458,12 +471,13 @@ namespace SousChef.Plugin.Navigation
             for (int i = 0; i < count; i++) if (BlocksWalkingBody(overlaps[i], point.y, point.y, low.y - bodyRadius, high.y + bodyRadius)) return Fail("body_overlap", point, overlaps[i]);
             return true;
         }
-        private bool FloorCentreSupported(Vector3 point, Collider support)
+        private bool FloorCentreSupported(Vector3 point, Collider support, bool liveConnector = false)
         {
             var box = support as BoxCollider;
             if (box == null || NativeStep(support) || Mathf.Abs(box.transform.up.y) < .9999f) return true;
             Vector3 local = box.transform.InverseTransformPoint(point) - box.center;
             if (Mathf.Abs(local.x) <= box.size.x * .5f && Mathf.Abs(local.z) <= box.size.z * .5f) return true;
+            if (liveConnector && RecoveringFloorEdge(point, box, local)) return true;
             // A sphere grazing a horizontal floor's outside edge reports a
             // sloping normal. It must not turn an unsupported inside corner into
             // a walkable ramp. Adjacent coplanar floors and real stair wedges can
@@ -501,6 +515,24 @@ namespace SousChef.Plugin.Navigation
                 }
             }
             return false;
+        }
+        private bool RecoveringFloorEdge(Vector3 point, BoxCollider box, Vector3 local)
+        {
+            // Native integration can leave a centimetre of centre overhang at
+            // a turn while the chef remains grounded on the floor lip. Permit
+            // only the live connector back toward support, never a new lattice
+            // route around an unsupported corner or a step farther over the edge.
+            if (chef.GroundCollider != box || Mathf.Abs(Position.y - box.bounds.max.y) > .01f ||
+                Vector3.Distance(point, Position) > Skin) return false;
+            Vector3 current = box.transform.InverseTransformPoint(Position) - box.center;
+            float depth = FloorOverhang(box, current);
+            return depth > 0 && depth <= Skin && FloorOverhang(box, local) <= depth + .0001f;
+        }
+        private static float FloorOverhang(BoxCollider box, Vector3 local)
+        {
+            var outside = new Vector3(local.x - Mathf.Clamp(local.x, -box.size.x * .5f, box.size.x * .5f), 0,
+                local.z - Mathf.Clamp(local.z, -box.size.z * .5f, box.size.z * .5f));
+            return box.transform.TransformVector(outside).magnitude;
         }
         // A sphere can touch a ramp while its centre is outside the side face.
         // That diagonal approach is standable in isolation but native slope

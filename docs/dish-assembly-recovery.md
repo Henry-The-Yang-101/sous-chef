@@ -86,3 +86,23 @@ Existing unsupported-floor-corner and stair-side collision tests remain.
 This milestone passes `scripts/check.py`
 (`.local/assembly-recovery-check-06.log`). Native task replays of these additional
 changes are pending; the direct walking diagnostic alone is not an assembly pass.
+
+## Native replay 03 and floor contact recovery
+
+The next seven-kitchen replay independently verified completed pizza (60.47 s),
+moving tomato pasta (55.05 s), chocolate pancakes (38.12 s), chicken burrito
+(49.31 s), and cheeseburger with greens (52.47 s). No fire or ruined food was
+observed in these seven runs. The fryer rescued its cooked chicken but then
+stalled at a floor lip; marinara pasta also stalled, near a moving counter.
+Both incomplete traces remain in `.local/assembly-recovery-03-*`.
+
+The fryer pose was grounded on its native floor with 0.01225 units of centre
+overhang. Live connectors can now recover inward from overhang bounded by the
+existing contact skin. Cached lattice routes cannot use this exception, and
+steps that increase overhang still fail. The captured geometry test covers all
+three cases and retains the prior unsupported-corner regressions.
+
+`scripts/check.py` passes (`.local/assembly-recovery-check-07.log`), including
+444 analytical navigation checks. Native replay of this floor-edge correction
+is pending. Trace-only native penetration details were added to distinguish
+the separate moving-counter contact from a planning-margin error.
