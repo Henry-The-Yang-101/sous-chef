@@ -297,7 +297,10 @@ internal static partial class Program
             var select=typeof(TaskActions).GetMethod("SelectAssemblyWork",flags);var job=select.Invoke(w.Tasks,null);
             Check(job!=null && (GameObject)job.GetType().GetField("Source").GetValue(job)==rice,
                 "known executable recipe work precedes an earlier allocated source with an unknown route");
+            var plateRoute=((List<object>)catalog["destinations"]).Cast<Json.Record>().Single(d=>(int)d["objectInstanceId"]==plateCounter.GetInstanceID());
             inventory.EndObservation();catalog["destinations"]=new List<object>();inventory.BeginObservation();inventory.Refresh(w.Chef,catalog);
+            Check(select.Invoke(w.Tasks,null)==null,"an unknown receiving route does not trigger repeated collection of safely stored food");
+            inventory.EndObservation();catalog["destinations"]=new List<object>{plateRoute};inventory.BeginObservation();inventory.Refresh(w.Chef,catalog);
             job=select.Invoke(w.Tasks,null);
             Check(job!=null && (string)job.GetType().GetField("Operation").GetValue(job)=="pick_component",
                 "an incomplete catalogue with no certified source routes still probes an exact allocated addition");

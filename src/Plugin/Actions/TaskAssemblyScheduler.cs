@@ -197,7 +197,12 @@ namespace SousChef.Plugin.Actions
                     else
                     {
                         var source = AssemblySource(stage, probeUnknown);
-                        if (source != null && AssemblyApproachCost(entry.Holder, source.Item, probeUnknown) != Single.MaxValue)
+                        // Probing an assigned source does not justify fetching
+                        // it for an unknown receiving route. That would shuttle
+                        // safe cooked food between hands and storage whenever
+                        // another branch is tried. Held cargo can still seek its
+                        // own destination without another pickup.
+                        if (source != null && !AssemblyDeferred(entry.Holder) && AssemblyApproachCost(entry.Holder, source.Item) != Single.MaxValue)
                             return new AssemblyJob { Stage = stage, Source = source.Item, Destination = entry.Holder,
                             Operation = System.Object.ReferenceEquals(ActionObservations.Held(chef), source.Item) ? "transfer_contents" : "pick_component" };
                     }
@@ -321,7 +326,7 @@ namespace SousChef.Plugin.Actions
             if (!next.Succeeded)
             {
                 assembly.Record("replan_uncompleted_step", stage, item, target);
-                assembly.RetryAt[operation == "place_at" ? target : item] = Time.realtimeSinceStartup + 1;
+                assembly.RetryAt[operation == "place_at" || operation == "transfer_contents" ? target : item] = Time.realtimeSinceStartup + 1;
                 yield break;
             }
             if (operation == "transfer_contents")
