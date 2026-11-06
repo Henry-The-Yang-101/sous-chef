@@ -17,6 +17,11 @@ function withCurrentVoice(next) {
   if (!next.voice) return next;
   if (latestVoice?.instanceId === next.voice.instanceId && latestVoice.revision > next.voice.revision) next.voice = latestVoice;
   else latestVoice = next.voice;
+  if (state?.interpreter && next.interpreter && state.voice?.instanceId === next.voice?.instanceId &&
+      (state.interpreter.generation > next.interpreter.generation ||
+       (state.interpreter.generation === next.interpreter.generation && state.interpreter.revision > next.interpreter.revision))) {
+    next.interpreter = state.interpreter;
+  }
   return next;
 }
 let receivedAt = 0;
@@ -746,11 +751,69 @@ let voiceTurn = null;
 let voiceHeartbeat = null;
 const voiceStatusLabels = {muted: 'Muted · voice / Jev off', muting: 'Muting… waiting for microphone acknowledgment',
   preparing: 'Preparing on-device recognition…', downloading: 'Downloading Apple recognition assets…',
-  listening: 'Microphone enabled', finalizing: 'Finalizing command…', error: 'Voice unavailable'};
+  listening: 'Microphone enabled', typed_ready: 'Typed Jev commands enabled · microphone off', finalizing: 'Finalizing command…', error: 'Voice unavailable'};
+
+let interpreterBusy = false;
+let interpreterFailure = '';
+let interpreterAnswers = '';
+function renderInterpreter() {
+  const current = state?.interpreter;
+  const armed = !!current?.configured && state?.voice && !state.voice.muted && !!token;
+  el('interpreter-status').textContent = !current?.configured
+    ? 'Jev is not configured. Add JEV_API_KEY to .env and restart the harness.'
+    : `${current.mode === 'preview' ? 'Preview · acceptance requires your click' : 'Automatic · validated plans enter the queue'} · ${current.status.replaceAll('_', ' ')}${current.inbox ? ` · ${current.inbox} waiting` : ''}`;
+  el('interpreter-enable').disabled = !current?.configured || !state?.voice?.muteAcknowledged || interpreterBusy;
+  el('interpreter-mode').disabled = !current || interpreterBusy || !!current.pending || ['interpreting', 'interpreting_reply'].includes(current.status);
+  if (current) el('interpreter-mode').value = current.mode;
+  el('interpreter-submit').disabled = !armed || interpreterBusy || current?.status === 'interpreting_reply' || current?.inbox >= 3;
+  el('interpreter-text').disabled = !armed;
+  const outcome = current?.result;
+  const edit = outcome?.plan?.queue_edit || outcome?.edit?.operation;
+  el('interpreter-message').textContent = outcome?.message || (edit ? `Queue change: ${edit.replaceAll('_', ' ')}` : '');
+  const tasks = outcome?.plan?.tasks || [];
+  el('interpreter-plan').replaceChildren(...tasks.map(task => {
+    const li = document.createElement('li');
+    const repeat = task.repeat.mode === 'until_cancelled' ? 'until cancelled' : `${task.repeat.count} ×`;
+    const items = task.arguments.items?.map(item => `${item.quantity} ${item.preparation} ${item.ingredient}`).join(', ');
+    li.textContent = `${repeat} ${capability(task.action)?.label || task.action.replaceAll('_', ' ')}${items ? `: ${items} for Player ${task.arguments.player_id}` : ''}`;
+    return li;
+  }));
+  if (tasks.length) el('interpreter-message').textContent = `Queue change: ${edit.replaceAll('_', ' ')}${outcome.plan.after_plan === 'pause_pending' ? ' · pause retained work afterwards' : ''}`;
+  const waiting = current?.pending;
+  el('interpreter-question').textContent = waiting?.kind === 'clarification' ? `${waiting.question} (${waiting.remainingSeconds}s remaining)` : '';
+  const signature = JSON.stringify([waiting?.id, waiting?.options, armed, interpreterBusy]);
+  if (signature !== interpreterAnswers) {
+    interpreterAnswers = signature;
+    el('interpreter-answers').replaceChildren(...Object.entries(waiting?.options || {}).map(([key, label]) => {
+      const button = document.createElement('button'); button.type = 'button'; button.textContent = label;
+      button.disabled = !armed || interpreterBusy;
+      button.addEventListener('click', () => interpreterControl('answer', {id: waiting.id, key}));
+      return button;
+    }));
+  }
+  el('interpreter-accept').hidden = waiting?.kind !== 'preview';
+  el('interpreter-accept').disabled = !armed || interpreterBusy;
+  el('interpreter-discard').hidden = !waiting;
+  el('interpreter-discard').disabled = !armed || interpreterBusy;
+  el('interpreter-error').textContent = interpreterFailure;
+  el('interpreter-error').hidden = !interpreterFailure;
+}
+
+async function interpreterControl(operation, fields = {}) {
+  interpreterBusy = true; interpreterFailure = ''; renderInterpreter();
+  try {
+    state = withCurrentVoice(await post('/api/interpreter', {interpreter: {
+      operation, generation: state?.voice?.generation, ...fields}}));
+    receivedAt = performance.now();
+    if (operation === 'submit') el('interpreter-text').value = '';
+  } catch (error) { interpreterFailure = error.message; }
+  finally { interpreterBusy = false; renderInterpreter(); }
+}
 
 function renderVoice() {
   const voice = state?.voice;
   const known = !!voice && !!token;
+  renderInterpreter();
   el('voice-status').textContent = voicePending === 'mute' ? 'Muting… waiting for server acknowledgment'
     : !known ? 'Voice status unknown · waiting for the harness'
     : (voiceStatusLabels[voice.status] || voice.status) + (voice.drafts?.some(d => d.finalizing) ? ' · finalizing a turn' : '');
@@ -768,7 +831,7 @@ function renderVoice() {
   el('voice-fake').textContent = voice?.fakeResult?.message || '';
   el('voice-input').textContent = voice?.inputDevice ? `${voice.inputDevice}${Number.isFinite(voice.audioLevel?.rms) ? ` · input energy ${voice.audioLevel.rms.toFixed(3)}` : ''}` : '';
   el('voice-inspection-data').textContent = voice ? JSON.stringify({transport: voice.transport,
-    remoteRequests: voice.remoteRequests, drafts: voice.drafts, commands: voice.commands}, null, 2) : 'Waiting for the harness.';
+    metrics: state?.interpreter?.metrics, drafts: voice.drafts, commands: voice.commands}, null, 2) : 'Waiting for the harness.';
   if (!voice) return;
   const inventory = JSON.stringify([voice.devices, voice.locales]);
   if (inventory !== voiceInventorySignature) {
@@ -863,3 +926,11 @@ el('voice-settings').addEventListener('submit', event => {
     fastResults: el('voice-fast').value === 'true', energyThreshold: Number(el('voice-energy').value),
     inspection: el('voice-inspection').value}}).catch(() => {});
 });
+el('interpreter-enable').addEventListener('click', () => voiceControl('arm_text').catch(() => {}));
+el('interpreter-mode').addEventListener('change', () => interpreterControl('mode', {mode: el('interpreter-mode').value}));
+el('interpreter-form').addEventListener('submit', event => {
+  event.preventDefault();
+  interpreterControl('submit', {command_id: newId(), text: el('interpreter-text').value});
+});
+el('interpreter-accept').addEventListener('click', () => interpreterControl('accept', {id: state?.interpreter?.pending?.id}));
+el('interpreter-discard').addEventListener('click', () => interpreterControl('discard', {id: state?.interpreter?.pending?.id}));

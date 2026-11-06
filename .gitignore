@@ -7,4 +7,7 @@ artifacts/
 **/__pycache__/
 *.pyc
 *.user
+.env
+.env.*
+!.env.example
 

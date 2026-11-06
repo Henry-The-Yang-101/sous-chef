@@ -143,3 +143,7 @@ pre { font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; backgroun
 #voice-transcript { white-space: pre-wrap; overflow-wrap: anywhere; }
 #voice-error { color: var(--danger, #ffb4a2); }
 #voice-inspection-data { max-height: 300px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.interpreter { border-top: 1px solid var(--border, #48505c); margin-top: 20px; padding-top: 12px; }
+#interpreter-text { display: block; width: 100%; box-sizing: border-box; margin: 8px 0; font: inherit; }
+#interpreter-plan, #interpreter-question, #interpreter-message { overflow-wrap: anywhere; }
+#interpreter-error { color: var(--danger, #ffb4a2); }

@@ -67,6 +67,11 @@ class Scheduler:
         with self.lock:
             return dict(copy.deepcopy(self.data), capacity=self.CAPACITY, error=self.fault)
 
+    def world(self):
+        # Avoid UI/voice locks while holding the scheduler lock. Test adapters
+        # and existing native-only users may expose just state().
+        return getattr(self.bridge, 'observation', self.bridge.state)()
+
     def _save(self, value, operation=None):
         # Commit first: storage failures cannot leave an unjournaled accepted task.
         if value != self.data or operation:
@@ -120,7 +125,7 @@ class Scheduler:
             if previous is not None:
                 return previous
             self._revision(raw.get('expected_queue_revision'))
-            world = self.bridge.state()
+            world = self.world()
             current = self._current(world, expected_context)
             plan = validate_plan(raw, capabilities=world['capabilities'])
             if self.data['barrier']:
@@ -209,7 +214,7 @@ class Scheduler:
             elif op == 'pause_pending':
                 value['paused'], value['reason'] = True, 'Dispatch paused by user'
             elif op == 'resume_pending':
-                world = self.bridge.state()
+                world = self.world()
                 self._current(world, value['context'])
                 if value['barrier'] or (value['active'] and value['active']['state'] == 'reconciling'):
                     raise QueueConflict('Resolve the unknown native outcome before resuming')
@@ -241,7 +246,7 @@ class Scheduler:
             value['revision'] += 1
             value['commandGeneration'] += 1
             value['paused'], value['reason'] = False, 'Stopping native work'
-            value['barrier'] = self._barrier(value['context'] or context_of(self.bridge.state()))
+            value['barrier'] = self._barrier(value['context'] or context_of(self.world()))
             value['lastOperation'] = {'message': 'Stop requested', 'revision': value['revision']}
             self._save(value)
             return copy.deepcopy(value['barrier'])
@@ -287,7 +292,7 @@ class Scheduler:
             return
         intent = None
         with self.lock:
-            world = self.bridge.state()
+            world = self.world()
             current = context_of(world)
             value = copy.deepcopy(self.data)
             if current is None:
@@ -366,7 +371,7 @@ class Scheduler:
             if operation == 'cancel':
                 if not value['barrier'] or value['barrier']['id'] != entry['id']:
                     return
-                latest = context_of(self.bridge.state())
+                latest = context_of(self.world())
                 if latest and (not same_kitchen(entry['context'], latest) or latest['fence'] > entry['context']['fence'] + 1):
                     self._invalidate(value, latest, 'Control changed again during cancellation; old work invalidated')
                 elif (latest and result and result.get('id') == entry['id'] and result.get('state') == 'succeeded'

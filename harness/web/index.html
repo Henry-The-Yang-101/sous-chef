@@ -23,7 +23,7 @@
     </section>
     <section class="logistics voice" aria-labelledby="voice-title">
       <h2 id="voice-title">Voice commands</h2>
-      <p>The microphone is on your Mac, including when you use this page on your phone. Transcripts stay local. Game interpretation arrives in milestone 4.</p>
+      <p>The microphone is on your Mac, including when you use this page on your phone. Recognition stays local. When Jev is enabled, finalized text and relevant kitchen state are sent for interpretation.</p>
       <p id="voice-status" role="status" aria-live="polite">Checking voice status…</p>
       <p id="voice-error" role="alert" hidden></p>
       <div class="queue-buttons">
@@ -46,13 +46,35 @@
           <label>Maximum command (seconds)<input id="voice-duration" type="number" min="1" max="60" value="30" required></label>
           <label>Audio energy threshold<input id="voice-energy" type="number" min="0.001" max="0.5" step="0.001" value="0.015" required></label>
           <label>Fast results<select id="voice-fast"><option value="false">Off · more context</option><option value="true">On</option></select></label>
-          <label>Transcript destination<select id="voice-inspection"><option value="local">Local inspection only</option><option value="fake">Local fake model transport</option></select></label>
+          <label>Transcript destination<select id="voice-inspection"><option value="local">Local inspection only</option><option value="fake">Local fake model transport</option><option value="jev">Jev interpreter</option></select></label>
           <div class="queue-buttons"><button id="voice-save" type="submit">Save settings</button><button id="voice-devices" type="button">Refresh devices and locales</button></div>
         </form>
         <p>Mute before changing settings. Automatic mode uses microphone energy, so game sound may delay a boundary or start a turn. Push to talk is the default. Commands exceeding the duration limit are discarded in full.</p>
       </details>
       <details><summary>Local transcript inspection</summary><pre id="voice-inspection-data">No commands yet.</pre></details>
       <p>Only finalized turns appear here. The last 20 turns expire after 10 minutes; mute, Stop, and Clear discard them. No audio is recorded. Stop also cancels unfinished voice commands.</p>
+      <div class="interpreter" aria-labelledby="interpreter-title">
+        <h3 id="interpreter-title">Command interpreter</h3>
+        <p id="interpreter-status" role="status" aria-live="polite"></p>
+        <div class="queue-buttons">
+          <button id="interpreter-enable" type="button">Enable typed Jev commands</button>
+          <label>Acceptance <select id="interpreter-mode"><option value="preview">Preview · review each plan</option><option value="automatic">Automatic · accept validated plans</option></select></label>
+        </div>
+        <form id="interpreter-form">
+          <label for="interpreter-text">Command or clarification reply</label>
+          <textarea id="interpreter-text" rows="2" maxlength="4000" placeholder="Bring me two chopped carrots, then wash dishes" required></textarea>
+          <button id="interpreter-submit" type="submit">Interpret</button>
+        </form>
+        <p id="interpreter-message" role="status"></p>
+        <ol id="interpreter-plan"></ol>
+        <p id="interpreter-question"></p>
+        <div id="interpreter-answers" class="queue-buttons"></div>
+        <div class="queue-buttons">
+          <button id="interpreter-accept" type="button" hidden>Accept this preview</button>
+          <button id="interpreter-discard" type="button" hidden>Discard unfinished command</button>
+        </div>
+        <p id="interpreter-error" role="alert" hidden></p>
+      </div>
     </section>
     <section class="performance" aria-labelledby="fps-title">
       <div class="fps-heading"><h2 id="fps-title">Game FPS</h2><strong id="fps-current">Waiting</strong><span id="fps-summary"></span></div>

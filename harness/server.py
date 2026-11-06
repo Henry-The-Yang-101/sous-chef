@@ -21,6 +21,7 @@ from harness.contents import ContentsObserver
 from harness.scheduler import Scheduler, QueueConflict, context_of
 from harness.sharing import PhoneShare, lan_addresses
 from harness.voice import VoiceService
+from harness.decision.service import InterpreterService
 
 
 class HarnessError(Exception):
@@ -66,6 +67,10 @@ class HarnessBridge:
                       'lastCommand': None}
         self.scheduler = Scheduler(self, journal_path)
         self.voice = VoiceService()
+        self.interpreter = InterpreterService(self, self.voice.gate)
+        self.voice.on_command = self.interpreter.submit
+        if self.interpreter.configured:
+            self.voice.settings['inspection'] = 'jev'
 
     def start(self):
         self.thread = threading.Thread(target=self._run, name='bridge-observer', daemon=True)
@@ -127,7 +132,8 @@ class HarnessBridge:
             except (OSError, ControlError, ValueError, KeyError) as error:
                 self._failed(error)
 
-    def state(self, viewer=None):
+    def observation(self, viewer=None):
+        """Raw game state only; safe under scheduler/gate locks without lock inversion."""
         with self.state_lock:
             result = copy.deepcopy(self.value)
             age = None if self.observed is None else self.clock() - self.observed
@@ -139,9 +145,14 @@ class HarnessBridge:
             result['capabilities'] = capability_snapshot(result)
             if self.contents:
                 self.contents.decorate(result)
+        return result
+
+    def state(self, viewer=None):
+        result = self.observation(viewer)
         result['queue'] = self.scheduler.snapshot()
         result['queue']['nativeContext'] = context_of(result)
         result['voice'] = self.voice.snapshot()
+        result['interpreter'] = self.interpreter.snapshot()
         return result
 
     def navigate(self, viewer, session, destination, instance):
@@ -355,6 +366,7 @@ class HarnessBridge:
     def close(self):
         self.halt.set()
         self.voice.close()
+        self.interpreter.close()
         if self.thread:
             self.thread.join(timeout=4)
         with self.io_lock:
@@ -459,6 +471,9 @@ class Handler(BaseHTTPRequestHandler):
                 result = self.server.bridge.edit_queue(data.get('edit'))
             elif path == '/api/voice':
                 self.server.bridge.voice.command(data.get('voice'), viewer)
+                result = self.server.bridge.state(viewer)
+            elif path == '/api/interpreter':
+                self.server.bridge.interpreter.control(data.get('interpreter'))
                 result = self.server.bridge.state(viewer)
             elif path == '/api/stop':
                 result = self.server.bridge.stop()

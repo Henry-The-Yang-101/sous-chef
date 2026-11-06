@@ -14,15 +14,29 @@ class DispatchGate:
         self.generation = 0
         self.muted = True
         self.inflight = set()
+        self.listeners = []
+
+    def check(self, generation):
+        with self.lock:
+            if self.muted or generation != self.generation:
+                raise ValueError('Voice / Jev is off or this command expired')
+
+    def run(self, generation, action):
+        """Serialize a nonblocking network write or local result adoption with mute."""
+        with self.lock:
+            self.check(generation)
+            return action()
 
     def invalidate(self, muted=None):
         with self.lock:
             self.generation += 1
             if muted is not None:
                 self.muted = muted
-            for future in self.inflight:
+            for future in tuple(self.inflight):
                 future.cancel()
             self.inflight.clear()
+            for listener in self.listeners:
+                listener()
             return self.generation
 
     def dispatch(self, generation, transport, request):

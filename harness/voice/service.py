@@ -27,7 +27,7 @@ def settings_from(value):
     for key in ('locale', 'deviceId'):
         if not isinstance(result[key], str) or len(result[key]) > 256:
             raise ValueError('Invalid ' + key)
-    if not result['locale'] or result['mode'] not in ('push_to_talk', 'automatic') or result['inspection'] not in ('local', 'fake'):
+    if not result['locale'] or result['mode'] not in ('push_to_talk', 'automatic') or result['inspection'] not in ('local', 'fake', 'jev'):
         raise ValueError('Invalid voice mode or locale')
     if type(result['fastResults']) is not bool:
         raise ValueError('fastResults must be boolean')
@@ -56,6 +56,7 @@ class VoiceService:
         self.history = deque(maxlen=20)
         self.fake = FakeTransport()
         self.fake_result = None
+        self.on_command = None
         self.process = None
         self.outbound = queue.Queue(maxsize=32)
         self.halt = threading.Event()
@@ -136,6 +137,11 @@ class VoiceService:
                     self.error, self.status = None, 'preparing'
                 self._ensure_helper()
                 self._send('arm' if operation == 'arm' else 'devices', settings=self.settings)
+            elif operation == 'arm_text':
+                if not self.gate.muted or not self.capture_stopped:
+                    raise ValueError('Mute voice before enabling typed commands')
+                self._reset(False)
+                self.error, self.status = None, 'typed_ready'
             elif operation == 'begin':
                 if self.gate.muted or self.settings['mode'] != 'push_to_talk' or self.status != 'listening' or self.ptt_owner:
                     raise ValueError('Microphone is not ready for a new push-to-talk turn')
@@ -173,7 +179,7 @@ class VoiceService:
                 self.status = 'muting' if muted else 'preparing'
                 self.capture_stopped = False
                 self.mute_since = time.monotonic() if muted else None
-            elif not muted:
+            elif not muted and self.status != 'typed_ready':
                 self.status = 'preparing'
                 self._ensure_helper()
                 self._send('arm', settings=self.settings)
@@ -193,7 +199,7 @@ class VoiceService:
                     'locales': list(self.locales), 'drafts': self.assembler.preview(),
                     'commands': [{k: copy.deepcopy(v) for k, v in item.items() if k != 'retainedAt'} for item in self.history],
                     'fakeResult': copy.deepcopy(self.fake_result), 'transport': self.settings['inspection'],
-                    'remoteRequests': 0, 'pttActive': self.ptt_owner is not None}
+                    'pttActive': self.ptt_owner is not None}
 
     def _ensure_helper(self):
         if self.launching or (self.process and self.process.poll() is None):
@@ -281,6 +287,11 @@ class VoiceService:
                     # The initial transport is immediate and local. A real adapter
                     # waits on its own worker, then adopts through the same fence.
                     self.gate.adopt(generation, future, lambda result: setattr(self, 'fake_result', result))
+                elif not command.get('empty') and self.settings['inspection'] == 'jev' and self.on_command:
+                    try:
+                        self.on_command(command)
+                    except ValueError as error:
+                        self.error = str(error)
 
     def _supervise(self):
         pending_message = None
