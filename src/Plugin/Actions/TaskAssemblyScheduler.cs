@@ -89,14 +89,15 @@ namespace SousChef.Plugin.Actions
                 (stage.Mixing ? TaskNative.Component<ServerMixingStation>(station) != null || TaskNative.Component<MixingStation>(station) != null :
                     TaskNative.Component<ServerMixingStation>(station) == null && TaskNative.Component<MixingStation>(station) == null);
         }
-        private float AssemblyApproachCost(GameObject target, GameObject cargo)
+        private float AssemblyApproachCost(GameObject target, GameObject cargo, bool assignedBatch = false)
         {
             float cost = ApproachCost(target);
             // The broad map may be invalidated immediately after a successful
-            // pickup. Preserve useful held cargo and let the directed child
-            // planner prove its next route before parking it for another branch.
+            // pickup. Preserve useful held cargo, and try the next processor for
+            // a bound batch instead of waiting with complete inputs on a counter.
+            // The directed child still proves the route before any input.
             return cost == Single.MaxValue && !(bool)inventory.Catalog["complete"] &&
-                System.Object.ReferenceEquals(ActionObservations.Held(chef), cargo)
+                (assignedBatch || System.Object.ReferenceEquals(ActionObservations.Held(chef), cargo))
                 ? 20000 + Vector3.Distance(chef.transform.position, target.transform.position) : cost;
         }
         private AssemblyJob SelectAssemblyWork()
@@ -144,7 +145,7 @@ namespace SousChef.Plugin.Actions
                 {
                     foreach (var target in assembly.Equipment)
                         if (!AssemblyDeferred(target) && ProcessingStationFor(stage, target) && ActionObservations.Occupant(target) == null &&
-                            AssemblyApproachCost(target, stage.Vessel) != Single.MaxValue && CanDeliver(stage.Vessel, target)) return MoveAssembly(stage, entry, target);
+                            AssemblyApproachCost(target, stage.Vessel, true) != Single.MaxValue && CanDeliver(stage.Vessel, target)) return MoveAssembly(stage, entry, target);
                 }
                 else if (stage.Processing && completeInputs)
                 {
@@ -159,7 +160,7 @@ namespace SousChef.Plugin.Actions
                         foreach (var target in assembly.Equipment)
                         {
                             if (AssemblyDeferred(target) || !ProcessingStationFor(stage, target) || ActionObservations.Occupant(target) != null || !CanDeliver(stage.Vessel, target)) continue;
-                            float distance = AssemblyApproachCost(target, stage.Vessel);
+                            float distance = AssemblyApproachCost(target, stage.Vessel, true);
                             if (distance < cost) { cost = distance; station = target; }
                         }
                         if (station != null) return MoveAssembly(stage, entry, station);

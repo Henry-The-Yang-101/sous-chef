@@ -99,6 +99,25 @@ internal static partial class Program
     private static void AssemblyProcessing()
     {
         {
+            var w=new World();var plate=AssemblyPlate(w,w.Delivery());var counter=w.Delivery();counter.Add(new Pickup());
+            var pan=new GameObject("assembled cold batch");pan.Add(new PhysicalAttachment());pan.Add(new Pickup());
+            pan.Add(new ServerIngredientContainer()).Contents.Add(Leaf("rice"));var step=new CookingStepData {m_uID=31};
+            pan.Add(new CookingHandler {m_cookingType=step});pan.Add(new CookableContainer());pan.Add(new ServerCookingHandler());pan.Add(new ProcessorComposition {Step=step});
+            counter.GetComponent<ServerAttachStation>().Item=pan;var burner=w.Delivery();burner.Add(new ServerCookingStation());burner.Add(new Pickup());
+            var goal=new CookedCompositeAssembledNode {m_composition=new[]{Leaf("rice")},m_cookingStep=step,m_progress=CookedCompositeOrderNode.CookingProgress.Cooked};
+            var request=AssemblyJob(w,new[]{plate},new GameObject[0],goal);request.Assembly.Equipment.Add(w.Navigation.RegisterItem(pan));request.Assembly.Equipment.Add(w.IdOf(burner));StartAssembly(w,request);
+            var flags=System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic;
+            var schedule=(AssemblySchedule)typeof(TaskActions).GetField("assembly",flags).GetValue(w.Tasks);schedule.Base=plate;schedule.Root.Vessel=plate;schedule.Root.Children[0].Vessel=pan;
+            var inventory=(LogisticsInventory)typeof(TaskActions).GetField("inventory",flags).GetValue(w.Tasks);
+            var catalog=(Json.Record)w.Navigation.Available(w.Chef);catalog["complete"]=false;catalog["destinations"]=new List<object>();
+            inventory.BeginObservation();inventory.Refresh(w.Chef,catalog);w.Chef.GroundCollider=null;
+            var select=typeof(TaskActions).GetMethod("SelectAssemblyWork",flags);var job=select.Invoke(w.Tasks,null);
+            Check(job!=null && (GameObject)job.GetType().GetField("Source").GetValue(job)==pan,
+                "complete assigned batch on a counter can start targeted processor planning while the broad map rebuilds");
+            catalog["complete"]=true;
+            Check(select.Invoke(w.Tasks,null)==null,"known unreachable processor is not treated as an unfinished discovery frontier");inventory.EndObservation();
+        }
+        {
             var w=new World();var plate=AssemblyPlate(w,w.Delivery());var doughCounter=w.Delivery();
             var dough=new GameObject("assigned cookable dough base");dough.Add(new PreparationContainer());
             dough.Add(new PhysicalAttachment());dough.Add(new Pickup());dough.Add(new IngredientTransfer());dough.Add(new ServerIngredientContainer());
