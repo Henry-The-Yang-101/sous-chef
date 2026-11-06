@@ -954,3 +954,42 @@ restores a route, and compare focused and unrestricted costs at the same pose.
 Local measurements are in `.local/nav-cost-investigation-1105/` and
 `.local/nav-speed-validation/`, including `portal/report.json` and
 `recovery/report.json` under the latter directory.
+
+### Harness frame times and action polling (bridge 0.8.8)
+
+In a native headless Sushi 1-2 round at a requested 120 FPS, the harness polled
+the production action catalogue every 200 ms plus response time. Each run used
+four 12-second observation windows, alternating full, compact, compact, full
+in the same process. The first 1.5 seconds of each window were excluded.
+A simulator-only probe recorded monotonic time between Unity updates, including
+frames between captures. Each table row covers approximately 21 seconds.
+
+| Harness feed and task lookup | Median capture | Frame p95 | Frame p99 | Longest frame | Lowest harness FPS interval |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Full, original lookup | 30.5 ms | 44.2 ms | 86.0 ms | 98.1 ms | 63.8 |
+| Compact, original lookup | 3.3 ms | 23.8 ms | 41.9 ms | 52.7 ms | 83.2 |
+| Full, typed lookup | 31.1 ms | 42.2 ms | 66.7 ms | 87.3 ms | 61.7 |
+| Compact, typed lookup | 2.8 ms | 22.9 ms | 36.7 ms | 46.1 ms | 82.2 |
+
+The harness FPS column applies the harness interval calculation (at least
+0.5 seconds) to the recorded frame counters. Individual slow frames are
+visible separately in the frame-time columns. The two lookup builds used
+separate simulator launches. These tests used a null graphics device, so a
+rendered-session FPS floor still requires a live comparison.
+
+With the compact feed alone, toggling catalogue polling changed frame p99 from
+18 ms without polling to 46 ms with polling. Timing individual stages revealed
+repeated component enumeration during task discovery. Direct typed lookups
+reduced median task discovery from 8.9 ms in the original isolated catalogue
+sample to 2.8 ms in the final compact-feed run. Navigation discovery took
+11.8 ms of the final 20.5 ms median catalogue build.
+
+On the production build the harness automatically negotiated the compact feed.
+After P2 fetched rice, both feeds described the same 32 targets, including the
+pot containing SushiRice, and produced matching polygons for 32 map shapes and
+positions for both chefs. P2 extinguished a stove fire in Sushi 1-2. In Resort
+1-3 (DLC 2), P2 washed a dirty plate with the water gun and parked the gun.
+The full build, installed-assembly audit, and test suite passed.
+Raw windows, stage timings and parity results are in
+`.local/fps-spike-refactor/`. The frame and stage probes were confined to the
+benchmark build.

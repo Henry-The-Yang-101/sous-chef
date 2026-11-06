@@ -94,11 +94,12 @@ game while it is closed. `Stream.Port` selects the port; `Capture.Hz` is clamped
 to 1–30. Start at 5 Hz: broad main-thread capture has measurable cost. Match a
 custom port with the client's `--port` argument.
 
-Observation capture follows connected readers. With no observation clients,
-both captures sleep; Player 2 control/navigation still work. A full-stream-only
-client (including the harness) no longer pays for unused 20 Hz gameplay samples.
-Gameplay-only readers still need full scene reconciliation at the configured
-full rate. Connecting resumes capture automatically with fresh state and assets.
+Observation capture follows connected readers. The harness discovers its compact
+feed through the full stream's greeting. Only its kitchen view runs during
+normal harness use. Full readers trigger detailed snapshots, and gameplay
+readers trigger both full scene reconciliation and the faster gameplay samples.
+With all observation sockets closed, Player 2 control and navigation run on
+their own. Reconnecting supplies fresh state and assets.
 
 ```sh
 python3 scripts/build.py             # artifacts/plugin/SousChef.Bridge.dll
