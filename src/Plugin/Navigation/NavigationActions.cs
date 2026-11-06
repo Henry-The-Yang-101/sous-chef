@@ -94,6 +94,28 @@ namespace SousChef.Plugin.Navigation
             foreach (Destination d in identities.Values) if (d.Id == id && d.Object != null && d.Object.activeInHierarchy) return d.Object;
             return null;
         }
+        private float nextSemanticScan;
+        // Register observed identities without refreshing physics or mutating any
+        // active route/destination. This also works on the first paused poll.
+        public void ObserveTargets(PlayerControls player)
+        {
+            if (Time.realtimeSinceStartup < nextSemanticScan) return;
+            nextSemanticScan = Time.realtimeSinceStartup + 1;
+            foreach (Collider collider in UnityEngine.Object.FindObjectsOfType<Collider>())
+            {
+                if (collider == null || !collider.enabled || !collider.gameObject.activeInHierarchy) continue;
+                Transform t = collider.transform;
+                for (int depth = 0; t != null && depth < 5; depth++, t = t.parent)
+                {
+                    string kind;
+                    if (!Eligible(t.gameObject, player, out kind, true)) continue;
+                    bool known = identities.ContainsKey(t.gameObject.GetInstanceID());
+                    RegisterItem(t.gameObject);
+                    if (!known) identities[t.gameObject.GetInstanceID()].Kind = kind;
+                    break;
+                }
+            }
+        }
         public List<GameObject> Targets()
         {
             var result = new List<GameObject>();
@@ -245,7 +267,7 @@ namespace SousChef.Plugin.Navigation
         {
             incrementalSearch = fastWarm = false; ClearRemote();
             ClearReachableIndex();
-            Stop(reason); teleportsCompleted = 0; lastDestination = arrivalDetails = null; identities.Clear(); available.Clear(); physics.Reset(); search = null; chef = null; lastPlan = -1; unavailable = reason;
+            Stop(reason); teleportsCompleted = 0; lastDestination = arrivalDetails = null; identities.Clear(); nextSemanticScan = 0; available.Clear(); physics.Reset(); search = null; chef = null; lastPlan = -1; unavailable = reason;
         }
         public void Dispose() { ClearRemote(); }
         public void ResumeAfterPause(float seconds)

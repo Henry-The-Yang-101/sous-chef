@@ -72,7 +72,7 @@ namespace SousChef.Plugin.Actions
             // This is a type choice, never a claim that cargo is obtainable now.
             foreach (PreparationIngredient root in inventory.IngredientRoots)
             {
-                preparation.Add(Json.Object("id", root.Id, "label", root.Name, "utensil", false));
+                preparation.Add(SemanticCatalog.Preparation(root));
                 if (ingredientIds.Add(root.Id)) ingredients.Add(Json.Object("id", root.Id, "label", root.Name));
             }
             foreach (GameObject go in navigation.Targets())
@@ -80,7 +80,8 @@ namespace SousChef.Plugin.Actions
                 if (PlayerControlsHelper.GetControllingPlacementHandler_Client(go) != null)
                     destinations.Add(navigation.TargetIdentity(go));
             }
-            foreach (string type in utensils) preparation.Add(Json.Object("id", type, "label", type, "utensil", true));
+            foreach (string type in utensils) preparation.Add(Json.Object("id", type, "label", type, "utensil", true, "preparations",
+                Json.Object("raw", "not_applicable", "chopped", "not_applicable", "cooked", "not_applicable", "mixed", "not_applicable", "empty", "applicable")));
             catalog["displayOptions"] = Json.Object("items", items, "ingredients", ingredients, "utensilTypes", utensils,
                 "preparationOptions", preparation, "deliveryDestinations", destinations);
         }

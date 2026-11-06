@@ -12,6 +12,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--game', type=Path, default=Path(os.environ.get('OC2_GAME', DEFAULT_GAME)))
     args = parser.parse_args()
+    subprocess.run([sys.executable, str(ROOT / "scripts/generate_capabilities.py"), "--check"], check=True)
     build(args.game.resolve())
     env = dict(os.environ, DOTNET_CLI_TELEMETRY_OPTOUT='1', DOTNET_SKIP_FIRST_TIME_EXPERIENCE='1')
     subprocess.run([str(bootstrap()), 'run', '--project', 'tests/Bridge.Tests.csproj', '--',

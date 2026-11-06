@@ -1,0 +1,1297 @@
+{
+  "schema_version": "sous-chef.capabilities.v1",
+  "version": 1,
+  "plan_schema_version": "sous-chef.plan.v1",
+  "max_plan_tasks": 5,
+  "$defs": {
+    "destination": {
+      "type": "string",
+      "format": "destination",
+      "minLength": 2,
+      "maxLength": 32
+    },
+    "selector": {
+      "type": "string",
+      "format": "selector",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "player": {
+      "type": "integer",
+      "enum": [
+        1,
+        3,
+        4
+      ]
+    },
+    "preparation": {
+      "type": "string",
+      "enum": [
+        "raw",
+        "chopped",
+        "cooked",
+        "mixed",
+        "empty"
+      ]
+    },
+    "quantity": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10
+    },
+    "work_condition": {
+      "type": "string",
+      "enum": [
+        "work_complete",
+        "one_plate_clean",
+        "sink_empty"
+      ]
+    },
+    "wait_condition": {
+      "type": "string",
+      "enum": [
+        "work_complete",
+        "one_plate_clean",
+        "sink_empty",
+        "occupied",
+        "empty",
+        "cooked",
+        "mixed",
+        "reachable",
+        "ready"
+      ]
+    },
+    "timeout": {
+      "type": "number",
+      "minimum": 0.1,
+      "maximum": 120
+    },
+    "preparation_item": {
+      "type": "object",
+      "properties": {
+        "ingredient": {
+          "$ref": "#/$defs/selector"
+        },
+        "preparation": {
+          "$ref": "#/$defs/preparation",
+          "default": "raw"
+        },
+        "quantity": {
+          "$ref": "#/$defs/quantity",
+          "default": 1
+        }
+      },
+      "required": [
+        "ingredient"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "contracts": [
+    {
+      "name": "assemble_dish",
+      "kind": "task",
+      "version": 1,
+      "label": "Assemble assigned dish",
+      "description": "Produce one exact live ticket using only allocated bases, component instances and equipment; mixing/cooking follow its native recipe.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "order_id": {
+            "$ref": "#/$defs/selector"
+          },
+          "bases": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/destination"
+            },
+            "minItems": 1,
+            "maxItems": 24,
+            "uniqueItems": true
+          },
+          "components": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/destination"
+            },
+            "minItems": 0,
+            "maxItems": 24,
+            "default": [],
+            "uniqueItems": true
+          },
+          "equipment": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/destination"
+            },
+            "minItems": 0,
+            "maxItems": 24,
+            "default": [],
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "order_id",
+          "bases"
+        ],
+        "additionalProperties": false
+      },
+      "repeat": {
+        "unit": "exact_ticket",
+        "minimum": 1,
+        "maximum": 1,
+        "until_cancelled": false,
+        "default": 1
+      },
+      "candidate_sources": [
+        "assemblyOrders",
+        "displayOptions.items",
+        "targets"
+      ],
+      "start_preconditions": [
+        "A live supported recipe ticket; compatible allocated plate and explicit resources."
+      ],
+      "completion_evidence": "Exact selected plate composition and native plating step match the original live ticket.",
+      "cancellation": "Stop cancels and neutralizes owned input; committed physical effects are not rolled back.",
+      "checkpoint_resume": false,
+      "limitations": [
+        "No chopping, dispenser replacements, plate washing, serving, automatic next order, gap transport or optional/unknown recipe branches.",
+        "Allocation binds exact objects; bases are alternatives. Clean stacks pin their current top plate. Missing resources wait; they never permit substitution."
+      ]
+    },
+    {
+      "name": "prepare_near_player",
+      "kind": "task",
+      "version": 1,
+      "label": "Prepare and give to player",
+      "description": "Prepare each requested ingredient/utensil quantity and deliver it near another eligible local player.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/preparation_item"
+            },
+            "minItems": 1,
+            "maxItems": 10
+          },
+          "player_id": {
+            "$ref": "#/$defs/player",
+            "default": 1
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "repeat": {
+        "unit": "item_list",
+        "minimum": 1,
+        "maximum": 10,
+        "until_cancelled": true,
+        "default": 1
+      },
+      "candidate_sources": [
+        "displayOptions.preparationOptions",
+        "players"
+      ],
+      "start_preconditions": [
+        "An eligible recipient and obtainable ingredient or utensil; preparation and handoff require native work/compatibility/route checks."
+      ],
+      "completion_evidence": "Every entry quantity delivered with native cargo identity and handoff evidence; finite totals equal quantity times repetitions.",
+      "cancellation": "Stop cancels and neutralizes owned input; committed physical effects are not rolled back.",
+      "checkpoint_resume": false,
+      "limitations": [
+        "Raw preserves the exact root; processed states follow its native work chain. Empty applies to utensils/plates.",
+        "A state name alone does not prove a cooking/mixing recipe or compatible equipment. No concurrent high-level jobs."
+      ]
+    },
+    {
+      "name": "take_ready",
+      "kind": "task",
+      "version": 1,
+      "label": "Take ready food off heat",
+      "description": "Wait for food on accessible cooking equipment, remove it when ready, then serve or park using native checks.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "repeat": {
+        "unit": "ready_food_collection",
+        "minimum": 1,
+        "maximum": 10,
+        "until_cancelled": true,
+        "default": 1
+      },
+      "candidate_sources": [
+        "targets",
+        "displayOptions.items"
+      ],
+      "start_preconditions": [
+        "Accessible non-ruined food on cooking equipment; mixers excluded."
+      ],
+      "completion_evidence": "One ready food collection and verified serving/parking.",
+      "cancellation": "Stop cancels and neutralizes owned input; committed physical effects are not rolled back.",
+      "checkpoint_resume": false,
+      "limitations": []
+    },
+    {
+      "name": "wash_dishes",
+      "kind": "task",
+      "version": 1,
+      "label": "Wash dirty dishes",
+      "description": "Collect an obtainable dirty batch where needed and wash at an accessible sink.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "repeat": {
+        "unit": "washing_batch",
+        "minimum": 1,
+        "maximum": 10,
+        "until_cancelled": true,
+        "default": 1
+      },
+      "candidate_sources": [
+        "targets",
+        "displayOptions.items"
+      ],
+      "start_preconditions": [
+        "Accessible sink with dirty contents or obtainable dirty dishes."
+      ],
+      "completion_evidence": "Native sink becomes empty after washing the selected batch.",
+      "cancellation": "Stop cancels and neutralizes owned input; committed physical effects are not rolled back.",
+      "checkpoint_resume": false,
+      "limitations": [
+        "One repetition is a batch, not one plate."
+      ]
+    },
+    {
+      "name": "deliver_dirty_dishes",
+      "kind": "task",
+      "version": 1,
+      "label": "Deliver dirty dishes",
+      "description": "Collect a dirty batch and hand it off for the human to wash.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "repeat": {
+        "unit": "dirty_dish_batch",
+        "minimum": 1,
+        "maximum": 10,
+        "until_cancelled": true,
+        "default": 1
+      },
+      "candidate_sources": [
+        "targets",
+        "players",
+        "displayOptions.items"
+      ],
+      "start_preconditions": [
+        "Obtainable dirty dishes, a human-accessible sink, and complete route evidence that P2 cannot access a sink."
+      ],
+      "completion_evidence": "Verified handoff of the collected dirty batch.",
+      "cancellation": "Stop cancels and neutralizes owned input; committed physical effects are not rolled back.",
+      "checkpoint_resume": false,
+      "limitations": [
+        "Incomplete route coverage cannot prove the human-only sink condition."
+      ]
+    },
+    {
+      "name": "put_out_fire",
+      "kind": "task",
+      "version": 1,
+      "label": "Put out fires",
+      "description": "Use an obtainable extinguisher to extinguish observed fires from certified spray stances.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "repeat": {
+        "unit": "reachable_fire_sweep",
+        "minimum": 1,
+        "maximum": 10,
+        "until_cancelled": true,
+        "default": 1
+      },
+      "candidate_sources": [
+        "targets",
+        "displayOptions.items"
+      ],
+      "start_preconditions": [
+        "Observed native fire and obtainable extinguisher."
+      ],
+      "completion_evidence": "Selected native fires no longer burn; no remaining fire has a certified reachable spray stance.",
+      "cancellation": "Stop cancels and neutralizes owned input; committed physical effects are not rolled back.",
+      "checkpoint_resume": false,
+      "limitations": [
+        "One repetition is a reachable-fire sweep, not one flame. A selected blocked fire waits."
+      ]
+    },
+    {
+      "name": "toss_burnt_food",
+      "kind": "task",
+      "version": 1,
+      "label": "Toss burnt food",
+      "description": "Dispose of one ruined food/container and return a surviving empty utensil to a compatible location.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "repeat": {
+        "unit": "burnt_food_disposal",
+        "minimum": 1,
+        "maximum": 10,
+        "until_cancelled": true,
+        "default": 1
+      },
+      "candidate_sources": [
+        "targets",
+        "displayOptions.items"
+      ],
+      "start_preconditions": [
+        "Obtainable food in native ruined state; disposal and return validated live."
+      ],
+      "completion_evidence": "Native disposal verified and surviving utensil returned where applicable.",
+      "cancellation": "Stop cancels and neutralizes owned input; committed physical effects are not rolled back.",
+      "checkpoint_resume": false,
+      "limitations": []
+    },
+    {
+      "name": "monitor_equipment",
+      "kind": "task",
+      "version": 1,
+      "label": "Monitor cooking and mixing",
+      "description": "Watch accessible unattended cooking/mixing equipment and rescue ready output.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "repeat": {
+        "unit": "ready_food_collection",
+        "minimum": 1,
+        "maximum": 10,
+        "until_cancelled": true,
+        "default": 1
+      },
+      "candidate_sources": [
+        "targets",
+        "displayOptions.items"
+      ],
+      "start_preconditions": [
+        "Accessible unattended processing equipment; contents may be empty initially."
+      ],
+      "completion_evidence": "One ready output collected and served/parked with native evidence.",
+      "cancellation": "Stop cancels and neutralizes owned input; committed physical effects are not rolled back.",
+      "checkpoint_resume": false,
+      "limitations": [
+        "Finite count measures rescued outputs, not seconds or polling cycles. Unlimited is a standing assignment. Chopping boards excluded."
+      ]
+    },
+    {
+      "name": "deliver_completed_dishes",
+      "kind": "task",
+      "version": 1,
+      "label": "Deliver completed dishes",
+      "description": "Deliver matching ready plated dishes, choosing the most urgent live ticket.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "repeat": {
+        "unit": "dish_delivery",
+        "minimum": 1,
+        "maximum": 10,
+        "until_cancelled": true,
+        "default": 1
+      },
+      "candidate_sources": [
+        "assemblyOrders",
+        "targets",
+        "displayOptions.items"
+      ],
+      "start_preconditions": [
+        "Accessible serving window; waits for a matching complete dish."
+      ],
+      "completion_evidence": "Native serving message identifies the exact delivered plate.",
+      "cancellation": "Stop cancels and neutralizes owned input; committed physical effects are not rolled back.",
+      "checkpoint_resume": false,
+      "limitations": [
+        "Does not assemble or prepare missing components."
+      ]
+    },
+    {
+      "name": "navigate_to",
+      "kind": "action",
+      "category": "navigation",
+      "version": 1,
+      "label": "Navigate",
+      "description": "Navigate using the existing native executor.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "destination_id": {
+            "$ref": "#/$defs/destination"
+          }
+        },
+        "required": [
+          "destination_id"
+        ],
+        "additionalProperties": false
+      },
+      "repeat": {
+        "unit": "single_action",
+        "minimum": 1,
+        "maximum": 1,
+        "until_cancelled": false,
+        "default": 1
+      },
+      "candidate_sources": [
+        "destinations"
+      ],
+      "start_preconditions": [
+        "Fresh exact target/source and native compatibility, cargo, route and input gates; one P2 owner."
+      ],
+      "completion_evidence": "Native checked route arrival and stable facing; may report positioned_no_action.",
+      "cancellation": "Stop neutralizes input; an already released throw or committed transfer cannot be undone.",
+      "checkpoint_resume": false,
+      "limitations": [
+        "Target options and conditions must be checked live; a possible operation is not start permission."
+      ],
+      "wire_arguments": [
+        "destination_id"
+      ]
+    },
+    {
+      "name": "pick_up",
+      "kind": "action",
+      "category": "interaction",
+      "version": 1,
+      "label": "Pick up",
+      "description": "Pick up using the existing native executor.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "target_id": {
+            "$ref": "#/$defs/destination"
+          }
+        },
+        "required": [
+          "target_id"
+        ],
+        "additionalProperties": false
+      },
+      "repeat": {
+        "unit": "single_action",
+        "minimum": 1,
+        "maximum": 1,
+        "until_cancelled": false,
+        "default": 1
+      },
+      "candidate_sources": [
+        "targets"
+      ],
+      "start_preconditions": [
+        "Fresh exact target/source and native compatibility, cargo, route and input gates; one P2 owner."
+      ],
+      "completion_evidence": "Exact expected cargo becomes held.",
+      "cancellation": "Stop neutralizes input; an already released throw or committed transfer cannot be undone.",
+      "checkpoint_resume": false,
+      "limitations": [
+        "Target options and conditions must be checked live; a possible operation is not start permission."
+      ],
+      "wire_arguments": [
+        "target_id"
+      ]
+    },
+    {
+      "name": "place_at",
+      "kind": "action",
+      "category": "interaction",
+      "version": 1,
+      "label": "Place held item",
+      "description": "Place held item using the existing native executor.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "target_id": {
+            "$ref": "#/$defs/destination"
+          }
+        },
+        "required": [
+          "target_id"
+        ],
+        "additionalProperties": false
+      },
+      "repeat": {
+        "unit": "single_action",
+        "minimum": 1,
+        "maximum": 1,
+        "until_cancelled": false,
+        "default": 1
+      },
+      "candidate_sources": [
+        "targets"
+      ],
+      "start_preconditions": [
+        "Fresh exact target/source and native compatibility, cargo, route and input gates; one P2 owner."
+      ],
+      "completion_evidence": "Native placement/transfer or serving receipt verifies the original cargo.",
+      "cancellation": "Stop neutralizes input; an already released throw or committed transfer cannot be undone.",
+      "checkpoint_resume": false,
+      "limitations": [
+        "Target options and conditions must be checked live; a possible operation is not start permission."
+      ],
+      "wire_arguments": [
+        "target_id"
+      ]
+    },
+    {
+      "name": "add_ingredient",
+      "kind": "action",
+      "category": "interaction",
+      "version": 1,
+      "label": "Add held ingredient",
+      "description": "Add held ingredient using the existing native executor.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "target_id": {
+            "$ref": "#/$defs/destination"
+          }
+        },
+        "required": [
+          "target_id"
+        ],
+        "additionalProperties": false
+      },
+      "repeat": {
+        "unit": "single_action",
+        "minimum": 1,
+        "maximum": 1,
+        "until_cancelled": false,
+        "default": 1
+      },
+      "candidate_sources": [
+        "targets"
+      ],
+      "start_preconditions": [
+        "Fresh exact target/source and native compatibility, cargo, route and input gates; one P2 owner."
+      ],
+      "completion_evidence": "Held single ingredient consumed and receiver composition changed as expected.",
+      "cancellation": "Stop neutralizes input; an already released throw or committed transfer cannot be undone.",
+      "checkpoint_resume": false,
+      "limitations": [
+        "Target options and conditions must be checked live; a possible operation is not start permission."
+      ],
+      "wire_arguments": [
+        "target_id"
+      ]
+    },
+    {
+      "name": "collect_contents",
+      "kind": "action",
+      "category": "interaction",
+      "version": 1,
+      "label": "Collect ready contents",
+      "description": "Collect ready contents using the existing native executor.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "target_id": {
+            "$ref": "#/$defs/destination"
+          }
+        },
+        "required": [
+          "target_id"
+        ],
+        "additionalProperties": false
+      },
+      "repeat": {
+        "unit": "single_action",
+        "minimum": 1,
+        "maximum": 1,
+        "until_cancelled": false,
+        "default": 1
+      },
+      "candidate_sources": [
+        "targets"
+      ],
+      "start_preconditions": [
+        "Fresh exact target/source and native compatibility, cargo, route and input gates; one P2 owner."
+      ],
+      "completion_evidence": "Ready contents transferred into the held compatible plate/container.",
+      "cancellation": "Stop neutralizes input; an already released throw or committed transfer cannot be undone.",
+      "checkpoint_resume": false,
+      "limitations": [
+        "Target options and conditions must be checked live; a possible operation is not start permission."
+      ],
+      "wire_arguments": [
+        "target_id"
+      ]
+    },
+    {
+      "name": "work_at",
+      "kind": "action",
+      "category": "interaction",
+      "version": 1,
+      "label": "Work",
+      "description": "Work using the existing native executor.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "target_id": {
+            "$ref": "#/$defs/destination"
+          },
+          "until": {
+            "$ref": "#/$defs/work_condition",
+            "default": "work_complete"
+          },
+          "timeout": {
+            "$ref": "#/$defs/timeout",
+            "default": 60
+          }
+        },
+        "required": [
+          "target_id"
+        ],
+        "additionalProperties": false
+      },
+      "repeat": {
+        "unit": "single_action",
+        "minimum": 1,
+        "maximum": 1,
+        "until_cancelled": false,
+        "default": 1
+      },
+      "candidate_sources": [
+        "targets"
+      ],
+      "start_preconditions": [
+        "Fresh exact target/source and native compatibility, cargo, route and input gates; one P2 owner."
+      ],
+      "completion_evidence": "Selected native work condition observed before timeout.",
+      "cancellation": "Stop neutralizes input; an already released throw or committed transfer cannot be undone.",
+      "checkpoint_resume": false,
+      "limitations": [
+        "Target options and conditions must be checked live; a possible operation is not start permission."
+      ],
+      "wire_arguments": [
+        "target_id",
+        "until",
+        "timeout"
+      ]
+    },
+    {
+      "name": "activate",
+      "kind": "action",
+      "category": "interaction",
+      "version": 1,
+      "label": "Activate",
+      "description": "Activate using the existing native executor.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "target_id": {
+            "$ref": "#/$defs/destination"
+          },
+          "desired_state": {
+            "type": "string",
+            "enum": [
+              "on",
+              "off",
+              "trigger"
+            ],
+            "default": "trigger"
+          }
+        },
+        "required": [
+          "target_id"
+        ],
+        "additionalProperties": false
+      },
+      "repeat": {
+        "unit": "single_action",
+        "minimum": 1,
+        "maximum": 1,
+        "until_cancelled": false,
+        "default": 1
+      },
+      "candidate_sources": [
+        "targets"
+      ],
+      "start_preconditions": [
+        "Fresh exact target/source and native compatibility, cargo, route and input gates; one P2 owner."
+      ],
+      "completion_evidence": "Native activation observed; on/off requires a readable toggle state.",
+      "cancellation": "Stop neutralizes input; an already released throw or committed transfer cannot be undone.",
+      "checkpoint_resume": false,
+      "limitations": [
+        "Target options and conditions must be checked live; a possible operation is not start permission."
+      ],
+      "wire_arguments": [
+        "target_id",
+        "desired_state"
+      ]
+    },
+    {
+      "name": "discard",
+      "kind": "action",
+      "category": "interaction",
+      "version": 1,
+      "label": "Discard held item",
+      "description": "Discard held item using the existing native executor.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "target_id": {
+            "$ref": "#/$defs/destination"
+          }
+        },
+        "required": [
+          "target_id"
+        ],
+        "additionalProperties": false
+      },
+      "repeat": {
+        "unit": "single_action",
+        "minimum": 1,
+        "maximum": 1,
+        "until_cancelled": false,
+        "default": 1
+      },
+      "candidate_sources": [
+        "targets"
+      ],
+      "start_preconditions": [
+        "Fresh exact target/source and native compatibility, cargo, route and input gates; one P2 owner."
+      ],
+      "completion_evidence": "Native rubbish disposal observed for the original cargo.",
+      "cancellation": "Stop neutralizes input; an already released throw or committed transfer cannot be undone.",
+      "checkpoint_resume": false,
+      "limitations": [
+        "Target options and conditions must be checked live; a possible operation is not start permission."
+      ],
+      "wire_arguments": [
+        "target_id"
+      ]
+    },
+    {
+      "name": "wait_until",
+      "kind": "action",
+      "category": "interaction",
+      "version": 1,
+      "label": "Wait",
+      "description": "Wait using the existing native executor.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "target_id": {
+            "$ref": "#/$defs/destination"
+          },
+          "condition": {
+            "$ref": "#/$defs/wait_condition"
+          },
+          "timeout": {
+            "$ref": "#/$defs/timeout",
+            "default": 60
+          }
+        },
+        "required": [
+          "target_id",
+          "condition"
+        ],
+        "additionalProperties": false
+      },
+      "repeat": {
+        "unit": "single_action",
+        "minimum": 1,
+        "maximum": 1,
+        "until_cancelled": false,
+        "default": 1
+      },
+      "candidate_sources": [
+        "targets"
+      ],
+      "start_preconditions": [
+        "Fresh exact target/source and native compatibility, cargo, route and input gates; one P2 owner."
+      ],
+      "completion_evidence": "Selected native condition observed before timeout; no scripted expression.",
+      "cancellation": "Stop neutralizes input; an already released throw or committed transfer cannot be undone.",
+      "checkpoint_resume": false,
+      "limitations": [
+        "Target options and conditions must be checked live; a possible operation is not start permission."
+      ],
+      "wire_arguments": [
+        "target_id",
+        "condition",
+        "timeout"
+      ]
+    },
+    {
+      "name": "throw_to",
+      "kind": "action",
+      "category": "interaction",
+      "version": 1,
+      "label": "Throw held item",
+      "description": "Throw held item using the existing native executor.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "target_id": {
+            "$ref": "#/$defs/destination"
+          }
+        },
+        "required": [
+          "target_id"
+        ],
+        "additionalProperties": false
+      },
+      "repeat": {
+        "unit": "single_action",
+        "minimum": 1,
+        "maximum": 1,
+        "until_cancelled": false,
+        "default": 1
+      },
+      "candidate_sources": [
+        "targets"
+      ],
+      "start_preconditions": [
+        "Fresh exact target/source and native compatibility, cargo, route and input gates; one P2 owner."
+      ],
+      "completion_evidence": "Exact thrown item observed at the planned native receiver.",
+      "cancellation": "Stop neutralizes input; an already released throw or committed transfer cannot be undone.",
+      "checkpoint_resume": false,
+      "limitations": [
+        "Target options and conditions must be checked live; a possible operation is not start permission."
+      ],
+      "wire_arguments": [
+        "target_id"
+      ]
+    },
+    {
+      "name": "throw_to_player",
+      "kind": "action",
+      "category": "interaction",
+      "version": 1,
+      "label": "Pass held item",
+      "description": "Pass held item using the existing native executor.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "player_id": {
+            "$ref": "#/$defs/player"
+          }
+        },
+        "required": [
+          "player_id"
+        ],
+        "additionalProperties": false
+      },
+      "repeat": {
+        "unit": "single_action",
+        "minimum": 1,
+        "maximum": 1,
+        "until_cancelled": false,
+        "default": 1
+      },
+      "candidate_sources": [
+        "players"
+      ],
+      "start_preconditions": [
+        "Fresh exact target/source and native compatibility, cargo, route and input gates; one P2 owner."
+      ],
+      "completion_evidence": "Exact thrown item caught by the selected local player.",
+      "cancellation": "Stop neutralizes input; an already released throw or committed transfer cannot be undone.",
+      "checkpoint_resume": false,
+      "limitations": [
+        "Target options and conditions must be checked live; a possible operation is not start permission."
+      ],
+      "wire_arguments": [
+        "player_id"
+      ]
+    },
+    {
+      "name": "stop",
+      "kind": "action",
+      "category": "control",
+      "version": 1,
+      "label": "Stop",
+      "description": "Stop using the existing native executor.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "repeat": {
+        "unit": "single_action",
+        "minimum": 1,
+        "maximum": 1,
+        "until_cancelled": false,
+        "default": 1
+      },
+      "candidate_sources": [],
+      "start_preconditions": [
+        "Available independently of current action and input suspension."
+      ],
+      "completion_evidence": "Owned input neutralized and active native action cancelled.",
+      "cancellation": "Stop neutralizes input; an already released throw or committed transfer cannot be undone.",
+      "checkpoint_resume": false,
+      "limitations": [],
+      "wire_arguments": []
+    },
+    {
+      "name": "move_item",
+      "kind": "action",
+      "category": "logistics",
+      "version": 1,
+      "label": "Move item",
+      "description": "Move item using the existing native executor.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "item": {
+            "$ref": "#/$defs/destination"
+          },
+          "destination": {
+            "$ref": "#/$defs/destination"
+          }
+        },
+        "required": [
+          "item",
+          "destination"
+        ],
+        "additionalProperties": false
+      },
+      "repeat": {
+        "unit": "single_action",
+        "minimum": 1,
+        "maximum": 1,
+        "until_cancelled": false,
+        "default": 1
+      },
+      "candidate_sources": [
+        "displayOptions.items",
+        "displayOptions.deliveryDestinations",
+        "jobOptions"
+      ],
+      "start_preconditions": [
+        "Fresh exact target/source and native compatibility, cargo, route and input gates; one P2 owner."
+      ],
+      "completion_evidence": "Exact source collected and delivered to the checked destination.",
+      "cancellation": "Stop neutralizes input; an already released throw or committed transfer cannot be undone.",
+      "checkpoint_resume": false,
+      "limitations": [
+        "Target options and conditions must be checked live; a possible operation is not start permission."
+      ],
+      "wire_arguments": [
+        "item",
+        "destination"
+      ]
+    },
+    {
+      "name": "fetch_ingredient",
+      "kind": "action",
+      "category": "logistics",
+      "version": 1,
+      "label": "Fetch ingredient",
+      "description": "Fetch ingredient using the existing native executor.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "ingredient": {
+            "$ref": "#/$defs/selector"
+          },
+          "destination": {
+            "$ref": "#/$defs/destination"
+          }
+        },
+        "required": [
+          "ingredient",
+          "destination"
+        ],
+        "additionalProperties": false
+      },
+      "repeat": {
+        "unit": "single_action",
+        "minimum": 1,
+        "maximum": 1,
+        "until_cancelled": false,
+        "default": 1
+      },
+      "candidate_sources": [
+        "displayOptions.ingredients",
+        "jobOptions"
+      ],
+      "start_preconditions": [
+        "Fresh exact target/source and native compatibility, cargo, route and input gates; one P2 owner."
+      ],
+      "completion_evidence": "One selected raw ingredient obtained and delivered.",
+      "cancellation": "Stop neutralizes input; an already released throw or committed transfer cannot be undone.",
+      "checkpoint_resume": false,
+      "limitations": [
+        "Target options and conditions must be checked live; a possible operation is not start permission."
+      ],
+      "wire_arguments": [
+        "ingredient",
+        "destination"
+      ]
+    },
+    {
+      "name": "get_plate",
+      "kind": "action",
+      "category": "logistics",
+      "version": 1,
+      "label": "Get clean plate",
+      "description": "Get clean plate using the existing native executor.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "destination": {
+            "$ref": "#/$defs/destination"
+          }
+        },
+        "required": [
+          "destination"
+        ],
+        "additionalProperties": false
+      },
+      "repeat": {
+        "unit": "single_action",
+        "minimum": 1,
+        "maximum": 1,
+        "until_cancelled": false,
+        "default": 1
+      },
+      "candidate_sources": [
+        "jobOptions"
+      ],
+      "start_preconditions": [
+        "Fresh exact target/source and native compatibility, cargo, route and input gates; one P2 owner."
+      ],
+      "completion_evidence": "One clean plate obtained and delivered; no washing.",
+      "cancellation": "Stop neutralizes input; an already released throw or committed transfer cannot be undone.",
+      "checkpoint_resume": false,
+      "limitations": [
+        "Target options and conditions must be checked live; a possible operation is not start permission."
+      ],
+      "wire_arguments": [
+        "destination"
+      ]
+    },
+    {
+      "name": "get_utensil",
+      "kind": "action",
+      "category": "logistics",
+      "version": 1,
+      "label": "Get empty utensil",
+      "description": "Get empty utensil using the existing native executor.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "utensil_type": {
+            "$ref": "#/$defs/selector"
+          },
+          "destination": {
+            "$ref": "#/$defs/destination"
+          }
+        },
+        "required": [
+          "utensil_type",
+          "destination"
+        ],
+        "additionalProperties": false
+      },
+      "repeat": {
+        "unit": "single_action",
+        "minimum": 1,
+        "maximum": 1,
+        "until_cancelled": false,
+        "default": 1
+      },
+      "candidate_sources": [
+        "displayOptions.utensilTypes",
+        "jobOptions"
+      ],
+      "start_preconditions": [
+        "Fresh exact target/source and native compatibility, cargo, route and input gates; one P2 owner."
+      ],
+      "completion_evidence": "One empty utensil of the selected type obtained and delivered.",
+      "cancellation": "Stop neutralizes input; an already released throw or committed transfer cannot be undone.",
+      "checkpoint_resume": false,
+      "limitations": [
+        "Target options and conditions must be checked live; a possible operation is not start permission."
+      ],
+      "wire_arguments": [
+        "utensil_type",
+        "destination"
+      ]
+    },
+    {
+      "name": "stage_item",
+      "kind": "action",
+      "category": "logistics",
+      "version": 1,
+      "label": "Stage item",
+      "description": "Stage item using the existing native executor.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "item": {
+            "$ref": "#/$defs/destination"
+          },
+          "handoff_location": {
+            "$ref": "#/$defs/destination"
+          }
+        },
+        "required": [
+          "item",
+          "handoff_location"
+        ],
+        "additionalProperties": false
+      },
+      "repeat": {
+        "unit": "single_action",
+        "minimum": 1,
+        "maximum": 1,
+        "until_cancelled": false,
+        "default": 1
+      },
+      "candidate_sources": [
+        "displayOptions.items",
+        "jobOptions"
+      ],
+      "start_preconditions": [
+        "Fresh exact target/source and native compatibility, cargo, route and input gates; one P2 owner."
+      ],
+      "completion_evidence": "Exact source delivered to the checked handoff location.",
+      "cancellation": "Stop neutralizes input; an already released throw or committed transfer cannot be undone.",
+      "checkpoint_resume": false,
+      "limitations": [
+        "Target options and conditions must be checked live; a possible operation is not start permission."
+      ],
+      "wire_arguments": [
+        "item",
+        "handoff_location"
+      ]
+    },
+    {
+      "name": "return_utensil",
+      "kind": "action",
+      "category": "logistics",
+      "version": 1,
+      "label": "Return utensil",
+      "description": "Return utensil using the existing native executor.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "utensil": {
+            "$ref": "#/$defs/destination"
+          }
+        },
+        "required": [
+          "utensil"
+        ],
+        "additionalProperties": false
+      },
+      "repeat": {
+        "unit": "single_action",
+        "minimum": 1,
+        "maximum": 1,
+        "until_cancelled": false,
+        "default": 1
+      },
+      "candidate_sources": [
+        "displayOptions.items",
+        "jobOptions"
+      ],
+      "start_preconditions": [
+        "Fresh exact target/source and native compatibility, cargo, route and input gates; one P2 owner."
+      ],
+      "completion_evidence": "Exact empty utensil returned to observed home or compatible free equipment.",
+      "cancellation": "Stop neutralizes input; an already released throw or committed transfer cannot be undone.",
+      "checkpoint_resume": false,
+      "limitations": [
+        "Target options and conditions must be checked live; a possible operation is not start permission."
+      ],
+      "wire_arguments": [
+        "utensil"
+      ]
+    },
+    {
+      "name": "clear_station",
+      "kind": "action",
+      "category": "logistics",
+      "version": 1,
+      "label": "Clear station",
+      "description": "Clear station using the existing native executor.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "station": {
+            "$ref": "#/$defs/destination"
+          },
+          "destination": {
+            "$ref": "#/$defs/destination"
+          }
+        },
+        "required": [
+          "station",
+          "destination"
+        ],
+        "additionalProperties": false
+      },
+      "repeat": {
+        "unit": "single_action",
+        "minimum": 1,
+        "maximum": 1,
+        "until_cancelled": false,
+        "default": 1
+      },
+      "candidate_sources": [
+        "targets",
+        "jobOptions"
+      ],
+      "start_preconditions": [
+        "Fresh exact target/source and native compatibility, cargo, route and input gates; one P2 owner."
+      ],
+      "completion_evidence": "Original station cargo collected and delivered to the selected destination.",
+      "cancellation": "Stop neutralizes input; an already released throw or committed transfer cannot be undone.",
+      "checkpoint_resume": false,
+      "limitations": [
+        "Target options and conditions must be checked live; a possible operation is not start permission."
+      ],
+      "wire_arguments": [
+        "station",
+        "destination"
+      ]
+    }
+  ],
+  "not_implemented": [
+    "move_to_region",
+    "transfer_contents",
+    "persistent_region_assignment",
+    "checkpoint_resume",
+    "concurrent_responsibilities",
+    "event_bound_task"
+  ]
+}

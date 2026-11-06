@@ -11,7 +11,7 @@ namespace SousChef.Core
     }
     public sealed class TaskRequest
     {
-        public static readonly string[] Names = { "prepare_near_player", "assemble_dish", "take_ready", "wash_dishes", "deliver_dirty_dishes", "put_out_fire", "toss_burnt_food", "monitor_equipment", "deliver_completed_dishes" };
+        public static readonly string[] Names = CapabilityRegistry.Tasks;
         public string Action;
         public int Repetitions = 1, Player = 1; // Zero means until explicitly stopped.
         public readonly List<PreparationRequest> Items = new List<PreparationRequest>();
@@ -21,7 +21,7 @@ namespace SousChef.Core
             if (tokens.Length < 4 || Array.IndexOf(Names, tokens[2]) < 0) throw new ArgumentException("invalid_task");
             var task = new TaskRequest { Action = tokens[2] };
             if (tokens[3] == "forever") task.Repetitions = 0;
-            else if (!Int32.TryParse(tokens[3], NumberStyles.None, CultureInfo.InvariantCulture, out task.Repetitions) || task.Repetitions < 1 || task.Repetitions > 10)
+            else if (!Int32.TryParse(tokens[3], NumberStyles.None, CultureInfo.InvariantCulture, out task.Repetitions) || task.Repetitions < 1 || task.Repetitions > CapabilityRegistry.MaxRepetitions)
                 throw new ArgumentException("invalid_repetitions");
             if (task.Action == "assemble_dish")
             {
@@ -30,14 +30,14 @@ namespace SousChef.Core
             }
             if (task.Action != "prepare_near_player")
             { if (tokens.Length != 4) throw new ArgumentException("invalid_task_arguments"); return task; }
-            if (tokens.Length < 8 || tokens.Length > 35 || (tokens.Length - 5) % 3 != 0 || (tokens[4] != "1" && tokens[4] != "3" && tokens[4] != "4"))
+            if (tokens.Length < 8 || tokens.Length > 5 + CapabilityRegistry.MaxPreparationItems * 3 || (tokens.Length - 5) % 3 != 0 || (tokens[4] != "1" && tokens[4] != "3" && tokens[4] != "4"))
                 throw new ArgumentException("invalid_preparation_list");
             task.Player = Int32.Parse(tokens[4], CultureInfo.InvariantCulture);
             for (int i = 5; i < tokens.Length; i += 3)
             {
                 int quantity;
-                if (Array.IndexOf(new[] { "raw", "chopped", "cooked", "mixed", "empty" }, tokens[i + 1]) < 0 ||
-                    !Int32.TryParse(tokens[i + 2], NumberStyles.None, CultureInfo.InvariantCulture, out quantity) || quantity < 1 || quantity > 10)
+                if (Array.IndexOf(CapabilityRegistry.Preparations, tokens[i + 1]) < 0 ||
+                    !Int32.TryParse(tokens[i + 2], NumberStyles.None, CultureInfo.InvariantCulture, out quantity) || quantity < 1 || quantity > CapabilityRegistry.MaxQuantity)
                     throw new ArgumentException("invalid_preparation");
                 task.Items.Add(new PreparationRequest { Selector = ControlCommand.DecodeSelector(tokens[i]), Preparation = tokens[i + 1], Quantity = quantity });
             }
@@ -57,7 +57,7 @@ namespace SousChef.Core
             {
                 int count;
                 if (cursor >= tokens.Length || !Int32.TryParse(tokens[cursor++], NumberStyles.None, CultureInfo.InvariantCulture, out count) ||
-                    count < (list == result.Bases ? 1 : 0) || count > 24 || cursor + count > tokens.Length)
+                    count < (list == result.Bases ? 1 : 0) || count > CapabilityRegistry.MaxAllocationGroup || cursor + count > tokens.Length)
                     throw new ArgumentException("invalid_assembly_allocation");
                 for (int i = 0; i < count; i++)
                 {

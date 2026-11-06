@@ -22,6 +22,7 @@ internal static class Program
     {
         checks += NavigationTests.Run();
         checks += WorkerTests.Run();
+        checks += CapabilityTests.Run();
         TestTasks(); TestSchedule(); TestJson(); TestNumericRecords(); TestUtf8Line(); TestIdentity(); TestStream(); TestStreamDemand(); TestControl();
         if (args.Length > 0) Audit(args[0]);
         Console.WriteLine("PASS: " + checks + " assertions");

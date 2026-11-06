@@ -77,6 +77,34 @@ internal static class Program
         Check(((List<object>)display["ingredients"]).Cast<Json.Record>().Any(item => (string)item["label"] == "Rice"), "automatic types also appear in the ingredient chooser");
         Check(!jobs.Inventory.Items.Any(item => item.Item == rawFish || item.Item == rice), "automatic prefabs never become obtainable inventory");
         Check(((List<object>)((Json.Record)catalog["jobOptions"])["fetch_ingredient"]).Count == 0, "unspawned types do not authorize fetch jobs");
+        var observer = new SemanticCatalog(nav);
+        var tasks = new TaskActions(nav, child, buttons => { throw new Exception("semantic observer pressed input"); },
+            () => { throw new Exception("semantic observer released task"); });
+        tasks.Run.Start(1, new ControlCommand { Id = "active", Operation = "task", Indefinite = true }, Time.realtimeSinceStartup);
+        long revision = tasks.Run.Revision;
+        string before = Json.Encode(tasks.Describe());
+        var flow = new GameObject("flow").Add(new ServerKitchenFlowControllerBase());
+        new GameObject("serving").Add(new ServerPlateStation());
+        var ticket = new OrderController.ServerOrderData { ID = new OrderController.OrderID { m_id = 7 }, Remaining = 100,
+            RecipeListEntry = new RecipeList.Entry { m_order = new OrderDefinitionNode { name = "Fish", Node = new IngredientAssembledNode("Fish") } } };
+        flow.Monitor.OrdersController.m_activeOrders.Add(ticket);
+        var semantic = (Json.Record)observer.Capture(chef, new List<object>());
+        tasks.Decorate(catalog, chef);
+        Check(((List<object>)catalog["taskOptions"]).Count == 0, "busy task is never advertised as startable");
+        Check(((Json.Record)catalog["taskApplicability"]).Length / 2 == TaskRequest.Names.Length, "all implemented families retain applicability records while busy");
+        Check(((List<object>)semantic["assemblyOrders"]).Count == 1, "exact live assembly tickets remain observable while busy");
+        Check(tasks.Run.Running && tasks.Run.Revision == revision && Json.Encode(tasks.Describe()) == before, "semantic observation preserves active task receipt and state");
+        var semanticPrep = ((List<object>)((Json.Record)semantic["displayOptions"])["preparationOptions"]).Cast<Json.Record>().ToList();
+        var fishOption = semanticPrep.First(item => (string)item["label"] == "Fish");
+        Check((string)((Json.Record)fishOption["preparations"])["chopped"] == "applicable", "native work chain supports chopped fish");
+        Check((string)((Json.Record)fishOption["preparations"])["cooked"] == "unknown", "work chain never fabricates cooking compatibility");
+        Check((string)((Json.Record)semanticPrep.First(item => (string)item["label"] == "Rice")["preparations"])["chopped"] == "not_applicable", "non-workable rice does not advertise chopping");
+        flow.Monitor.OrdersController.m_activeOrders.Clear();
+        semantic = (Json.Record)observer.Capture(chef, new List<object>());
+        Check(((List<object>)semantic["assemblyOrders"]).Count == 0, "expired tickets disappear during busy observation");
+        rawFish.GetComponent<WorkableItem>().Next = rawFish;
+        Check((string)((Json.Record)((Json.Record)SemanticCatalog.Preparation(new PreparationIngredient { Id = "cycle", Name = "cycle", Prefab = rawFish }))["preparations"])["chopped"] == "unknown", "cyclic work chain is bounded and unknown");
+        rawFish.GetComponent<WorkableItem>().Next = fish;
         // Native crates may change their output later in the round.
         supply.Add(new PickupItemSwitcher { m_itemPrefabs = new[] { raw, rice, null } });
         automatic.activeInHierarchy = false;

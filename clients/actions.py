@@ -1,74 +1,38 @@
 #!/usr/bin/env python3
 """Typed autonomous Player 2 actions; the caller never supplies steering input."""
 import argparse
-import base64
 import json
-import math
 import time
-import unicodedata
 try:
     from .control import ControlClient, ControlError
+    from .capabilities import TASK_NAMES, WORK_CONDITIONS, WAIT_CONDITIONS, contract, validate, selector, wire_command
 except ImportError:
     from control import ControlClient, ControlError
+    from capabilities import TASK_NAMES, WORK_CONDITIONS, WAIT_CONDITIONS, contract, validate, selector, wire_command
 
 
 class ActionClient(ControlClient):
-    WORK_CONDITIONS = ('work_complete', 'one_plate_clean', 'sink_empty')
-    WAIT_CONDITIONS = (*WORK_CONDITIONS, 'occupied', 'empty', 'cooked', 'mixed', 'reachable', 'ready')
+    TASK_ACTIONS = TASK_NAMES
+    WORK_CONDITIONS = WORK_CONDITIONS
+    WAIT_CONDITIONS = WAIT_CONDITIONS
 
-    TASK_ACTIONS = ('assemble_dish', 'prepare_near_player', 'take_ready', 'wash_dishes', 'deliver_dirty_dishes',
-                    'put_out_fire', 'toss_burnt_food', 'monitor_equipment', 'deliver_completed_dishes')
+    def run_capability(self, name, arguments, repetitions=1, *, version=None):
+        """Shared validated adapter; names are registry keys, never method names."""
+        operation, tokens = wire_command(name, arguments, repetitions, version)
+        return self._request(operation, *tokens)
 
     def run_task(self, action, repetitions=1, *, items=None, player_id=1, order_id=None, bases=None, components=None, equipment=None):
-        """Run one autonomous task; repetitions=None repeats until Stop.
-
-        Preparation items: [{'ingredient': 'chicken', 'preparation': 'chopped', 'quantity': 2}].
-        Use preparation='empty' and ingredient='plate'/'pot' for utensils.
-        """
-        if action not in self.TASK_ACTIONS:
+        """Run one task. None means until Stop; assembly accepts exactly one ticket."""
+        if contract(action)['kind'] != 'task':
             raise ValueError('Unknown task action')
-        if repetitions is not None and (type(repetitions) is not int or not 1 <= repetitions <= 10):
-            raise ValueError('repetitions must be 1..10 or None (infinite)')
-        args = [action, 'forever' if repetitions is None else repetitions]
-        if action != 'assemble_dish' and any(value is not None for value in (order_id, bases, components, equipment)):
-            raise ValueError('Only assembly takes an order and resource allocation')
-        if action == 'assemble_dish':
-            if repetitions != 1 or items is not None or player_id != 1:
-                raise ValueError('Assembly takes one ticket and an explicit resource allocation')
-            args.append(self._selector(order_id))
-            seen = set()
-            for index, group in enumerate((bases, [] if components is None else components, [] if equipment is None else equipment)):
-                if not isinstance(group, list) or not (1 if index == 0 else 0) <= len(group) <= 24:
-                    raise ValueError('Assign 1..24 bases and at most 24 components/equipment each')
-                args.append(len(group))
-                for value in group:
-                    resource = self._destination(value)
-                    if resource in seen:
-                        raise ValueError('Each resource may be assigned only once')
-                    seen.add(resource); args.append(resource)
-        elif action == 'prepare_near_player':
-            if type(player_id) is not int or player_id not in (1, 3, 4):
-                raise ValueError('Choose another local player')
-            if not isinstance(items, list) or not 1 <= len(items) <= 10:
-                raise ValueError('Provide 1..10 preparation items')
-            args.append(player_id)
-            for item in items:
-                if not isinstance(item, dict) or item.keys() - {'ingredient', 'preparation', 'quantity'}:
-                    raise ValueError('Invalid preparation item')
-                preparation, quantity = item.get('preparation', 'raw'), item.get('quantity', 1)
-                if preparation not in ('raw', 'chopped', 'cooked', 'mixed', 'empty') or type(quantity) is not int or not 1 <= quantity <= 10:
-                    raise ValueError('Choose a preparation and quantity 1..10')
-                args.extend((self._selector(item.get('ingredient')), preparation, quantity))
-        elif items is not None or player_id != 1:
-            raise ValueError('Only preparation takes items/player_id')
-        return self._request('task', *args)
+        arguments = {key: value for key, value in dict(items=items, order_id=order_id, bases=bases,
+                     components=components, equipment=equipment).items() if value is not None}
+        if action == 'prepare_near_player' or player_id != 1 or type(player_id) is not int:
+            arguments['player_id'] = player_id
+        return self.run_capability(action, arguments, repetitions)
 
     def assemble_dish(self, order_id, *, bases, components, equipment=None):
-        """Assemble one exact live ticket using only these allocated item IDs.
-
-        IDs come from assemblyOrders, items, and destinations in available_actions().
-        Bases are alternatives; components are finite instances, never dispenser selectors.
-        """
+        """Assemble one exact live ticket using only these allocated native IDs."""
         return self.run_task('assemble_dish', order_id=order_id, bases=bases,
                              components=components, equipment=equipment)
 
@@ -76,98 +40,73 @@ class ActionClient(ControlClient):
         self._request('actions')
         return self.last_response['availableActions']
 
+    @staticmethod
+    def _destination(value):
+        return validate(contract('navigate_to')['parameters']['properties']['destination_id'], value)
+
+    _selector = staticmethod(selector)
+
+    @staticmethod
+    def _timeout(value):
+        return round(validate(contract('work_at')['parameters']['properties']['timeout'], value) * 1000)
+
     def navigate_to(self, destination_id):
-        return self._target('navigate_to', destination_id)
-
-    def _target(self, operation, destination_id, *arguments):
-        return self._request(operation, self._destination(destination_id), *arguments)
-
-    @staticmethod
-    def _destination(destination_id):
-        if (not isinstance(destination_id, str) or not 2 <= len(destination_id) <= 32
-                or destination_id[0] != 'd' or not destination_id[1:].isascii()
-                or not destination_id[1:].isdigit()):
-            raise ValueError('Use a destination ID from available_actions()')
-        return destination_id
-
-    @staticmethod
-    def _selector(value):
-        if not isinstance(value, str) or not value.strip() or len(value) > 64 or len(value.encode('utf-8')) > 96 or any(unicodedata.category(c) == 'Cc' for c in value):
-            raise ValueError('Selector must contain 1..64 printable characters, at most 96 UTF-8 bytes')
-        return 's' + base64.urlsafe_b64encode(value.encode('utf-8')).decode('ascii').rstrip('=')
+        return self.run_capability('navigate_to', dict(destination_id=destination_id))
 
     def move_item(self, item, destination):
-        return self._request('move_item', self._destination(item), self._destination(destination))
+        return self.run_capability('move_item', dict(item=item, destination=destination))
 
     def fetch_ingredient(self, ingredient, destination):
-        return self._request('fetch_ingredient', self._selector(ingredient), self._destination(destination))
+        return self.run_capability('fetch_ingredient', dict(ingredient=ingredient, destination=destination))
 
     def get_plate(self, destination):
-        return self._target('get_plate', destination)
+        return self.run_capability('get_plate', dict(destination=destination))
 
     def get_utensil(self, utensil_type, destination):
-        return self._request('get_utensil', self._selector(utensil_type), self._destination(destination))
+        return self.run_capability('get_utensil', dict(utensil_type=utensil_type, destination=destination))
 
     def stage_item(self, item, handoff_location):
-        return self._request('stage_item', self._destination(item), self._destination(handoff_location))
+        return self.run_capability('stage_item', dict(item=item, handoff_location=handoff_location))
 
     def return_utensil(self, utensil):
-        return self._target('return_utensil', utensil)
+        return self.run_capability('return_utensil', dict(utensil=utensil))
 
     def clear_station(self, station, destination):
-        return self._request('clear_station', self._destination(station), self._destination(destination))
+        return self.run_capability('clear_station', dict(station=station, destination=destination))
 
     def pick_up(self, target_id):
-        return self._target('pick_up', target_id)
+        return self.run_capability('pick_up', dict(target_id=target_id))
 
     def place_at(self, target_id):
-        return self._target('place_at', target_id)
+        return self.run_capability('place_at', dict(target_id=target_id))
 
     def add_ingredient(self, target_id):
-        """Add the held single ingredient; container transfers are a higher layer."""
-        return self._target('add_ingredient', target_id)
+        return self.run_capability('add_ingredient', dict(target_id=target_id))
 
     def collect_contents(self, target_id):
-        """Collect ready contents into the held compatible plate/container."""
-        return self._target('collect_contents', target_id)
+        return self.run_capability('collect_contents', dict(target_id=target_id))
 
     def discard(self, bin_id):
-        """Dispose of the held item/contents at the specified native rubbish bin."""
-        return self._target('discard', bin_id)
+        return self.run_capability('discard', dict(target_id=bin_id))
 
     def throw_to(self, target_id):
-        """Plan, navigate, aim and throw the held object to a native receiver."""
-        return self._target('throw_to', target_id)
+        return self.run_capability('throw_to', dict(target_id=target_id))
 
     def throw_to_player(self, player_id):
-        if type(player_id) is not int or player_id not in (1, 3, 4):
-            raise ValueError('player_id must be another local player: 1, 3, or 4')
-        return self._request('throw_to_player', player_id)
-
-    @staticmethod
-    def _timeout(seconds):
-        if isinstance(seconds, bool) or not isinstance(seconds, (int, float)) or not math.isfinite(seconds) or not .1 <= seconds <= 120:
-            raise ValueError('timeout must be finite seconds in 0.1..120')
-        return round(seconds * 1000)
+        return self.run_capability('throw_to_player', dict(player_id=player_id))
 
     def work_at(self, target_id, until='work_complete', timeout=60):
-        if until not in self.WORK_CONDITIONS:
-            raise ValueError('Unknown work completion condition')
-        return self._target('work_at', target_id, until, self._timeout(timeout))
+        return self.run_capability('work_at', dict(target_id=target_id, until=until, timeout=timeout))
 
     def activate(self, target_id, desired_state='trigger'):
-        if desired_state not in ('on', 'off', 'trigger'):
-            raise ValueError('desired_state must be on, off, or trigger')
-        return self._target('activate', target_id, desired_state)
+        return self.run_capability('activate', dict(target_id=target_id, desired_state=desired_state))
 
     def wait_until(self, target_id, condition, timeout=60):
-        if condition not in self.WAIT_CONDITIONS:
-            raise ValueError('Unknown wait condition')
-        return self._target('wait_until', target_id, condition, self._timeout(timeout))
+        return self.run_capability('wait_until', dict(target_id=target_id, condition=condition, timeout=timeout))
 
     def stop(self):
-        """Interrupt the current bridge action/input, including from another client."""
-        return self._request('stop')
+        """Interrupt current native work, including from another client."""
+        return self.run_capability('stop', {})
 
 
 if __name__ == '__main__':

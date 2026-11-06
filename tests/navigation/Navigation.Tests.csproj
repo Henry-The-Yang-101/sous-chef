@@ -8,7 +8,7 @@
   <ItemGroup>
     <Compile Include="../../src/Core/Navigation.cs" />
     <Compile Include="../../src/Core/ControlLease.cs" />
-    <Compile Include="../../src/Core/ActionRun.cs" />
+    <Compile Include="../../src/Core/CapabilityRegistry.cs" /><Compile Include="../../src/Core/ActionRun.cs" />
     <Compile Include="../../src/Core/TaskRequest.cs" />
     <Compile Include="../../src/Core/Json.cs" /><Compile Include="../../src/Core/WorkerWire.cs"/><Compile Include="../../src/Core/WorkerHost.cs"/><Compile Include="../../src/Core/RemoteWalk.cs"/><Compile Include="../../src/Core/RemoteFlight.cs"/><Compile Include="../../src/Core/FlightBatch.cs"/>
     <Compile Include="../../src/Plugin/Navigation/*.cs" />

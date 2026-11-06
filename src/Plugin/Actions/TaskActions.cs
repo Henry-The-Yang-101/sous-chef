@@ -244,6 +244,9 @@ namespace SousChef.Plugin.Actions
         {
             var choices = new List<object>(); catalog["taskOptions"] = choices;
             catalog["task"] = Describe();
+            var applicability = Json.Object(); catalog["taskApplicability"] = applicability;
+            foreach (string name in TaskRequest.Names)
+                applicability[name] = Json.Object("state", "unknown", "reason", "not_evaluated_while_busy");
             if (parentBusy || Run.Running || child.Run.Running || navigation.Action.State != "idle") return;
             chef = actor; inventory.Refresh(chef, catalog);
             var preparation = new List<object>(); var selectors = new HashSet<string>();
@@ -261,8 +264,14 @@ namespace SousChef.Plugin.Actions
             catalog["assemblyOrders"] = AssemblyOrders.Describe();
             foreach (var pair in definitions)
             {
-                try { if (pair.Value.Available()) choices.Add(Json.Object("name", pair.Key)); }
-                catch (Exception) { /* Incomplete observations never authorize work. */ }
+                try
+                {
+                    bool eligible = pair.Value.Available();
+                    if (eligible) choices.Add(Json.Object("name", pair.Key));
+                    applicability[pair.Key] = Json.Object("state", eligible ? "applicable" : "unknown",
+                        "reason", eligible ? "native_start_preconditions_observed" : "native_start_preconditions_not_met");
+                }
+                catch (Exception) { applicability[pair.Key] = Json.Object("state", "unknown", "reason", "observation_unavailable"); }
             }
         }
     }

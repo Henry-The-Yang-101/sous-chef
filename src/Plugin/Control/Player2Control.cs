@@ -17,6 +17,7 @@ namespace SousChef.Plugin.Control
         private readonly ThrowOptions throwOptions;
         private readonly TaskActions tasks;
         private bool lastWasTask;
+        private readonly SemanticCatalog semanticCatalog;
         private bool lastWasLogistics;
         private long navigationSequence;
         private readonly ControlLease lease = new ControlLease();
@@ -51,8 +52,9 @@ namespace SousChef.Plugin.Control
             logistics = new LogisticsActions(navigation, interactions, Buttons, FinishLogistics);
             tasks = new TaskActions(navigation, interactions, Buttons, FinishLogistics);
             throwOptions = new ThrowOptions(navigation);
+            semanticCatalog = new SemanticCatalog(navigation);
             server = new ControlServer(port, Json.Object("type", "hello", "controlProtocolVersion", 1,
-                "sessionId", session, "bridgeVersion", BridgePlugin.Version, "player", 2, "mode", "direct_logical_input", "maxHoldMs", 1000, "actions", ActionRun.AllNames),
+                "sessionId", session, "bridgeVersion", BridgePlugin.Version, "player", 2, "mode", "direct_logical_input", "maxHoldMs", 1000, "actions", ActionRun.AllNames, "capabilities", CapabilityRegistry.Describe()),
                 delegate(int client) { lease.Disconnect(client); });
             server.Start();
         }
@@ -61,7 +63,7 @@ namespace SousChef.Plugin.Control
         {
             if (disposed) return;
             KitchenGate gate = KitchenGate.Inspect();
-            if (flow != gate.Flow) { Revoke("round_changed"); logistics.Reset("round_changed"); tasks.Reset("round_changed"); throwOptions.Reset(); navigation.Reset("round_changed"); flow = gate.Flow; nextScan = 0; }
+            if (flow != gate.Flow) { Revoke("round_changed"); logistics.Reset("round_changed"); tasks.Reset("round_changed"); throwOptions.Reset(); semanticCatalog.Reset(); navigation.Reset("round_changed"); flow = gate.Flow; nextScan = 0; }
             if (Now >= nextScan) { Discover(); nextScan = Now + 0.25; }
             string reason = Check(gate);
             bool preservingSuspension = PreservingSuspension(reason);
@@ -184,6 +186,15 @@ namespace SousChef.Plugin.Control
                 else if (lease.Owner(Now) != 0 && navigation.Action.State == "idle" && !interactions.Run.Running && !logistics.Run.Running && !tasks.Run.Running)
                     actions = Json.Object("actions", new[] { Json.Object("name", "stop") }, "destinations", new object[0], "reason", "already_claimed", "navigation", navigation.Describe());
                 else actions = Catalog();
+                var observed = (Json.Record)actions;
+                observed["capabilities"] = CapabilityRegistry.Describe();
+                // Structural observations remain available through suspension and
+                // ownership. Invalid round/chef contexts publish no old candidates.
+                if (gate.InRound && gate.Role == "host" && target != null && config != null && config.IsLocal())
+                {
+                    try { observed["semanticCatalog"] = semanticCatalog.Capture(target, DescribePlayers(false)); }
+                    catch (Exception) { observed["semanticCatalog"] = Json.Object("version", CapabilityRegistry.Version, "error", "semantic_observation_unavailable"); }
+                }
             }
             else if (command.Operation == "task" || command.Operation == "navigate_to" || InteractionActions.Handles(command.Operation) || LogisticsActions.Handles(command.Operation))
             {
@@ -305,21 +316,7 @@ namespace SousChef.Plugin.Control
                 catch (Exception) { identity["operations"] = new string[0]; identity["reason"] = "observation_unavailable"; }
                 targets.Add(identity);
             }
-            var players = new System.Collections.Generic.List<object>();
-            foreach (PlayerControls player in UnityEngine.Object.FindObjectsOfType<PlayerControls>())
-            {
-                if (player == target || player.PlayerIDProvider == null) continue;
-                int playerId = (int)player.PlayerIDProvider.GetID() + 1;
-                if (playerId != 1 && playerId != 3 && playerId != 4) continue;
-                var entry = PlayerInputLookup.GetInputConfig().GetInputConfigEntry(player.PlayerIDProvider.GetID());
-                if (entry == null || !entry.IsLocal()) continue;
-                object preview;
-                bool canPass = throwOptions.Check(player.gameObject, out preview);
-                players.Add(Json.Object("id", "p" + playerId, "playerId", playerId, "kind", "player", "label", "Player " + playerId,
-                    "objectInstanceId", player.gameObject.GetInstanceID(), "position", Values.Vector(player.transform.position),
-                    "possibleOperations", new[] { "throw_to_player" },
-                    "operations", canPass ? new[] { "throw_to_player" } : new string[0], "throw", preview));
-            }
+            var players = DescribePlayers(true);
             var actions = (System.Collections.Generic.List<object>)catalog["actions"];
             if (!interactions.Run.Running && !logistics.Run.Running && !tasks.Run.Running && navigation.Action.State == "idle")
                 foreach (string name in ActionRun.Names)
@@ -342,6 +339,26 @@ namespace SousChef.Plugin.Control
             catalog["targets"] = targets; catalog["players"] = players; catalog["action"] = lastWasTask ? tasks.Describe() : lastWasLogistics ? logistics.Describe() : interactions.Describe();
             catalog["throwOptionsComplete"] = throwOptions.End();
             logistics.Decorate(catalog, target, tasks.Run.Running); tasks.Decorate(catalog, target, logistics.Run.Running); return catalog;
+        }
+        private System.Collections.Generic.List<object> DescribePlayers(bool withPreview)
+        {
+            var players = new System.Collections.Generic.List<object>();
+            foreach (PlayerControls player in UnityEngine.Object.FindObjectsOfType<PlayerControls>())
+            {
+                if (player == target || player.PlayerIDProvider == null) continue;
+                int playerId = (int)player.PlayerIDProvider.GetID() + 1;
+                if (playerId != 1 && playerId != 3 && playerId != 4) continue;
+                var entry = PlayerInputLookup.GetInputConfig().GetInputConfigEntry(player.PlayerIDProvider.GetID());
+                if (entry == null || !entry.IsLocal()) continue;
+                object preview;
+                preview = null;
+                bool canPass = withPreview && throwOptions.Check(player.gameObject, out preview);
+                players.Add(Json.Object("id", "p" + playerId, "playerId", playerId, "kind", "player", "label", "Player " + playerId,
+                    "objectInstanceId", player.gameObject.GetInstanceID(), "position", Values.Vector(player.transform.position),
+                    "possibleOperations", new[] { "throw_to_player" },
+                    "operations", canPass ? new[] { "throw_to_player" } : new string[0], "throw", preview));
+            }
+            return players;
         }
         private void Install()
         {
