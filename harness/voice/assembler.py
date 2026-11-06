@@ -93,9 +93,14 @@ class CommandAssembler:
                 text = ' '.join(s['text'].strip() for s in turn['segments']).strip()
                 if not text:
                     return {'empty': True, 'audio_range_ms': [turn['start'], cutoff]}
+                segments = copy.deepcopy(turn['segments'])
+                for segment in segments:
+                    if not segment['is_final']:
+                        segment['finalization_source'] = 'drained_result_stream'
+                        segment['is_final'] = True
                 return {'id': turn['id'], 'speech_generation': self.generation,
                         'audio_range_ms': [turn['start'], cutoff], 'text': text,
-                        'segments': copy.deepcopy(turn['segments']), 'boundary': turn.get('boundary'),
+                        'segments': segments, 'boundary': turn.get('boundary'),
                         'last_speech_ms': turn.get('last_speech_ms')}
         return None
 

@@ -1211,7 +1211,7 @@ workspace changes. There is no automatic push or deployment implied.
 ### Milestone 1 — Shared capability contracts
 
 **Implemented 6 November 2026:** see [contracts and verification](capability-contracts.md).
-Milestone 2 is also implemented below; milestones 3–6 describe future integration work.
+Milestones 2 and 3 are also implemented below; milestones 4–6 describe future integration work.
 
 Deliver:
 
@@ -1245,6 +1245,10 @@ unknown outcomes pause the queue; existing pause/reconnect behavior is preserved
 Reordering must preserve explicit dependencies or ask the user to replace the plan.
 
 ### Milestone 3 — Apple speech service
+
+**Implemented 6 November 2026:** see [speech service and verification boundaries](apple-speech-service.md).
+Tests, microphone/game-sound measurements, and UI execution were skipped at the
+user's request. The helper compiles; behavioral acceptance remains unverified.
 
 Deliver:
 

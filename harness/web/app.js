@@ -12,6 +12,13 @@ const authHeaders = () => accessToken ? {'X-Page-Token': accessToken} : {};
 let token = null;
 let capabilityRegistry = null;
 let state = null;
+let latestVoice = null;
+function withCurrentVoice(next) {
+  if (!next.voice) return next;
+  if (latestVoice?.instanceId === next.voice.instanceId && latestVoice.revision > next.voice.revision) next.voice = latestVoice;
+  else latestVoice = next.voice;
+  return next;
+}
 let receivedAt = 0;
 let pending = false;
 let lastError = '';
@@ -251,6 +258,7 @@ function renderMap(catalog, visible, destinations, busy, live) {
   el('map-selection').textContent = !mapLive ? 'Waiting for a fresh kitchen map.' : `${description}${mode === 'action' && selected && el('map-run').disabled ? ' This action is currently unavailable.' : ''}`;
 }
 function render() {
+  renderVoice();
   const live = fresh();
   if (draftOrigin && state?.queue && (state.queue.commandGeneration !== draftOrigin.generation ||
       (state.queue.nativeContext && JSON.stringify(state.queue.nativeContext) !== JSON.stringify(draftOrigin.context)))) {
@@ -373,7 +381,7 @@ async function post(path, data = {}) {
     body: JSON.stringify({...data, token, viewerId}), signal: AbortSignal.timeout(6000)});
   const result = await response.json();
   if (!response.ok) throw new Error(result.error || 'Command failed');
-  return result;
+  return withCurrentVoice(result);
 }
 async function perform(d, choice) {
   if (actionBlocked(state?.control?.navigation?.state === 'navigating' || state?.control?.action?.state === 'running', fresh()) ||
@@ -417,6 +425,7 @@ async function runJob(event) {
   finally { pending = false; render(); }
 }
 async function stop() {
+  releaseVoice(true);
   draftTasks = []; draftOrigin = null;
   if (!token) return;
   lastError = '';
@@ -436,7 +445,7 @@ async function poll() {
     }
     const response = await fetch('/api/state', {headers: {...authHeaders(), 'X-Viewer-Id': viewerId}, signal: AbortSignal.timeout(2000)});
     if (!response.ok) throw new Error('Could not read live state');
-    state = await response.json(); receivedAt = performance.now();
+    state = withCurrentVoice(await response.json()); receivedAt = performance.now();
   } catch (error) {
     state = {connected: false, fresh: false, error: error.message.startsWith('Scan ') ? error.message : 'Harness connection lost. Reconnecting…'};
     token = null;
@@ -727,3 +736,130 @@ el('plan-clear').addEventListener('click', () => { draftTasks = []; draftOrigin 
 el('task-repeat').addEventListener('change', render);
 for (const [id, operation] of [['queue-pause', 'pause_pending'], ['queue-resume', 'resume_pending'], ['queue-clear', 'clear_pending'], ['queue-skip', 'skip_active']]) el(id).addEventListener('click', () => queueEdit(operation));
 addTaskItem();
+
+let voicePending = '';
+let voiceRequest = null;
+let voiceFailure = '';
+let voiceSettingsSignature = '';
+let voiceInventorySignature = '';
+let voiceTurn = null;
+let voiceHeartbeat = null;
+const voiceStatusLabels = {muted: 'Muted · voice / Jev off', muting: 'Muting… waiting for microphone acknowledgment',
+  preparing: 'Preparing on-device recognition…', downloading: 'Downloading Apple recognition assets…',
+  listening: 'Microphone enabled', finalizing: 'Finalizing command…', error: 'Voice unavailable'};
+
+function renderVoice() {
+  const voice = state?.voice;
+  const known = !!voice && !!token;
+  el('voice-status').textContent = voicePending === 'mute' ? 'Muting… waiting for server acknowledgment'
+    : !known ? 'Voice status unknown · waiting for the harness'
+    : (voiceStatusLabels[voice.status] || voice.status) + (voice.drafts?.some(d => d.finalizing) ? ' · finalizing a turn' : '');
+  const error = voiceFailure || voice?.error || '';
+  el('voice-error').textContent = error; el('voice-error').hidden = !error;
+  el('voice-arm').disabled = !known || !voice.muted || !voice.muteAcknowledged || !!voicePending;
+  // Mute remains independent of any pending model, capture or game request.
+  el('voice-mute').disabled = !token || (voice?.muted && voice?.muteAcknowledged && !voicePending);
+  el('voice-talk').disabled = !known || voice.muted || voice.status !== 'listening' || voice.settings.mode !== 'push_to_talk' || (!!voice.pttActive && !voiceTurn);
+  el('voice-talk').textContent = voiceTurn ? 'Listening… release to submit' : 'Hold to talk';
+  el('voice-talk').setAttribute('aria-pressed', String(!!voiceTurn));
+  for (const input of el('voice-settings').elements) input.disabled = !known || !voice.muted || !voice.muteAcknowledged || !!voicePending;
+  el('voice-clear').disabled = !known;
+  el('voice-transcript').textContent = voice?.drafts?.map(d => d.text).filter(Boolean).join(' / ') || voice?.commands?.at(-1)?.text || '';
+  el('voice-fake').textContent = voice?.fakeResult?.message || '';
+  el('voice-input').textContent = voice?.inputDevice ? `${voice.inputDevice}${Number.isFinite(voice.audioLevel?.rms) ? ` · input energy ${voice.audioLevel.rms.toFixed(3)}` : ''}` : '';
+  el('voice-inspection-data').textContent = voice ? JSON.stringify({transport: voice.transport,
+    remoteRequests: voice.remoteRequests, drafts: voice.drafts, commands: voice.commands}, null, 2) : 'Waiting for the harness.';
+  if (!voice) return;
+  const inventory = JSON.stringify([voice.devices, voice.locales]);
+  if (inventory !== voiceInventorySignature) {
+    voiceInventorySignature = inventory;
+    const selected = el('voice-device').value || voice.settings.deviceId;
+    const choices = [{id: '', name: 'System default microphone'}, ...voice.devices];
+    if (selected && !choices.some(d => d.id === selected)) choices.push({id: selected, name: 'Selected device (disconnected)'});
+    el('voice-device').replaceChildren(...choices.map(d => { const o = document.createElement('option'); o.value = d.id; o.textContent = d.name; return o; }));
+    el('voice-device').value = selected;
+    el('voice-locales').replaceChildren(...voice.locales.map(locale => { const o = document.createElement('option'); o.value = locale; return o; }));
+  }
+  const signature = JSON.stringify(voice.settings);
+  if (signature !== voiceSettingsSignature) {
+    voiceSettingsSignature = signature;
+    for (const [id, key] of [['device', 'deviceId'], ['locale', 'locale'], ['mode', 'mode'], ['pause', 'pauseMs'],
+      ['energy', 'energyThreshold'], ['fast', 'fastResults'], ['inspection', 'inspection']]) el(`voice-${id}`).value = String(voice.settings[key]);
+    el('voice-duration').value = voice.settings.maxCommandMs / 1000;
+  }
+}
+
+async function voiceControl(operation, fields = {}) {
+  const requestId = newId();
+  voiceRequest = requestId;
+  voicePending = operation; voiceFailure = ''; renderVoice();
+  try {
+    const result = await post('/api/voice', {voice: {operation, generation: state?.voice?.generation, ...fields}});
+    // Older HTTP responses cannot roll back a more recent mute generation.
+    state = withCurrentVoice(result);
+    receivedAt = performance.now();
+    return result;
+  } catch (error) { voiceFailure = error.message; throw error; }
+  finally { if (voiceRequest === requestId) voicePending = ''; renderVoice(); }
+}
+
+function beginVoice() {
+  if (voiceTurn || el('voice-talk').disabled) return;
+  const turn = {id: newId(), generation: state.voice.generation};
+  voiceTurn = turn;
+  turn.started = voiceControl('begin', {turnId: turn.id, generation: turn.generation});
+  turn.started.then(() => {
+    if (voiceTurn !== turn) return;
+    voiceHeartbeat = setInterval(() => {
+      post('/api/voice', {voice: {operation: 'heartbeat', generation: turn.generation, turnId: turn.id}})
+        .catch(() => releaseVoice(true));
+    }, 750);
+  }).catch(() => { if (voiceTurn === turn) { voiceTurn = null; renderVoice(); } });
+  renderVoice();
+}
+function releaseVoice(cancel = false) {
+  const turn = voiceTurn;
+  if (!turn) return;
+  voiceTurn = null;
+  clearInterval(voiceHeartbeat); voiceHeartbeat = null;
+  // Release can beat the begin response on a phone. Preserve that ordering.
+  turn.started.then(() => voiceControl(cancel ? 'cancel' : 'finalize',
+    {turnId: turn.id, generation: turn.generation})).catch(() => {});
+  renderVoice();
+}
+for (const [id, operation] of [['voice-arm', 'arm'], ['voice-clear', 'clear'], ['voice-devices', 'devices']]) {
+  el(id).addEventListener('click', () => { voiceControl(operation).catch(() => {}); });
+}
+el('voice-mute').addEventListener('click', () => {
+  releaseVoice(true);
+  voiceControl('mute').catch(() => {});
+});
+el('voice-talk').addEventListener('pointerdown', event => {
+  if (event.button !== 0) return;
+  event.preventDefault();
+  el('voice-talk').setPointerCapture(event.pointerId);
+  beginVoice();
+});
+el('voice-talk').addEventListener('pointerup', () => releaseVoice());
+el('voice-talk').addEventListener('pointercancel', () => releaseVoice(true));
+el('voice-talk').addEventListener('lostpointercapture', () => releaseVoice(true));
+el('voice-talk').addEventListener('keydown', event => {
+  if ([' ', 'Enter'].includes(event.key)) { event.preventDefault(); if (!event.repeat) beginVoice(); }
+});
+el('voice-talk').addEventListener('keyup', event => {
+  if ([' ', 'Enter'].includes(event.key)) { event.preventDefault(); releaseVoice(); }
+});
+window.addEventListener('blur', () => releaseVoice(true));
+document.addEventListener('visibilitychange', () => { if (document.hidden) releaseVoice(true); });
+window.addEventListener('pagehide', () => {
+  if (!voiceTurn || !token) return;
+  navigator.sendBeacon('/api/voice', new Blob([JSON.stringify({token, viewerId,
+    voice: {operation: 'cancel', turnId: voiceTurn.id, generation: voiceTurn.generation}})], {type: 'application/json'}));
+});
+el('voice-settings').addEventListener('submit', event => {
+  event.preventDefault();
+  voiceControl('configure', {settings: {deviceId: el('voice-device').value, locale: el('voice-locale').value,
+    mode: el('voice-mode').value, pauseMs: Number(el('voice-pause').value), maxCommandMs: Number(el('voice-duration').value) * 1000,
+    fastResults: el('voice-fast').value === 'true', energyThreshold: Number(el('voice-energy').value),
+    inspection: el('voice-inspection').value}}).catch(() => {});
+});

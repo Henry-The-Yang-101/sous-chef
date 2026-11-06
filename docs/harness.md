@@ -346,3 +346,13 @@ throws, map actions and target rows; retained selections through pause, busy and
 stale states; level-change removal; level-only preparation choices; and a
 390-pixel phone layout without horizontal overflow. These UI checks used a test
 server, not a live game kitchen.
+
+## Local voice capture
+
+The **Voice commands** panel implements [milestone 3's Apple speech service](apple-speech-service.md):
+Mac microphone capture, shared mute, push-to-talk, optional audio pause endpointing,
+and local transcript inspection with an optional fake model transport. It starts
+muted, preserves the accepted queue on mute, and discards unfinished speech on
+Stop. Jev interpretation and voice plan acceptance remain milestone 4. See the
+service document for settings, protocol, privacy bounds and the explicitly
+unverified microphone/UI acceptance work.

@@ -300,6 +300,8 @@ class VoiceService:
                 if not self.gate.muted and self.status == 'listening' and now - self.last_event > 5:
                     self._failure('Microphone stopped producing audio; command discarded')
                 if not process or process.poll() is not None:
+                    if not self.launching and not self.outbound.empty():
+                        self._ensure_helper()
                     continue
                 if pending_message is None:
                     try:

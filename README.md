@@ -188,6 +188,9 @@ and with the same clients connected.
 
 Autonomous multi-step tasks, repeat counts, and indefinite environmental waiting
 are documented in [docs/tasks.md](docs/tasks.md). The localhost **Tasks** panel
-accepts atomic plans through the [shared scheduler](docs/scheduler.md), with queue editing and restart recovery. It uses the same production task executor; voice/Jev integration is intentionally
-separate. [Dish assembly](docs/dish-assembly.md) binds one ticket and its assigned
+accepts atomic plans through the [shared scheduler](docs/scheduler.md), with queue editing and restart recovery. It uses the same production task executor.
+The [Voice commands panel](docs/apple-speech-service.md) provides local Apple speech
+capture, push-to-talk, pause endpointing, shared mute, and transcript inspection.
+It starts muted; the only model transport is an optional local fake. Jev task
+interpretation is milestone 4. [Dish assembly](docs/dish-assembly.md) binds one ticket and its assigned
 resources, verifies exact-recipe additions, and schedules assembly, mixing and cooking.
