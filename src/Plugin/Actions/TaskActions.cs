@@ -17,7 +17,7 @@ namespace SousChef.Plugin.Actions
         public Func<GameObject, bool> UseHeld, ReplanForHeld;
         public Func<GameObject, IEnumerable<TaskStep>> FreeHands;
         public bool EmptyHands;
-        public bool ReplanOnBlock, ReplanAfterPress, Succeeded;
+        public bool ReplanOnBlock, ReplanAfterPress, Succeeded, RouteFailed;
         public GameObject Obstruction;
     }
     internal sealed class TaskDefinition
@@ -107,6 +107,7 @@ namespace SousChef.Plugin.Actions
                         // No native button has been pressed: storage/handoff may
                         // choose another checked destination without replaying cargo.
                         step.Obstruction = child.Obstruction;
+                        step.RouteFailed = child.Run.Phase == "recovering_navigation";
                         child.Cancel("task_replan_before_press"); childStarted = false;
                         step = null; Wait("waiting_for_alternative_destination"); return;
                     }
@@ -117,7 +118,7 @@ namespace SousChef.Plugin.Actions
                         // The exact pickup cargo no longer exists. Choosing a
                         // fresh source cannot replay a transfer of that item.
                         if (step.ReplanOnBlock && (child.CanRetry || child.Run.Reason == "pickup_item_destroyed"))
-                        { step = null; Wait(child.Run.Reason); return; }
+                        { step.RouteFailed = child.RouteUnavailable; step = null; Wait(child.Run.Reason); return; }
                         // Pressed or released: the plan reconciles the cargo's
                         // observed fate itself and never replays the press.
                         if (step.ReplanAfterPress && child.Run.State != "cancelled") { step = null; Wait(child.Run.Reason); return; }

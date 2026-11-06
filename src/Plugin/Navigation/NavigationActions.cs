@@ -297,6 +297,7 @@ namespace SousChef.Plugin.Navigation
                     "searchComplete", search != null && search.Complete,
                     "physicsQueries", physics.Queries, "candidateCount", candidateCount, "startCount", startCount, "observationError", observationError,
                     "cachedProbes", physics.CachedProbeCount, "cachedEdges", physics.CachedEdgeCount, "geometryCacheEvictions", physics.GeometryCacheEvictions,
+                    "geometryChanges", physics.TraceEnabled ? physics.GeometryChanges.ToArray() : null,
                     "portals", physics.PortalDiagnostics()));
         }
         private static object Identity(Destination d)

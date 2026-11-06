@@ -24,6 +24,16 @@ namespace SousChef.Plugin.Actions
         public string Waiting;
         public bool Verified;
         public readonly Dictionary<GameObject, float> RetryAt = new Dictionary<GameObject, float>();
+        internal sealed class RouteRetry
+        {
+            public GameObject Target, Held, Occupant;
+            public Collider Support;
+            public Vector3 ActorPosition, TargetPosition;
+            public bool Reachable;
+            public int Attempts;
+            public float After;
+        }
+        public readonly Dictionary<GameObject, RouteRetry> RouteRetries = new Dictionary<GameObject, RouteRetry>();
         public Stage Root, Plating;
         public readonly List<Stage> Stages = new List<Stage>();
         private readonly List<object> decisions = new List<object>();

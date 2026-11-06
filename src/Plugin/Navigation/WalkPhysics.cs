@@ -42,6 +42,7 @@ namespace SousChef.Plugin.Navigation
         private bool useGridSelection;
         private float radius, nativeRadius, height, pivotToFoot, lastReconcile, walkingSpeed, stepHeight, bodyContactOffset;
         public bool TraceEnabled;
+        public readonly List<object> GeometryChanges = new List<object>();
         public object StartFailures { get; private set; }
         public object Settlement { get; private set; }
         private string failureReason;
@@ -141,6 +142,7 @@ namespace SousChef.Plugin.Navigation
                 if (attachment != null && !attachment.IsAttached()) ignoredLooseColliders.Add(c.GetInstanceID());
             }
             changed.Clear(); winds.Clear();
+            GeometryChanges.Clear();
             geometryScan++;
             bool reconcile = Time.realtimeSinceStartup - lastReconcile >= .2f;
             if (reconcile)
@@ -164,6 +166,11 @@ namespace SousChef.Plugin.Navigation
                     !old.Obstruction.Equals(obstruction) || old.Matrix != matrix || old.Layer != c.gameObject.layer || old.Trigger != c.isTrigger || old.Shape != shapeKey || old.Danger != danger || old.Step != step ||
                     (reconcile && c is TerrainCollider))
                 {
+                    if (TraceEnabled && GeometryChanges.Count < 12)
+                        GeometryChanges.Add(Json.Object("id", id, "name", c.gameObject.name, "trigger", c.isTrigger,
+                            "oldCentre", old == null ? null : Values.Vector(old.Bounds.center), "centre", Values.Vector(bounds.center),
+                            "boundsChanged", old == null || !old.Bounds.Equals(bounds), "matrixChanged", old == null || old.Matrix != matrix,
+                            "shapeChanged", old == null || old.Shape != shapeKey));
                     if (old != null) changed.Add(old.Obstruction);
                     changed.Add(obstruction);
                     stamps[id] = new GeometryStamp { Collider = c, Bounds = bounds, Obstruction = obstruction, Matrix = matrix, Layer = c.gameObject.layer, Trigger = c.isTrigger, Shape = shapeKey, Danger = danger, Step = step };

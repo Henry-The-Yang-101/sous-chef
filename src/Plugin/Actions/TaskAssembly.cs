@@ -133,7 +133,41 @@ namespace SousChef.Plugin.Actions
             return plate == null || (bool)TaskNative.Call(plate, "CanPlaceOnPlate", source, new PlacementContext(PlacementContext.Source.Player));
         }
         private bool AssemblyDeferred(GameObject item)
-        { float at; return assembly.RetryAt.TryGetValue(item, out at) && Time.realtimeSinceStartup < at; }
+        {
+            float at;
+            if (assembly.RetryAt.TryGetValue(item, out at) && Time.realtimeSinceStartup < at) return true;
+            AssemblySchedule.RouteRetry retry;
+            if (!assembly.RouteRetries.TryGetValue(item, out retry)) return false;
+            if (AssemblyRouteChanged(retry)) { assembly.RouteRetries.Remove(item); return false; }
+            return Time.realtimeSinceStartup < retry.After;
+        }
+        private Vector3 AssemblyRelativePosition(Vector3 point, Collider support)
+        { return support == null ? point : support.transform.InverseTransformPoint(point); }
+        private bool AssemblyRouteChanged(AssemblySchedule.RouteRetry retry)
+        {
+            var support = chef.GroundCollider;
+            return retry.Target == null || support != retry.Support ||
+                (AssemblyRelativePosition(chef.transform.position, support) - retry.ActorPosition).sqrMagnitude >= .16f ||
+                (AssemblyRelativePosition(retry.Target.transform.position, support) - retry.TargetPosition).sqrMagnitude >= .16f ||
+                !System.Object.ReferenceEquals(ActionObservations.Held(chef), retry.Held) ||
+                !System.Object.ReferenceEquals(ActionObservations.Occupant(retry.Target), retry.Occupant) ||
+                !retry.Reachable && inventory.DistanceTo(retry.Target) != Single.MaxValue;
+        }
+        private void DeferAssemblyRoute(GameObject key, GameObject target)
+        {
+            AssemblySchedule.RouteRetry retry;
+            if (!assembly.RouteRetries.TryGetValue(key, out retry) || retry.Target != target || AssemblyRouteChanged(retry))
+                retry = new AssemblySchedule.RouteRetry();
+            retry.Attempts++;
+            retry.After = Time.realtimeSinceStartup + (float)Math.Pow(2, Math.Min(4, retry.Attempts));
+            retry.Target = target; retry.Support = chef.GroundCollider;
+            retry.ActorPosition = AssemblyRelativePosition(chef.transform.position, retry.Support);
+            retry.TargetPosition = AssemblyRelativePosition(target.transform.position, retry.Support);
+            retry.Held = ActionObservations.Held(chef); retry.Occupant = ActionObservations.Occupant(target);
+            retry.Reachable = inventory.DistanceTo(target) != Single.MaxValue;
+            assembly.RouteRetries[key] = retry;
+            assembly.Record("route_deferred", source: key, destination: target);
+        }
         private TaskStep AssemblyStep(string operation, GameObject target, Func<bool> proof, string condition = null)
         {
             var next = Reschedulable(operation, target, condition);
@@ -162,7 +196,7 @@ namespace SousChef.Plugin.Actions
                     }
                 }
                 var job = SelectAssemblyWork();
-                if (job == null) { yield return AssemblyWait(plate == null ? "waiting_for_assigned_base" : "waiting_for_assembly_dependency"); continue; }
+                if (job == null) { yield return AssemblyWait(assembly.Waiting ?? (plate == null ? "waiting_for_assigned_base" : "waiting_for_assembly_dependency")); continue; }
                 assembly.Waiting = null;
                 foreach (var next in ExecuteAssembly(job)) yield return next;
             }

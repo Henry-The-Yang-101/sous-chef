@@ -98,6 +98,7 @@ internal static partial class Program
     }
     private static void AssemblyProcessing()
     {
+        AssemblyRecoveryPolicy();
         {
             var w=new World();var plate=AssemblyPlate(w,w.Delivery());var step=new CookingStepData {m_uID=31};
             var pans=new List<GameObject>();var goals=new List<AssembledDefinitionNode>();ServerCookingHandler pending=null;
@@ -234,6 +235,46 @@ internal static partial class Program
             Check(w.Tasks.Run.State=="succeeded" && adds==3 && sawCook && (!mixing || sawMix),"combined processing assembled, rescued and plated: "+Json.Encode(w.Tasks.Describe()));
             Check(RecipeProof.Equal(RecipeProof.Composition(plate),goal),"final dish retains exact cooking/mixing structure");
         }
+    }
+
+    private static void AssemblyRecoveryPolicy()
+    {
+        var w=new World();var plate=AssemblyPlate(w,w.Delivery());var fish=AssemblyFood(w,w.Target,"fish");
+        var burner=w.Delivery();burner.Add(new Pickup());burner.Add(new ServerCookingStation());
+        var pan=new GameObject("owned cooking rice");pan.Add(new PhysicalAttachment());pan.Add(new Pickup());pan.Add(new IngredientTransfer());
+        pan.Add(new ServerIngredientContainer()).Contents.Add(Leaf("rice"));var cookingStep=new CookingStepData {m_uID=31};
+        pan.Add(new CookingHandler {m_cookingType=cookingStep});pan.Add(new CookableContainer());var cooking=pan.Add(new ServerCookingHandler());
+        pan.Add(new ProcessorComposition {Step=cookingStep});burner.GetComponent<ServerAttachStation>().Item=pan;
+        w.Delivery().transform.position=new Vector3(-2,0,0);
+        var goal=new CookedCompositeAssembledNode {m_composition=new[]{Leaf("rice")},m_cookingStep=cookingStep,m_progress=CookedCompositeOrderNode.CookingProgress.Cooked};
+        var request=AssemblyJob(w,new[]{plate},new[]{fish},goal,Leaf("fish"));request.Assembly.Equipment.Add(w.Navigation.RegisterItem(pan));request.Assembly.Equipment.Add(w.IdOf(burner));StartAssembly(w,request);
+        var flags=System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic;
+        var schedule=(AssemblySchedule)typeof(TaskActions).GetField("assembly",flags).GetValue(w.Tasks);
+        schedule.Base=plate;schedule.Root.Vessel=plate;schedule.Root.Children[0].Vessel=pan;
+        var select=typeof(TaskActions).GetMethod("SelectAssemblyWork",flags);
+        var inventory=(LogisticsInventory)typeof(TaskActions).GetField("inventory",flags).GetValue(w.Tasks);
+        Action refresh=()=>{inventory.EndObservation();inventory.BeginObservation();inventory.Refresh(w.Chef);};refresh();
+        cooking.m_ServerData.m_cookingState=ProcessingState.Completed;schedule.RetryAt[pan]=Time.realtimeSinceStartup+.2f;
+        Check(select.Invoke(w.Tasks,null)==null && schedule.Waiting=="waiting_for_heat_access",
+            "a ready batch's retry delay cannot dispatch the available cold ingredient");
+        Time.realtimeSinceStartup+=.3f;var job=select.Invoke(w.Tasks,null);
+        Check(job!=null && (bool)job.GetType().GetField("Rescue").GetValue(job),"ready batch retains rescue priority after the short recovery delay");
+        cooking.m_ServerData.m_cookingState=ProcessingState.Progressing;cooking.m_ServerData.m_cookingProgress=cooking.AccessCookingTime-1;
+        w.Target.GetComponent<ServerAttachStation>().Item=null;w.Hold(fish);refresh();job=select.Invoke(w.Tasks,null);
+        Check(job!=null && (bool)job.GetType().GetField("Storage").GetValue(job) && (GameObject)job.GetType().GetField("Source").GetValue(job)==fish,
+            "hands are cleared before another batch finishes rather than starting a distant addition");
+        w.Hold(null);w.Target.GetComponent<ServerAttachStation>().Item=fish;refresh();job=select.Invoke(w.Tasks,null);
+        Check(job!=null && (string)job.GetType().GetField("Operation").GetValue(job)=="approach_heat",
+            "empty-handed chef approaches imminent food without removing it before cooking completes");
+        var defer=typeof(TaskActions).GetMethod("DeferAssemblyRoute",flags);var deferred=typeof(TaskActions).GetMethod("AssemblyDeferred",flags);
+        defer.Invoke(w.Tasks,new object[]{w.Target,w.Target});Time.realtimeSinceStartup+=2.1f;
+        defer.Invoke(w.Tasks,new object[]{w.Target,w.Target});Time.realtimeSinceStartup+=2.1f;
+        Check((bool)deferred.Invoke(w.Tasks,new object[]{w.Target}),"the second failed route stays deferred while another two-second attempt runs");
+        w.Target.GetComponent<ServerAttachStation>().Item=null;
+        Check(!(bool)deferred.Invoke(w.Tasks,new object[]{w.Target}),"changed counter occupancy wakes a deferred route immediately");
+        defer.Invoke(w.Tasks,new object[]{w.Target,w.Target});w.Chef.transform.position+=new Vector3(.5f,0,0);
+        Check(!(bool)deferred.Invoke(w.Tasks,new object[]{w.Target}),"substantive movement wakes a deferred route instead of waiting for its timer");
+        inventory.EndObservation();w.Tasks.Cancel("test");
     }
 
     private sealed class BaseComposition : MonoBehaviour, IOrderDefinition

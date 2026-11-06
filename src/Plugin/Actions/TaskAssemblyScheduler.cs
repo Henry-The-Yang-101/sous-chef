@@ -102,23 +102,48 @@ namespace SousChef.Plugin.Actions
         }
         private AssemblyJob SelectAssemblyWork()
         {
+            assembly.Waiting = null;
             // Rescue owned finished food before doing anything that could delay
             // it. Moving a vessel preserves its exact identity and dependency.
-            AssemblyJob rescue = null; float earliest = Single.MaxValue;
+            AssemblyJob rescue = null, approaching = null; float earliest = Single.MaxValue, soonest = Single.MaxValue;
+            bool readyPending = false;
             foreach (var stage in assembly.Stages)
             {
-                if (!stage.Processing || !StageComplete(stage)) continue;
+                if (!stage.Processing || stage.Vessel == null || !StageFits(stage)) continue;
                 var entry = AssemblyEntry(stage.Vessel);
+                if (entry == null || !OnProcessor(stage, entry)) continue;
+                if (!StageComplete(stage))
+                {
+                    if (stage.Mixing || !RecipeProof.Equal(StageContents(stage), stage.Inputs) || ProcessorOff(entry.Holder, false)) continue;
+                    float remaining = TaskNative.Remaining(stage.Vessel);
+                    // Leave time to put down current cargo and approach the
+                    // batch before it finishes, rather than spending its spoil
+                    // window recovering storage after a distant plating trip.
+                    float returnSeconds = AssemblyReturnSeconds(entry.Source);
+                    if (remaining <= returnSeconds && remaining < soonest)
+                    { soonest = remaining; approaching = new AssemblyJob { Stage = stage, Source = stage.Vessel, Destination = entry.Source, Operation = "approach_heat" }; }
+                    continue;
+                }
+                readyPending = true;
                 // A moving kitchen may keep the broad catalogue frontier
                 // incomplete. Let the active, bounded destination planner try
                 // the exact hot vessel instead of waiting until it burns.
-                if (entry == null || !OnProcessor(stage, entry) || AssemblyDeferred(stage.Vessel) ||
+                if (AssemblyDeferred(stage.Vessel) ||
                     !LogisticsChecks.CanCollectEmpty(chef, entry.Source)) continue;
                 float margin = TaskNative.Remaining(stage.Vessel, stage.Mixing, true);
                 if (margin < earliest)
                 { earliest = margin; rescue = new AssemblyJob { Stage = stage, Source = stage.Vessel, Destination = entry.Source, Operation = "pick_up", Rescue = true }; }
             }
             if (rescue != null) return rescue;
+            // A brief rescue retry delay does not authorize a cold-food pickup.
+            if (readyPending) { assembly.Waiting = "waiting_for_heat_access"; return null; }
+            if (approaching != null)
+            {
+                var held = ActionObservations.Held(chef);
+                if (held == null) return approaching;
+                assembly.Waiting = "waiting_for_heat_storage";
+                return StoreAssemblyCargo(held);
+            }
             // An unavailable plate must not block independent recipe work.
             // Keep its selection pending (or its identity pinned) while owned
             // processing dependencies advance and finished food is rescued.
@@ -138,6 +163,10 @@ namespace SousChef.Plugin.Actions
                 held.GetComponent<PreparationContainer>() != null || held.GetComponent<ServerPlate>() != null) return null;
             // Returning an empty assigned utensil while food cooks avoids
             // spending the next ready batch's spoil window freeing our hands.
+            return StoreAssemblyCargo(held);
+        }
+        private AssemblyJob StoreAssemblyCargo(GameObject held)
+        {
             var counter = AssemblyParking(held, true);
             return counter == null ? null : new AssemblyJob { Stage = assembly.Root, Source = held,
                 Destination = counter, Operation = "place_at", Storage = true };
@@ -146,6 +175,7 @@ namespace SousChef.Plugin.Actions
         {
             var excluded = new HashSet<GameObject>();
             foreach (var pair in assembly.RetryAt) if (AssemblyDeferred(pair.Key)) excluded.Add(pair.Key);
+            foreach (var key in new List<GameObject>(assembly.RouteRetries.Keys)) if (AssemblyDeferred(key)) excluded.Add(key);
             return Parking(item, excluded: excluded, probeUnknown: probeUnknown);
         }
         private AssemblyJob SelectStageWork(AssemblySchedule.Stage stage, bool probeUnknown = false)
@@ -273,13 +303,21 @@ namespace SousChef.Plugin.Actions
             if (since < 0) since = Time.realtimeSinceStartup;
             return Time.realtimeSinceStartup - since >= 2;
         }
-        private bool AssemblyHeatDue()
+        private float AssemblyReturnSeconds(GameObject station)
+        {
+            float distance = inventory.DistanceTo(station);
+            if (distance == Single.MaxValue) distance = Vector3.Distance(chef.transform.position, station.transform.position);
+            return distance / Math.Max(.1f, chef.Movement.RunSpeed) + 3;
+        }
+        private bool AssemblyHeatDue(bool includeImminent = false)
         {
             foreach (var stage in assembly.Stages)
             {
                 if (!stage.Processing || stage.Vessel == null) continue;
                 var entry = AssemblyEntry(stage.Vessel);
-                if (entry != null && OnProcessor(stage, entry) && StageComplete(stage)) return true;
+                if (entry != null && OnProcessor(stage, entry) && (StageComplete(stage) || includeImminent && !stage.Mixing &&
+                    StageFits(stage) && RecipeProof.Equal(StageContents(stage), stage.Inputs) && !ProcessorOff(entry.Holder, false) &&
+                    TaskNative.Remaining(stage.Vessel) <= AssemblyReturnSeconds(entry.Source))) return true;
             }
             return false;
         }
@@ -293,9 +331,26 @@ namespace SousChef.Plugin.Actions
         private IEnumerable<TaskStep> ExecuteAssembly(AssemblyJob job)
         {
             var stage = job.Stage; var item = job.Source; var target = job.Destination;
-            assembly.Record(job.Rescue ? "rescue_finished_batch" : job.Storage ? "park_empty_utensil" : job.Operation, stage, item, target);
+            assembly.Record(job.Rescue ? "rescue_finished_batch" : job.Storage ? "park_assembly_cargo" : job.Operation, stage, item, target);
+            if (job.Operation == "approach_heat")
+            {
+                float retry = 0;
+                yield return new TaskStep { Phase = "approaching_heat", Progress = () => {
+                    var entry = AssemblyEntry(item);
+                    if (entry == null || !OnProcessor(stage, entry) || !StageFits(stage) || ProcessorOff(entry.Holder, false) ||
+                        AssemblyHeatDue() || ActionObservations.Held(chef) != null)
+                    { if (navigation.Action.State == "navigating") navigation.Stop("assembly_heat_recheck"); return true; }
+                    if (navigation.Action.State == "navigating" || Time.realtimeSinceStartup < retry) return false;
+                    if (ActionObservations.CanPickUp(chef, target) && chef.Motion.GetVelocityXZ().magnitude <= .1f) return false;
+                    retry = Time.realtimeSinceStartup + .2f;
+                    navigation.Start(chef, Run.Owner, navigation.RegisterItem(target), true);
+                    return false;
+                }};
+                yield break;
+            }
             Func<bool> valid = () => StageFits(stage);
             string operation = job.Operation;
+            var before = StageContents(stage); var addition = RecipeProof.Composition(item);
             if (operation == "pick_component")
             {
                 var entry = AssemblyEntry(item); if (entry == null) yield break;
@@ -304,12 +359,11 @@ namespace SousChef.Plugin.Actions
                     AssemblyTransfer(item, stage.Vessel, stage.Inputs, stage.Processing && stage.Mixing);
             }
             else if (operation == "place_at")
-                valid = () => (job.Storage ? LogisticsInventory.Empty(item) : StageFits(stage)) && System.Object.ReferenceEquals(ActionObservations.Held(chef), item) && ActionObservations.Occupant(target) == null &&
+                valid = () => (job.Storage ? RecipeProof.Equal(addition, RecipeProof.Composition(item)) : StageFits(stage)) && System.Object.ReferenceEquals(ActionObservations.Held(chef), item) && ActionObservations.Occupant(target) == null &&
                     (!TaskNative.Equipment(target) || ProcessingStationFor(stage, target) && (stage.Mixing ? RecipeProof.Subset(StageContents(stage), stage.Inputs) : RecipeProof.Equal(RecipeProof.Composition(item), stage.Inputs)));
             else if (operation == "activate")
                 valid = () => StageFits(stage) && System.Object.ReferenceEquals(ActionObservations.Occupant(target), item) &&
                     RecipeProof.Equal(RecipeProof.Composition(item), stage.Inputs) && ProcessorOff(target, stage.Mixing);
-            var before = StageContents(stage); var addition = RecipeProof.Composition(item);
             if (operation == "transfer_contents")
                 valid = () => StageFits(stage) && System.Object.ReferenceEquals(ActionObservations.Held(chef), item) && System.Object.ReferenceEquals(ActionObservations.Occupant(target), stage.Vessel) &&
                     RecipeProof.Equal(before, StageContents(stage)) && RecipeProof.Equal(addition, RecipeProof.Composition(item)) &&
@@ -317,22 +371,26 @@ namespace SousChef.Plugin.Actions
             var next = AssemblyStep(operation, target, valid, operation == "transfer_contents" && stage.Processing && stage.Mixing ? "assembly_mixing_inputs" : null);
             var beforePress = next.BeforePress;
             next.BeforePress = () => {
-                bool allowed = beforePress();
+                bool allowed = beforePress() && (job.Rescue || job.Storage || !AssemblyHeatDue(true));
                 assembly.Record(allowed ? "press_authorized" : "press_rejected", stage, item, target);
                 return allowed;
             };
             if (operation == "pick_up") next.UseHeld = cargo => System.Object.ReferenceEquals(cargo, item);
+            if (job.Rescue) next.FreeHands = ClearAssemblyHands;
             var abandon = next.AbandonBeforePress;
             float planningSince = -1;
             next.AbandonBeforePress = () => abandon() || !job.Rescue &&
-                (!job.Storage && AssemblyHeatDue() || AssemblyPlanningStalled(ref planningSince));
+                (!job.Storage && AssemblyHeatDue(true) || AssemblyPlanningStalled(ref planningSince));
             yield return next;
             if (!next.Succeeded)
             {
                 assembly.Record("replan_uncompleted_step", stage, item, target);
-                assembly.RetryAt[operation == "place_at" || operation == "transfer_contents" ? target : item] = Time.realtimeSinceStartup + 1;
+                var key = operation == "place_at" || operation == "transfer_contents" ? target : item;
+                if (next.RouteFailed && !job.Rescue) DeferAssemblyRoute(key, target);
+                else assembly.RetryAt[key] = Time.realtimeSinceStartup + (job.Rescue ? .2f : 1);
                 yield break;
             }
+            assembly.RouteRetries.Remove(operation == "place_at" || operation == "transfer_contents" ? target : item);
             if (operation == "transfer_contents")
             {
                 if (!RecipeProof.Equal(RecipeProof.Combine(before, addition), StageContents(stage)))
@@ -341,6 +399,15 @@ namespace SousChef.Plugin.Actions
                 assembly.Record("transfer_verified", stage, item, target);
                 foreach (var owner in assembly.Stages)
                     if (owner != stage && System.Object.ReferenceEquals(owner.Vessel, item)) owner.Vessel = null;
+            }
+        }
+        private IEnumerable<TaskStep> ClearAssemblyHands(GameObject held)
+        {
+            while (System.Object.ReferenceEquals(ActionObservations.Held(chef), held))
+            {
+                var storage = StoreAssemblyCargo(held);
+                if (storage == null) { yield return AssemblyWait("waiting_for_heat_storage"); continue; }
+                foreach (var step in ExecuteAssembly(storage)) yield return step;
             }
         }
     }
