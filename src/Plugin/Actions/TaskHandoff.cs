@@ -16,16 +16,21 @@ namespace SousChef.Plugin.Actions
             public string Mode;
             public Vector3? Approach;
             public float? ArrivalSeconds;
+            public float Score, WalkDistance, Separation;
         }
         private readonly GroundPassAccess groundPass;
         private object handoffEvidence;
         private readonly ThrowOptions handoffThrows;
-        private bool ThrowPossible(GameObject item, GameObject target, bool ground = false)
-        {
-            object description; return handoffThrows.Check(target, out description, ground);
-        }
+        private GameObject handoffPreviewItem;
+        private float handoffPreviewUntil, handoffCheckAt;
         private Handoff FindHandoff(GameObject item, int player, List<Vector3> excluded, HashSet<GameObject> blockedTargets)
         {
+            if (handoffPreviewItem != item)
+            { handoffPreviewItem = item; handoffPreviewUntil = Time.realtimeSinceStartup + .4f; handoffCheckAt = 0; }
+            // Geometry previews keep their existing per-frame slice; inventory
+            // and positive-proof comparison need only run ten times per second.
+            if (Time.realtimeSinceStartup < handoffCheckAt) return null;
+            handoffCheckAt = Time.realtimeSinceStartup + .1f;
             handoffThrows.Begin(chef);
             // Rank usable choices. An unfinished counter proof must not hold a
             // feasible ground pass hostage on a continuously moving kitchen.
@@ -35,7 +40,9 @@ namespace SousChef.Plugin.Actions
         private Handoff FindHandoffCore(GameObject item, int player, List<Vector3> excluded, HashSet<GameObject> blockedTargets)
         {
             RefreshWorld(player); PlayerControls human = Human(player); if (human == null || item == null) return null;
-            GameObject best = null; bool throwItem = false; float score = Single.MaxValue;
+            Handoff best = null;
+            float speed = Math.Max(.1f, chef.Movement.RunSpeed), tile = HandoffPreference.TileSize(human);
+            var counters = new List<Handoff>();
             foreach (GameObject target in navigation.Targets())
             {
                 if (blockedTargets.Contains(target) || !Counter(target) || ActionObservations.Occupant(target) != null ||
@@ -47,17 +54,37 @@ namespace SousChef.Plugin.Actions
                     humanCost = observer.LocalApproachDistance(target, 5);
                 if (humanCost > 5) continue;
                 float botCost = StorageDistance(target, Single.MaxValue);
-                bool walk = botCost < Single.MaxValue && CanDeliver(item, target);
-                if (!walk && !ThrowPossible(item, target)) continue;
-                float candidate = humanCost * 100 + (walk ? botCost : 50);
-                if (candidate < score) { best = target; throwItem = !walk; score = candidate; }
+                float separation = HandoffPreference.Distance(target.transform.position, human.transform.position);
+                if (botCost < Single.MaxValue && CanDeliver(item, target))
+                    PreferHandoff(new Handoff { Target = target, Mode = "counter_near_player", WalkDistance = botCost,
+                        Separation = separation, ArrivalSeconds = botCost / speed + .25f,
+                        Score = HandoffPreference.Score(botCost / speed + .25f, separation, tile) }, ref best);
+                counters.Add(new Handoff { Target = target, Throw = true, Mode = "throw_near_player", Separation = separation,
+                    Score = HandoffPreference.Score(.2f, separation, tile) });
             }
-            if (best != null) return new Handoff { Target = best, Throw = throwItem, Mode = throwItem ? "throw_near_player" : "counter_near_player" };
+            bool pending = false;
+            // Compare throwing even when walking is possible. Preview only a
+            // bounded shortlist; the existing worker-backed planners advance in
+            // small slices while this task waits with neutral input.
+            ConsiderThrow(new Handoff { Player = player, Ground = true, Mode = "throw_ground_near_player" },
+                human.gameObject, speed, tile, ref best, ref pending);
             DropPlan drop;
-            if (new DropHandoff().Plan(chef, item, human, out drop) || ThrowPossible(item, human.gameObject))
-                return new Handoff { Player = player, Mode = "at_player" };
-            if (ThrowPossible(item, human.gameObject, true))
-                return new Handoff { Player = player, Ground = true, Mode = "throw_ground_near_player" };
+            if (new DropHandoff().Plan(chef, item, human, out drop))
+            {
+                float separation = HandoffPreference.Distance(drop.Landing, human.transform.position);
+                PreferHandoff(new Handoff { Player = player, Mode = "at_player", Separation = separation,
+                    ArrivalSeconds = drop.FlightSeconds + .25f,
+                    Score = HandoffPreference.Score(drop.FlightSeconds + .25f, separation, tile) }, ref best);
+            }
+            else ConsiderThrow(new Handoff { Player = player, Mode = "at_player", Separation = 0 },
+                human.gameObject, speed, tile, ref best, ref pending);
+            counters.Sort((a, b) => a.Score.CompareTo(b.Score));
+            for (int i = 0; i < Math.Min(4, counters.Count); i++)
+                ConsiderThrow(counters[i], counters[i].Target, speed, tile, ref best, ref pending);
+            // Allow a short comparison window, never an unbounded wait for an
+            // unfinished throw proof when a usable handoff already exists.
+            if (pending && Time.realtimeSinceStartup < handoffPreviewUntil) return null;
+            if (best != null) return best;
             navigation.PrepareStances(chef);
             for (int i = 0; i < 12; i++)
             {
@@ -78,6 +105,22 @@ namespace SousChef.Plugin.Actions
                 if (seconds != Single.MaxValue) return new Handoff { Target = target, Transport = true, Mode = "moving_counter_to_player", ArrivalSeconds = seconds };
             }
             return null;
+        }
+        private static void PreferHandoff(Handoff candidate, ref Handoff best)
+        { if (best == null || candidate.Score < best.Score) best = candidate; }
+        private void ConsiderThrow(Handoff candidate, GameObject target, float speed, float tile, ref Handoff best, ref bool pending)
+        {
+            float lowerBound = candidate.Ground ? .2f : HandoffPreference.Score(.2f, candidate.Separation, tile);
+            if (best != null && lowerBound >= best.Score) return;
+            object description; ThrowPlan plan;
+            bool feasible = handoffThrows.Check(target, out description, out plan, candidate.Ground);
+            pending |= (string)((Json.Record)description)["state"] == "pending";
+            if (!feasible || plan == null) return;
+            candidate.WalkDistance = plan.WalkDistance;
+            candidate.Separation = plan.Ground ? plan.LandingDistance : candidate.Separation;
+            candidate.ArrivalSeconds = plan.WalkDistance / speed + .2f + plan.FlightSeconds;
+            candidate.Score = HandoffPreference.Score(candidate.ArrivalSeconds.Value, candidate.Separation, tile);
+            PreferHandoff(candidate, ref best);
         }
         private float CounterArrival(GameObject target, int player)
         {
@@ -138,6 +181,7 @@ namespace SousChef.Plugin.Actions
                 }
                 handoffEvidence = Json.Object("mode", choice.Mode, "itemInstanceId", item.GetInstanceID(), "player", player,
                     "predictedArrivalSeconds", choice.ArrivalSeconds,
+                    "walkDistance", choice.WalkDistance, "playerSeparation", choice.Separation,
                     "targetInstanceId", choice.Target == null ? null : (object)choice.Target.GetInstanceID());
                 TaskStep delivery;
                 if (choice.Player != 0)

@@ -190,6 +190,7 @@ namespace SousChef.Plugin.Actions
             // release the lease before all owned input has been neutralized.
             child.Cancel(reason); input(0); Run.Finish(state, reason);
             handoffThrows.Reset();
+            handoffPreviewItem = null;
             if (navigation.Action.State == "navigating") navigation.Stop(reason);
             if (plan != null) plan.Dispose(); plan = null; step = null;
             if (handsPlan != null) handsPlan.Dispose(); handsPlan = null; handsCargo = null; suspendedStep = null;

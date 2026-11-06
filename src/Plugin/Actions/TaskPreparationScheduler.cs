@@ -85,7 +85,15 @@ namespace SousChef.Plugin.Actions
                     float margin = TaskNative.Remaining(batch.Container, batch.Mixing, true);
                     if (margin < earliestBurn) { ready = batch; earliestBurn = margin; }
                 }
-                else availableSeconds = Math.Min(availableSeconds, TaskNative.Remaining(batch.Container, batch.Mixing));
+                else
+                {
+                    // Completion is not a burn deadline. Use the remaining safe
+                    // window so a nearby loose ingredient can fill another pot,
+                    // reserving time to return and collect the oldest batch.
+                    float rescue = ApproachCost(batch.Station) / Math.Max(.1f, chef.Movement.RunSpeed) + 2;
+                    availableSeconds = Math.Min(availableSeconds,
+                        Math.Max(0, TaskNative.Remaining(batch.Container, batch.Mixing, true) - rescue));
+                }
             }
             return ready;
         }

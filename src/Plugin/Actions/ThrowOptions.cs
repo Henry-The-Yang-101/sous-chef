@@ -110,10 +110,16 @@ namespace SousChef.Plugin.Actions
         }
         public bool Check(GameObject target, out object description, bool ground = false)
         {
+            ThrowPlan plan;
+            return Check(target, out description, out plan, ground);
+        }
+        public bool Check(GameObject target, out object description, out ThrowPlan plan, bool ground = false)
+        {
+            plan = null;
             description = Json.Object("state", "unavailable", "reason", "hands_empty");
             if (chef == null || item == null || target == null) return false;
             var player = target.GetComponent<PlayerControls>(); DropPlan drop;
-            if (player != null && drops.Plan(chef, item, player, out drop))
+            if (!ground && player != null && drops.Plan(chef, item, player, out drop))
             { description = Json.Object("state", "feasible", "plan", drop.Describe()); return true; }
             Option option;
             long key = ((long)target.GetInstanceID() << 1) | (ground ? 1L : 0L);
@@ -139,6 +145,7 @@ namespace SousChef.Plugin.Actions
             }
             description = Json.Object("state", option.Plan != null ? "feasible" : option.Reason == ThrowPlanner.Pending ? "pending" : "unavailable",
                 "reason", option.Reason, "plan", option.Plan == null ? null : option.Plan.Describe());
+            plan = option.Plan;
             return option.Plan != null;
         }
         public bool End()

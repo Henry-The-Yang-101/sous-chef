@@ -57,12 +57,14 @@ namespace SousChef.Plugin.Actions
         {
             Vector3 difference = point - human; difference.y = 0;
             groundSpots.Add(new GroundSpot { Point = receivingSupport.transform.InverseTransformPoint(point),
-                Support = receivingSupport, Priority = difference.sqrMagnitude });
+                Support = receivingSupport, Priority = HandoffPreference.SpacingCost(difference.magnitude, groundTileSize) });
         }
+        private float groundTileSize;
         private string PrepareGround()
         {
             groundSpots.Clear();
             if (player == chef || player.m_bRespawning || !player.gameObject.activeInHierarchy) return "player_unavailable";
+            groundTileSize = HandoffPreference.TileSize(player);
             var cast = player.GetComponent<GroundCast>(); var capsule = player.GetComponent<CapsuleCollider>();
             if (cast == null || capsule == null) return "unsupported_ground_receiver";
             groundMask = ActionObservations.Read<LayerMask>(cast, "m_landscapeMask").value;
@@ -75,15 +77,16 @@ namespace SousChef.Plugin.Actions
             Vector3 toward = chef.transform.position - foot; toward.y = 0;
             if (toward.sqrMagnitude < .001f) toward = player.transform.forward;
             toward.Normalize();
-            // Keep close passes, then cover the receiving support. Distance is a
+            // Seed the preferred three-tile ring, then cover the receiving support. Distance is a
             // preference, never a cutoff. These are seeds; live native footprint,
             // obstacle and flight proofs are still required before selecting one.
-            for (int n = 0; n < 8; n++)
-            {
-                float angle = n * Mathf.PI / 4;
-                AddGround(foot + new Vector3(toward.x * Mathf.Cos(angle) - toward.z * Mathf.Sin(angle), 0,
-                    toward.x * Mathf.Sin(angle) + toward.z * Mathf.Cos(angle)) * 1.25f, foot);
-            }
+            foreach (float radius in new[] { HandoffPreference.PreferredTiles * groundTileSize, groundTileSize })
+                for (int n = 0; n < 8; n++)
+                {
+                    float angle = n * Mathf.PI / 4;
+                    AddGround(foot + new Vector3(toward.x * Mathf.Cos(angle) - toward.z * Mathf.Sin(angle), 0,
+                        toward.x * Mathf.Sin(angle) + toward.z * Mathf.Cos(angle)) * radius, foot);
+                }
             var box = receivingSupport as BoxCollider;
             Vector3 center, size; bool localBox = box != null && Mathf.Abs(box.transform.up.y) > .9999f;
             if (localBox) { center = box.center; size = box.size; }

@@ -328,4 +328,5 @@ public class GridManager : UnityEngine.MonoBehaviour
     public UnityEngine.Vector3 GetPosFromGridLocation(GridIndex at) { return transform.TransformPoint(new UnityEngine.Vector3(at.X,at.Y,at.Z)); }
     public UnityEngine.GameObject GetGridOccupant(GridIndex at) { return at.X==0 && at.Y==0 && at.Z==0 ? Station : null; }
 }
+public class QuadGridManager : GridManager { public UnityEngine.Vector3 m_size = new UnityEngine.Vector3(1.2f,1,1.2f); }
 namespace SousChef.Plugin { public static class Values { public static object Vector(UnityEngine.Vector3 p) { return new[] {p.x,p.y,p.z}; } } }

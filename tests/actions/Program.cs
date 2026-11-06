@@ -378,6 +378,57 @@ internal static class Program
             w.Tasks.Cancel("test_end");
         }
     }
+    private static void RiceCookingWindow()
+    {
+        var w=new World(t=>t.Add(new CookingStation()));
+        var human=new GameObject("human");human.Add(new PlayerIDProvider {Id=0});
+        human.Add(new PlayerControls {GroundCollider=w.Chef.GroundCollider});human.Add(new CapsuleCollider());human.Add(new GroundCast());
+        human.Add(new ServerPlayerAttachmentCarrier());human.Add(new ClientPlayerAttachmentCarrier());
+        var pan=new GameObject("cooking pot");pan.Add(new ServerIngredientContainer()).Contents.Add(new AssembledDefinitionNode("rice"));
+        var cooking=pan.Add(new ServerCookingHandler());cooking.m_ServerData.m_cookingState=ProcessingState.Progressing;
+        cooking.m_ServerData.m_cookingProgress=9;w.Target.GetComponent<ServerAttachStation>().Item=pan;
+        var spare=w.Delivery();spare.Add(new CookingStation());var empty=new GameObject("empty pot");
+        empty.Add(new ServerIngredientContainer());empty.Add(new IngredientTransfer());empty.Add(new ServerCookingHandler());
+        spare.GetComponent<ServerAttachStation>().Item=empty;
+        var source=w.Delivery();source.transform.position=new Vector3(-2,0,0);source.Add(new Pickup());
+        w.Hold(w.Ingredient("unrelated food"));
+        var request=new TaskRequest {Action="prepare_near_player",Repetitions=0};
+        request.Items.Add(new PreparationRequest {Selector="rice",Preparation="cooked",Quantity=1});
+        Check(w.Tasks.Start(w.Chef,1,new ControlCommand {Operation="task",Task=request})==null,"rice refill request accepted");w.Tick(.25f);
+        var flags=System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic;
+        var schedule=(PreparationSchedule)typeof(TaskActions).GetField("preparation",flags).GetValue(w.Tasks);
+        schedule.StartCooking(schedule.Lanes[0],w.Target);w.Hold(null);
+        source.GetComponent<ServerAttachStation>().Item=w.Ingredient("rice");
+        for(int i=0;i<10 && !w.Skills.Run.Running;i++)w.Tick(.25f);
+        Check(w.Skills.Run.Operation=="pick_up" && w.Navigation.Resolve(w.Skills.Run.Target)==source,
+            "rice on a counter fills a spare pot during the first pot's safe cooking window instead of waiting for completion");
+        w.Tasks.Cancel("test_end");
+    }
+    private static void HandoffPreferences()
+    {
+        float tile=1.2f, peak=HandoffPreference.Score(1,3*tile,tile);
+        foreach(float distance in new[] {0f,1f,2f,4f,5f})
+            Check(HandoffPreference.Score(1,distance*tile,tile)>peak,
+                "equal-cost handoff reward peaks at three tiles, falling on either side");
+        Check(HandoffPreference.Score(.7f,3*tile,tile)<HandoffPreference.Score(3,3*tile,tile),
+            "a proven faster throw wins over walking to an equally spaced destination");
+        Check(HandoffPreference.Score(.2f,tile,tile)<HandoffPreference.Score(8,3*tile,tile),
+            "spacing stays a preference rather than forcing a long detour");
+    }
+    private static void LowFoodApproaches()
+    {
+        var w=new World();var rice=w.Ingredient("rice");rice.Add(new PhysicalAttachment());rice.Add(new Pickup());
+        rice.transform.position=new Vector3(2,0,0);
+        w.Colliders.Add(rice.Add(new BoxCollider {center=new Vector3(0,.06f,0),size=new Vector3(.6f,.12f,.6f)}));
+        Func<bool> reachable=()=>{
+            Json.Record catalog=null;
+            for(int i=0;i<30;i++) { Time.frameCount++;Time.realtimeSinceStartup+=.1f;catalog=(Json.Record)w.Navigation.Available(w.Chef); }
+            return ((List<object>)catalog["destinations"]).Cast<Json.Record>().Any(d=>(int)d["objectInstanceId"]==rice.GetInstanceID());
+        };
+        Check(reachable(),"thin food lying on the floor has a usable pickup approach instead of failing counter-height sight limits");
+        rice.transform.position+=Vector3.up*3;
+        Check(!reachable(),"floor-food sight does not make an elevated ingredient reachable from below");
+    }
     private static void OccupiedBoards()
     {
         // Raft kitchens: the human throws raw food onto P2's floor, counters
@@ -1996,8 +2047,10 @@ internal static class Program
         w.Chef.transform.position=new Vector3(0,0,-1.25f-8*flight-.4f);item.transform.position=w.Chef.transform.position+new Vector3(0,1,.4f);w.Hold(item);
         Physics.Nearby=(p,r)=>w.Colliders.Where(c=>Vector3.Distance(p,c.bounds.ClosestPoint(p))<=r).ToArray();
         var planner=new ThrowPlanner();ThrowPlan plan=null;
-        Check(planner.Prepare(w.Chef,item,human,groundHandoff:true)==null && FindPlan(planner,w.Navigation,out plan)==null && plan.WalkDistance<.01f,
-            "a checked current-pose throw can use space too narrow for walking-arrival uncertainty");
+        string prepared=planner.Prepare(w.Chef,item,human,groundHandoff:true);
+        string found=prepared==null ? FindPlan(planner,w.Navigation,out plan) : prepared;
+        Check(found==null && plan.WalkDistance<.01f,
+            "a checked current-pose throw can use space too narrow for walking-arrival uncertainty: "+found+" "+Json.Encode(planner.Diagnostics));
         Vector3 local=plan.StanceLocalPoint;w.Colliders[0].transform.position+=Vector3.right;
         Check(Vector3.Distance(plan.CurrentStance,plan.Stance+Vector3.right)<.01f && plan.StanceLocalPoint.Equals(local),
             "cached release poses follow their support instead of gaining fictitious walking uncertainty as a raft moves");
@@ -2078,6 +2131,6 @@ internal static class Program
         Check(planner.Prepare(w.Chef,item,human,groundHandoff:true)==null && planner.RestoreGround(plan),
             "a selected landing stays valid while the chef faces elsewhere; the cargo lands along its planned throw");
     }
-    private static void Main() { CounterForecasts();PersistentTasks();HumanSinkEligibility();NativeUtensilDefinitions();PreparationEquipmentDiscovery();PreparedIngredientSources();AutomaticPreparationSources();AvailablePreparationWork();ReadyPreparationPriority();OccupiedBoards();HeldItemTasks();ReconciledHandoffs();EquipmentMonitoring();MixerReadiness();ReadyFoodTasks();DishDeliveryTasks();PauseTimers();MovingPickups();Transactions();IngredientsAndDisposal();WorkAndWait();ImmediateNativeWork();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();GroundThrows();RaftLandingFallback();CurrentPoseLandingClearance();SupportedLandingArea();WalkingLandingClearance();LandingFootprintOrientation();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
+    private static void Main() { CounterForecasts();PersistentTasks();HumanSinkEligibility();NativeUtensilDefinitions();PreparationEquipmentDiscovery();PreparedIngredientSources();AutomaticPreparationSources();AvailablePreparationWork();ReadyPreparationPriority();RiceCookingWindow();HandoffPreferences();LowFoodApproaches();OccupiedBoards();HeldItemTasks();ReconciledHandoffs();EquipmentMonitoring();MixerReadiness();ReadyFoodTasks();DishDeliveryTasks();PauseTimers();MovingPickups();Transactions();IngredientsAndDisposal();WorkAndWait();ImmediateNativeWork();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();GroundThrows();RaftLandingFallback();CurrentPoseLandingClearance();SupportedLandingArea();WalkingLandingClearance();LandingFootprintOrientation();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
     private static ClientInteractable GetCurrentlyInteractingForTest(this PlayerControls chef) { return chef.GetComponent<ClientPlayerControlsImpl_Default>().Current; }
 }

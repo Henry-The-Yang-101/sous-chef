@@ -827,6 +827,14 @@ namespace SousChef.Plugin.Navigation
                 if (destinationObject == null || !target.transform.IsChildOf(destinationObject.transform)) return false;
             }
             Vector3 origin = foot + Vector3.up * Mathf.Min(1f, height * .6f);
+            // A low loose ingredient is picked up from the floor, not viewed
+            // from counter height. The old high ray could fail its vertical /
+            // spherical range limit even when a native pickup was in reach.
+            // Keep obstacle testing at the item's height and retain the normal
+            // height/range checks for raised objects and grid stations.
+            if (grid == null && target.GetComponentInParent<PhysicalAttachment>() != null &&
+                target.bounds.max.y >= foot.y && target.bounds.max.y < foot.y + .5f)
+                origin.y = Mathf.Max(foot.y + .1f, target.bounds.max.y);
             Vector3 end = target.ClosestPointOnBounds(origin), delta = end - origin;
             if (delta.magnitude > (grid == null ? .9f : 1.1f) || Mathf.Abs(end.y - origin.y) > .8f) return false;
             int count = Physics.RaycastNonAlloc(origin, delta.normalized, hits, delta.magnitude, ~0, QueryTriggerInteraction.Ignore); Queries++;
