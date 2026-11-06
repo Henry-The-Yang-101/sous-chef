@@ -81,10 +81,17 @@ not turn the partial mixture into an unrelated raw ingredient. Final completion
 still requires the actual mixed/cooked native output, not just those inputs.
 
 Ready owned batches are selected by their remaining spoil window and rescued
-before other work. An unpressed child can yield to ready food. Vessel identities
+before other work. A short rescue retry never dispatches ordinary ingredient
+collection. Before leaving a cooking batch, the scheduler budgets the outward
+and return trip plus storage/interaction time. It clears hands and approaches
+the batch early when another trip would run too long. Nearby work can proceed
+when that budget fits. An unpressed child can yield to ready food. Vessel identities
 survive removal from equipment. No native progress, ownership or recipe fields
 are written by the executor. Inventory observations are reused per task pass;
-blocked choices back off for 0.2 seconds rather than scanning every render frame.
+dependency waits are paced at 0.2 seconds rather than scanning every render frame.
+Repeated route failures back off for 2, 4, 8, then 16 seconds, waking earlier when
+position, support, occupancy, cargo or certified reachability changes. Assembly
+pickups share this storage and route-history policy when clearing their hands.
 
 Every addition requires two independent proofs:
 
@@ -143,6 +150,8 @@ proof succeeds. See the validation section below for the scenarios actually run.
 The original three-case baseline follows. The broader decision audit and its
 remaining failures are recorded separately in
 [dish-assembly-sweep.md](dish-assembly-sweep.md).
+The later simplification and retained general scheduling fixes are documented in
+[dish-assembly-recovery.md](dish-assembly-recovery.md).
 
 The final plugin and isolated runtime DLL have the same SHA-256:
 `8e784901ccd7ca831bb4d2c7bc30fff4ba19406a69833cfe24ec146d4deb67b1`.

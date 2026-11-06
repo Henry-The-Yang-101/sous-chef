@@ -1,0 +1,352 @@
+{
+  "codeCommit": "924996b",
+  "scope": "Simplified implementation: previous walking geometry and pinned plate selection; general heat/retry scheduling and destination search retained.",
+  "checkLog": ".local/assembly-simplified-check-02.log",
+  "checks": {
+    "core": 2895,
+    "navigation": 435,
+    "actions": 1150,
+    "harness": 20,
+    "python": 136
+  },
+  "artifactSha256": "20d188e39dc8f88129334fc22a312e29525cb1394bc3d491bdbaef82a8bdf10a",
+  "runtimeSha256": "20d188e39dc8f88129334fc22a312e29525cb1394bc3d491bdbaef82a8bdf10a",
+  "cases": [
+    {
+      "level": "s_sushi_1_1",
+      "recipe": "Sushi_PlainFish",
+      "state": "succeeded",
+      "elapsedSeconds": 2.06,
+      "independentComposition": {
+        "matched": true,
+        "plateInstanceId": 509946,
+        "parts": [
+          [
+            "ingredient",
+            "i23600"
+          ]
+        ]
+      },
+      "verifiedAdditions": 1,
+      "warnings": [],
+      "observationErrors": [],
+      "schedulerDecisions": 8,
+      "controlObservations": 8,
+      "nativeSamples": 3,
+      "review": {
+        "decisionReasons": {
+          "pick_component": 1,
+          "press_authorized": 4,
+          "transfer_contents": 1,
+          "transfer_verified": 1,
+          "composition_verified": 1
+        },
+        "waitingIntervals": [],
+        "completedVesselHolderChanges": [],
+        "navigationReasons": {
+          "null": 7,
+          "arrived": 1
+        },
+        "note": "Intervals and holder changes need review against native processing and reachability; they do not independently prove unreasonable waiting."
+      },
+      "traceDirectory": ".local/assembly-simplified-01-prepared/s_sushi_1_1",
+      "dllSha256": "20d188e39dc8f88129334fc22a312e29525cb1394bc3d491bdbaef82a8bdf10a"
+    },
+    {
+      "level": "s_balloon_1_5",
+      "recipe": "Pasta_TomatoOnly_New",
+      "state": "succeeded",
+      "elapsedSeconds": 56.24,
+      "independentComposition": {
+        "matched": true,
+        "plateInstanceId": 523326,
+        "parts": [
+          [
+            "cooked",
+            20068,
+            [
+              [
+                "ingredient",
+                "i26686"
+              ]
+            ]
+          ],
+          [
+            "cooked",
+            20294,
+            [
+              [
+                "ingredient",
+                "i16506"
+              ]
+            ]
+          ]
+        ]
+      },
+      "verifiedAdditions": 4,
+      "warnings": [],
+      "observationErrors": [],
+      "schedulerDecisions": 102,
+      "controlObservations": 240,
+      "nativeSamples": 108,
+      "review": {
+        "decisionReasons": {
+          "waiting_for_assembly_dependency": 11,
+          "pick_up": 4,
+          "press_authorized": 34,
+          "place_at": 15,
+          "replan_uncompleted_step": 11,
+          "route_deferred": 11,
+          "pick_component": 2,
+          "transfer_contents": 4,
+          "transfer_verified": 4,
+          "approach_heat": 2,
+          "rescue_finished_batch": 2,
+          "park_assembly_cargo": 1,
+          "composition_verified": 1
+        },
+        "waitingIntervals": [
+          {
+            "start": 43.1,
+            "seconds": 8.95,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 2.424,
+            "seconds": 2.6,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 10.922,
+            "seconds": 1.42,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 15.193,
+            "seconds": 1.42,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 7.608,
+            "seconds": 1.2,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 0.045,
+            "seconds": 0.97,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 9.736,
+            "seconds": 0.49,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 14.004,
+            "seconds": 0.47,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 5.724,
+            "seconds": 0.24,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 13.061,
+            "seconds": 0.24,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 6.669,
+            "seconds": 0.22,
+            "reason": "waiting_for_assembly_dependency"
+          }
+        ],
+        "completedVesselHolderChanges": [
+          {
+            "vessel": 522878,
+            "firstObservedAt": 37.59,
+            "holder": 522084,
+            "overdoing": false,
+            "ruined": false,
+            "removedAfterSeconds": 0.6
+          }
+        ],
+        "navigationReasons": {
+          "round_changed": 4,
+          "null": 47,
+          "arrived": 189
+        },
+        "note": "Intervals and holder changes need review against native processing and reachability; they do not independently prove unreasonable waiting."
+      },
+      "traceDirectory": ".local/assembly-simplified-01-moving_pasta/s_balloon_1_5",
+      "dllSha256": "20d188e39dc8f88129334fc22a312e29525cb1394bc3d491bdbaef82a8bdf10a"
+    },
+    {
+      "level": "s_mine_2_5",
+      "recipe": "Chicken_Burrito",
+      "state": "succeeded",
+      "elapsedSeconds": 46.11,
+      "independentComposition": {
+        "matched": true,
+        "plateInstanceId": 538592,
+        "parts": [
+          [
+            "cooked",
+            20068,
+            [
+              [
+                "ingredient",
+                "i17454"
+              ]
+            ]
+          ],
+          [
+            "cooked",
+            20294,
+            [
+              [
+                "ingredient",
+                "i34294"
+              ]
+            ]
+          ],
+          [
+            "ingredient",
+            "i11428"
+          ]
+        ]
+      },
+      "verifiedAdditions": 5,
+      "warnings": [],
+      "observationErrors": [],
+      "schedulerDecisions": 70,
+      "controlObservations": 196,
+      "nativeSamples": 89,
+      "review": {
+        "decisionReasons": {
+          "pick_up": 4,
+          "press_authorized": 40,
+          "place_at": 4,
+          "pick_component": 3,
+          "transfer_contents": 5,
+          "transfer_verified": 5,
+          "approach_heat": 2,
+          "rescue_finished_batch": 2,
+          "park_assembly_cargo": 2,
+          "waiting_for_assembly_dependency": 2,
+          "composition_verified": 1
+        },
+        "waitingIntervals": [
+          {
+            "start": 26.765,
+            "seconds": 9.15,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 41.644,
+            "seconds": 0.24,
+            "reason": "waiting_for_assembly_dependency"
+          }
+        ],
+        "completedVesselHolderChanges": [],
+        "navigationReasons": {
+          "null": 89,
+          "arrived": 107
+        },
+        "note": "Intervals and holder changes need review against native processing and reachability; they do not independently prove unreasonable waiting."
+      },
+      "traceDirectory": ".local/assembly-simplified-01-burrito/s_mine_2_5",
+      "dllSha256": "20d188e39dc8f88129334fc22a312e29525cb1394bc3d491bdbaef82a8bdf10a"
+    },
+    {
+      "level": "s_wizard_school_3_4",
+      "recipe": "Pancake_Chocolate",
+      "state": "succeeded",
+      "elapsedSeconds": 38.27,
+      "independentComposition": {
+        "matched": true,
+        "plateInstanceId": 556320,
+        "parts": [
+          [
+            "cooked",
+            20294,
+            [
+              [
+                "mixed",
+                null,
+                [
+                  [
+                    "ingredient",
+                    "i16620"
+                  ],
+                  [
+                    "ingredient",
+                    "i18448"
+                  ],
+                  [
+                    "ingredient",
+                    "i22804"
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      },
+      "verifiedAdditions": 5,
+      "warnings": [],
+      "observationErrors": [],
+      "schedulerDecisions": 64,
+      "controlObservations": 162,
+      "nativeSamples": 73,
+      "review": {
+        "decisionReasons": {
+          "pick_component": 4,
+          "press_authorized": 34,
+          "transfer_contents": 6,
+          "transfer_verified": 5,
+          "waiting_for_assembly_dependency": 3,
+          "rescue_finished_batch": 2,
+          "pick_up": 2,
+          "park_assembly_cargo": 2,
+          "place_at": 2,
+          "approach_heat": 1,
+          "replan_uncompleted_step": 1,
+          "route_deferred": 1,
+          "composition_verified": 1
+        },
+        "waitingIntervals": [
+          {
+            "start": 3.285,
+            "seconds": 11.23,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 18.872,
+            "seconds": 8.91,
+            "reason": "waiting_for_assembly_dependency"
+          },
+          {
+            "start": 31.694,
+            "seconds": 2.64,
+            "reason": "waiting_for_assembly_dependency"
+          }
+        ],
+        "completedVesselHolderChanges": [],
+        "navigationReasons": {
+          "null": 46,
+          "arrived": 116
+        },
+        "note": "Intervals and holder changes need review against native processing and reachability; they do not independently prove unreasonable waiting."
+      },
+      "traceDirectory": ".local/assembly-simplified-01-mix_cook/s_wizard_school_3_4",
+      "dllSha256": "20d188e39dc8f88129334fc22a312e29525cb1394bc3d491bdbaef82a8bdf10a"
+    }
+  ],
+  "limitations": [
+    "Representative replay, not a measured 98% success rate.",
+    "Lift transport and remaining difficult geometry/access cases remain unsupported.",
+    "Earlier recovery runs used experiments that were rolled back; their results are not attributed to this binary."
+  ]
+}

@@ -156,3 +156,37 @@ a small preference for retaining the current plate. A plate containing any
 food remains pinned. Tests move the original plate into another chef's hands
 after component collection: an empty dish uses the other allocated plate;
 a partially assembled dish waits without splitting its contents.
+
+## Final simplified-build verification
+
+Commit `924996b` restores the simpler geometry and plate policy described at the
+top of this document. `scripts/check.py` passes: 2,895 core assertions, 435
+analytical navigation checks, 1,150 executor checks, 20 harness checks, and 136
+Python tests (`.local/assembly-simplified-check-02.log`). The first rollback check
+still contained an assertion for the removed contact correction; that assertion
+was then reverted with its implementation before the passing full check.
+
+Four representative native replays all completed with independently matched
+recipe trees on the same simplified binary:
+
+| Level | Recipe | Seconds | Verified additions |
+| --- | --- | ---: | ---: |
+| `s_sushi_1_1` | `Sushi_PlainFish` | 2.06 | 1 |
+| `s_balloon_1_5` | `Pasta_TomatoOnly_New` | 56.24 | 4 |
+| `s_mine_2_5` | `Chicken_Burrito` | 46.11 | 5 |
+| `s_wizard_school_3_4` | `Pancake_Chocolate` | 38.27 | 5 |
+
+The monitor retained all 244 scheduler events, 606 control observations and 273
+native food-state samples, with no missing scheduler records, lost requests or
+leases, observation errors, fires, or ruined food. Long dependency waits were
+reviewed against actual mixing/cooking progress; shorter route retries remained.
+This is representative verification, not a measured 98% completion rate or an
+all-kitchen guarantee. The known lift, gap, and difficult-contact limitations are
+accepted within the simpler scope.
+
+The built and tested isolated-runtime DLLs both hash to
+`20d188e39dc8f88129334fc22a312e29525cb1394bc3d491bdbaef82a8bdf10a`.
+The [result index](dish-assembly-recovery.json) records each case and trace path.
+Only initial prepared ingredients were supplied by fixtures. No measured chef
+positions or processing clocks were changed. The owned test runtime was stopped;
+the normal installed game was not modified.
