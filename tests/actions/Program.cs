@@ -1129,6 +1129,20 @@ internal static partial class Program
         Check(w.Inputs.Count(i=>i==1)<=2,"one pickup press is held briefly, never blindly retried");
 
         w=new World();item=w.Ingredient("tomato");w.Target.GetComponent<ServerAttachStation>().Item=item;
+        Check(w.Skills.Start(w.Chef,1,new ControlCommand {Operation="pick_up",Destination=w.Id,Indefinite=true})==null,"persistent finite pickup starts");
+        w.Arrive();w.Verify();w.Tick(3);
+        Check(w.Skills.Run.State=="blocked" && w.Skills.Run.Reason=="pickup_not_applied" && w.Skills.CanRetry,
+            "unchanged finite source and empty hands permit replanning after a native-suppressed pickup");
+        Check(w.Inputs.Count(i=>i==1)<=2,"pickup reconciliation returns control without issuing a second edge");
+        w=new World();item=w.Ingredient("tomato");w.Target.GetComponent<ServerAttachStation>().Item=item;
+        w.Skills.Start(w.Chef,1,new ControlCommand {Operation="pick_up",Destination=w.Id,Indefinite=true});w.Arrive();w.Verify();
+        w.Target.GetComponent<ServerAttachStation>().Item=w.Ingredient("onion");w.Tick(3);
+        Check(w.Skills.Run.Reason=="outcome_not_observed" && !w.Skills.CanRetry,"changed pickup source cannot authorize replay");
+        w=new World();w.Target.Add(new PickupItemSpawner {m_itemPrefab=w.Ingredient("tomato")});
+        w.Skills.Start(w.Chef,1,new ControlCommand {Operation="pick_up",Destination=w.Id,Indefinite=true});w.Arrive();w.Verify();w.Tick(3);
+        Check(w.Skills.Run.Reason=="outcome_not_observed" && !w.Skills.CanRetry,"unchanged infinite supply is insufficient evidence for replaying a possibly spawned item");
+
+        w=new World();item=w.Ingredient("tomato");w.Target.GetComponent<ServerAttachStation>().Item=item;
         w.Start("pick_up");w.Target.GetComponent<ServerAttachStation>().Item=w.Ingredient("onion");w.Arrive();
         Check(w.Skills.Run.State=="blocked" && !w.Inputs.Contains(1),"changed source cannot pick up a substitute");
 

@@ -526,7 +526,9 @@ namespace SousChef.Plugin.Actions
                         // (e.g. a contact/selection change). Only retry when both
                         // authoritative sides prove that nothing was transferred.
                         var contents = held == null ? null : held.GetComponent<ServerIngredientContainer>();
-                        if (command.Indefinite && command.Operation == "transfer_contents" && held != null &&
+                        if (command.Indefinite && command.Operation == "pick_up" && PickupUnchanged())
+                        { pressed = false; Finish("blocked", "pickup_not_applied"); }
+                        else if (command.Indefinite && command.Operation == "transfer_contents" && held != null &&
                             System.Object.ReferenceEquals(ActionObservations.Held(chef), held) && ActionObservations.Container(target) == container &&
                             container != null && container.GetContentsCount() == initialSourceContents &&
                             (contents == null ? initialContents == 0 : contents.GetContentsCount() == initialContents) &&
@@ -543,6 +545,20 @@ namespace SousChef.Plugin.Actions
                 }
             }
             catch (Exception) { Finish("failed", "observation_unavailable"); }
+        }
+        private bool PickupUnchanged()
+        {
+            // Native pickup cooldown can suppress a valid edge just after a
+            // placement. Only finite, still-observed cargo is retryable: an
+            // unchanged dispenser cannot prove that it did not spawn an item.
+            if (pickupPrefab != null || expectedPickup == null || !expectedPickup.activeInHierarchy || held != null ||
+                ActionObservations.Held(chef) != null || !System.Object.ReferenceEquals(initialOccupant, ActionObservations.Occupant(target)) ||
+                !System.Object.ReferenceEquals(receiver, ActionObservations.Receiver(target)) ||
+                ActionObservations.Container(target) != container ||
+                (container == null ? initialSourceContents != 0 : container.GetContentsCount() != initialSourceContents) ||
+                ActionObservations.StackCount(receiver) != initialStack) return false;
+            var stack = receiver.GetComponent<ServerStack>();
+            return expectedTopPlate == null || stack != null && System.Object.ReferenceEquals(stack.InspectTopOfStack(), expectedTopPlate);
         }
         private void SetPhase(string phase) { Run.Advance(phase); phaseStarted = Time.realtimeSinceStartup; }
         private string recoveryReason;
