@@ -83,6 +83,7 @@ namespace SousChef.Plugin.Navigation
 
         public void Reset()
         {
+            ClearStallAvoidance();
             ForgetSearch();
             chef = null; ClearGeometryCache(); stamps.Clear(); meshes.Clear(); dangers.Clear(); nativeSteps.Clear(); surfaces.Clear(); surfaceHistories.Clear(); properties.Clear(); grids.Clear(); ignoredChefColliders.Clear(); ignoredLooseColliders.Clear(); portals.Clear(); portalEntries.Clear(); portalExits.Clear(); exitPortal = null;
         }
@@ -513,6 +514,7 @@ namespace SousChef.Plugin.Navigation
                 // Radius is relative to the live chef, never part of cached
                 // geometry. Moving closer must reveal previously clipped edges.
                 if (!b.Valid || (b.Point - Position).sqrMagnitude > (Range - 2) * (Range - 2)) continue;
+                if (!AvoidsStalledHeadings(a.Point, b.Point)) continue;
                 bool clear = true;
                 IMovingSurface current = MovingSurface(a.Ground), previous = null;
                 if (from.SurfaceHistory != 0) surfaceHistories.TryGetValue(from.SurfaceHistory, out previous);
@@ -558,6 +560,8 @@ namespace SousChef.Plugin.Navigation
         }
         private bool Segment(Vector3 from, Vector3 to, float clearance, bool checkFlow, List<GroundSample> samples = null, Action<int> history = null, int initialHistory = 0)
         {
+            // Recovery constraints are live routing policy, never cached geometry.
+            if (checkFlow && !AvoidsStalledHeadings(from, to)) return false;
             Vector3 previous = from;
             RaycastHit previousGround = new RaycastHit(); bool havePrevious = false;
             IMovingSurface currentSurface = null, priorSurface = null;

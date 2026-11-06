@@ -277,6 +277,113 @@ internal static class Program
         var navigation=w.Navigate(bin);
         Check(navigation.Action.State=="navigating","a bin is navigable with empty hands and no available discard action");
     }
+    private static int Reroutes(NavigationActions navigation)
+    { return (int)((Json.Record)navigation.Describe())["stallReroutes"]; }
+
+    private static void WalkingStallRecovery()
+    {
+        var w = new World(); var floor = w.AddFloor((x,z) => Math.Abs(x)<4 && Math.Abs(z)<4 ? 0 : (float?)null);
+        w.Chef.transform.position = new Vector3(0,0,-2.5f);
+        var station = w.AddStation(); var navigation = w.Navigate(station);
+        string destination = navigation.Action.Destination;
+        Time.deltaTime = Time.unscaledDeltaTime = .05f;
+        navigation.Tick(w.Chef); Vector3 original = w.LastInput;
+        for (int i=0; i<9; i++) { Time.realtimeSinceStartup += .05f; navigation.Tick(w.Chef); }
+        Time.realtimeSinceStartup += .049f; navigation.Tick(w.Chef);
+        Check(Reroutes(navigation) == 0, "499 ms of commanded stationary walking does not reroute early");
+        Time.realtimeSinceStartup += .001f; navigation.Tick(w.Chef);
+        Check(Reroutes(navigation) == 1 && navigation.Action.State == "navigating" && navigation.Action.Destination == destination,
+            "500 ms of stalled walking reroutes while retaining the same destination");
+        Check(w.LastInput.magnitude > .9f && Vector3.Dot(original, w.LastInput) <= .51f,
+            "rerouting takes a different checked heading instead of repeating the stalled shortcut");
+        // Model an unreported native contact that blocks northbound movement near
+        // the original pose. Only a detour can escape; the floor stays unchanged.
+        for (int i=0; i<150 && navigation.Action.State == "navigating"; i++)
+        {
+            Vector3 p = w.Chef.transform.position;
+            if (!(Math.Abs(p.x)<.35f && p.z< -2.1f && w.LastInput.z>.5f))
+                w.Chef.transform.position += w.LastInput * (.05f * w.Chef.Movement.RunSpeed);
+            Time.realtimeSinceStartup += .05f; navigation.Tick(w.Chef);
+        }
+        Check(navigation.Action.Reason == "arrived" && Reroutes(navigation) == 1,
+            "the recovered controller walks around an unreported contact and arrives");
+
+        // Ground motion must not disguise a stationary chef, even when the
+        // destination is stationary on a different support.
+        w = new World(); floor = w.AddFloor((x,z) => Math.Abs(x)<5 && Math.Abs(z)<5 ? 0 : (float?)null);
+        w.Chef.transform.position = new Vector3(0,0,-2.5f); station = w.AddStation(); navigation = w.Navigate(station);
+        Time.deltaTime = Time.unscaledDeltaTime = .05f; navigation.Tick(w.Chef);
+        Vector3 local = floor.transform.InverseTransformPoint(w.Chef.transform.position);
+        for (int i=0; i<10; i++)
+        {
+            floor.transform.position += new Vector3(.03f,0,0); floor.transform.yaw += .01f;
+            w.Chef.transform.position = floor.transform.TransformPoint(local);
+            Time.realtimeSinceStartup += .05f; navigation.Tick(w.Chef);
+        }
+        Check(Reroutes(navigation) == 1 && navigation.Action.State == "navigating",
+            "shared ground translation and rotation do not count as walking progress");
+
+        w = new World(); floor = w.AddFloor((x,z) => Math.Abs(x)<5 && Math.Abs(z)<5 ? 0 : (float?)null);
+        w.Chef.transform.position = new Vector3(0,0,-2.5f); station = w.AddStation(); navigation = w.Navigate(station);
+        Time.deltaTime = Time.unscaledDeltaTime = .05f; navigation.Tick(w.Chef);
+        for (int i=0; i<16; i++)
+        {
+            // A chef stationary in world coordinates is walking relative to a
+            // translating floor. This also covers small, accumulated progress.
+            floor.transform.position -= new Vector3(0,0,.01f);
+            Time.realtimeSinceStartup += .05f; navigation.Tick(w.Chef);
+        }
+        Check(Reroutes(navigation) == 0 && navigation.Action.State == "navigating",
+            "slow ground-relative progress prevents a false stall despite zero world displacement");
+
+        w = new World(); w.AddFloor((x,z) => Math.Abs(x)<4 && Math.Abs(z)<4 ? 0 : (float?)null);
+        w.Chef.transform.position = new Vector3(0,0,-2.5f); navigation = w.Navigate(w.AddStation());
+        Time.deltaTime = Time.unscaledDeltaTime = .05f; navigation.Tick(w.Chef);
+        for (int i=0; i<8; i++)
+        {
+            w.Chef.transform.position += new Vector3(i%2 == 0 ? .005f : -.005f,0,0);
+            Time.realtimeSinceStartup += .05f; navigation.Tick(w.Chef);
+        }
+        Time.realtimeSinceStartup += 10; navigation.ResumeAfterPause(10); navigation.Tick(w.Chef);
+        for (int i=0; i<9; i++) { Time.realtimeSinceStartup += .05f; navigation.Tick(w.Chef); }
+        Check(Reroutes(navigation) == 0, "resume starts a fresh stall interval without counting paused time");
+        Time.realtimeSinceStartup += .05f; navigation.Tick(w.Chef);
+        Check(Reroutes(navigation) == 1, "contact jitter does not continually reset the 500 ms watchdog");
+
+        // Commands that expire between updates do not count the uncommanded gap.
+        w = new World(); w.AddFloor((x,z) => Math.Abs(x)<4 && Math.Abs(z)<4 ? 0 : (float?)null);
+        w.Chef.transform.position = new Vector3(0,0,-2.5f); navigation = w.Navigate(w.AddStation()); navigation.Tick(w.Chef);
+        for (int i=0; i<3; i++) { Time.realtimeSinceStartup += .2f; navigation.Tick(w.Chef); }
+        Check(Reroutes(navigation) == 0, "expired input windows cannot count as continuous commanded walking");
+    }
+
+    private static void StallAvoidanceGeometry()
+    {
+        var w = new World(); var floor = w.AddFloor((x,z) => Math.Abs(x)<4 && Math.Abs(z)<4 ? 0 : (float?)null);
+        var physics = w.Ready(); var origin = new WalkCell(0,0,0); var north = new WalkCell(0,0,1);
+        Check(physics.Neighbours(origin).Any(e => e.Cell.Equals(north)), "fixture warms a northbound cached edge");
+        physics.AvoidStalledHeading(Vector3.zero, Vector3.forward, floor);
+        Check(!physics.Neighbours(origin).Any(e => e.Cell.Equals(north)), "recovery excludes the failed direction from already cached edges");
+        Check(!physics.Segment(Vector3.zero, Vector3.forward) && physics.Segment(Vector3.zero, Vector3.right) &&
+            physics.Segment(Vector3.zero, -Vector3.forward), "connectors reject the stalled heading but allow checked lateral and backward exits");
+        Check(physics.Segment(Vector3.right, Vector3.right + Vector3.forward), "the failed heading stays local rather than blocking travel across the kitchen");
+        floor.transform.position = new Vector3(1,0,1); floor.transform.yaw = (float)Math.PI/2;
+        Vector3 p = floor.transform.TransformPoint(Vector3.zero), ahead = floor.transform.TransformPoint(Vector3.forward);
+        Check(!physics.Segment(p,ahead), "avoidance travels and rotates with its support");
+        physics.ClearStallAvoidance();
+        Check(physics.Neighbours(origin).Any(e => e.Cell.Equals(north)) && physics.Segment(p,ahead),
+            "clearing action-local avoidance restores cached edges without poisoning geometry");
+
+        // Exclusion cannot invent an escape over a gap in a one-cell corridor.
+        w = new World(); w.AddFloor((x,z) => Math.Abs(x)<.05f && Math.Abs(z)<4 ? 0 : (float?)null);
+        w.Chef.transform.position = new Vector3(0,0,-2.5f); var navigation = w.Navigate(w.AddStation());
+        Time.deltaTime = Time.unscaledDeltaTime = .05f; navigation.Tick(w.Chef);
+        for (int i=0; i<11 && navigation.Action.State == "navigating"; i++)
+        { Time.realtimeSinceStartup += .05f; navigation.Tick(w.Chef); }
+        Check(Reroutes(navigation) == 1 && navigation.Action.State == "idle" && navigation.Action.Reason != "arrived",
+            "a stall without a supported detour stops instead of forcing an unsafe escape");
+    }
+
     private static void ArrivalMotion()
     {
         var w=new World(); w.AddFloor((x,z) => Math.Abs(x)<2 && Math.Abs(z)<2 ? 0 : (float?)null);
@@ -1138,7 +1245,7 @@ internal static class Program
     }
     private static void Main()
     {
-        DoorwayChanges(); StationConnectorReuse(); FocusedPlanning(); SearchContinuity(); ShallowCeilingContacts(); EquivalentVerticalStarts(); ConveyorSearchContinuity(); CertifiedStart(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); DirectedConveyors(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
+        WalkingStallRecovery(); StallAvoidanceGeometry(); DoorwayChanges(); StationConnectorReuse(); FocusedPlanning(); SearchContinuity(); ShallowCeilingContacts(); EquivalentVerticalStarts(); ConveyorSearchContinuity(); CertifiedStart(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); DirectedConveyors(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
         WorkerStartingStateChanges(); LoosePickupBodies(); StationaryThrowStances();
         Console.WriteLine("PASS: " + checks + " navigator integration checks (analytical geometry; not PhysX)");
     }

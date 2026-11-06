@@ -29,6 +29,13 @@ and rejected overshoot. The core suite separately checks input expiry while
 retaining ownership and renewal after frame jitter. Open-corridor continuation
 and unchanged final-approach windows have separate production-controller checks.
 
+Stall recovery checks the 499/500 ms boundary, successful rerouting around an
+unreported contact, small contact jitter, moving/rotating ground independent of
+the destination, slow relative progress, pause/resume and expired input windows.
+It also checks live exclusions on cached edges and shortcuts, support-relative
+exclusion transforms, clearing recovery without corrupting geometry caches, and
+refusal to escape over a hole when no alternate route exists.
+
 These doubles do not emulate PhysX, native step projection, friction or Unity
 update ordering. Building against the installed assemblies checks API compatibility;
 real level traversal and low-FPS/native-input behavior still need live validation.

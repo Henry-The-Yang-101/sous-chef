@@ -63,7 +63,7 @@ namespace SousChef.Plugin.Navigation
                 // not attempt to walk back across the completed teleport.
                 waypoint = Mathf.Min(route.Count - 1, waypoint + 2);
                 activePortal = null; lastPlan = -1; settlingSince = -1;
-                progressPosition = physics.Position; lastProgress = Time.realtimeSinceStartup;
+                ResetWalkingProgress();
                 haveMotion = motionSampleValid = false; arrival.Reset(); facingSince = -1;
                 move(Vector3.zero, commandMilliseconds); return;
             }

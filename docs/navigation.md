@@ -292,6 +292,23 @@ claimed. Geometry and target eligibility are rechecked during execution.
 States are `idle` and `navigating`; `reason` records completion or interruption.
 The plugin checks the selected object and live geometry each update while moving,
 replans on observed changes, and polls reachability at least every 0.1 seconds.
+While issuing walking input, 500 ms without at least 0.03 world units of net
+horizontal movement relative to the supporting ground triggers a fresh route
+to the same destination. The measurement removes the ground's translation and
+rotation, tolerates small contact jitter, and counts only checked nonzero input
+windows. Neutral alignment, ground settling, portal waits/transport and pause
+do not accumulate stall time; resuming starts a fresh interval.
+
+Recovery excludes the failed heading near the stuck position, in the supporting
+ground's local frame. This applies to cached graph edges, start/goal connectors,
+retained routes and walking shortcuts, so ordinary replanning cannot immediately
+select the same stuck approach. Sideways/backward detours still require the usual
+support, collision and environmental-flow checks. Up to eight failed headings
+are retained for the current action and cleared on stop. If no checked alternative
+route is available, navigation stops; the overall 45-second action timeout also
+remains in force. `navigation.stallReroutes` reports recovery attempts, and optional
+execution traces include `stall_reroute` decisions.
+
 If the destination loses its route or eligibility, movement input is released
 and state becomes `idle` in that detecting update. It does not wait for a bridge
 or door to reopen, silently resume, or choose a different semantic task.

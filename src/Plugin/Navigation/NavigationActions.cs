@@ -42,8 +42,7 @@ namespace SousChef.Plugin.Navigation
         private readonly ArrivalCheck arrival = new ArrivalCheck();
         private int nextId, waypoint, warmTicks;
         private PlayerControls chef;
-        private float lastPlan = -1, started, lastProgress, facingSince = -1;
-        private Vector3 progressPosition;
+        private float lastPlan = -1, started, facingSince = -1;
         private Vector3 motionPosition, motionLocalPosition, targetVelocity;
         private float motionTime, observedRelativeSpeed;
         private bool haveMotion, motionSampleValid;
@@ -79,7 +78,12 @@ namespace SousChef.Plugin.Navigation
         }
         public NavigationActions(Action<Vector3, int> walk, Action halt)
         {
-            move = walk; neutral = halt;
+            move = delegate(Vector3 input, int milliseconds)
+            {
+                if (input.sqrMagnitude < .0001f) ResetWalkingProgress();
+                walk(input, milliseconds);
+            };
+            neutral = halt;
             physics.TraceEnabled = Environment.GetEnvironmentVariable("SOUS_CHEF_NAV_TRACE") == "1";
         }
         public GameObject Resolve(string id)
@@ -119,7 +123,8 @@ namespace SousChef.Plugin.Navigation
             var chosen = new Destination { Id = "throw_stance", Object = aim, Kind = "throw_stance", IsPoint = true, StrictPointArrival = strictArrival,
                 Approach = supported, PointSupport = ground, LocalApproach = ground.transform.InverseTransformPoint(supported) };
             if (!Action.Start(owner, chosen.Id, true)) return "action_in_progress";
-            settlingSince = -1; teleportsCompleted = 0; target = chosen; started = lastProgress = Time.realtimeSinceStartup; progressPosition = player.transform.position;
+            settlingSince = -1; teleportsCompleted = 0; target = chosen; started = Time.realtimeSinceStartup;
+            ResetWalkingProgress(); stallReroutes = 0;
             arrivalDetails = null; arrival.Reset(); facingSince = -1; haveMotion = motionSampleValid = false;
             Refresh(player, true, true);
             if (!ApplyPlan()) return Action.Reason;
@@ -243,7 +248,7 @@ namespace SousChef.Plugin.Navigation
         public void ResumeAfterPause(float seconds)
         {
             if (Action.State != "navigating") return;
-            started += seconds; lastProgress += seconds;
+            started += seconds; ResetWalkingProgress();
             if (facingSince >= 0) facingSince += seconds;
             if (settlingSince >= 0) settlingSince += seconds;
             if (activePortal != null) portalStarted += seconds;
@@ -255,6 +260,7 @@ namespace SousChef.Plugin.Navigation
             Trace(reason, Vector3.zero, Vector3.zero);
             // Neutral first; callers must not observe idle with stale movement input.
             neutral();
+            ResetWalkingProgress(); physics.ClearStallAvoidance();
             if (target != null && target.Object != null) lastDestination = Identity(target);
             fullCatalogueRequested = false;
             Action.Stop(reason); portalReplanUntil = 0; waitingPortalRoute = false; activePortal = null; portalSteps.Clear(); settlingSince = -1; target = null; route = null; facingSince = -1; arrival.Reset(); haveMotion = motionSampleValid = false;
@@ -276,7 +282,7 @@ namespace SousChef.Plugin.Navigation
             return Json.Object("state", Action.State, "destinationId", Action.Destination, "reason", Action.Reason,
                 "destination", target == null ? lastDestination : Identity(target),
                 "phase", Action.State == "idle" ? "idle" : activePortal != null ? portalPhase : waitingPortalRoute ? "waiting_portal_route" : settlingSince >= 0 ? (followingSupport ? "following_support" : "settling_ground") : facingSince < 0 ? "walking" : "aligning", "arrival", arrivalDetails,
-                "teleportsCompleted", teleportsCompleted, "portal", DescribePortal(),
+                "teleportsCompleted", teleportsCompleted, "stallReroutes", stallReroutes, "portal", DescribePortal(),
                 "executionTrace", physics.TraceEnabled ? executionTrace.ToArray() : null,
                 "revision", Action.Revision, "catalogRevision", revision, "catalogReason", CatalogueReason,
                 "catalogComplete", CatalogueReason == null && search != null && search.Complete,
@@ -350,7 +356,8 @@ namespace SousChef.Plugin.Navigation
             Destination chosen;
             if (!available.TryGetValue(destination, out chosen)) return unavailable ?? "destination_unavailable";
             if (!Action.Start(owner, destination, true)) return "action_in_progress";
-            target = chosen; lastDestination = Identity(chosen); started = lastProgress = Time.realtimeSinceStartup; progressPosition = physics.Position;
+            target = chosen; lastDestination = Identity(chosen); started = Time.realtimeSinceStartup;
+            ResetWalkingProgress(); stallReroutes = 0;
             arrivalDetails = null; arrival.Reset(); facingSince = -1; haveMotion = motionSampleValid = false;
             settlingSince = -1; teleportsCompleted = 0; executionTrace.Clear(); SetRoute(chosen); Trace("start", chosen.Approach, Vector3.zero); return null;
         }
@@ -373,7 +380,7 @@ namespace SousChef.Plugin.Navigation
                 if ((unavailable == null || unavailable == "planning_in_progress") &&
                     Time.realtimeSinceStartup < portalReplanUntil && Time.realtimeSinceStartup - started < 45f)
                 {
-                    waitingPortalRoute = true; lastProgress = Time.realtimeSinceStartup;
+                    waitingPortalRoute = true;
                     Trace("waiting_portal_route", Vector3.zero, Vector3.zero);
                     move(Vector3.zero, WalkingCommand.Milliseconds(Time.unscaledDeltaTime));
                     return false;
@@ -445,10 +452,11 @@ namespace SousChef.Plugin.Navigation
                 (!target.IsPoint && !Eligible(target.Object, player, out target.Kind, true))) { Stop("destination_unavailable"); return; }
             int commandMilliseconds = WalkingCommand.Milliseconds(Time.unscaledDeltaTime);
             if (commandMilliseconds == 0) { Stop("unsafe_update_interval"); return; }
-            if (activePortal != null) { TickPortal(commandMilliseconds); return; }
+            if (activePortal != null) { ResetWalkingProgress(); TickPortal(commandMilliseconds); return; }
             string error = physics.Refresh(player);
             if ((error == null || error == "not_grounded") && physics.NeedsGroundSettling())
             {
+                ResetWalkingProgress();
                 if (settlingSince < 0) settlingSince = Time.realtimeSinceStartup;
                 if (Time.realtimeSinceStartup - settlingSince > 2f) { Stop("ground_contact_timeout"); return; }
                 if (ContinueAboveSupport(commandMilliseconds)) return;
@@ -469,13 +477,9 @@ namespace SousChef.Plugin.Navigation
             Vector3 position = physics.Position;
             SampleMotion(position);
             if (Time.realtimeSinceStartup - started > 45f) { Stop("navigation_timeout"); return; }
-            // A valid detour can initially move away from the destination. Measure
-            // actual displacement for the stall watchdog, not Euclidean goal distance.
-            if (Vector3.Distance(position, progressPosition) > .15f)
-            { progressPosition = position; lastProgress = Time.realtimeSinceStartup; }
             if (arrival.ShouldSettle(Vector3.Distance(position, target.Approach)) || BrakeForArrival(position, commandMilliseconds))
             { Align(position, commandMilliseconds); return; }
-            if (Time.realtimeSinceStartup - lastProgress > 2f) { Stop("no_progress"); return; }
+            if (!RecoverIfStalled(position)) return;
             facingSince = -1; arrival.Reset(); arrivalDetails = null;
             Vector3 goal;
             bool exiting = physics.ExitClearance(position, out goal);
@@ -491,6 +495,7 @@ namespace SousChef.Plugin.Navigation
             PortalLink nextPortal;
             if (!exiting && portalSteps.TryGetValue(waypoint, out nextPortal))
             {
+                ResetWalkingProgress();
                 activePortal = nextPortal; portalStarted = Time.realtimeSinceStartup; sawTeleport = sawReceive = false; portalBrakeFrames = nextPortal.StagingDistance < 1f ? 3 : 2;
                 TickPortal(commandMilliseconds); return;
             }
@@ -556,6 +561,7 @@ namespace SousChef.Plugin.Navigation
                 Vector3 extended = position + (input * speed + drift) * (continuation / 1000f + Time.fixedDeltaTime);
                 if (continuation > commandMilliseconds && physics.Segment(position, extended)) commandMilliseconds = continuation;
             }
+            RecordWalking(position, goal - position, commandMilliseconds);
             move(input, commandMilliseconds);
         }
         private bool ContinueAboveSupport(int commandMilliseconds)
