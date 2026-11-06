@@ -92,34 +92,51 @@ namespace SousChef.Plugin.Actions
 
         private PrepJob SelectPreparation(float availableSeconds, ref BoardWait boardWait, PreparationSchedule.Lane exclude = null)
         {
-            GameObject held = ActionObservations.Held(chef); PrepJob first = null;
+            GameObject held = ActionObservations.Held(chef); PrepJob best = null;
             for (int n = 0; n < preparation.Lanes.Length; n++)
             {
                 var lane = preparation.At(n);
                 if (lane == exclude || Time.realtimeSinceStartup < lane.RetryAt) continue;
+                PrepJob job = null;
                 if (lane.ParkedMeal != null)
                 {
                     foreach (var entry in inventory.Items)
                         if (System.Object.ReferenceEquals(lane.ParkedMeal, entry.Item) && Obtainable(entry, "move_item"))
-                            return new PrepJob { Lane = lane, Source = entry, Parked = true };
-                    continue;
+                        { job = new PrepJob { Lane = lane, Source = entry, Parked = true }; break; }
                 }
-                if (!lane.WantsMore) continue;
-                var source = StartingSource(lane.Order, ref boardWait);
-                if (source == null || availableSeconds != Single.MaxValue && availableSeconds <= PreparationSeconds(lane.Order, source)) continue;
-                if (Passive(lane.Order) && !CanPrepareForProcessor(lane, source)) continue;
-                var job = new PrepJob { Lane = lane, Source = source };
-                if (held == null) return job;
-                if (System.Object.ReferenceEquals(held, source.Item))
-                    return first != null && ReadyToGive(first) && !ReadyToGive(job) ? first : job;
-                if (first == null) first = job;
+                else if (lane.WantsMore)
+                {
+                    var source = StartingSource(lane.Order, ref boardWait);
+                    if (source == null || availableSeconds != Single.MaxValue && availableSeconds <= PreparationSeconds(lane.Order, source)) continue;
+                    if (Passive(lane.Order) && !CanPrepareForProcessor(lane, source)) continue;
+                    job = new PrepJob { Lane = lane, Source = source };
+                }
+                if (job != null && PreferPreparation(job, best, held)) best = job;
             }
-            return first;
+            return best;
         }
 
         private static bool ReadyToGive(PrepJob job)
         {
-            return !job.Source.Supply && !Passive(job.Lane.Order) && !NeedsWork(job.Lane.Order, job.Source.Item);
+            return job.Parked || !Passive(job.Lane.Order) && !NeedsWork(job.Lane.Order, job.Source.Item);
+        }
+        private static bool PreferPreparation(PrepJob candidate, PrepJob current, GameObject held)
+        {
+            if (current == null) return true;
+            // Feeding the receiving chef outranks producing more stock. Compare
+            // every lane, even with empty hands or useful raw cargo already held.
+            bool ready = ReadyToGive(candidate), currentReady = ReadyToGive(current);
+            if (ready != currentReady) return ready;
+            // Within the same class, use held cargo, then preserve the cursor's
+            // round-robin order. Never let a raw catch outrank a ready handoff.
+            return System.Object.ReferenceEquals(held, candidate.Source.Item) &&
+                !System.Object.ReferenceEquals(held, current.Source.Item);
+        }
+        private bool ReadyPreparationWaiting()
+        {
+            BoardWait unused = BoardWait.None;
+            PrepJob next = SelectPreparation(Single.MaxValue, ref unused);
+            return next != null && ReadyToGive(next);
         }
         private bool CanPrepareForProcessor(PreparationSchedule.Lane lane, LogisticsItem source)
         {
@@ -193,6 +210,10 @@ namespace SousChef.Plugin.Actions
                         yield break;
                     }
                 }
+                // A ready portion may have arrived while we carried/placed this
+                // raw food. Leave it on its board and dispatch the handoff first.
+                // This is a safe action boundary, not a new per-frame world scan.
+                if (ReadyPreparationWaiting()) yield break;
                 var work = Reschedulable("work_at", board, "work_complete");
                 work.ReplanForHeld = UsefulCatch;
                 yield return work;
