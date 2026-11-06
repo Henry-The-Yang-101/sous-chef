@@ -122,3 +122,17 @@ map while the assembly scheduler could probe a concrete empty counter.
 451 navigation checks). Native replay of these changes is pending. Replay 04's
 fryer case lacked enough reachable empty counters for its initial fixture;
 no assembly was started, so that setup attempt is not a behavioral result.
+
+Replay 05 completed marinara in 94.29 seconds with an independent exact recipe
+match and no fire/ruined food. The long generic storage wait and `no_safe_start`
+stall did not recur. Its recorded ready vessels were removed after 0.59 and
+0.42 seconds. The fryer also recovered its floor contact and removed both
+ready baskets after 0.44 and 0.58 seconds, but exposed an empty-base selection
+problem: its chosen plate stayed on a distant moving cart while an alternative
+allocated plate was near the cooking area.
+
+Empty base selection is now reconsidered among the explicit allocation, with
+a small preference for retaining the current plate. A plate containing any
+food remains pinned. Tests move the original plate into another chef's hands
+after component collection: an empty dish uses the other allocated plate;
+a partially assembled dish waits without splitting its contents.
