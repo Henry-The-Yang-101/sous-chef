@@ -6,12 +6,37 @@ imported or called. Expected results never enter a provider request.
 """
 import argparse
 import asyncio
+from collections import Counter
 import hashlib
 import json
 from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def semantic_result(result):
+    """Normalize actions, arguments, repetition, queue and after-plan behavior."""
+    kind = result['kind']
+    if kind == 'plan':
+        plan = result['plan']
+        return {'kind': kind, 'queue_edit': plan['queue_edit'], 'after_plan': plan['after_plan'],
+                'tasks': [{key: task[key] for key in ('action', 'arguments', 'repeat')} for task in plan['tasks']]}
+    if kind == 'queue_edit':
+        return {'kind': kind, **{key: result['edit'][key] for key in ('operation', 'task_id') if key in result['edit']}}
+    return {'kind': kind}
+
+
+def score_outcome(expected, outcome):
+    """Abstention is not a correct completed interpretation."""
+    status = outcome['status']
+    if status == 'request':
+        return 'incomplete'
+    if status == 'complete':
+        return 'correct_completion' if semantic_result(outcome['result']) == expected else 'incorrect_completion'
+    if expected['kind'] == 'blocked' and status in ('rejected', 'clarification'):
+        return 'safe_block'
+    return 'clarification' if status == 'clarification' else 'unexpected_rejection'
 
 
 def main():
@@ -52,10 +77,12 @@ def main():
         if outcome['status'] == 'request':
             batch.append({'name': session['name'], 'request': outcome['request']})
         report.append({'name': session['name'], 'status': outcome['status'],
+                       'score': score_outcome(session['expected'], outcome),
                        'stage': outcome.get('stage'), 'field': outcome.get('field'),
                        'requests': len(session['responses'])})
     (args.directory/'batch.json').write_text(json.dumps(batch)+'\n')
-    print(json.dumps({'pending_requests': len(batch), 'cases': report}, indent=2))
+    print(json.dumps({'pending_requests': len(batch), 'scores': dict(Counter(case['score'] for case in report)),
+                      'cases': report}, indent=2))
 
 
 if __name__ == '__main__': main()

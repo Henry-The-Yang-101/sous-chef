@@ -38,11 +38,14 @@ def response(request, selections=None):
     answers = {}
     for key, question in request['questions'].items():
         if question['type'] == 'noul':
-            answers[key] = {'type': 'noul', 'noul': selections.get(key, 1.0)}
+            default = 0.0 if key in ('concurrent_duties', 'external_deadline', 'region_goal') else 1.0
+            answers[key] = {'type': 'noul', 'noul': selections.get(key, default)}
         else:
             default = {'route': 'task_plan', 'queue_edit': 'append', 'simple': 'staged',
-                       'repeat': 'count_1', 'recipient': 'player_1'}.get(key, next(iter(question['criteria'])))
+                       'repeat': 'count_1', 'recipient': 'player_1', 'coverage': 'equivalent'}.get(key, next(iter(question['criteria'])))
             value = selections.get(key, default)
+            if key == 'coverage' and isinstance(value, (int, float)):
+                value = ('equivalent', value)
             probability = 1.0
             if isinstance(value, tuple): value, probability = value
             others = max(1, len(question['criteria']) - 1)
@@ -84,27 +87,30 @@ class CompilerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([t['action'] for t in result['plan']['tasks']], ['wash_dishes', 'take_ready', 'wash_dishes'])
 
     async def test_repeated_ingredient_different_preparation_and_corrected_quantity(self):
-        c, _ = compiler('Give me one raw carrot and two, actually three chopped carrots', [
+        c, script = compiler('Give me one raw carrot and two, actually three chopped carrots', [
             {'simple_coverage': 0}, {'next_task': 'prepare_near_player'},
-            {'ingredient': 'ingredient_carrot'}, {'preparation': 'raw', 'quantity': 'count_1'},
-            {'ingredient': 'ingredient_carrot'}, {'preparation': 'chopped', 'quantity': 'count_3'},
+            {'ingredient': 'ingredient_carrot'}, {'preparation': 'raw'}, {'quantity': 'count_1'},
+            {'ingredient': 'ingredient_carrot'}, {'preparation': 'chopped'}, {'quantity': 'count_3'},
             {'ingredient': 'done'}, {}, {}, {'next_task': 'done'}, {}])
         items = (await c.compile())['plan']['tasks'][0]['arguments']['items']
         self.assertEqual(items, [{'ingredient': 'carrot', 'preparation': 'raw', 'quantity': 1},
                                  {'ingredient': 'carrot', 'preparation': 'chopped', 'quantity': 3}])
+        quantities = [request for request in script.requests if 'quantity' in request['questions']]
+        self.assertEqual([request['state']['compiler']['resolved_preparation'] for request in quantities], ['raw', 'chopped'])
+        self.assertTrue(all(set(request['questions']) == {'quantity'} for request in quantities))
 
     async def test_clarification_preserves_draft_and_cached_decisions(self):
         c, s = compiler('Give me two chopped carrots and one onion, then wash', [
             {'simple_coverage': 0}, {'next_task': 'prepare_near_player'},
-            {'ingredient': 'ingredient_carrot'}, {'preparation': 'chopped', 'quantity': 'count_2'},
-            {'ingredient': 'ingredient_onion'}, {'preparation': 'unspecified', 'quantity': 'count_1'},
+            {'ingredient': 'ingredient_carrot'}, {'preparation': 'chopped'}, {'quantity': 'count_2'},
+            {'ingredient': 'ingredient_onion'}, {'preparation': 'unspecified'}, {'quantity': 'count_1'},
             {'ingredient': 'done'}, {}, {}, {'next_task': 'wash_dishes'}, {}, {'next_task': 'done'}, {}])
         with self.assertRaises(Clarification) as caught: await c.compile()
         self.assertEqual(c.tasks, [])
-        self.assertEqual(len(s.requests), 6)
+        self.assertEqual(len(s.requests), 7)
         c.resolve(caught.exception, 'chopped')
         result = await c.compile()
-        self.assertEqual(len(s.requests), 13)
+        self.assertEqual(len(s.requests), 15)
         self.assertEqual(result['plan']['tasks'][0]['arguments']['items'][1]['preparation'], 'chopped')
         self.assertEqual(s.requests[-1]['state']['compiler']['clarifications'][0]['answer'], 'Chopped Onion.')
 
@@ -131,7 +137,7 @@ class CompilerTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_low_confidence_done_and_failed_coverage_never_truncate(self):
         for final in ({'next_task': ('done', .84)}, {'next_task': 'done'}):
-            c, _ = compiler('Wash and more work', [{'simple_coverage': 0}, {'next_task': 'wash_dishes'}, {}, final, {'coverage': .1}])
+            c, _ = compiler('Wash and more work', [{'simple_coverage': 0}, {'next_task': 'wash_dishes'}, {}, final, {'coverage': 'different'}])
             with self.assertRaises(Clarification): await c.compile()
 
     async def test_missing_simple_candidate_falls_back_to_full_registry(self):
@@ -143,13 +149,13 @@ class CompilerTests(unittest.IsolatedAsyncioTestCase):
         c, _ = compiler('Wash twelve batches', [{'simple_coverage': 0}, {'next_task': 'wash_dishes'}, {'repeat': 'out_of_range'}])
         with self.assertRaises(Unsupported): await c.compile()
         c, _ = compiler('Give me an empty carrot', [{'simple_coverage': 0}, {'next_task': 'prepare_near_player'},
-            {'ingredient': 'ingredient_carrot'}, {'preparation': 'empty', 'quantity': 'count_1'}])
+            {'ingredient': 'ingredient_carrot'}, {'preparation': 'empty'}, {'quantity': 'count_1'}])
         with self.assertRaises(Unsupported): await c.compile()
 
     async def test_assembly_and_unimplemented_work_have_no_partial_result(self):
         c, _ = compiler('Wash then make a pizza', [{'simple_coverage': 0}, {'next_task': 'wash_dishes'}, {}, {'next_task': 'assemble_dish'}])
         with self.assertRaisesRegex(Unsupported, 'allocation'): await c.compile()
-        c, _ = compiler('Wash while monitoring for thirty seconds', [{'route': 'unsupported'}])
+        c, _ = compiler('Wash while monitoring for thirty seconds', [{'concurrent_duties': 1}])
         with self.assertRaises(Unsupported): await c.compile()
 
     async def test_queue_only_remove_binds_local_identity(self):
@@ -161,6 +167,27 @@ class CompilerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result['edit']['expected_queue_revision'], 4)
         self.assertNotIn('next_task', str(s.requests))
         self.assertIn('Remove pending task 1: Wash dirty dishes', result['message'])
+        self.assertEqual(s.requests[0]['state']['scheduler']['pending_task_count'], 1)
+        self.assertNotIn('pending', s.requests[0]['state']['scheduler'])
+        self.assertEqual(s.requests[1]['state']['scheduler']['pending'][0]['id'], 'queued')
+
+    async def test_constraint_vetoes_do_not_replace_whole_plan_verification(self):
+        for field in ('concurrent_duties', 'external_deadline', 'region_goal'):
+            with self.subTest(field=field):
+                c, script = compiler('A request with an unsupported constraint', [{field: .85}])
+                with self.assertRaises(Unsupported): await c.compile()
+                self.assertEqual(len(script.requests), 1)
+        c, script = compiler('Wash dishes for a minute', [
+            {'simple': 'wash_dishes_once', 'external_deadline': .8}, {'coverage': 'different'}])
+        with self.assertRaises(Clarification): await c.compile()
+        self.assertEqual(len(script.requests), 2)
+
+    async def test_native_verification_includes_the_selected_target_meaning(self):
+        c, script = compiler('Go stand at the sink', [{'simple_coverage': 0}, {'next_task': 'native_action'},
+            {'action': 'navigate_to'}, {'destination_id': 'value_0'}, {}, {'next_task': 'done'}, {}])
+        result = await c.compile()
+        self.assertEqual(result['plan']['after_plan'], 'pause_pending')
+        self.assertEqual(script.requests[-1]['state']['world']['targets'][0]['label'], 'Sink')
 
     async def test_uncertain_removal_confirmation_names_the_exact_pending_task(self):
         ctx = build_context(world(), {'revision': 4, 'pending': [
@@ -194,7 +221,7 @@ class CompilerTests(unittest.IsolatedAsyncioTestCase):
     async def test_ten_items_can_finish_but_eleventh_is_not_truncated(self):
         for ending in ('done','ingredient_carrot'):
             steps = [{'simple_coverage':0},{'next_task':'prepare_near_player'}]
-            steps += [{'ingredient':'ingredient_carrot'},{'preparation':'chopped','quantity':'count_1'}]*10
+            steps += [{'ingredient':'ingredient_carrot'},{'preparation':'chopped'},{'quantity':'count_1'}]*10
             steps += [{'ingredient':ending},{},{},{'next_task':'done'},{}]
             c,_ = compiler('Give me ten separately described carrot entries',steps)
             if ending=='done': self.assertEqual(len((await c.compile())['plan']['tasks'][0]['arguments']['items']),10)

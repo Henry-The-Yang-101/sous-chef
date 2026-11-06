@@ -203,7 +203,9 @@ class InterpreterService:
                        'cancel': 'Cancels only the unfinished original command.',
                        'ambiguous': 'Cannot tell whether this revises the original or adds independent work.'}
             request = {'model': MODEL, 'state': {'unfinished_command': active['compiler'].command['text'],
-                                               'new_utterance': incoming['text']},
+                                               'new_utterance': incoming['text'],
+                                               **({'unfinished_interpretation': Compiler.describe(active['compiler'].tasks)}
+                                                  if active['compiler'].tasks else {})},
                        'questions': {'relationship': choice('Classify how the new utterance relates to the unfinished command. '
                            'No work from the unfinished command has been accepted yet. Do not treat an explicit correction as appended work.', options)}}
             response = await self.client.ask(request, active['generation'], active['budget'], lambda: self._current(active))
