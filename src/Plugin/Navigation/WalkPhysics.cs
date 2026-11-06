@@ -53,20 +53,7 @@ namespace SousChef.Plugin.Navigation
             "collider", failureCollider == null ? null : failureCollider.gameObject.name,
             "colliderId", failureCollider == null ? 0 : failureCollider.GetInstanceID(), "support", failureSupport); } }
         private bool Fail(string reason, Vector3 point, Collider collider = null)
-        {
-            failureReason = reason; failurePoint = point; failureCollider = collider; failureSupport = null;
-            if (TraceEnabled && collider != null && capsule != null &&
-                (reason == "body_overlap" || reason == "body_sweep") && Vector3.Distance(point, Position) < .02f)
-            {
-                Vector3 direction; float depth;
-                bool penetrating = Physics.ComputePenetration(capsule, capsule.transform.position + point - Position,
-                    capsule.transform.rotation, collider, collider.transform.position, collider.transform.rotation, out direction, out depth);
-                Queries++;
-                failureSupport = Json.Object("nativePenetration", penetrating, "depth", depth, "direction", Values.Vector(direction),
-                    "boundsCentre", Values.Vector(collider.bounds.center), "boundsSize", Values.Vector(collider.bounds.size));
-            }
-            return false;
-        }
+        { failureReason = reason; failurePoint = point; failureCollider = collider; failureSupport = null; return false; }
         public bool Overflow { get; private set; }
         public int Queries { get; private set; }
         public bool Changed { get; private set; }
@@ -315,7 +302,7 @@ namespace SousChef.Plugin.Navigation
             if (!WalkHeight.Connected(from.point.y, to.point.y, StepHeight)) return false;
             return ContinuousSupport(from, to) || NativeStep(to.point.y > from.point.y ? to.collider : from.collider);
         }
-        private bool ContinuousSupport(RaycastHit from, RaycastHit to)
+        private static bool ContinuousSupport(RaycastHit from, RaycastHit to)
         {
             Vector3 delta = to.point - from.point; delta.y = 0;
             float rise = to.point.y - from.point.y;
@@ -327,7 +314,7 @@ namespace SousChef.Plugin.Navigation
             // error between the reconstructed foot and returned tangent normal.
             // Keep flat/flat ledges and near-flat mesh seams on the strict bound;
             // every accepted slope connector still undergoes the full body sweep.
-            float tolerance = from.normal.y < .99f || to.normal.y < .99f ? Mathf.Max(.0025f, bodyContactOffset) : .0001f;
+            float tolerance = from.normal.y < .99f || to.normal.y < .99f ? .0025f : .0001f;
             return rise >= Mathf.Min(0, Mathf.Min(a, b)) - tolerance && rise <= Mathf.Max(0, Mathf.Max(a, b)) + tolerance;
         }
         private bool Ground(Vector3 point, out RaycastHit best, float dropDistance = -1)
@@ -343,51 +330,29 @@ namespace SousChef.Plugin.Navigation
             Queries++;
             if (count == hits.Length) { Overflow = true; return false; }
             float distance = Single.MaxValue, contactHeight = 0;
-            RaycastHit lip = new RaycastHit(), ramp = new RaycastHit();
-            float lipDistance = Single.MaxValue, rampDistance = Single.MaxValue;
             for (int i = 0; i < count; i++)
             {
                 var hit = hits[i];
-                if (hit.collider == null || Own(hit.collider) || Dangerous(hit.collider) || hit.normal.y <= 0 || hit.distance <= 0) continue;
+                if (hit.collider == null || Own(hit.collider) || Dangerous(hit.collider) || hit.normal.y < .52992f ||
+                    hit.distance <= 0 || hit.distance >= distance) continue;
                 // SphereCast returns the contact point, not the capsule's foot.
                 // Index and sweep the supported body pose; retain the native normal.
                 Vector3 foot = origin + Vector3.down * (hit.distance + r);
                 if (foot.y - point.y > reach - .08f || point.y - foot.y > drop - .08f) continue;
-                var box = hit.collider as BoxCollider;
-                if (hit.normal.y < .52992f)
-                {
-                    if (box != null && Mathf.Abs(box.transform.up.y) > .9999f && hit.distance < lipDistance)
-                    { lip = hit; lipDistance = hit.distance; }
-                    continue;
-                }
-                if (box != null && Mathf.Abs(box.transform.up.y) < .99f && hit.distance < rampDistance)
-                { ramp = hit; ramp.point = foot; rampDistance = hit.distance; }
-                if (hit.distance >= distance) continue;
                 best = hit; best.point = foot; distance = hit.distance; contactHeight = hit.point.y;
-            }
-            // A native capsule climbs the round lip of a tread above its ramp.
-            // That lip's tangent may be steeper than the ramp slope limit. It
-            // can support the body only with an independently valid ramp contact
-            // in the same sphere query, within the rounded contact envelope.
-            if (lipDistance < distance && rampDistance < Single.MaxValue)
-            {
-                Vector3 foot = origin + Vector3.down * (lip.distance + r);
-                if (foot.y - ramp.point.y <= r * (1 - .52992f) &&
-                    SlopeInterior(foot, ramp.collider, radius) && FloorCentreSupported(foot, lip.collider))
-                { best = lip; best.point = foot; distance = lipDistance; contactHeight = lip.point.y; }
             }
             // PhysX can report a slightly tilted sphere contact at an internal
             // triangle seam on a flat mesh, lowering the reconstructed foot by
             // radius*(1-normal.y). Confirm the actual plane under the centre;
             // a hole, different collider, slope or real ledge is not corrected.
             if (distance != Single.MaxValue && best.normal.y > .99f && best.normal.y < .99999f &&
-                Mathf.Abs(contactHeight - best.point.y) <= .002f)
+                contactHeight - best.point.y > 0 && contactHeight - best.point.y <= .002f)
             {
                 int rays = Physics.RaycastNonAlloc(best.point + Vector3.up * .1f, Vector3.down, hits, .2f, groundMask, QueryTriggerInteraction.Ignore); Queries++;
                 if (rays == hits.Length) { Overflow = true; return false; }
                 float closest = Single.MaxValue; RaycastHit plane = new RaycastHit();
                 for (int i = 0; i < rays; i++) if (hits[i].distance < closest) { closest = hits[i].distance; plane = hits[i]; }
-                if (plane.collider == best.collider && plane.normal.y > .99999f && Mathf.Abs(plane.point.y - contactHeight) < .002f)
+                if (plane.collider == best.collider && plane.normal.y > .99999f && Mathf.Abs(plane.point.y - contactHeight) < .0001f)
                 { Vector3 foot = best.point; foot.y = plane.point.y; best.point = foot; best.normal = plane.normal; }
             }
             return distance != Single.MaxValue;
@@ -444,7 +409,7 @@ namespace SousChef.Plugin.Navigation
             RaycastHit centre;
             return Stand(guess, out point, out support, clearance, out centre);
         }
-        private bool Stand(Vector3 guess, out Vector3 point, out Collider support, float clearance, out RaycastHit hit, float dropDistance = -1, Vector3? escapeTo = null)
+        private bool Stand(Vector3 guess, out Vector3 point, out Collider support, float clearance, out RaycastHit hit, float dropDistance = -1)
         {
             point = guess; support = null;
             if (!Ground(guess, out hit, dropDistance)) return Fail("ground_probe", guess);
@@ -454,87 +419,37 @@ namespace SousChef.Plugin.Navigation
             // on its top rather than shortcut around an overhanging corner.
             if (MovingSurface(support) is Travelator && !ConveyorSupport(point, hit.normal, clearance))
                 return Fail("conveyor_side_support", point, support);
-            if (!FloorCentreSupported(point, support, clearance < radius - .0001f)) return Fail("floor_centre_unsupported", point, support);
+            if (!FloorCentreSupported(point, support)) return Fail("floor_centre_unsupported", point, support);
             if (!SlopeInterior(point, support, clearance)) return Fail("slope_side_clearance", point, support);
             // GroundCast supports the rounded capsule across narrow tread seams.
             // Requiring a ray under every footprint edge rejects real stairs even
             // while the native sphere has stable contact. Segment checks repeat
             // this support test along the entire route; broad gaps still fail.
-            // GroundCast describes contact for the native radius. Inflating that
-            // radius at a rounded ramp/tread join can overlap the very tread
-            // supporting the chef. Keep the native body there; lateral ramp
-            // margins and centre support were independently checked above.
-            float bodyRadius = hit.normal.y < .99f ? Mathf.Min(clearance, nativeRadius) : clearance;
-            Vector3 low, high; Capsule(point, out low, out high, bodyRadius);
-            int count = Physics.OverlapCapsuleNonAlloc(low, high, bodyRadius, overlaps, ~0, QueryTriggerInteraction.Collide); Queries++;
+            Vector3 low, high; Capsule(point, out low, out high, clearance);
+            int count = Physics.OverlapCapsuleNonAlloc(low, high, clearance, overlaps, ~0, QueryTriggerInteraction.Collide); Queries++;
             if (count == overlaps.Length) { Overflow = true; return false; }
-            for (int i = 0; i < count; i++)
-                if (BlocksWalkingBody(overlaps[i], point.y, point.y, low.y - bodyRadius, high.y + bodyRadius) &&
-                    !(escapeTo.HasValue && EscapingContact(overlaps[i], point, escapeTo.Value))) return Fail("body_overlap", point, overlaps[i]);
+            for (int i = 0; i < count; i++) if (BlocksWalkingBody(overlaps[i], point.y, point.y, low.y - clearance, high.y + clearance)) return Fail("body_overlap", point, overlaps[i]);
             return true;
         }
-        private bool FloorCentreSupported(Vector3 point, Collider support, bool liveConnector = false)
+        private bool FloorCentreSupported(Vector3 point, Collider support)
         {
             var box = support as BoxCollider;
             if (box == null || NativeStep(support) || Mathf.Abs(box.transform.up.y) < .9999f) return true;
             Vector3 local = box.transform.InverseTransformPoint(point) - box.center;
             if (Mathf.Abs(local.x) <= box.size.x * .5f && Mathf.Abs(local.z) <= box.size.z * .5f) return true;
-            if (liveConnector && RecoveringFloorEdge(point, box, local)) return true;
             // A sphere grazing a horizontal floor's outside edge reports a
             // sloping normal. It must not turn an unsupported inside corner into
             // a walkable ramp. Adjacent coplanar floors and real stair wedges can
             // still support the centre; native Steppable contact is kept above.
             int count = Physics.RaycastNonAlloc(point + Vector3.up * (nativeRadius + .01f), Vector3.down,
-                hits, nativeRadius + StepHeight + .02f, groundMask, QueryTriggerInteraction.Ignore); Queries++;
+                hits, 2 * nativeRadius + .02f, groundMask, QueryTriggerInteraction.Ignore); Queries++;
             if (count == hits.Length) { Overflow = true; return false; }
             float closest = Single.MaxValue; RaycastHit plane = new RaycastHit();
             for (int i = 0; i < count; i++)
                 if (hits[i].collider != null && !Own(hits[i].collider) && hits[i].distance < closest)
                 { closest = hits[i].distance; plane = hits[i]; }
             if (plane.collider == null || Dangerous(plane.collider) || plane.normal.y < .52992f) return false;
-            if (plane.normal.y < .99f || Mathf.Abs(plane.point.y - point.y) <= Skin) return true;
-            // Rounded contact can reach a tread just before the centre reaches
-            // its joining wedge. Require an actual ramp under the short chord
-            // to that tread, and keep its lateral footprint clearance. A bare
-            // ledge or a floor corner over a hole cannot satisfy this witness.
-            Vector3 edge = box.transform.TransformPoint(box.center + new Vector3(
-                Mathf.Clamp(local.x, -box.size.x * .5f, box.size.x * .5f), local.y,
-                Mathf.Clamp(local.z, -box.size.z * .5f, box.size.z * .5f)));
-            Vector3 chord = edge - point; chord.y = 0;
-            if (chord.magnitude > nativeRadius) return false;
-            for (int n = 1; n <= 3; n++)
-            {
-                Vector3 sample = point + chord * (n / 3f);
-                count = Physics.RaycastNonAlloc(sample + Vector3.up * (nativeRadius + .01f), Vector3.down,
-                    hits, 2 * nativeRadius + .02f, groundMask, QueryTriggerInteraction.Ignore); Queries++;
-                if (count == hits.Length) { Overflow = true; return false; }
-                for (int i = 0; i < count; i++)
-                {
-                    var ramp = hits[i];
-                    if (ramp.collider != null && !Own(ramp.collider) && !Dangerous(ramp.collider) &&
-                        ramp.normal.y >= .52992f && ramp.normal.y < .99f && ramp.point.y >= plane.point.y - .0025f &&
-                        ramp.point.y <= box.bounds.max.y + .0025f && SlopeInterior(sample, ramp.collider, radius)) return true;
-                }
-            }
-            return false;
-        }
-        private bool RecoveringFloorEdge(Vector3 point, BoxCollider box, Vector3 local)
-        {
-            // Native integration can leave a centimetre of centre overhang at
-            // a turn while the chef remains grounded on the floor lip. Permit
-            // only the live connector back toward support, never a new lattice
-            // route around an unsupported corner or a step farther over the edge.
-            if (chef.GroundCollider != box || Mathf.Abs(Position.y - box.bounds.max.y) > .01f ||
-                Vector3.Distance(point, Position) > Skin) return false;
-            Vector3 current = box.transform.InverseTransformPoint(Position) - box.center;
-            float depth = FloorOverhang(box, current);
-            return depth > 0 && depth <= Skin && FloorOverhang(box, local) <= depth + .0001f;
-        }
-        private static float FloorOverhang(BoxCollider box, Vector3 local)
-        {
-            var outside = new Vector3(local.x - Mathf.Clamp(local.x, -box.size.x * .5f, box.size.x * .5f), 0,
-                local.z - Mathf.Clamp(local.z, -box.size.z * .5f, box.size.z * .5f));
-            return box.transform.TransformVector(outside).magnitude;
+            return plane.normal.y < .99f || Mathf.Abs(plane.point.y - box.bounds.max.y) < .0025f;
         }
         // A sphere can touch a ramp while its centre is outside the side face.
         // That diagonal approach is standable in isolation but native slope
@@ -677,7 +592,6 @@ namespace SousChef.Plugin.Navigation
             // Recovery constraints are live routing policy, never cached geometry.
             if (checkFlow && !AvoidsStalledHeadings(from, to)) return false;
             Vector3 previous = from;
-            Vector3? escapeTo = clearance < radius - .0001f && Vector3.Distance(from, Position) < .02f ? to : (Vector3?)null;
             RaycastHit previousGround = new RaycastHit(); bool havePrevious = false;
             IMovingSurface currentSurface = null, priorSurface = null;
             if (checkFlow && initialHistory == 0 && Vector3.Distance(from, Position) < .02f)
@@ -695,7 +609,7 @@ namespace SousChef.Plugin.Navigation
                 // collision: use consistent native clearance along this connector.
                 // Lattice nodes and edges retain padded clearance. The contact skin
                 // is bounded, and every sample still checks support and hazards.
-                if (!Stand(guess, out point, out ground, clearance, out centre, escapeTo: escapeTo)) return false;
+                if (!Stand(guess, out point, out ground, clearance, out centre)) return false;
                 if (!WalkHeight.Connected(guess.y, point.y, StepHeight) || !WalkHeight.Connected(previous.y, point.y, StepHeight))
                     return Fail("support_height", point, ground);
                 bool nativeStep = havePrevious && !ContinuousSupport(previousGround, centre) &&
@@ -729,8 +643,7 @@ namespace SousChef.Plugin.Navigation
                 // Native Steppable collisions can lift the body vertically. Ordinary
                 // ramps cannot: sweep the actual continuous body trajectory, so
                 // a raised endpoint cannot hide a collision at the ramp's side.
-                float bodyRadius = centre.normal.y < .99f || havePrevious && previousGround.normal.y < .99f ? Mathf.Min(clearance, nativeRadius) : clearance;
-                if (!(nativeStep ? StepSweep(previous, point, bodyRadius) : Sweep(previous, point, bodyRadius, escapeTo))) return false;
+                if (!(nativeStep ? StepSweep(previous, point, clearance) : Sweep(previous, point, clearance))) return false;
                 if (samples != null) samples.Add(new GroundSample { Point = centre.point, Ground = ground });
                 previous = point; previousGround = centre; havePrevious = true;
                 return true;
@@ -824,16 +737,14 @@ namespace SousChef.Plugin.Navigation
             return Sweep(from, raisedFrom, clearance) && Sweep(raisedFrom, raisedTo, clearance) && Sweep(raisedTo, to, clearance);
         }
         private float ContactRadius { get { return Mathf.Max(.01f, nativeRadius - .02f); } }
-        private bool Sweep(Vector3 from, Vector3 to, float clearance, Vector3? escapeTo = null)
+        private bool Sweep(Vector3 from, Vector3 to, float clearance)
         {
             Vector3 delta = to - from, low, high; float length = delta.magnitude;
             if (length < .0001f) return true;
             Capsule(from, out low, out high, clearance);
             int count = Physics.CapsuleCastNonAlloc(low, high, clearance, delta / length, hits, length, ~0, QueryTriggerInteraction.Collide); Queries++;
             if (count == hits.Length) { Overflow = true; return false; }
-            for (int i = 0; i < count; i++)
-                if (BlocksWalkingBody(hits[i].collider, Mathf.Min(from.y, to.y), Mathf.Max(from.y, to.y), low.y - clearance + Mathf.Min(0, delta.y), high.y + clearance + Mathf.Max(0, delta.y)) &&
-                    !(escapeTo.HasValue && EscapingContact(hits[i].collider, from, escapeTo.Value) && EscapingContact(hits[i].collider, to, escapeTo.Value))) return Fail("body_sweep", from, hits[i].collider);
+            for (int i = 0; i < count; i++) if (BlocksWalkingBody(hits[i].collider, Mathf.Min(from.y, to.y), Mathf.Max(from.y, to.y), low.y - clearance + Mathf.Min(0, delta.y), high.y + clearance + Mathf.Max(0, delta.y))) return Fail("body_sweep", from, hits[i].collider);
             return true;
         }
         private void TrackSurface(Collider ground, Vector3 point, ref IMovingSurface current, ref IMovingSurface previous)

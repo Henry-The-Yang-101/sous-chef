@@ -99,7 +99,6 @@ internal static partial class Program
     private static void AssemblyProcessing()
     {
         AssemblyRecoveryPolicy();
-        AssemblyBaseReselection();
         {
             var w=new World();var plate=AssemblyPlate(w,w.Delivery());var step=new CookingStepData {m_uID=31};
             var pans=new List<GameObject>();var goals=new List<AssembledDefinitionNode>();ServerCookingHandler pending=null;
@@ -286,32 +285,6 @@ internal static partial class Program
         inventory.EndObservation();w.Tasks.Cancel("test");
     }
 
-    private static void AssemblyBaseReselection()
-    {
-        foreach(bool partial in new[]{false,true})
-        {
-            var w=new World();var firstCounter=w.Delivery();firstCounter.transform.position=new Vector3(2,0,0);
-            var otherCounter=w.Delivery();otherCounter.transform.position=new Vector3(4,0,0);
-            var first=AssemblyPlate(w,firstCounter,partial?new[]{Leaf("rice")}:new AssembledDefinitionNode[0]);
-            var alternative=AssemblyPlate(w,otherCounter);var food=AssemblyFood(w,w.Target,"fish");
-            var request=AssemblyJob(w,new[]{first,alternative},new[]{food},partial?new[]{Leaf("rice"),Leaf("fish")}:new[]{Leaf("fish")});
-            var human=new GameObject("human using the initially selected plate");human.Add(new PlayerControls());
-            var carrier=human.Add(new ServerPlayerAttachmentCarrier());bool claimed=false;
-            StartAssembly(w,request);
-            int additions=DriveAssembly(w,180,onTick:()=>{
-                if(!claimed && w.Carrier.Item==food)
-                {claimed=true;firstCounter.GetComponent<ServerAttachStation>().Item=null;carrier.Item=first;}
-            });
-            Check(claimed,"initial plate becomes unavailable only after the assigned component is collected");
-            if(partial)
-                Check(w.Tasks.Run.Running && additions==0 && RecipeProof.Empty(RecipeProof.Composition(alternative)),
-                    "a partially assembled dish remains pinned when another assigned plate becomes easier to use");
-            else
-                Check(w.Tasks.Run.State=="succeeded" && additions==1 && RecipeProof.Equal(RecipeProof.Composition(alternative),Leaf("fish")) && RecipeProof.Empty(RecipeProof.Composition(first)),
-                    "an unavailable empty base can be replaced by another explicitly assigned plate without splitting the dish: "+Json.Encode(w.Tasks.Describe()));
-            w.Tasks.Cancel("test");
-        }
-    }
     private sealed class BaseComposition : MonoBehaviour, IOrderDefinition
     {
         public AssembledDefinitionNode GetOrderComposition() { return RecipeProof.Combine(Leaf("bun"), Recipe(gameObject.GetComponent<ServerIngredientContainer>().GetContents())); }

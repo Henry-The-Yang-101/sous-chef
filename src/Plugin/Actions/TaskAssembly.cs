@@ -76,9 +76,6 @@ namespace SousChef.Plugin.Actions
                 var entry = AssemblyEntry(item);
                 if (entry == null || !AssemblyObtainable(entry, entry.CleanPlate ? "get_plate" : "move_item", true)) continue;
                 float cost = AssemblyApproachCost(entry.Source, item, true);
-                // Keep an equally useful base, but do not let an empty plate on
-                // an inaccessible moving counter pin the whole finished dish.
-                if (System.Object.ReferenceEquals(item, assembly.Base) && cost < Single.MaxValue) cost -= 1;
                 int parts = RecipeProof.Parts(RecipeProof.Composition(item)).Count;
                 if (parts > progress || parts == progress && cost < distance)
                 { best = item; progress = parts; distance = cost; }
@@ -87,19 +84,6 @@ namespace SousChef.Plugin.Actions
         }
         private void SelectAssemblyWorkspace()
         {
-            if (assembly.Base != null && RecipeProof.Empty(RecipeProof.Composition(assembly.Base)) &&
-                (System.Object.ReferenceEquals(assembly.Root.Vessel, assembly.Base) ||
-                    assembly.Plating != null && System.Object.ReferenceEquals(assembly.Plating.Vessel, assembly.Base)))
-            {
-                var replacement = SelectAssemblyBase();
-                if (replacement != null && !System.Object.ReferenceEquals(replacement, assembly.Base))
-                {
-                    var previous = assembly.Base; assembly.Base = replacement;
-                    if (System.Object.ReferenceEquals(assembly.Root.Vessel, previous)) assembly.Root.Vessel = replacement;
-                    if (assembly.Plating != null) assembly.Plating.Vessel = replacement;
-                    assembly.Record("reselect_empty_base", assembly.Root, previous, replacement);
-                }
-            }
             if (assembly.Root.Vessel != null || assembly.Base == null) return;
             assembly.Root.Vessel = assembly.Base;
             // Keep a partially plated dish intact. For an empty plate, an

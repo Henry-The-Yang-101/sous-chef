@@ -1,5 +1,25 @@
 # Assembly recovery follow-up
 
+## Current scope after simplification
+
+At the user's request, the final implementation returns to the earlier walking
+geometry rather than expanding navigation to cover the remaining kitchen edge
+cases. The experimental lift code was discarded. The new rounded-tread,
+floor-overhang and shallow-counter-contact exceptions and their dedicated
+fixtures were rolled back, as was repeated empty-plate reselection. The original
+assigned-plate pinning contract remains.
+
+Retained changes are general task behavior: exact recipe/allocation checks,
+heat priority and whole-trip cooking budgets, early hand clearing, persistent
+route retry history, and the assembly storage scheduler. General destination A*
+and observed-motion arrival checks remain; no level names or kitchen geometry
+are used by these policies.
+
+The findings below are historical experiments, not claims about the simplified
+binary. In particular, the pizza and contact-recovery successes used changes
+that were subsequently removed. The interrupted replay 06 was stopped for this
+scope change. Final simplified-build verification is recorded separately below.
+
 The cross-kitchen sweep left four stalled executions and one late heat rescue.
 This follow-up fixes scheduler recovery first, then uses native traces to separate
 navigation defects from kitchen mechanisms and resource access constraints.
