@@ -139,6 +139,22 @@ namespace SousChef.Plugin
                     throw new ArgumentException("fixture_requires_obtainable_loose_food_and_empty_human_hands");
                 carrier.CarryItem(food); result["itemInstanceId"] = food.GetInstanceID(); result["playerInstanceId"] = target.GetInstanceID();
             }
+            else if (args[0] == "borrow-cookware")
+            {
+                // Initial single-pan checkpoint: P1 keeps the spare empty pan
+                // in hand, so only one pan can be used throughout the trial.
+                if (args.Length != 3) throw new ArgumentException("borrow-cookware STATION_ID HUMAN_ID");
+                var station = FixtureObject(Int32.Parse(args[1])).GetComponent<ServerAttachStation>();
+                var human = FixtureObject(Int32.Parse(args[2])).GetComponent<PlayerControls>();
+                var carrier = human == null ? null : human.GetComponent<ServerPlayerAttachmentCarrier>();
+                var pan = station == null ? null : station.InspectItem();
+                if (carrier == null || human.PlayerIDProvider.GetID() != PlayerInputLookup.Player.One || carrier.InspectCarriedItem() != null ||
+                    pan == null || pan.GetComponent<ServerCookingHandler>() == null || !Actions.LogisticsInventory.Empty(pan) || !station.CanHandlePickup(carrier))
+                    throw new ArgumentException("fixture_requires_empty_cookware_and_human_hands");
+                station.HandlePickup(carrier, Vector2.up);
+                if (carrier.InspectCarriedItem() != pan || station.InspectItem() != null) throw new InvalidOperationException("cookware_not_borrowed");
+                result["itemInstanceId"] = pan.GetInstanceID();
+            }
             else if (args[0] == "wear-pack")
             {
                 if (args.Length != 3) throw new ArgumentException("wear-pack PACK_ID HUMAN_ID");

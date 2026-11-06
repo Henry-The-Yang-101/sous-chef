@@ -166,7 +166,7 @@ namespace SousChef.Plugin.Actions
                     if (!HumanCanCollect(item, player, true, choice.Ground ? Single.MaxValue : 5)) return false;
                     ((Json.Record)handoffEvidence)["reconciledOutcome"] = child.Run.Reason; return true;
                 };
-                if (defer != null) delivery.AbandonBeforePress = () => child.RouteUnavailable && defer();
+                if (defer != null) delivery.AbandonBeforePress = () => child.RouteUnavailable;
                 delivery.ReplanOnBlock = true; delivery.ReplanAfterPress = lossTolerant; yield return delivery;
                 if (!delivery.Succeeded)
                 {

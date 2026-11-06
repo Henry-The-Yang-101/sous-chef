@@ -64,7 +64,7 @@ namespace SousChef.Plugin.Actions
                 if (item == null || !item.activeInHierarchy) { lane.ParkedMeal = null; continue; }
                 var human = Human(request.Player);
                 if (human != null && System.Object.ReferenceEquals(ActionObservations.Held(human), item))
-                { deliveredItems.Add(item); completed = preparation.Complete(lane); lane.ParkedMeal = null; }
+                { deliveredItems.Add(item); completed = preparation.Complete(lane, item); lane.ParkedMeal = null; }
                 else if (Passive(lane.Order) && LogisticsInventory.Empty(item)) lane.ParkedMeal = null;
             }
         }
@@ -133,7 +133,9 @@ namespace SousChef.Plugin.Actions
                         ApproachCost(item.Source) != Single.MaxValue) return true;
                 // Full pan: prepare its successor on a board. Once chopped it
                 // becomes the preferred source and cannot enter this branch.
-                return lane.InFlight != 0 && NeedsWork(lane.Order, source.Item);
+                if (NeedsWork(lane.Order, source.Item))
+                    foreach (var batch in preparation.Cooking) if (batch.Mixing == mixing) return true;
+                return false;
             }
             LogisticsItem empty; GameObject equipment;
             return Processor(source.Item, mixing) != null || EquipmentPair(source.Item, mixing, out empty, out equipment);
@@ -302,11 +304,11 @@ namespace SousChef.Plugin.Actions
                 dispatched = true; lane.InTransit++;
                 DispatchDelivery(cargo, player, () => cargo != null && cargo.activeInHierarchy &&
                     (!Passive(lane.Order) || !LogisticsInventory.Empty(cargo) && !TaskNative.Burnt(cargo)),
-                    received => { lane.InTransit--; if (received) completed = preparation.Complete(lane); });
+                    received => { lane.InTransit--; if (received) completed = preparation.Complete(lane, cargo); });
             };
             foreach (var step in Give(item, request.Player, dispatch, true, defer)) yield return step;
             if (dispatched) yield break;
-            if (deliveredItems.Contains(item)) completed = preparation.Complete(lane);
+            if (deliveredItems.Contains(item)) completed = preparation.Complete(lane, item);
             else if (deferred && System.Object.ReferenceEquals(item, ActionObservations.Held(chef)))
             {
                 foreach (var step in Park(item)) yield return step;
