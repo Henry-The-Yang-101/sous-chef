@@ -27,7 +27,9 @@ class Audit:
         self.client = None
 
     def load(self, level, complete=True):
-        generation = sim.read_status(self.args.runtime)['generation'] + 1
+        # The native status file can be between writes. Obtain a complete ready
+        # record instead of treating an empty transient read as a missing level.
+        generation = sim.wait_ready(self.args.runtime)['generation'] + 1
         sim.command(self.args.runtime, 'load ' + level)
         sim.wait_ready(self.args.runtime, generation)
         self.client = ActionClient(self.args.port_base + 1, timeout=15)

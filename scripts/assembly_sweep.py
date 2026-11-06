@@ -31,6 +31,48 @@ def nodes(tree):
         yield from nodes(child)
 
 
+def recipe_parts(node, native=False):
+    """Compare native snapshot contents independently of the task's success flag."""
+    if not native:
+        kind = node['kind']
+        if kind == 'ingredient':
+            return [('ingredient', node['id'])]
+        children = tuple(sorted(part for child in node['components'] for part in recipe_parts(child)))
+        if kind == 'assembly':
+            return list(children)
+        if kind not in ('cooked', 'mixed'):
+            raise ValueError('Unknown recipe node: ' + kind)
+        return [(kind, node.get('cookingStepId') if kind == 'cooked' else None, children)]
+    kind = node['type']; data = node.get('fields', {})
+    if kind == 'NullAssembledNode':
+        return []
+    if kind == 'IngredientAssembledNode':
+        definition = data['IngredientAssembledNode.m_ingriedientOrderNode']
+        return [('ingredient', 'i' + str(definition['fields']['OrderDefinitionNode.m_uID']))]
+    if data.get('CompositeAssembledNode.m_optional'):
+        raise ValueError('Unresolved optional native recipe contents')
+    children = tuple(sorted(part for child in data['CompositeAssembledNode.m_composition'] for part in recipe_parts(child, True)))
+    if kind == 'CompositeAssembledNode':
+        return list(children)
+    if kind == 'CookedCompositeAssembledNode' and data[kind + '.m_progress'] == 'Cooked':
+        step = data[kind + '.m_cookingStep']['fields']['CookingStepData.m_uID']
+        return [('cooked', step, children)]
+    if kind == 'MixedCompositeAssembledNode' and data[kind + '.m_progress'] == 'Mixed':
+        return [('mixed', None, children)]
+    raise ValueError('Incomplete or unknown native processing node: ' + kind)
+
+
+def verify_plate(report, snapshot):
+    state = report['result']['details']['assembly']
+    plate = next(o for o in snapshot['objects'] if o['unityInstanceId'] == state['baseInstanceId'] and o['activeInHierarchy'])
+    contents = fields(plate, 'ServerIngredientContainer')['m_contents']
+    actual = sorted(part for node in contents for part in recipe_parts(node, True))
+    expected = sorted(recipe_parts(report['order']['composition']))
+    if actual != expected:
+        raise AssertionError('Final native plate does not match the exact recipe tree')
+    return {'matched': True, 'plateInstanceId': plate['unityInstanceId'], 'parts': actual}
+
+
 def review(directory):
     """Index the retained trace for human review; these metrics are not a pass verdict."""
     decisions = [json.loads(line) for line in (directory / 'decisions.ndjson').open()]
@@ -151,12 +193,14 @@ class NativeMonitor:
 
 class Sweep(Audit):
     def catalog(self, complete=True):
-        started = time.monotonic(); deadline = started + 35; best = None
+        started = time.monotonic(); deadline = started + (90 if self.args.recipe else 35); best = None
         while time.monotonic() < deadline:
             catalog = self.client.available_actions()
             # Moving kitchens can invalidate the full route tree continuously.
             # Require concrete observed resources, not a globally static map.
-            if catalog.get('displayOptions', {}).get('items') and catalog.get('assemblyOrders'):
+            orders = catalog.get('assemblyOrders', [])
+            wanted = not self.args.recipe or any(o['recipe'] == self.args.recipe for o in orders)
+            if catalog.get('displayOptions', {}).get('items') and orders and wanted:
                 best = catalog
                 if catalog.get('complete'):
                     return catalog
@@ -262,10 +306,13 @@ class Sweep(Audit):
             result = self.client.status()['action']; self.client.stop(); warnings.append('observation_timeout')
         write(self.directory / 'transitions.json', transitions)
         after = self.snap('after')
-        return {'order':order, 'allocation':allocation, 'elapsed':round(time.monotonic()-start,2), 'result':result,
+        report = {'order':order, 'allocation':allocation, 'elapsed':round(time.monotonic()-start,2), 'result':result,
                 'warnings':warnings,'observationErrors':errors,'transitions':len(transitions),
                 'nativeSamples':sum(1 for _ in (self.directory/'kitchen.ndjson').open()), 'schedulerDecisions':decision_sequence,
                 'review':review(self.directory), 'afterSequence':after['sequence']}
+        if result['state'] == 'succeeded':
+            report['independentComposition'] = verify_plate(report, after)
+        return report
 
 
 def main():
