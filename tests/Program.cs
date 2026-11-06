@@ -35,6 +35,10 @@ internal static class Program
         Assert(ControlCommand.Parse("task serve deliver_completed_dishes forever").Task.Repetitions == 0, "dish delivery supports continuous monitoring");
         var command = ControlCommand.Parse("task prep prepare_near_player 3 1 sY2hpY2tlbg chopped 2 scG90 empty 1");
         Assert(command.Task.Items.Count == 2 && command.Task.Items[0].Selector == "chicken" && command.Task.Items[0].Quantity == 2, "mixed ingredient utensil task grammar");
+        var assembly = ControlCommand.Parse("task dish assemble_dish 1 sb3JkZXJfQQ 2 d1 d2 1 d3 2 d4 d5").Task.Assembly;
+        Assert(assembly.Order == "order_A" && assembly.Bases.Count == 2 && assembly.Components[0] == "d3" && assembly.Equipment.Count == 2, "exact order and finite resource allocation grammar");
+        foreach (string invalid in new[] { "2 sb3JkZXJfQQ 1 d1 0 0", "forever sb3JkZXJfQQ 1 d1 0 0", "1 sb3JkZXJfQQ 0 0 0", "1 sb3JkZXJfQQ 1 d1 1 d1 0", "1 sb3JkZXJfQQ 1 d1 1 raw 0", "1 sb3JkZXJfQQ 1 d1 0 1", "1 sb3JkZXJfQQ 1 d1 0 0 d2" })
+        { bool rejected = false; try { ControlCommand.Parse("task bad assemble_dish " + invalid); } catch (ArgumentException) { rejected = true; } Assert(rejected, "reject invalid assembly " + invalid); }
         foreach (string value in new[] {"0", "11", "-1", "nan", "1.5"})
         { bool rejected=false; try { ControlCommand.Parse("task bad take_ready " + value); } catch(ArgumentException) { rejected=true; } Assert(rejected,"reject invalid repetitions " + value); }
         var lease = new ControlLease(); Assert(lease.Claim(1, 0, true), "task owns durable lease");

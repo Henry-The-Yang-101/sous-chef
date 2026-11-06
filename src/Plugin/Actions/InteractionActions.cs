@@ -49,6 +49,8 @@ namespace SousChef.Plugin.Actions
         private readonly ActionRecovery recovery = new ActionRecovery();
         private float nextRecoveryAttempt;
         private float lastTick;
+        private Func<bool> authorizePress;
+        private AssembledDefinitionNode transferSource, transferDestination;
 
         public InteractionActions(NavigationActions walking, Action<int> buttons, Action finished)
         { navigation = walking; input = buttons; release = finished; }
@@ -140,9 +142,10 @@ namespace SousChef.Plugin.Actions
             return result.ToArray();
         }
 
-        public string Start(PlayerControls player, int owner, ControlCommand request)
+        public string Start(PlayerControls player, int owner, ControlCommand request, Func<bool> beforePress = null)
         {
             if (Run.Running || navigation.Action.State != "idle") return "action_in_progress";
+            authorizePress = beforePress;
             recovery.Reset(); recoveryReason = null; nextRecoveryAttempt = 0; lastTick = Time.realtimeSinceStartup;
             chef = player; command = request; target = null;
             if (request.GroundDrop && request.Operation == "place_at") target = chef.gameObject;
@@ -248,7 +251,7 @@ namespace SousChef.Plugin.Actions
                 if (expectedPickup == null && target.GetComponent<PickupItemSpawner>() == null && target.GetComponent<PlateStackBase>() == null)
                     return "nothing_to_pick_up";
             }
-            if (op == "place_at" || op == "add_ingredient" || op == "collect_contents" || op == "discard" || op == "throw_to" || op == "throw_to_player")
+            if (op == "place_at" || op == "add_ingredient" || op == "transfer_contents" || op == "collect_contents" || op == "discard" || op == "throw_to" || op == "throw_to_player")
                 if (held == null) return "hands_empty";
             if (op == "place_at" && target.GetComponent<ServerRubbishBin>() != null) return "use_discard";
             if (op == "add_ingredient")
@@ -262,6 +265,13 @@ namespace SousChef.Plugin.Actions
                 initialMatches = ActionObservations.MatchingCount(container, ingredient);
             }
             if (op == "discard" && target.GetComponent<ServerRubbishBin>() == null) return "target_is_not_disposal";
+            if (op == "transfer_contents")
+            {
+                var transfer = GameObjectUtils.RequestInterface<IContainerTransferBehaviour>(held);
+                transferSource = RecipeProof.Composition(held); transferDestination = RecipeProof.Composition(receiver);
+                if (container == null || transfer == null || transferSource == null || transferDestination == null ||
+                    RecipeProof.Empty(transferSource) || !transfer.CanTransferToContainer(container)) return "incompatible_contents_transfer";
+            }
             if (op == "collect_contents")
             {
                 var recipient = held.GetComponent<ServerIngredientContainer>();
@@ -553,6 +563,10 @@ namespace SousChef.Plugin.Actions
         }
         private bool BeforePress()
         {
+            // Execute the parent's recipe/ownership proof at the actual input
+            // edge, after walking and native selection. No earlier snapshot is
+            // authority for an irreversible addition.
+            if (authorizePress != null && !authorizePress()) { Finish("blocked", "task_precondition_changed"); return false; }
             string op = command.Operation;
             if (command.GroundDrop)
             {
@@ -589,6 +603,10 @@ namespace SousChef.Plugin.Actions
             {
                 if (!System.Object.ReferenceEquals(ActionObservations.Held(chef), held)) { Finish("blocked", "held_item_changed"); return false; }
                 if (op == "add_ingredient" && ActionObservations.Container(target) != container) { Finish("blocked", "container_changed"); return false; }
+                if (op == "transfer_contents" && (ActionObservations.Container(target) != container ||
+                    !RecipeProof.Equal(transferSource, RecipeProof.Composition(held)) ||
+                    !RecipeProof.Equal(transferDestination, RecipeProof.Composition(receiver))))
+                { Finish("blocked", "transfer_contents_changed"); return false; }
                 if (op == "collect_contents")
                 {
                     if (ActionObservations.Container(target) != container) { Finish("blocked", "container_changed"); return false; }
@@ -647,6 +665,18 @@ namespace SousChef.Plugin.Actions
                     container != null && ActionObservations.Container(target) == container && container.GetContentsCount() < initialSourceContents;
                 if (collected) evidence = Json.Object("sourceRemaining", container.GetContentsCount(), "recipientCount", recipient.GetContentsCount(), "heldItem", ItemEvidence(held));
                 return collected;
+            }
+            if (op == "transfer_contents")
+            {
+                // A destination count alone cannot distinguish a teammate's
+                // addition. Observe this exact source's consumption as well.
+                var source = held == null ? null : held.GetComponent<ServerIngredientContainer>();
+                bool consumed = held == null || !held.activeInHierarchy || source != null &&
+                    source.GetContentsCount() < initialContents && RecipeProof.Empty(RecipeProof.Composition(held));
+                bool added = container != null && ActionObservations.Container(target) == container &&
+                    RecipeProof.Equal(RecipeProof.Combine(transferDestination, transferSource), RecipeProof.Composition(receiver));
+                if (consumed && added) evidence = Json.Object("source", ItemEvidence(held), "receiver", ItemEvidence(receiver), "compositionVerified", true);
+                return consumed && added;
             }
             if (op == "place_at")
             {

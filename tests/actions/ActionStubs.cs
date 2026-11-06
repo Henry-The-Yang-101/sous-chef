@@ -9,9 +9,41 @@ public static class GameObjectUtils
 public class AssembledDefinitionNode
 {
     public string Name;
-    public AssembledDefinitionNode(string name) { Name = name; }
-    public static bool Matching(AssembledDefinitionNode a, AssembledDefinitionNode b) { return a != null && b != null && a.Name == b.Name; }
+    public static readonly AssembledDefinitionNode NullNode = new AssembledDefinitionNode("NULL");
+    public AssembledDefinitionNode(string name = null) { Name = name; }
+    public virtual AssembledDefinitionNode Simpilfy() { return this; }
+    public static bool Matching(AssembledDefinitionNode a, AssembledDefinitionNode b) { if (a == null || b == null) return false;
+        a=a.Simpilfy();b=b.Simpilfy();
+        if (a is CompositeAssembledNode x || b is CompositeAssembledNode) {
+            if (!(a is CompositeAssembledNode ca) || !(b is CompositeAssembledNode cb) || a.GetType()!=b.GetType()) return false;
+            if (a is CookedCompositeAssembledNode ac && b is CookedCompositeAssembledNode bc && (ac.m_cookingStep!=bc.m_cookingStep || ac.m_progress!=bc.m_progress)) return false;
+            if (a is MixedCompositeAssembledNode am && b is MixedCompositeAssembledNode bm && am.m_progress!=bm.m_progress) return false;
+            var rest=new List<AssembledDefinitionNode>(cb.m_composition);
+            foreach(var part in ca.m_composition) {int at=rest.FindIndex(n=>Matching(part,n));if(at<0)return false;rest.RemoveAt(at);}return rest.Count==0;
+        }
+        return a.Name == b.Name; }
 }
+public class CompositeAssembledNode : AssembledDefinitionNode
+{
+    public AssembledDefinitionNode[] m_composition = new AssembledDefinitionNode[0], m_optional = new AssembledDefinitionNode[0];
+    public override AssembledDefinitionNode Simpilfy() {
+        if (GetType()==typeof(CompositeAssembledNode)) {if(m_composition.Length==0)return NullNode;if(m_composition.Length==1)return m_composition[0].Simpilfy();}
+        return this;
+    }
+}
+public class IngredientAssembledNode : AssembledDefinitionNode { public IngredientAssembledNode(string name) : base(name) {} }
+public class CookingStepData : UnityEngine.Object {public int m_uID;}
+public class CookedCompositeOrderNode {public enum CookingProgress {Raw,Cooked,Burnt}}
+public class MixedCompositeOrderNode {public enum MixingProgress {Unmixed,Mixed,OverMixed}}
+public class CookedCompositeAssembledNode : CompositeAssembledNode {public CookingStepData m_cookingStep;public CookedCompositeOrderNode.CookingProgress m_progress;}
+public class MixedCompositeAssembledNode : CompositeAssembledNode {public MixedCompositeOrderNode.MixingProgress m_progress;}
+public class OrderDefinitionNode : UnityEngine.Object
+{
+    public int m_uID;public PlatingStepData m_platingStep;public AssembledDefinitionNode Node;
+    public AssembledDefinitionNode Simpilfy(){return Node.Simpilfy();}
+    public static implicit operator AssembledDefinitionNode(OrderDefinitionNode value){return value.Node;}
+}
+public class RecipeList {public class Entry {public OrderDefinitionNode m_order;}}
 public interface IOrderDefinition { AssembledDefinitionNode GetOrderComposition(); }
 public class IngredientPropertiesComponent : MonoBehaviour, IOrderDefinition
 {
@@ -61,7 +93,7 @@ public class ServerPlate : MonoBehaviour
     public PlatingStepData PlatingStep;
     public bool Reserved;
     public bool IsReserved() { return Reserved; }
-    public AssembledDefinitionNode GetOrderComposition() { return Composition; }
+    public AssembledDefinitionNode GetOrderComposition() { return Composition ?? new CompositeAssembledNode {m_composition=m_ingredientContainer.GetContents()}; }
     public PlatingStepData GetPlatingStep() { return PlatingStep; }
 }
 public class PlateStationMessage { public GameObject m_delivered; public bool m_success; }
@@ -73,8 +105,8 @@ public class ServerPlateStation : MonoBehaviour
 }
 namespace OrderController
 {
-    public struct OrderID { public int Value; }
-    public class ServerOrderData { public OrderID ID; public float Remaining, Lifetime; }
+    public struct OrderID { public int Value; public uint m_id; }
+    public class ServerOrderData { public OrderID ID; public float Remaining, Lifetime; public RecipeList.Entry RecipeListEntry; }
 }
 public class ServerOrderControllerBase
 {

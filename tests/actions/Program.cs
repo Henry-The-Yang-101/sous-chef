@@ -6,7 +6,7 @@ using SousChef.Plugin.Actions;
 using SousChef.Plugin.Navigation;
 using UnityEngine;
 
-internal static class Program
+internal static partial class Program
 {
     private static int checks;
     private static void Check(bool value,string reason) { if (!value) throw new Exception(reason); checks++; }
@@ -2142,6 +2142,6 @@ internal static class Program
         Check(planner.Prepare(w.Chef,item,human,groundHandoff:true)==null && planner.RestoreGround(plan),
             "a selected landing stays valid while the chef faces elsewhere; the cargo lands along its planned throw");
     }
-    private static void Main() { CounterForecasts();PersistentTasks();HumanSinkEligibility();NativeUtensilDefinitions();PreparationEquipmentDiscovery();PreparedIngredientSources();AutomaticPreparationSources();AvailablePreparationWork();ReadyPreparationPriority();RiceCookingWindow();HandoffPreferences();LowFoodApproaches();OccupiedBoards();HeldItemTasks();ReconciledHandoffs();EquipmentMonitoring();MixerReadiness();ReadyFoodTasks();DishDeliveryTasks();PauseTimers();MovingPickups();Transactions();IngredientsAndDisposal();WorkAndWait();ImmediateNativeWork();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();GroundThrows();RaftLandingFallback();CurrentPoseLandingClearance();SupportedLandingArea();WalkingLandingClearance();LandingFootprintOrientation();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
+    private static void Main() { AssemblyProofs(); CounterForecasts();PersistentTasks();HumanSinkEligibility();NativeUtensilDefinitions();PreparationEquipmentDiscovery();PreparedIngredientSources();AutomaticPreparationSources();AvailablePreparationWork();ReadyPreparationPriority();RiceCookingWindow();HandoffPreferences();LowFoodApproaches();OccupiedBoards();HeldItemTasks();ReconciledHandoffs();EquipmentMonitoring();MixerReadiness();ReadyFoodTasks();DishDeliveryTasks();PauseTimers();MovingPickups();Transactions();IngredientsAndDisposal();WorkAndWait();ImmediateNativeWork();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();GroundThrows();RaftLandingFallback();CurrentPoseLandingClearance();SupportedLandingArea();WalkingLandingClearance();LandingFootprintOrientation();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
     private static ClientInteractable GetCurrentlyInteractingForTest(this PlayerControls chef) { return chef.GetComponent<ClientPlayerControlsImpl_Default>().Current; }
 }

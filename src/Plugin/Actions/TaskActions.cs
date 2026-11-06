@@ -13,6 +13,7 @@ namespace SousChef.Plugin.Actions
         public Func<bool> Ready;
         public Func<bool> Progress;
         public Func<bool> Outcome, AbandonBeforePress;
+        public Func<bool> BeforePress;
         public Func<GameObject, bool> UseHeld, ReplanForHeld;
         public Func<GameObject, IEnumerable<TaskStep>> FreeHands;
         public bool EmptyHands;
@@ -50,11 +51,12 @@ namespace SousChef.Plugin.Actions
             navigation = nav; child = primitive; inventory = new LogisticsInventory(nav); input = buttons; release = finished;
             groundPass = new GroundPassAccess(CanReachLanding, CanCollectLanding);
             handoffThrows = new ThrowOptions(nav, groundPass); child.GroundAccess = groundPass;
-            RegisterPreparation(); RegisterTakeReady(); RegisterWashing(); RegisterDirtyDelivery(); RegisterFire(); RegisterBurnt(); RegisterMonitor(); RegisterDishDelivery();
+            RegisterPreparation(); RegisterAssembly(); RegisterTakeReady(); RegisterWashing(); RegisterDirtyDelivery(); RegisterFire(); RegisterBurnt(); RegisterMonitor(); RegisterDishDelivery();
         }
         partial void RegisterPreparation(); partial void RegisterTakeReady(); partial void RegisterWashing();
         partial void RegisterDirtyDelivery(); partial void RegisterFire(); partial void RegisterBurnt(); partial void RegisterMonitor();
         partial void RegisterDishDelivery();
+        partial void RegisterAssembly();
         private void Register(string name, Func<bool> available, Func<IEnumerable<TaskStep>> steps)
         { definitions.Add(name, new TaskDefinition { Name = name, Available = available, Plan = steps }); }
         public object Describe()
@@ -62,7 +64,7 @@ namespace SousChef.Plugin.Actions
             return Run.Describe(Json.Object("taskAction", request == null ? null : request.Action,
                 "repetitions", request == null ? 1 : request.Repetitions, "infinite", request != null && request.Repetitions == 0,
                 "completedRepetitions", completed, "completedSteps", completedSteps, "waitingReason", waitingReason,
-                "preparation", preparation == null ? null : preparation.Describe(), "handoff", handoffEvidence, "pendingDeliveries", pendingDeliveries.Count, "observationError", observationError,
+                "preparation", preparation == null ? null : preparation.Describe(), "assembly", assembly == null ? null : assembly.Describe(), "handoff", handoffEvidence, "pendingDeliveries", pendingDeliveries.Count, "observationError", observationError,
                 "handoffPlanning", waitingReason == "waiting_for_player_handoff" ? handoffThrows.Describe() : null,
                 "child", childStarted ? child.Describe() : null));
         }
@@ -73,6 +75,11 @@ namespace SousChef.Plugin.Actions
             if (command.Task == null || !definitions.TryGetValue(command.Task.Action, out definition)) return "unsupported_task";
             chef = actor; request = command.Task; inventory.Refresh(chef);
             if (!definition.Available()) return "task_not_available";
+            assembly = null;
+            if (request.Action == "assemble_dish")
+            {
+                string error = BindAssembly(); if (error != null) return error;
+            }
             pendingDeliveries.Clear(); nextDeliveryCheck = 0;
             preparation = null; completed = completedSteps = 0; childStarted = false; waitingReason = null; observationError = null; handoffEvidence = null; step = null; plan = definition.Plan().GetEnumerator(); retryAt = 0;
             command.Indefinite = true; Run.Start(owner, command, Time.realtimeSinceStartup); input(0); return null;
@@ -83,6 +90,7 @@ namespace SousChef.Plugin.Actions
             inventory.BeginObservation();
             try
             {
+                if (assembly != null && !assembly.Order.Live) { Finish("blocked", "assembly_order_unavailable"); return; }
                 ObserveDeliveries();
                 ObserveHandsRecovery();
                 if (!child.Run.Running && navigation.Action.State == "idle") handoffThrows.Tick(chef);
@@ -158,7 +166,7 @@ namespace SousChef.Plugin.Actions
                 ControlCommand command = step.Command();
                 if (command == null) { Wait(step.Phase); return; }
                 command.Id = Run.RequestId; command.Indefinite = true;
-                string error = child.Start(chef, Run.Owner, command);
+                string error = child.Start(chef, Run.Owner, command, step.BeforePress);
                 if (error != null)
                 {
                     if (step.ReplanOnBlock) step = null;
@@ -213,7 +221,7 @@ namespace SousChef.Plugin.Actions
                 if (operation == "pick_up")
                     return System.Object.ReferenceEquals(ActionObservations.Occupant(target), originalOccupant) &&
                         (supply == null || System.Object.ReferenceEquals(supply.m_itemPrefab, originalPrefab));
-                if ((operation == "place_at" || operation == "add_ingredient" || operation == "collect_contents" || operation == "discard") &&
+                if ((operation == "place_at" || operation == "add_ingredient" || operation == "transfer_contents" || operation == "collect_contents" || operation == "discard") &&
                     !System.Object.ReferenceEquals(ActionObservations.Held(chef), originalHeld)) throw new InvalidOperationException("task_cargo_changed");
                 return operation != "place_at" && operation != "collect_contents" && operation != "work_at" || System.Object.ReferenceEquals(ActionObservations.Occupant(target), originalOccupant);
             }, Command = delegate { return new ControlCommand {
@@ -244,6 +252,7 @@ namespace SousChef.Plugin.Actions
                     preparation.Add(Json.Object("id", type, "label", type, "utensil", true));
             }
             catalog["preparationOptions"] = preparation;
+            catalog["assemblyOrders"] = AssemblyOrders.Describe();
             foreach (var pair in definitions)
             {
                 try { if (pair.Value.Available()) choices.Add(Json.Object("name", pair.Key)); }

@@ -16,10 +16,10 @@ class ActionClient(ControlClient):
     WORK_CONDITIONS = ('work_complete', 'one_plate_clean', 'sink_empty')
     WAIT_CONDITIONS = (*WORK_CONDITIONS, 'occupied', 'empty', 'cooked', 'mixed', 'reachable', 'ready')
 
-    TASK_ACTIONS = ('prepare_near_player', 'take_ready', 'wash_dishes', 'deliver_dirty_dishes',
+    TASK_ACTIONS = ('assemble_dish', 'prepare_near_player', 'take_ready', 'wash_dishes', 'deliver_dirty_dishes',
                     'put_out_fire', 'toss_burnt_food', 'monitor_equipment', 'deliver_completed_dishes')
 
-    def run_task(self, action, repetitions=1, *, items=None, player_id=1):
+    def run_task(self, action, repetitions=1, *, items=None, player_id=1, order_id=None, bases=None, components=None, equipment=None):
         """Run one autonomous task; repetitions=None repeats until Stop.
 
         Preparation items: [{'ingredient': 'chicken', 'preparation': 'chopped', 'quantity': 2}].
@@ -30,7 +30,23 @@ class ActionClient(ControlClient):
         if repetitions is not None and (type(repetitions) is not int or not 1 <= repetitions <= 10):
             raise ValueError('repetitions must be 1..10 or None (infinite)')
         args = [action, 'forever' if repetitions is None else repetitions]
-        if action == 'prepare_near_player':
+        if action != 'assemble_dish' and any(value is not None for value in (order_id, bases, components, equipment)):
+            raise ValueError('Only assembly takes an order and resource allocation')
+        if action == 'assemble_dish':
+            if repetitions != 1 or items is not None or player_id != 1:
+                raise ValueError('Assembly takes one ticket and an explicit resource allocation')
+            args.append(self._selector(order_id))
+            seen = set()
+            for index, group in enumerate((bases, [] if components is None else components, [] if equipment is None else equipment)):
+                if not isinstance(group, list) or not (1 if index == 0 else 0) <= len(group) <= 24:
+                    raise ValueError('Assign 1..24 bases and at most 24 components/equipment each')
+                args.append(len(group))
+                for value in group:
+                    resource = self._destination(value)
+                    if resource in seen:
+                        raise ValueError('Each resource may be assigned only once')
+                    seen.add(resource); args.append(resource)
+        elif action == 'prepare_near_player':
             if type(player_id) is not int or player_id not in (1, 3, 4):
                 raise ValueError('Choose another local player')
             if not isinstance(items, list) or not 1 <= len(items) <= 10:
@@ -46,6 +62,15 @@ class ActionClient(ControlClient):
         elif items is not None or player_id != 1:
             raise ValueError('Only preparation takes items/player_id')
         return self._request('task', *args)
+
+    def assemble_dish(self, order_id, *, bases, components, equipment=None):
+        """Assemble one exact live ticket using only these allocated item IDs.
+
+        IDs come from assemblyOrders, items, and destinations in available_actions().
+        Bases are alternatives; components are finite instances, never dispenser selectors.
+        """
+        return self.run_task('assemble_dish', order_id=order_id, bases=bases,
+                             components=components, equipment=equipment)
 
     def available_actions(self):
         self._request('actions')
@@ -157,6 +182,7 @@ if __name__ == '__main__':
     task.add_argument('--repeat', default='1', help='1..10 or forever')
     task.add_argument('--items', type=json.loads, help='JSON preparation list')
     task.add_argument('--player', type=int, default=1)
+    task.add_argument('--allocation', type=json.loads, default={}, help='Assembly JSON: order_id, bases, components, equipment')
     for operation in ('navigate_to', 'pick_up', 'place_at', 'add_ingredient', 'collect_contents', 'discard', 'throw_to', 'get_plate', 'return_utensil'):
         commands.add_parser(operation).add_argument('target_id')
     for operation in ('move_item', 'stage_item', 'clear_station', 'fetch_ingredient', 'get_utensil'):
@@ -182,7 +208,7 @@ if __name__ == '__main__':
             elif args.operation == 'stop': print(json.dumps(client.stop(), indent=2))
             elif args.operation == 'status': print(json.dumps(client.status(), indent=2))
             else:
-                if args.operation == 'task': result = client.run_task(args.action, None if args.repeat == 'forever' else int(args.repeat), items=args.items, player_id=args.player)
+                if args.operation == 'task': result = client.run_task(args.action, None if args.repeat == 'forever' else int(args.repeat), items=args.items, player_id=args.player, **args.allocation)
                 elif args.operation == 'work_at': result = client.work_at(args.target_id, args.until, args.timeout)
                 elif args.operation == 'wait_until': result = client.wait_until(args.target_id, args.condition, args.timeout)
                 elif args.operation == 'activate': result = client.activate(args.target_id, args.desired_state)

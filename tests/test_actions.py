@@ -28,6 +28,17 @@ def reply(n, **fields):
 
 
 class ActionsTests(unittest.TestCase):
+    def test_assembly_preserves_explicit_ticket_and_resource_allocation(self):
+        c = client(reply(1))
+        c.assemble_dish('order_A', bases=['d1', 'd2'], components=['d3'], equipment=['d4', 'd5'])
+        self.assertEqual(c.socket.sent, [b'task 1 assemble_dish 1 sb3JkZXJfQQ 2 d1 d2 1 d3 2 d4 d5\n'])
+        for kwargs in ({'bases': []}, {'bases': ['d1'], 'components': ['d1']},
+                       {'bases': ['d1'], 'components': 'd2'}, {'bases': ['d1'], 'equipment': False},
+                       {'bases': ['d1'], 'repetitions': None}, {'bases': ['d1'], 'items': []}):
+            with self.assertRaises(ValueError): c.run_task('assemble_dish', order_id='order_A', **kwargs)
+        with self.assertRaises(ValueError): c.run_task('wash_dishes', bases=['d1'])
+        self.assertEqual(len(c.socket.sent), 1)
+
     def test_deliver_completed_dishes_uses_standard_task_repetitions(self):
         c = client(reply(1), reply(2))
         c.run_task('deliver_completed_dishes'); c.run_task('deliver_completed_dishes', None)
