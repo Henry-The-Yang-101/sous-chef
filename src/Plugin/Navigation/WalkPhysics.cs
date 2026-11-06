@@ -302,7 +302,7 @@ namespace SousChef.Plugin.Navigation
             if (!WalkHeight.Connected(from.point.y, to.point.y, StepHeight)) return false;
             return ContinuousSupport(from, to) || NativeStep(to.point.y > from.point.y ? to.collider : from.collider);
         }
-        private static bool ContinuousSupport(RaycastHit from, RaycastHit to)
+        private bool ContinuousSupport(RaycastHit from, RaycastHit to)
         {
             Vector3 delta = to.point - from.point; delta.y = 0;
             float rise = to.point.y - from.point.y;
@@ -314,7 +314,7 @@ namespace SousChef.Plugin.Navigation
             // error between the reconstructed foot and returned tangent normal.
             // Keep flat/flat ledges and near-flat mesh seams on the strict bound;
             // every accepted slope connector still undergoes the full body sweep.
-            float tolerance = from.normal.y < .99f || to.normal.y < .99f ? .0025f : .0001f;
+            float tolerance = from.normal.y < .99f || to.normal.y < .99f ? Mathf.Max(.0025f, bodyContactOffset) : .0001f;
             return rise >= Mathf.Min(0, Mathf.Min(a, b)) - tolerance && rise <= Mathf.Max(0, Mathf.Max(a, b)) + tolerance;
         }
         private bool Ground(Vector3 point, out RaycastHit best, float dropDistance = -1)
@@ -330,29 +330,51 @@ namespace SousChef.Plugin.Navigation
             Queries++;
             if (count == hits.Length) { Overflow = true; return false; }
             float distance = Single.MaxValue, contactHeight = 0;
+            RaycastHit lip = new RaycastHit(), ramp = new RaycastHit();
+            float lipDistance = Single.MaxValue, rampDistance = Single.MaxValue;
             for (int i = 0; i < count; i++)
             {
                 var hit = hits[i];
-                if (hit.collider == null || Own(hit.collider) || Dangerous(hit.collider) || hit.normal.y < .52992f ||
-                    hit.distance <= 0 || hit.distance >= distance) continue;
+                if (hit.collider == null || Own(hit.collider) || Dangerous(hit.collider) || hit.normal.y <= 0 || hit.distance <= 0) continue;
                 // SphereCast returns the contact point, not the capsule's foot.
                 // Index and sweep the supported body pose; retain the native normal.
                 Vector3 foot = origin + Vector3.down * (hit.distance + r);
                 if (foot.y - point.y > reach - .08f || point.y - foot.y > drop - .08f) continue;
+                var box = hit.collider as BoxCollider;
+                if (hit.normal.y < .52992f)
+                {
+                    if (box != null && Mathf.Abs(box.transform.up.y) > .9999f && hit.distance < lipDistance)
+                    { lip = hit; lipDistance = hit.distance; }
+                    continue;
+                }
+                if (box != null && Mathf.Abs(box.transform.up.y) < .99f && hit.distance < rampDistance)
+                { ramp = hit; ramp.point = foot; rampDistance = hit.distance; }
+                if (hit.distance >= distance) continue;
                 best = hit; best.point = foot; distance = hit.distance; contactHeight = hit.point.y;
+            }
+            // A native capsule climbs the round lip of a tread above its ramp.
+            // That lip's tangent may be steeper than the ramp slope limit. It
+            // can support the body only with an independently valid ramp contact
+            // in the same sphere query, within the rounded contact envelope.
+            if (lipDistance < distance && rampDistance < Single.MaxValue)
+            {
+                Vector3 foot = origin + Vector3.down * (lip.distance + r);
+                if (foot.y - ramp.point.y <= r * (1 - .52992f) &&
+                    SlopeInterior(foot, ramp.collider, radius) && FloorCentreSupported(foot, lip.collider))
+                { best = lip; best.point = foot; distance = lipDistance; contactHeight = lip.point.y; }
             }
             // PhysX can report a slightly tilted sphere contact at an internal
             // triangle seam on a flat mesh, lowering the reconstructed foot by
             // radius*(1-normal.y). Confirm the actual plane under the centre;
             // a hole, different collider, slope or real ledge is not corrected.
             if (distance != Single.MaxValue && best.normal.y > .99f && best.normal.y < .99999f &&
-                contactHeight - best.point.y > 0 && contactHeight - best.point.y <= .002f)
+                Mathf.Abs(contactHeight - best.point.y) <= .002f)
             {
                 int rays = Physics.RaycastNonAlloc(best.point + Vector3.up * .1f, Vector3.down, hits, .2f, groundMask, QueryTriggerInteraction.Ignore); Queries++;
                 if (rays == hits.Length) { Overflow = true; return false; }
                 float closest = Single.MaxValue; RaycastHit plane = new RaycastHit();
                 for (int i = 0; i < rays; i++) if (hits[i].distance < closest) { closest = hits[i].distance; plane = hits[i]; }
-                if (plane.collider == best.collider && plane.normal.y > .99999f && Mathf.Abs(plane.point.y - contactHeight) < .0001f)
+                if (plane.collider == best.collider && plane.normal.y > .99999f && Mathf.Abs(plane.point.y - contactHeight) < .002f)
                 { Vector3 foot = best.point; foot.y = plane.point.y; best.point = foot; best.normal = plane.normal; }
             }
             return distance != Single.MaxValue;
@@ -425,10 +447,15 @@ namespace SousChef.Plugin.Navigation
             // Requiring a ray under every footprint edge rejects real stairs even
             // while the native sphere has stable contact. Segment checks repeat
             // this support test along the entire route; broad gaps still fail.
-            Vector3 low, high; Capsule(point, out low, out high, clearance);
-            int count = Physics.OverlapCapsuleNonAlloc(low, high, clearance, overlaps, ~0, QueryTriggerInteraction.Collide); Queries++;
+            // GroundCast describes contact for the native radius. Inflating that
+            // radius at a rounded ramp/tread join can overlap the very tread
+            // supporting the chef. Keep the native body there; lateral ramp
+            // margins and centre support were independently checked above.
+            float bodyRadius = hit.normal.y < .99f ? Mathf.Min(clearance, nativeRadius) : clearance;
+            Vector3 low, high; Capsule(point, out low, out high, bodyRadius);
+            int count = Physics.OverlapCapsuleNonAlloc(low, high, bodyRadius, overlaps, ~0, QueryTriggerInteraction.Collide); Queries++;
             if (count == overlaps.Length) { Overflow = true; return false; }
-            for (int i = 0; i < count; i++) if (BlocksWalkingBody(overlaps[i], point.y, point.y, low.y - clearance, high.y + clearance)) return Fail("body_overlap", point, overlaps[i]);
+            for (int i = 0; i < count; i++) if (BlocksWalkingBody(overlaps[i], point.y, point.y, low.y - bodyRadius, high.y + bodyRadius)) return Fail("body_overlap", point, overlaps[i]);
             return true;
         }
         private bool FloorCentreSupported(Vector3 point, Collider support)
@@ -442,14 +469,38 @@ namespace SousChef.Plugin.Navigation
             // a walkable ramp. Adjacent coplanar floors and real stair wedges can
             // still support the centre; native Steppable contact is kept above.
             int count = Physics.RaycastNonAlloc(point + Vector3.up * (nativeRadius + .01f), Vector3.down,
-                hits, 2 * nativeRadius + .02f, groundMask, QueryTriggerInteraction.Ignore); Queries++;
+                hits, nativeRadius + StepHeight + .02f, groundMask, QueryTriggerInteraction.Ignore); Queries++;
             if (count == hits.Length) { Overflow = true; return false; }
             float closest = Single.MaxValue; RaycastHit plane = new RaycastHit();
             for (int i = 0; i < count; i++)
                 if (hits[i].collider != null && !Own(hits[i].collider) && hits[i].distance < closest)
                 { closest = hits[i].distance; plane = hits[i]; }
             if (plane.collider == null || Dangerous(plane.collider) || plane.normal.y < .52992f) return false;
-            return plane.normal.y < .99f || Mathf.Abs(plane.point.y - box.bounds.max.y) < .0025f;
+            if (plane.normal.y < .99f || Mathf.Abs(plane.point.y - point.y) <= Skin) return true;
+            // Rounded contact can reach a tread just before the centre reaches
+            // its joining wedge. Require an actual ramp under the short chord
+            // to that tread, and keep its lateral footprint clearance. A bare
+            // ledge or a floor corner over a hole cannot satisfy this witness.
+            Vector3 edge = box.transform.TransformPoint(box.center + new Vector3(
+                Mathf.Clamp(local.x, -box.size.x * .5f, box.size.x * .5f), local.y,
+                Mathf.Clamp(local.z, -box.size.z * .5f, box.size.z * .5f)));
+            Vector3 chord = edge - point; chord.y = 0;
+            if (chord.magnitude > nativeRadius) return false;
+            for (int n = 1; n <= 3; n++)
+            {
+                Vector3 sample = point + chord * (n / 3f);
+                count = Physics.RaycastNonAlloc(sample + Vector3.up * (nativeRadius + .01f), Vector3.down,
+                    hits, 2 * nativeRadius + .02f, groundMask, QueryTriggerInteraction.Ignore); Queries++;
+                if (count == hits.Length) { Overflow = true; return false; }
+                for (int i = 0; i < count; i++)
+                {
+                    var ramp = hits[i];
+                    if (ramp.collider != null && !Own(ramp.collider) && !Dangerous(ramp.collider) &&
+                        ramp.normal.y >= .52992f && ramp.normal.y < .99f && ramp.point.y >= plane.point.y - .0025f &&
+                        ramp.point.y <= box.bounds.max.y + .0025f && SlopeInterior(sample, ramp.collider, radius)) return true;
+                }
+            }
+            return false;
         }
         // A sphere can touch a ramp while its centre is outside the side face.
         // That diagonal approach is standable in isolation but native slope
@@ -643,7 +694,8 @@ namespace SousChef.Plugin.Navigation
                 // Native Steppable collisions can lift the body vertically. Ordinary
                 // ramps cannot: sweep the actual continuous body trajectory, so
                 // a raised endpoint cannot hide a collision at the ramp's side.
-                if (!(nativeStep ? StepSweep(previous, point, clearance) : Sweep(previous, point, clearance))) return false;
+                float bodyRadius = centre.normal.y < .99f || havePrevious && previousGround.normal.y < .99f ? Mathf.Min(clearance, nativeRadius) : clearance;
+                if (!(nativeStep ? StepSweep(previous, point, bodyRadius) : Sweep(previous, point, bodyRadius))) return false;
                 if (samples != null) samples.Add(new GroundSample { Point = centre.point, Ground = ground });
                 previous = point; previousGround = centre; havePrevious = true;
                 return true;

@@ -153,7 +153,11 @@ namespace SousChef.Plugin.Actions
             // Exhaust work with known routes before probing another allocated
             // dependency. Missing entries in an incomplete catalogue are not
             // evidence that every assigned source is unreachable.
-            return SelectStageWork(assembly.Root) ?? SelectStageWork(assembly.Root, true) ?? StoreEmptyAssemblyUtensil();
+            var work = SelectStageWork(assembly.Root) ?? SelectStageWork(assembly.Root, true) ?? StoreEmptyAssemblyUtensil();
+            var deadline = work == null || work.Storage ? null : AssemblyTripDeadline(work);
+            if (deadline == null) return work;
+            var cargo = ActionObservations.Held(chef);
+            return cargo == null ? deadline : StoreAssemblyCargo(cargo);
         }
         private AssemblyJob StoreEmptyAssemblyUtensil()
         {
@@ -309,6 +313,33 @@ namespace SousChef.Plugin.Actions
             if (distance == Single.MaxValue) distance = Vector3.Distance(chef.transform.position, station.transform.position);
             return distance / Math.Max(.1f, chef.Movement.RunSpeed) + 3;
         }
+        private AssemblyJob AssemblyTripDeadline(AssemblyJob planned)
+        {
+            var destination = planned.Destination;
+            if (planned.Operation == "pick_component")
+            {
+                var source = AssemblyEntry(planned.Source);
+                if (source == null) return null;
+                destination = source.Source;
+            }
+            float distance = inventory.DistanceTo(destination);
+            if (ActionObservations.CanPickUp(chef, destination)) distance = 0;
+            // Budget both the outward trip and a return through the current
+            // position, plus storage/interaction time. An uncertified outward
+            // route cannot justify leaving a cooking batch unattended.
+            float trip = distance == Single.MaxValue ? Single.PositiveInfinity :
+                2 * distance / Math.Max(.1f, chef.Movement.RunSpeed);
+            foreach (var stage in assembly.Stages)
+            {
+                if (!stage.Processing || stage.Mixing || stage.Vessel == null || !StageFits(stage) || StageComplete(stage) ||
+                    !RecipeProof.Equal(StageContents(stage), stage.Inputs)) continue;
+                var entry = AssemblyEntry(stage.Vessel);
+                if (entry != null && OnProcessor(stage, entry) && !ProcessorOff(entry.Holder, false) &&
+                    TaskNative.Remaining(stage.Vessel) <= AssemblyReturnSeconds(entry.Source) + trip)
+                    return new AssemblyJob { Stage = stage, Source = stage.Vessel, Destination = entry.Source, Operation = "approach_heat" };
+            }
+            return null;
+        }
         private bool AssemblyHeatDue(bool includeImminent = false)
         {
             foreach (var stage in assembly.Stages)
@@ -339,7 +370,7 @@ namespace SousChef.Plugin.Actions
                     var entry = AssemblyEntry(item);
                     if (entry == null || !OnProcessor(stage, entry) || !StageFits(stage) || ProcessorOff(entry.Holder, false) ||
                         AssemblyHeatDue() || ActionObservations.Held(chef) != null)
-                    { if (navigation.Action.State == "navigating") navigation.Stop("assembly_heat_recheck"); return true; }
+                    { navigation.CancelRecoveryPlanning(); if (navigation.Action.State == "navigating") navigation.Stop("assembly_heat_recheck"); return true; }
                     if (navigation.Action.State == "navigating" || Time.realtimeSinceStartup < retry) return false;
                     if (ActionObservations.CanPickUp(chef, target) && chef.Motion.GetVelocityXZ().magnitude <= .1f) return false;
                     retry = Time.realtimeSinceStartup + .2f;
@@ -371,7 +402,7 @@ namespace SousChef.Plugin.Actions
             var next = AssemblyStep(operation, target, valid, operation == "transfer_contents" && stage.Processing && stage.Mixing ? "assembly_mixing_inputs" : null);
             var beforePress = next.BeforePress;
             next.BeforePress = () => {
-                bool allowed = beforePress() && (job.Rescue || job.Storage || !AssemblyHeatDue(true));
+                bool allowed = beforePress() && (job.Rescue || job.Storage || !AssemblyHeatDue(true) && AssemblyTripDeadline(job) == null);
                 assembly.Record(allowed ? "press_authorized" : "press_rejected", stage, item, target);
                 return allowed;
             };
@@ -380,7 +411,7 @@ namespace SousChef.Plugin.Actions
             var abandon = next.AbandonBeforePress;
             float planningSince = -1;
             next.AbandonBeforePress = () => abandon() || !job.Rescue &&
-                (!job.Storage && AssemblyHeatDue(true) || AssemblyPlanningStalled(ref planningSince));
+                (!job.Storage && (AssemblyHeatDue(true) || AssemblyTripDeadline(job) != null) || AssemblyPlanningStalled(ref planningSince));
             yield return next;
             if (!next.Succeeded)
             {

@@ -889,6 +889,7 @@ namespace SousChef.Plugin.Actions
             if (throwReleased && state != "succeeded") evidence = Json.Object("throwReleased", true, "throw", throwPlan.Describe());
             if (dropPlan != null && pressed && state != "succeeded") evidence = Json.Object("handoffRequested", true, "handoff", dropPlan.Describe());
             // Cancel the child while the parent still owns the input lease.
+            navigation.CancelRecoveryPlanning();
             if (navigation.Action.State == "navigating") navigation.Stop(reason);
             Run.Finish(state, reason); release();
         }

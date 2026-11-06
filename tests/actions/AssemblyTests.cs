@@ -266,6 +266,14 @@ internal static partial class Program
         w.Hold(null);w.Target.GetComponent<ServerAttachStation>().Item=fish;refresh();job=select.Invoke(w.Tasks,null);
         Check(job!=null && (string)job.GetType().GetField("Operation").GetValue(job)=="approach_heat",
             "empty-handed chef approaches imminent food without removing it before cooking completes");
+        cooking.m_ServerData.m_cookingProgress=2;refresh();job=select.Invoke(w.Tasks,null);
+        Check(job!=null && (string)job.GetType().GetField("Operation").GetValue(job)=="pick_component",
+            "useful nearby work still runs when its return trip fits before cooking completes");
+        w.Target.transform.position=new Vector3(8,0,0);w.Chef.CurrentInteractionObjects.m_TheOriginalHandlePickup=burner;
+        cooking.m_ServerData.m_cookingProgress=5;refresh();job=select.Invoke(w.Tasks,null);
+        Check(job!=null && (string)job.GetType().GetField("Operation").GetValue(job)=="approach_heat",
+            "a distant ingredient trip cannot consume the time needed to return and rescue cooking food");
+        w.Target.transform.position=Vector3.zero;refresh();
         var defer=typeof(TaskActions).GetMethod("DeferAssemblyRoute",flags);var deferred=typeof(TaskActions).GetMethod("AssemblyDeferred",flags);
         defer.Invoke(w.Tasks,new object[]{w.Target,w.Target});Time.realtimeSinceStartup+=2.1f;
         defer.Invoke(w.Tasks,new object[]{w.Target,w.Target});Time.realtimeSinceStartup+=2.1f;

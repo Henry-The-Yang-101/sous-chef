@@ -633,6 +633,22 @@ internal static class Program
         Check(physics.Stand(new Vector3(12.4f, -.053588f, -1.2f), out point, out ground),
             "explicit native step support retains spherical contact semantics");
     }
+    private static void CapturedPizzaStairs()
+    {
+        var w = new World();
+        var shape = w.Chef.GetComponent<CapsuleCollider>(); shape.radius=.4f;shape.height=2;shape.center=Vector3.up;
+        var boxes=RecordedBox.Install("pizza-stairs.json");w.Chef.GroundCollider=boxes[0];
+        w.Chef.transform.position=new Vector3(7.6f,0,-10.8f);var physics=w.Ready();
+        physics.TraceEnabled=true;
+        Check(physics.Segment(new Vector3(7.2f,.111535f,-10.8f),new Vector3(5.2f,1,-10.8f)),
+            "captured pizza oven stairs remain connected through their actual wedge and tread geometry: "+Json.Encode(physics.Failure));
+        Check(physics.Segment(new Vector3(5.2f,1,-10.8f),new Vector3(7.2f,.111535f,-10.8f)),
+            "captured pizza stairs retain a safe return route with cooked food");
+        foreach(var box in boxes) if(box.gameObject.name=="Wedge") {box.enabled=false;box.Ground=false;}
+        Time.realtimeSinceStartup+=.21f;physics.Refresh(w.Chef);
+        Check(!physics.Segment(new Vector3(7.2f,.111535f,-10.8f),new Vector3(5.2f,1,-10.8f)),
+            "removing the actual ramps cannot turn bare tread lips into a certified staircase");
+    }
     private static void CapturedStairContact()
     {
         var w = new World();
@@ -1013,6 +1029,13 @@ internal static class Program
         };
         var physics=w.Ready();
         Check(physics.Segment(Vector3.zero,new Vector3(1,0,0)),"native flat mesh sphere-contact seam is resolved by an independent plane ray");
+        Physics.GroundSphere=(p,r,d,length)=> {
+            var hits=cast(p,r,d,length);
+            if(p.x>.5f && p.x<.6f) for(int i=0;i<hits.Length;i++)
+            {hits[i].normal=new Vector3(-.026f,.9996622f,0);hits[i].distance-=.00048f;}
+            return hits;
+        };
+        Check(physics.Segment(Vector3.zero,new Vector3(1,0,0)),"native sphere-contact overshoot also requires and accepts an independent matching plane");
         Physics.Ray=(p,d,length,mask)=>new RaycastHit[0];
         Check(!physics.Segment(Vector3.zero,new Vector3(1,0,0)),"missing centre support does not receive flat seam correction");
         Physics.Ray=(p,d,length,mask)=>new[]{new RaycastHit {collider=floor,point=new Vector3(p.x,.01f,p.z),normal=Vector3.up,distance=p.y-.01f}};
@@ -1117,6 +1140,23 @@ internal static class Program
         var diagnostics = (Json.Record)((Json.Record)nav.Describe())["diagnostics"];
         Check((int)diagnostics["candidateCount"] == 1 && !(bool)diagnostics["searchComplete"],
             "recovery focuses on its station before completing the unrelated kitchen catalogue");
+
+        w = new World(); w.AddFloor((x,z) => Math.Abs(x)<24 && Math.Abs(z)<24 ? 0 : (float?)null);
+        station=w.AddStation();station.transform.position=new Vector3(18,0,0);w.AddStation();
+        nav=new NavigationActions((direction,ms)=>{},()=>{});
+        string distant=nav.RegisterItem(station);
+        Physics.Overlap=(a,b,r)=>{System.Threading.Thread.Sleep(1);return new Collider[0];};
+        error=nav.Start(w.Chef,2,distant,true);
+        Check(error=="planning_in_progress","fixture retains an unfinished recovery search");
+        Physics.Overlap=(a,b,r)=>new Collider[0];
+        catalog=(Json.Record)nav.Available(w.Chef);
+        diagnostics=(Json.Record)((Json.Record)catalog["navigation"])["diagnostics"];
+        Check((int)diagnostics["candidateCount"]==1 && (bool)diagnostics["goalDirected"],
+            "catalogue polling continues the owned recovery target rather than replacing its frontier");
+        nav.CancelRecoveryPlanning();catalog=(Json.Record)nav.Available(w.Chef);
+        diagnostics=(Json.Record)((Json.Record)catalog["navigation"])["diagnostics"];
+        Check((int)diagnostics["candidateCount"]==2 && !(bool)diagnostics["goalDirected"],
+            "ending recovery releases the focused planner for the full catalogue");
     }
 
     private static void DoorwayChanges()
@@ -1366,7 +1406,7 @@ internal static class Program
     }
     private static void Main()
     {
-        WalkingStallRecovery(); StallAvoidanceGeometry(); DoorwayChanges(); StationConnectorReuse(); FocusedPlanning(); SearchContinuity(); ShallowCeilingContacts(); EquivalentVerticalStarts(); ConveyorSearchContinuity(); CertifiedStart(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedFloorCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); DirectedConveyors(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
+        WalkingStallRecovery(); StallAvoidanceGeometry(); DoorwayChanges(); StationConnectorReuse(); FocusedPlanning(); SearchContinuity(); ShallowCeilingContacts(); EquivalentVerticalStarts(); ConveyorSearchContinuity(); CertifiedStart(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedPizzaStairs(); CapturedStairCorner(); CapturedFloorCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); DirectedConveyors(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
         WorkerStartingStateChanges(); LoosePickupBodies(); StationaryThrowStances();
         Console.WriteLine("PASS: " + checks + " navigator integration checks (analytical geometry; not PhysX)");
     }

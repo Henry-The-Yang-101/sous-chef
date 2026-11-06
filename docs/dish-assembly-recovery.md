@@ -58,3 +58,31 @@ whose bound certifies a different target.
 with Dijkstra, including a forced detour, and preserve moving-platform, wind
 drift, pending-walking, and full-catalogue restoration checks. Native replays
 of this navigation milestone are pending.
+
+## Further failures retained and addressed
+
+Replay 02 completed moving pasta in 44.04 seconds, independently matched the
+recipe, and removed the observed ready tomato pan after 0.58 seconds without
+overdoing. The fryer run exposed a further failure: P2 left its cooking basket
+for a distant ingredient and could not return before it was ruined and ignited.
+That failed trace is retained under `.local/assembly-recovery-02-fryer`.
+
+Assembly now budgets the outward and return trip before dispatching ordinary
+work during cooking. Nearby work can still proceed; an unknown or too-long
+route causes P2 to approach the active batch instead. The same check protects
+the native input edge. Recovery searches also retain their destination across
+catalogue polls and release it when the owning action ends.
+
+The pizza stairs were separately verified with ordinary native leftward input
+from an explicit supported starting pose: P2 climbed from y=0 to y=1 without a
+dash or position changes during measurement
+(`.local/assembly-recovery-pizza-native-walk-01.json`). Planner probes rejected
+real ramp/tread joins. The geometry correction requires a real adjoining ramp
+and underlying support, admits the native rounded tread lip only alongside a
+valid ramp contact, and preserves lateral ramp margins and capsule sweeps.
+The recorded regression also rejects the staircase when its ramps are removed.
+Existing unsupported-floor-corner and stair-side collision tests remain.
+
+This milestone passes `scripts/check.py`
+(`.local/assembly-recovery-check-06.log`). Native task replays of these additional
+changes are pending; the direct walking diagnostic alone is not an assembly pass.

@@ -199,6 +199,7 @@ namespace SousChef.Plugin.Actions
         }
         private void Finish(string state, string reason)
         {
+            navigation.CancelRecoveryPlanning();
             // Keep the parent running during child cleanup so its callback cannot
             // release the lease before all owned input has been neutralized.
             child.Cancel(reason); input(0); Run.Finish(state, reason);

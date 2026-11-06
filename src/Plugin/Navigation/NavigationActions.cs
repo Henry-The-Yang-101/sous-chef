@@ -37,6 +37,7 @@ namespace SousChef.Plugin.Navigation
         private bool searchReused;
         private List<Vector3> route;
         private Destination target;
+        private Destination recoveryTarget;
         private object lastDestination;
         private object arrivalDetails;
         private readonly ArrivalCheck arrival = new ArrivalCheck();
@@ -259,6 +260,7 @@ namespace SousChef.Plugin.Navigation
         }
         public void Stop(string reason)
         {
+            CancelRecoveryPlanning();
             Trace(reason, Vector3.zero, Vector3.zero);
             // Neutral first; callers must not observe idle with stale movement input.
             neutral();
@@ -267,6 +269,7 @@ namespace SousChef.Plugin.Navigation
             fullCatalogueRequested = false;
             Action.Stop(reason); portalReplanUntil = 0; waitingPortalRoute = false; activePortal = null; portalSteps.Clear(); settlingSince = -1; target = null; route = null; facingSince = -1; arrival.Reset(); haveMotion = motionSampleValid = false;
         }
+        public void CancelRecoveryPlanning() { recoveryTarget = null; }
         public void Invalidate(string reason)
         {
             incrementalSearch = fastWarm = false; ClearRemote();
@@ -362,10 +365,12 @@ namespace SousChef.Plugin.Navigation
             // A stalled pickup/placement already identifies its next station.
             // Certify that route before spending the recovery slice matching the
             // whole kitchen, which may change again before a broad search ends.
-            Refresh(player, true, false, !recovering, recovering ? RecoveryBudgetMilliseconds : PlanningBudgetMilliseconds, requested);
+            recoveryTarget = requested;
+            Refresh(player, true, false, true, recovering ? RecoveryBudgetMilliseconds : PlanningBudgetMilliseconds, requested);
             Destination chosen;
             if (!available.TryGetValue(destination, out chosen)) return unavailable ?? "destination_unavailable";
             if (!Action.Start(owner, destination, true)) return "action_in_progress";
+            recoveryTarget = null;
             target = chosen; lastDestination = Identity(chosen); started = Time.realtimeSinceStartup;
             ResetWalkingProgress(); stallReroutes = 0;
             arrivalDetails = null; arrival.Reset(); facingSince = -1; haveMotion = motionSampleValid = false;
@@ -853,8 +858,10 @@ namespace SousChef.Plugin.Navigation
                     if (!supported || Vector3.Distance(checkedPoint, target.Approach) > .04f) { unavailable = "unsafe_release_stance"; return; }
                 }
                 observationError = null;
-                Destination station = requested ?? target;
-                focusedPlan = station != null && !station.IsPoint && (requested != null || !fullCatalogueRequested);
+                // A read-only catalogue poll must not replace an unfinished
+                // owned recovery search with a different broad frontier.
+                Destination station = requested ?? target ?? recoveryTarget;
+                focusedPlan = station != null && !station.IsPoint && (requested != null || recoveryTarget != null || !fullCatalogueRequested);
                 var candidates = target != null && target.IsPoint ? new List<Destination> { target } : Discover(player, focusedPlan ? station : null);
                 candidateCount = candidates.Count;
                 StationMatch focused = focusedPlan && candidates.Count == 1 ? new StationMatch(this, station) : null;
@@ -871,7 +878,8 @@ namespace SousChef.Plugin.Navigation
                 startCount = starts == null ? savedStartCount : starts.Count;
                 prepareMilliseconds = watch.Elapsed.TotalMilliseconds;
                 var searchWatch = Stopwatch.StartNew();
-                double budget = incremental && (searchReused || !hadIncremental) ? IncrementalBudgetMilliseconds : activeBudgetMilliseconds;
+                double budget = requested != null ? activeBudgetMilliseconds :
+                    incremental && (searchReused || !hadIncremental) ? IncrementalBudgetMilliseconds : activeBudgetMilliseconds;
                 Func<bool> hasBudget = delegate { return searchWatch.Elapsed.TotalMilliseconds < budget && !physics.Overflow; };
                 WorkerHost worker = WorkerHost.Current;
                 bool workerReady = worker != null && worker.Ready;
