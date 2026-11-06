@@ -119,8 +119,9 @@ class HttpTransport:
 class DecisionClient:
     def __init__(self, transport, gate, settings):
         self.transport, self.gate, self.settings = transport, gate, settings
+        self.io_lock = asyncio.Lock()
 
-    async def ask(self, request, generation, budget):
+    async def ask(self, request, generation, budget, current=None):
         validate_request(request)
         for attempt in range(self.settings.retries + 1):
             self.gate.check(generation)
@@ -130,8 +131,20 @@ class DecisionClient:
             budget['requests'] += 1
             started = time.monotonic()
             try:
-                response = await asyncio.wait_for(self.transport.exchange(request,
-                    lambda write: self.gate.run(generation, write)), min(remaining, self.settings.request_seconds))
+                def send(write):
+                    def guarded_write():
+                        if current: current()
+                        if time.monotonic() >= budget['deadline']:
+                            raise DecisionError('Interpretation expired before transmission')
+                        write()
+                    self.gate.run(generation, guarded_write)
+                async def exchange():
+                    # Discard/correction can start a new coroutine while the old
+                    # socket is cancelling. Never interleave two HTTP exchanges.
+                    async with self.io_lock:
+                        if current: current()
+                        return await self.transport.exchange(request, send)
+                response = await asyncio.wait_for(exchange(), min(remaining, self.settings.request_seconds))
                 self.gate.check(generation)
                 response = validate_response(request, response)
                 budget['input_tokens'] += response['usage']['input_tokens']

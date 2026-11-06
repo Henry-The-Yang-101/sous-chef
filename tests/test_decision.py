@@ -7,6 +7,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import patch
 
 from clients.capabilities import REGISTRY_HASH, registry
 from harness.decision.compiler import Compiler, Clarification, Unsupported, build_context, number_candidates
@@ -40,7 +41,7 @@ def response(request, selections=None):
             answers[key] = {'type': 'noul', 'noul': selections.get(key, 1.0)}
         else:
             default = {'route': 'task_plan', 'queue_edit': 'append', 'simple': 'staged',
-                       'repeat': 'unspecified', 'recipient': 'player_1'}.get(key, next(iter(question['criteria'])))
+                       'repeat': 'count_1', 'recipient': 'player_1'}.get(key, next(iter(question['criteria'])))
             value = selections.get(key, default)
             probability = 1.0
             if isinstance(value, tuple): value, probability = value
@@ -85,8 +86,8 @@ class CompilerTests(unittest.IsolatedAsyncioTestCase):
     async def test_repeated_ingredient_different_preparation_and_corrected_quantity(self):
         c, _ = compiler('Give me one raw carrot and two, actually three chopped carrots', [
             {'simple_coverage': 0}, {'next_task': 'prepare_near_player'},
-            {'ingredient': 'ingredient_0'}, {'preparation': 'raw', 'quantity': 'number_0'},
-            {'ingredient': 'ingredient_0'}, {'preparation': 'chopped', 'quantity': 'number_2'},
+            {'ingredient': 'ingredient_carrot'}, {'preparation': 'raw', 'quantity': 'count_1'},
+            {'ingredient': 'ingredient_carrot'}, {'preparation': 'chopped', 'quantity': 'count_3'},
             {'ingredient': 'done'}, {}, {}, {'next_task': 'done'}, {}])
         items = (await c.compile())['plan']['tasks'][0]['arguments']['items']
         self.assertEqual(items, [{'ingredient': 'carrot', 'preparation': 'raw', 'quantity': 1},
@@ -95,8 +96,8 @@ class CompilerTests(unittest.IsolatedAsyncioTestCase):
     async def test_clarification_preserves_draft_and_cached_decisions(self):
         c, s = compiler('Give me two chopped carrots and one onion, then wash', [
             {'simple_coverage': 0}, {'next_task': 'prepare_near_player'},
-            {'ingredient': 'ingredient_0'}, {'preparation': 'chopped', 'quantity': 'number_0'},
-            {'ingredient': 'ingredient_1'}, {'preparation': 'unspecified', 'quantity': 'number_1'},
+            {'ingredient': 'ingredient_carrot'}, {'preparation': 'chopped', 'quantity': 'count_2'},
+            {'ingredient': 'ingredient_onion'}, {'preparation': 'unspecified', 'quantity': 'count_1'},
             {'ingredient': 'done'}, {}, {}, {'next_task': 'wash_dishes'}, {}, {'next_task': 'done'}, {}])
         with self.assertRaises(Clarification) as caught: await c.compile()
         self.assertEqual(c.tasks, [])
@@ -129,20 +130,20 @@ class CompilerTests(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaises(Clarification): await c.compile()
 
     async def test_low_confidence_done_and_failed_coverage_never_truncate(self):
-        for final in ({'next_task': ('done', .91)}, {'next_task': 'done'}):
+        for final in ({'next_task': ('done', .84)}, {'next_task': 'done'}):
             c, _ = compiler('Wash and more work', [{'simple_coverage': 0}, {'next_task': 'wash_dishes'}, {}, final, {'coverage': .1}])
             with self.assertRaises(Clarification): await c.compile()
 
     async def test_missing_simple_candidate_falls_back_to_full_registry(self):
-        c, _ = compiler('Pass the held item to player one', [{'simple_coverage': 0}, {'next_task': 'throw_to_player'},
+        c, _ = compiler('Pass the held item to player one', [{'simple_coverage': 0}, {'next_task': 'native_action'}, {'action':'throw_to_player'},
             {'player_id': 'value_0'}, {}, {'next_task': 'done'}, {}])
         self.assertEqual((await c.compile())['plan']['tasks'][0]['action'], 'throw_to_player')
 
     async def test_out_of_range_not_clamped_and_impossible_preparation_not_substituted(self):
-        c, _ = compiler('Wash twelve batches', [{'simple_coverage': 0}, {'next_task': 'wash_dishes'}, {'repeat': 'number_0'}])
+        c, _ = compiler('Wash twelve batches', [{'simple_coverage': 0}, {'next_task': 'wash_dishes'}, {'repeat': 'out_of_range'}])
         with self.assertRaises(Unsupported): await c.compile()
         c, _ = compiler('Give me an empty carrot', [{'simple_coverage': 0}, {'next_task': 'prepare_near_player'},
-            {'ingredient': 'ingredient_0'}, {'preparation': 'empty', 'quantity': 'unspecified'}])
+            {'ingredient': 'ingredient_carrot'}, {'preparation': 'empty', 'quantity': 'count_1'}])
         with self.assertRaises(Unsupported): await c.compile()
 
     async def test_assembly_and_unimplemented_work_have_no_partial_result(self):
@@ -168,6 +169,25 @@ class CompilerTests(unittest.IsolatedAsyncioTestCase):
         c, s = compiler("Don't stop washing", [{'route': 'no_change'}])
         self.assertEqual((await c.compile())['kind'], 'no_change')
         self.assertEqual(len(s.requests), 1)
+
+    async def test_full_plan_confirmation_is_exact_and_does_not_repeat_model_io(self):
+        c, s = compiler('Wash dishes', [{'simple':'wash_dishes_once'}, {'coverage':.6}])
+        with self.assertRaises(Clarification) as caught: await c.compile()
+        self.assertEqual(list(caught.exception.options), ['confirm_plan'])
+        c.resolve(caught.exception, 'confirm_plan')
+        self.assertEqual((await c.compile())['kind'], 'plan')
+        self.assertEqual(len(s.requests), 2)
+        self.assertNotIn('command_id', s.requests[-1]['state']['compiler']['proposed'])
+
+    async def test_ten_items_can_finish_but_eleventh_is_not_truncated(self):
+        for ending in ('done','ingredient_carrot'):
+            steps = [{'simple_coverage':0},{'next_task':'prepare_near_player'}]
+            steps += [{'ingredient':'ingredient_carrot'},{'preparation':'chopped','quantity':'count_1'}]*10
+            steps += [{'ingredient':ending},{},{},{'next_task':'done'},{}]
+            c,_ = compiler('Give me ten separately described carrot entries',steps)
+            if ending=='done': self.assertEqual(len((await c.compile())['plan']['tasks'][0]['arguments']['items']),10)
+            else:
+                with self.assertRaises(Clarification): await c.compile()
 
 
 class ProtocolTests(unittest.TestCase):
@@ -199,8 +219,12 @@ class ProtocolTests(unittest.TestCase):
             path = Path(d)/'.env'; path.write_text("JEV_API_KEY='literal$(echo-no)'\nIGNORED=x\n")
             self.assertEqual(load_settings(path, {}).api_key, 'literal$(echo-no)')
             self.assertEqual(load_settings(path, {'JEV_API_KEY': 'environment'}).api_key, 'environment')
+            self.assertEqual(load_settings(path, {'TYPESAFE_API_KEY': 'environment-alias'}).api_key, 'environment-alias')
             self.assertNotIn('literal', repr(load_settings(path, {})))
         self.assertEqual(number_candidates('twenty-one carrots, actually 3; twice'), {21:['twenty-one'], 3:['3'], 2:['twice']})
+        self.assertEqual(number_candidates('give player one three carrots'), {1:['one'], 3:['three']})
+        self.assertEqual(number_candidates('one hundred and two, two thousand five, minus three'),
+                         {102:['one hundred and two'], 2005:['two thousand five'], -3:['minus three']})
 
 
 class Transport:
@@ -217,6 +241,47 @@ class Transport:
 
 
 class TransportTests(unittest.IsolatedAsyncioTestCase):
+    async def test_stale_command_is_checked_at_actual_write(self):
+        gate = DispatchGate(); generation = gate.invalidate(False)
+        t = Transport([{}]); t.before_send=asyncio.Event()
+        p=ProtocolTests();p.setUp();current=True
+        def check():
+            if not current: raise DecisionError('Queue changed')
+        budget=dict(deadline=time.monotonic()+2,requests=0,input_tokens=0,output_tokens=0)
+        task=asyncio.create_task(DecisionClient(t,gate,Settings()).ask(p.request,generation,budget,check))
+        await asyncio.sleep(.01);current=False;t.before_send.set()
+        with self.assertRaisesRegex(DecisionError,'Queue changed'):await task
+        self.assertEqual(t.sent,0)
+
+    async def test_http_framing_and_keepalive_without_network(self):
+        p=ProtocolTests();p.setUp();body=json.dumps(response(p.request)).encode()
+        class Writer:
+            def __init__(self):self.writes=[];self.closed=False
+            def write(self,value):self.writes.append(value)
+            def is_closing(self):return self.closed
+            async def drain(self):pass
+            def close(self):self.closed=True
+            async def wait_closed(self):pass
+        reader=asyncio.StreamReader();writer=Writer()
+        reader.feed_data(b'HTTP/1.1 200 OK\r\nContent-Length: '+str(len(body)).encode()+b'\r\n\r\n'+body)
+        reader.feed_data(b'HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n'+f'{len(body):x}'.encode()+b'\r\n'+body+b'\r\n0\r\n\r\n')
+        with patch('asyncio.open_connection',return_value=(reader,writer)) as connect:
+            transport=HttpTransport('test-only-not-a-key')
+            for _ in range(2):
+                result=await transport.exchange(p.request,lambda send:send())
+                validate_response(p.request,result)
+            self.assertEqual(connect.call_count,1)
+            self.assertEqual(len(writer.writes),2)
+            self.assertTrue(all(b'Danger-Zone' not in payload for payload in writer.writes))
+            await transport.close()
+
+    async def test_transient_retry_succeeds_and_counts_attempts(self):
+        gate=DispatchGate();generation=gate.invalidate(False)
+        t=Transport([ProviderError(503),{}]);p=ProtocolTests();p.setUp()
+        budget=dict(deadline=time.monotonic()+2,requests=0,input_tokens=0,output_tokens=0)
+        await DecisionClient(t,gate,Settings()).ask(p.request,generation,budget)
+        self.assertEqual(t.sent,2);self.assertEqual(budget['requests'],2)
+        self.assertEqual(budget['input_tokens'],100)
     async def test_mute_before_actual_send_blocks_deferred_transport(self):
         gate = DispatchGate(); generation = gate.invalidate(False)
         t = Transport([{}]); t.before_send = asyncio.Event()
@@ -333,6 +398,62 @@ class ServiceTests(unittest.TestCase):
         InterpreterService._exact_bindings(before,after,raw)
         after['targets'][0]['objectInstanceId'] += 1
         with self.assertRaises(DecisionError): InterpreterService._exact_bindings(before,after,raw)
+
+    def test_late_response_after_mute_never_accepts(self):
+        self.t.after_send=asyncio.Event();self.control('mode',mode='automatic')
+        self.service.submit({'id':'late','text':'Wash'})
+        end=time.monotonic()+1
+        while not self.t.sent and time.monotonic()<end:time.sleep(.005)
+        self.gate.invalidate(True)
+        self.service.loop.call_soon_threadsafe(self.t.after_send.set)
+        time.sleep(.02)
+        self.assertEqual(self.bridge.scheduler.snapshot()['pending'],[])
+        self.assertEqual(self.t.sent,1)
+
+    def test_queue_change_while_connecting_prevents_transmission(self):
+        self.t.before_send=asyncio.Event()
+        self.service.submit({'id':'stale','text':'Wash'})
+        self.bridge.scheduler.edit({'operation_id':'manual','expected_queue_revision':0,'operation':'pause_pending'})
+        self.service.loop.call_soon_threadsafe(self.t.before_send.set)
+        self.wait_for({'error'})
+        self.assertEqual(self.t.sent,0)
+
+    def test_clarification_button_resumes_only_current_draft(self):
+        self.t.script.steps=[{'simple':'wash_dishes_once'},{'coverage':.6}]
+        self.service.submit({'id':'clarify','text':'Wash'})
+        state=self.wait_for({'clarification'})
+        self.assertEqual(self.bridge.scheduler.snapshot()['pending'],[])
+        self.control('answer',id=state['pending']['id'],key='confirm_plan')
+        preview=self.wait_for({'preview'})
+        self.assertEqual(self.t.sent,2)
+        self.control('accept',id=preview['pending']['id'])
+        self.assertEqual(len(self.bridge.scheduler.snapshot()['pending']),1)
+
+    def test_spoken_reply_can_cancel_an_unfinished_command(self):
+        self.t.script.steps=[{'simple':'wash_dishes_once'},{'coverage':.6},{'route':'cancel','answer':'ambiguous'}]
+        self.service.submit({'id':'one','text':'Wash'})
+        self.wait_for({'clarification'})
+        self.service.submit({'id':'reply','text':'Cancel this unfinished command'})
+        self.wait_for({'cancelled'})
+        self.assertEqual(self.bridge.scheduler.snapshot()['pending'],[])
+
+    def test_followup_correction_replaces_unfinished_preview(self):
+        self.service.submit({'id':'one','text':'Wash'})
+        self.wait_for({'preview'})
+        self.t.script.steps=[{'relationship':'correction'},{'simple':'take_ready_once'},{}]
+        self.service.submit({'id':'correction','text':'Actually take ready food instead'})
+        state=self.wait_for({'preview'})
+        self.assertEqual(state['result']['plan']['tasks'][0]['action'],'take_ready')
+        self.assertEqual(self.bridge.scheduler.snapshot()['pending'],[])
+
+    def test_invalid_configuration_does_not_disable_manual_queue(self):
+        with patch('harness.decision.service.load_settings',side_effect=ValueError('bad config')):
+            service=InterpreterService(self.bridge,DispatchGate())
+        self.addCleanup(service.close)
+        self.assertFalse(service.snapshot()['configured'])
+        self.assertIn('configuration',service.snapshot()['configurationError'])
+        self.bridge.scheduler.accept(plan(),context_of(self.bridge.state()))
+        self.assertEqual(len(self.bridge.scheduler.snapshot()['pending']),1)
 
 
 if __name__ == '__main__': unittest.main()

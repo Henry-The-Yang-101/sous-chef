@@ -760,7 +760,7 @@ function renderInterpreter() {
   const current = state?.interpreter;
   const armed = !!current?.configured && state?.voice && !state.voice.muted && !!token;
   el('interpreter-status').textContent = !current?.configured
-    ? 'Jev is not configured. Add JEV_API_KEY to .env and restart the harness.'
+    ? current?.configurationError || 'Jev is not configured. Add JEV_API_KEY to .env and restart the harness.'
     : `${current.mode === 'preview' ? 'Preview · acceptance requires your click' : 'Automatic · validated plans enter the queue'} · ${current.status.replaceAll('_', ' ')}${current.inbox ? ` · ${current.inbox} waiting` : ''}`;
   el('interpreter-enable').disabled = !current?.configured || !state?.voice?.muteAcknowledged || interpreterBusy;
   el('interpreter-mode').disabled = !current || interpreterBusy || !!current.pending || ['interpreting', 'interpreting_reply'].includes(current.status);

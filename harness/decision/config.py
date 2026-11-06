@@ -16,9 +16,10 @@ class Settings:
     retries: int = 2
     clarification_seconds: float = 90
     preview_seconds: float = 60
-    choice_probability: float = .90
+    choice_probability: float = .85
     critical_probability: float = .97
-    coverage_probability: float = .90
+    completion_probability: float = .85
+    coverage_probability: float = .85
 
 
 def load_settings(path=None, environ=None):
@@ -40,8 +41,8 @@ def load_settings(path=None, environ=None):
                     value = value.split(' #', 1)[0].rstrip()
                 values[key.strip()] = value
     environment = os.environ if environ is None else environ
-    values.update({k: environment[k] for k in ('JEV_API_KEY', 'TYPESAFE_API_KEY') if k in environment})
-    key = values.get('JEV_API_KEY', values.get('TYPESAFE_API_KEY', '')).strip()
+    key = next((source[name] for source in (environment, values) for name in ('JEV_API_KEY', 'TYPESAFE_API_KEY')
+                if name in source), '').strip()
     if any(ord(c) < 33 or ord(c) > 126 for c in key):
         raise ValueError('API key must be a printable token without whitespace')
     return Settings(api_key=key)

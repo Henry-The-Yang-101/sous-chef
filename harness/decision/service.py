@@ -11,7 +11,7 @@ from clients.capabilities import REGISTRY_HASH, ValidationError
 from harness.plans import identity, validate_plan
 from harness.scheduler import context_of
 from .compiler import Compiler, Clarification, Unsupported, build_context, choice
-from .config import MODEL, load_settings
+from .config import MODEL, Settings, load_settings
 from .protocol import DecisionError, validate_response
 from .transport import DecisionClient, HttpTransport
 
@@ -19,7 +19,12 @@ from .transport import DecisionClient, HttpTransport
 class InterpreterService:
     def __init__(self, bridge, gate, settings=None, transport=None):
         self.bridge, self.gate = bridge, gate
-        self.settings = settings or load_settings()
+        self.configuration_error = None
+        try:
+            self.settings = settings or load_settings()
+        except (OSError, ValueError):
+            self.settings = Settings()
+            self.configuration_error = 'Jev configuration could not be loaded. Check the API key format and .env file permissions.'
         self.configured = bool(self.settings.api_key) or transport is not None
         self.transport = transport or HttpTransport(self.settings.api_key)
         self.client = DecisionClient(self.transport, gate, self.settings)
@@ -111,7 +116,7 @@ class InterpreterService:
                           requests=0, input_tokens=0, output_tokens=0, last_ms=None)
             async def ask(request):
                 self._current(active)
-                return await self.client.ask(request, generation, budget)
+                return await self.client.ask(request, generation, budget, lambda: self._current(active))
             compiler = Compiler(command, context, ask, self.settings)
             active = {'compiler': compiler, 'generation': generation, 'context': native,
                       'revision': queue['revision'], 'commandGeneration': queue.get('commandGeneration', 0),
@@ -139,21 +144,23 @@ class InterpreterService:
     async def _compile(self, active):
         try:
             outcome = await active['compiler'].compile()
-            if not await self._arrivals(active):
-                return
-            with self.gate.lock:
-                self._current(active)
-                self.result = dict(outcome, metrics=self._metrics(active))
-                self.revision += 1
-                if outcome['kind'] == 'no_change':
-                    self.status, self.active = 'no_change', None
-                    self._advance()
-                elif self.mode == 'automatic':
-                    self._accept(active, outcome)
-                else:
-                    self.status = 'preview'
-                    self.pending = {'kind': 'preview', 'id': uuid.uuid4().hex, 'active': active,
-                                    'outcome': outcome, 'expires': time.monotonic() + self.settings.preview_seconds}
+            while await self._arrivals(active):
+                with self.gate.lock:
+                    self._current(active)
+                    if any(c['id'] not in active.get('independent_followups', set()) for c in self.inbox):
+                        continue  # A follow-up arrived between classification and adoption.
+                    self.result = dict(outcome, metrics=self._metrics(active))
+                    self.revision += 1
+                    if outcome['kind'] == 'no_change':
+                        self.status, self.active = 'no_change', None
+                        self._advance()
+                    elif self.mode == 'automatic':
+                        self._accept(active, outcome)
+                    else:
+                        self.status = 'preview'
+                        self.pending = {'kind': 'preview', 'id': uuid.uuid4().hex, 'active': active,
+                                        'outcome': outcome, 'expires': time.monotonic() + self.settings.preview_seconds}
+                    break
         except Clarification as clarification:
             with self.gate.lock:
                 if self.active is not active: return
@@ -196,7 +203,7 @@ class InterpreterService:
                                                'new_utterance': incoming['text']},
                        'questions': {'relationship': choice('Classify how the new utterance relates to the unfinished command. '
                            'No work from the unfinished command has been accepted yet. Do not treat an explicit correction as appended work.', options)}}
-            response = await self.client.ask(request, active['generation'], active['budget'])
+            response = await self.client.ask(request, active['generation'], active['budget'], lambda: self._current(active))
             answer = response['answers']['relationship']
             key = answer['choice']
             if answer['probabilities'][key] < self.settings.critical_probability:
@@ -269,7 +276,7 @@ class InterpreterService:
                               'answer': choice('If the reply answers the pending question, which allowed answer does it select? Read only the reply and pending question.', values)}}
             # Reply has its own per-request deadline but consumes the original request count.
             active['budget']['deadline'] = time.monotonic() + self.settings.compile_seconds
-            response = validate_response(request, await self.client.ask(request, active['generation'], active['budget']))
+            response = validate_response(request, await self.client.ask(request, active['generation'], active['budget'], lambda: self._current(active)))
             with self.gate.lock:
                 self._current(active)
                 if self.pending is not pending or time.monotonic() >= pending['expires']:
@@ -295,6 +302,12 @@ class InterpreterService:
                 if self.pending is pending: self.status = 'clarification'
 
     def _accept(self, active, outcome):
+        # Queue-only Stop needs the same compare-and-swap as all other edits;
+        # hold only local locks through validation + the journal transaction.
+        with self.bridge.scheduler.lock:
+            return self._accept_locked(active, outcome)
+
+    def _accept_locked(self, active, outcome):
         world = self._current(active, deadline=False)
         if outcome['kind'] == 'plan':
             raw = outcome['plan']
@@ -357,6 +370,7 @@ class InterpreterService:
                 self.status = 'expired'
                 raise DecisionError('This preview or clarification expired')
             if operation == 'discard':
+                if self.future: self.future.cancel()
                 self.pending = self.active = None
                 self.status, self.result = 'cancelled', None
                 self.revision += 1
@@ -394,6 +408,7 @@ class InterpreterService:
                 if pending['kind'] == 'clarification':
                     visible.update(question=pending['clarification'].message, options=pending['clarification'].options)
             return {'revision': self.revision, 'generation': self.gate.generation, 'configured': self.configured,
+                    'configurationError': self.configuration_error,
                     'model': MODEL, 'mode': self.mode, 'status': self.status, 'inbox': len(self.inbox),
                     'pending': visible, 'result': copy.deepcopy(self.result),
                     'metrics': self._metrics(self.active) if self.active else None}
@@ -407,7 +422,12 @@ class InterpreterService:
             self.invalidate()
             self.gate.listeners.remove(self.invalidate)
         try:
-            asyncio.run_coroutine_threadsafe(self.transport.close(), self.loop).result(timeout=2)
+            async def shutdown():
+                tasks = [task for task in asyncio.all_tasks() if task is not asyncio.current_task()]
+                for task in tasks: task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
+                await self.transport.close()
+            asyncio.run_coroutine_threadsafe(shutdown(), self.loop).result(timeout=2)
         except Exception:
             pass
         self.loop.call_soon_threadsafe(self.loop.stop)

@@ -48,7 +48,7 @@ class HarnessBridge:
     POLL_SECONDS = .2
     STALE_SECONDS = 1.5
 
-    def __init__(self, port=24703, factory=None, clock=time.monotonic, focus=focus_game, contents=None, journal_path=':memory:'):
+    def __init__(self, port=24703, factory=None, clock=time.monotonic, focus=focus_game, contents=None, journal_path=':memory:', decision_settings=None, decision_transport=None):
         self.factory = factory or (lambda: ActionClient(port, timeout=1.0))
         self.clock = clock
         self.focus = focus
@@ -67,7 +67,7 @@ class HarnessBridge:
                       'lastCommand': None}
         self.scheduler = Scheduler(self, journal_path)
         self.voice = VoiceService()
-        self.interpreter = InterpreterService(self, self.voice.gate)
+        self.interpreter = InterpreterService(self, self.voice.gate, decision_settings, decision_transport)
         self.voice.on_command = self.interpreter.submit
         if self.interpreter.configured:
             self.voice.settings['inspection'] = 'jev'
