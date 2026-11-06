@@ -93,6 +93,10 @@ namespace SousChef.Plugin.Actions
         private PrepJob SelectPreparation(float availableSeconds, ref BoardWait boardWait, PreparationSchedule.Lane exclude = null)
         {
             GameObject held = ActionObservations.Held(chef); PrepJob best = null;
+            var candidates = new List<PrepJob>(preparation.Lanes.Length);
+            bool cookerBuffered = false, mixerBuffered = false;
+            // Observe each lane's source once. A prepared successor waiting for
+            // equipment caps speculative chopping across all lanes using it.
             for (int n = 0; n < preparation.Lanes.Length; n++)
             {
                 var lane = preparation.At(n);
@@ -106,12 +110,28 @@ namespace SousChef.Plugin.Actions
                 }
                 else if (lane.WantsMore)
                 {
-                    var source = StartingSource(lane.Order, ref boardWait);
-                    if (source == null || availableSeconds != Single.MaxValue && availableSeconds <= PreparationSeconds(lane.Order, source)) continue;
-                    if (Passive(lane.Order) && !CanPrepareForProcessor(lane, source)) continue;
+                    var source = PreparationSource(lane.Order);
+                    if (source == null) continue;
                     job = new PrepJob { Lane = lane, Source = source };
+                    if (!source.Supply && Passive(lane.Order) && !NeedsWork(lane.Order, source.Item))
+                    {
+                        if (lane.Order.Preparation == "mixed") mixerBuffered = true;
+                        else cookerBuffered = true;
+                    }
                 }
-                if (job != null && PreferPreparation(job, best, held)) best = job;
+                if (job != null) candidates.Add(job);
+            }
+            foreach (var job in candidates)
+            {
+                var order = job.Lane.Order;
+                if (!job.Parked)
+                {
+                    if (availableSeconds != Single.MaxValue && availableSeconds <= PreparationSeconds(order, job.Source)) continue;
+                    if (Passive(order) && !CanPrepareForProcessor(job.Lane, job.Source,
+                        order.Preparation == "mixed" ? mixerBuffered : cookerBuffered)) continue;
+                    if (!PreparationBoardAvailable(order, job.Source, ref boardWait)) continue;
+                }
+                if (PreferPreparation(job, best, held)) best = job;
             }
             return best;
         }
@@ -120,13 +140,24 @@ namespace SousChef.Plugin.Actions
         {
             return job.Parked || !Passive(job.Lane.Order) && !NeedsWork(job.Lane.Order, job.Source.Item);
         }
-        private static bool PreferPreparation(PrepJob candidate, PrepJob current, GameObject held)
+        private enum PreparationPriority { Fetch, Held, InProgress, LoadProcessor, Handoff }
+        private PreparationPriority Priority(PrepJob job, GameObject held)
+        {
+            // Existing ready food always feeds the player first. A dispenser
+            // can create unlimited raw handoffs, so keep it in round-robin turn
+            // rather than starving another ingredient's unfinished preparation.
+            bool supplyDue = job.Lane.Delivered + job.Lane.InTransit < (completed + 1) * job.Lane.Order.Quantity;
+            if (ReadyToGive(job) && (!job.Source.Supply || supplyDue)) return PreparationPriority.Handoff;
+            if (!job.Source.Supply && Passive(job.Lane.Order) && !NeedsWork(job.Lane.Order, job.Source.Item))
+                return PreparationPriority.LoadProcessor;
+            if (OnBoard(job.Source) || !job.Source.Supply && PreparationProgress(job.Source.Item) > 0) return PreparationPriority.InProgress;
+            return System.Object.ReferenceEquals(held, job.Source.Item) ? PreparationPriority.Held : PreparationPriority.Fetch;
+        }
+        private bool PreferPreparation(PrepJob candidate, PrepJob current, GameObject held)
         {
             if (current == null) return true;
-            // Feeding the receiving chef outranks producing more stock. Compare
-            // every lane, even with empty hands or useful raw cargo already held.
-            bool ready = ReadyToGive(candidate), currentReady = ReadyToGive(current);
-            if (ready != currentReady) return ready;
+            var priority = Priority(candidate, held); var previous = Priority(current, held);
+            if (priority != previous) return priority > previous;
             // Within the same class, use held cargo, then preserve the cursor's
             // round-robin order. Never let a raw catch outrank a ready handoff.
             return System.Object.ReferenceEquals(held, candidate.Source.Item) &&
@@ -138,7 +169,7 @@ namespace SousChef.Plugin.Actions
             PrepJob next = SelectPreparation(Single.MaxValue, ref unused);
             return next != null && ReadyToGive(next);
         }
-        private bool CanPrepareForProcessor(PreparationSchedule.Lane lane, LogisticsItem source)
+        private bool CanPrepareForProcessor(PreparationSchedule.Lane lane, LogisticsItem source, bool buffered)
         {
             bool mixing = lane.Order.Preparation == "mixed";
             // Work-output and dispenser prefabs do not have the live network
@@ -150,7 +181,7 @@ namespace SousChef.Plugin.Actions
                         ApproachCost(item.Source) != Single.MaxValue) return true;
                 // Full pan: prepare its successor on a board. Once chopped it
                 // becomes the preferred source and cannot enter this branch.
-                if (NeedsWork(lane.Order, source.Item))
+                if (!buffered && NeedsWork(lane.Order, source.Item))
                     foreach (var batch in preparation.Cooking) if (batch.Mixing == mixing) return true;
                 return false;
             }
@@ -186,7 +217,8 @@ namespace SousChef.Plugin.Actions
                 pickup.ReplanAfterPress = true;
                 GameObject initialCargo = ActionObservations.Held(chef);
                 pickup.UseHeld = held => HeldPreparation(held, order) &&
-                    (NeedsWork(order, source.Item) || !NeedsWork(order, held));
+                    (NeedsWork(order, source.Item) || !NeedsWork(order, held)) &&
+                    (source.Supply || PreparationProgress(held) >= PreparationProgress(source.Item));
                 // If an existing catch lost to a more advanced source, park it.
                 // Only a new catch invalidates this scheduling decision.
                 pickup.ReplanForHeld = held => !System.Object.ReferenceEquals(held, initialCargo) && UsefulCatch(held);
@@ -215,7 +247,8 @@ namespace SousChef.Plugin.Actions
                 // This is a safe action boundary, not a new per-frame world scan.
                 if (ReadyPreparationWaiting()) yield break;
                 var work = Reschedulable("work_at", board, "work_complete");
-                work.ReplanForHeld = UsefulCatch;
+                GameObject initialWorkCargo = ActionObservations.Held(chef);
+                work.ReplanForHeld = held => !System.Object.ReferenceEquals(held, initialWorkCargo) && UsefulCatch(held);
                 yield return work;
                 if (!work.Succeeded) { foreach (var step in Clear(work.Obstruction)) yield return step; yield break; }
                 item = ActionObservations.Occupant(board);

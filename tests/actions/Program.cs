@@ -316,6 +316,61 @@ internal static class Program
             w.Tasks.Cancel("test_end");
         }
         {
+            var w=kitchen();var started=raw(w,"chicken");w.Target.GetComponent<ServerAttachStation>().Item=started;
+            var shelf=w.Delivery();shelf.Add(new Pickup());shelf.GetComponent<ServerAttachStation>().Item=raw(w,"potato");
+            start(w);next(w);
+            Check(w.Skills.Run.Operation=="work_at" && w.Navigation.Resolve(w.Skills.Run.Target)==w.Target,
+                "finish food already on a board before fetching an earlier lane's raw ingredient");
+            w.Tasks.Cancel("test_end");
+        }
+        {
+            var w=kitchen();w.Target.GetComponent<ServerAttachStation>().Item=raw(w,"potato");
+            var source=w.Delivery();source.Add(new Pickup());source.GetComponent<ServerAttachStation>().Item=w.Ingredient("chicken");
+            var cooker=w.Delivery();cooker.transform.position=new Vector3(-2,0,0);cooker.Add(new CookingStation());
+            var pan=new GameObject("pan");pan.Add(new ServerIngredientContainer());pan.Add(new IngredientTransfer());pan.Add(new ServerCookingHandler());
+            cooker.GetComponent<ServerAttachStation>().Item=pan;
+            var request=new TaskRequest {Action="prepare_near_player",Repetitions=0};
+            foreach(string name in new[] {"potato","chicken"})request.Items.Add(new PreparationRequest {Selector=name,Preparation="cooked",Quantity=1});
+            Check(w.Tasks.Start(w.Chef,1,new ControlCommand {Operation="task",Task=request})==null,"cooking priority request accepted");next(w);
+            Check(w.Skills.Run.Operation=="pick_up" && w.Navigation.Resolve(w.Skills.Run.Target)==source,
+                "load an already prepared ingredient into available equipment before chopping another lane's raw food");
+            w.Tasks.Cancel("test_end");
+        }
+        {
+            var w=kitchen();var started=raw(w,"potato");started.GetComponent<ServerWorkableItem>().Progress=1;
+            w.Target.GetComponent<ServerAttachStation>().Item=started;
+            var caught=raw(w,"potato");w.Hold(caught);var spare=w.Delivery();spare.Add(new Pickup());
+            start(w);next(w);
+            Check(w.Skills.Run.Operation=="place_at" && w.Navigation.Resolve(w.Skills.Run.Target)==spare,
+                "park a fresh raw catch once instead of placing it on another board while partially chopped food waits");
+            w.ArriveAt(spare);spare.GetComponent<ServerAttachStation>().Item=caught;w.Hold(null);w.Verify();next(w);
+            Check(w.Skills.Run.Operation=="work_at" && w.Navigation.Resolve(w.Skills.Run.Target)==w.Target &&
+                w.Target.GetComponent<ServerAttachStation>().Item==started && started.GetComponent<ServerWorkableItem>().Progress==1,
+                "resume the exact partially chopped item and preserve its native progress");
+            w.Tasks.Cancel("test_end");
+        }
+        {
+            var w=kitchen();w.Target.GetComponent<ServerAttachStation>().Item=w.Ingredient("potato");
+            var source=w.Delivery();source.Add(new Pickup());source.GetComponent<ServerAttachStation>().Item=raw(w,"chicken");
+            var cooker=w.Delivery();cooker.transform.position=new Vector3(-2,0,0);cooker.Add(new CookingStation());
+            var pan=new GameObject("pan");pan.Add(new ServerIngredientContainer()).Contents.Add(new AssembledDefinitionNode("chicken"));
+            pan.Add(new ServerCookingHandler()).m_ServerData.m_cookingState=ProcessingState.Progressing;
+            cooker.GetComponent<ServerAttachStation>().Item=pan;
+            var freeBoard=w.Delivery();freeBoard.transform.position=new Vector3(0,0,2);freeBoard.Add(new ServerWorkstation());
+            var request=new TaskRequest {Action="prepare_near_player",Repetitions=0};
+            foreach(string name in new[] {"potato","chicken"})request.Items.Add(new PreparationRequest {Selector=name,Preparation="cooked",Quantity=1});
+            Check(w.Tasks.Start(w.Chef,1,new ControlCommand {Operation="task",Task=request})==null,"buffered cooking request accepted");w.Tick(.25f);
+            // Reproduce an owned cooking batch after its successor was chopped.
+            var flags=System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic;
+            var schedule=(PreparationSchedule)typeof(TaskActions).GetField("preparation",flags).GetValue(w.Tasks);
+            schedule.StartCooking(schedule.Lanes[1],cooker);
+            for(int i=0;i<10;i++)w.Tick(.25f);
+            Check(!w.Skills.Run.Running && w.Target.GetComponent<ServerAttachStation>().Item!=null &&
+                source.GetComponent<ServerAttachStation>().Item!=null,
+                "one prepared successor across lanes prevents fetching or staging another raw item while their only pan is full");
+            w.Tasks.Cancel("test_end");
+        }
+        {
             var w=kitchen();w.Target.GetComponent<ServerAttachStation>().Item=raw(w,"potato");
             var shelf=w.Delivery();shelf.Add(new Pickup {Allowed=false});shelf.GetComponent<ServerAttachStation>().Item=w.Ingredient("chicken");
             start(w);next(w);

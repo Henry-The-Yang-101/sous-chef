@@ -103,15 +103,24 @@ destination; if all alternatives are blocked, the same task waits and retries.
 Preparation visits entries in list order, respecting quantity: two A and one B
 normally give A, A, B, A, A, B. With A, B, C and no B available, P2 gives A, C,
 A, C. B becomes eligible again when its source or equipment is available. A
-useful catch or a pan about to burn can change the order. Finished loose food
-and food on boards/counters are candidates at every dispatch, including after
-a catch. A new raw potato cannot displace an already chopped potato for the
-same chopped request. Items already handed to the human stay reserved.
+ready handoff or a pan about to burn can change the order. Across all entries,
+P2 prioritizes existing ready food for the player, then food ready to load into
+available equipment, then unfinished board work, then held raw food, then new
+fetches. Native chopping progress breaks ties between copies of one ingredient.
+A fresh raw catch therefore cannot displace a partially chopped or finished
+copy. Ready handoffs are checked again after placement, before starting work.
+An unlimited raw dispenser only gets handoff priority while its entry is due in
+the current delivery round, so repeated easy raw handoffs cannot starve chopping.
+Items already handed to the human stay reserved.
 
 Cooking and mixing reserve one unit of demand per occupied container. The
 scheduler compares native time remaining with estimated travel and chopping
 time. It can chop a second chicken while the first cooks, even with only one pan:
-the second portion stays on its board until it can be loaded. Ready containers
+the second portion stays on its board until it can be loaded. When equipment is
+full, one prepared successor shared across cooking entries (and independently
+across mixing entries) stops further speculative chopping. Available equipment
+can still receive prepared food; blocked equipment does not cause P2 to clear
+boards just to stage more raw stock. Ready containers
 are collected in order of time remaining before ruin. A pan removed or emptied
 by another chef no longer owns that unit of demand. A blocked handoff can be
 parked on a safe counter while other work proceeds; P2 remembers the exact meal

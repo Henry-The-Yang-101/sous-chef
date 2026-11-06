@@ -48,7 +48,7 @@ namespace SousChef.Plugin.Actions
             string utensilType = utensil ? LogisticsInventory.CanonicalUtensil(selector) : null;
             bool plate = utensilType == "plate";
             LogisticsItem best = null; float score = Single.MaxValue; int bestWork = Int32.MaxValue;
-            bool bestPlaced = false, bestHeld = false;
+            bool bestPlaced = false, bestHeld = false; float bestProgress = -1;
             var ids = utensil ? null : PreparationIdentities(selector, processed);
             GameObject cargo = ActionObservations.Held(chef);
             foreach (LogisticsItem entry in inventory.Items)
@@ -61,12 +61,13 @@ namespace SousChef.Plugin.Actions
                 // For equivalent preparation stages, prefer certified sources.
                 float candidate = (entry.Distance != Single.MaxValue ? entry.Distance : ApproachCost(entry.Source)) + (entry.Supply ? 10000 : 0);
                 int work = processed ? PreparationWork(entry.Item) : 0;
+                float progress = processed && !entry.Supply ? PreparationProgress(entry.Item) : 0;
                 bool held = System.Object.ReferenceEquals(cargo, entry.Item);
                 // Food already on a board needs no placement and frees that board.
                 bool placed = work > 0 && OnBoard(entry);
-                if (work < bestWork || work == bestWork && (held && !bestHeld || held == bestHeld &&
-                    (placed && !bestPlaced || placed == bestPlaced && candidate < score)))
-                { best = entry; score = candidate; bestWork = work; bestPlaced = placed; bestHeld = held; }
+                if (work < bestWork || work == bestWork && (progress > bestProgress || progress == bestProgress &&
+                    (placed && !bestPlaced || placed == bestPlaced && (held && !bestHeld || held == bestHeld && candidate < score))))
+                { best = entry; score = candidate; bestWork = work; bestProgress = progress; bestPlaced = placed; bestHeld = held; }
             }
             return best;
         }
@@ -94,6 +95,11 @@ namespace SousChef.Plugin.Actions
                 return ids.Count == 0 ? LogisticsInventory.IngredientMatches(entry, desired.Selector) : ids.Contains(entry.IngredientId);
             }
             return false;
+        }
+        private static float PreparationProgress(GameObject item)
+        {
+            var work = TaskNative.Component<ServerWorkableItem>(item);
+            return work == null ? 0 : work.GetProgress() + ActionObservations.Read<int>(work, "m_subProgress") * .001f;
         }
         private static bool NeedsWork(PreparationRequest request, GameObject item)
         { return request.Preparation != "raw" && request.Preparation != "empty" && item != null && item.GetComponent<WorkableItem>() != null; }
@@ -141,15 +147,14 @@ namespace SousChef.Plugin.Actions
         // while every reachable board is occupied would keep P2 from clearing
         // the very boards it is waiting for. An unknown route is not a free board.
         private enum BoardWait { None, Unreachable, Occupied }
-        private LogisticsItem StartingSource(PreparationRequest desired, ref BoardWait boardWait)
+        private bool PreparationBoardAvailable(PreparationRequest desired, LogisticsItem source, ref BoardWait boardWait)
         {
-            LogisticsItem source = PreparationSource(desired);
-            if (source == null || !NeedsWork(desired, source.Item) || OnBoard(source)) return source;
+            if (!NeedsWork(desired, source.Item) || OnBoard(source)) return true;
             bool occupied;
-            if (Board(source.Item, out occupied, source.Supply) != null) return source;
+            if (Board(source.Item, out occupied, source.Supply) != null) return true;
             if (occupied) boardWait = BoardWait.Occupied;
             else if (boardWait == BoardWait.None) boardWait = BoardWait.Unreachable;
-            return null;
+            return false;
         }
         private GameObject Processor(GameObject item, bool mixing)
         {

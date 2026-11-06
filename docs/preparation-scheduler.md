@@ -12,6 +12,10 @@ the exact instance ID when the lane's delivered count advances.
 | Skip and resume (4-2) | Same order, but with no accessible chicken. Require lettuce, tomato, lettuce, tomato before supplying either chicken. Both chickens must then arrive, and the request must stop at exactly two of each. |
 | Single fryer (4-2) | P1 starts on P2's raft holding the spare empty fryer basket. Supply two **raw** chickens. During the one usable basket's native cooking interval, a snapshot must show the other raw chicken being worked on a board. Check the two delivered items' native contents at receipt: each must be cooked and unruined. |
 | Blocked handoff (4-2) | Request an empty fryer basket and raw lettuce with P1 on the other raft. P2 must park the nonthrowable basket, give P1 lettuce, then retrieve and deliver the **same** basket after P1 moves within reach. |
+| Ready before chopping (2-1) | Request potato before chicken, but provide one raw potato and two chopped chickens. Both exact chickens must arrive before any chopping starts. Run with the raw potato on a board, already held, and with the ready chicken arriving during raw placement. |
+| Resume board (2-1) | Request potato before chicken, with raw potato on a counter and chicken already on a board. The first operation must work the occupied board; chicken must arrive before potato. |
+| Raw catch during work (2-1) | Once chicken has native chopping progress, inject another raw chicken into P2's hands. Require continued progress on the original board and a confirmed chicken handoff. This verifies the original work survives; it does not require the caught raw item to remain held across native use release. |
+| Bounded backup (4-2) | One usable fryer, two raw chickens and one raw potato. Chop potato while the first chicken cooks, then wait with that backup. Do not chop the second chicken before collecting the first batch. Load the prepared potato next and verify both cooked handoffs. |
 
 The cooking and handoff cases stage P1 where needed. P2's movement, work,
 placements, transfers and passes all use production inputs. No fixture advances
@@ -69,3 +73,36 @@ Native carrier, board, cooking and placement checks remain on Unity's thread.
 The existing secondary process handles eligible graph expansion, throw-preview
 batches and response encoding; choosing among at most ten entries adds no IPC
 wait to the game loop.
+
+## Ready-food and raw-stock priority follow-up
+
+Ready handoffs now outrank new chopping across the entire request, even when
+P2 already holds useful raw food. Selection also prefers native progress and
+occupied boards over starting fresh copies, and loads prepared food into free
+equipment before producing more. A prepared backup applies across entries,
+preventing each ingredient from building its own queue behind the same full
+equipment. Native compatibility, cooking deadlines and finite demand still
+gate eligibility before priority is compared.
+
+The three ready-food cases, ordered ABCABC, and single-fryer overlap passed in
+`.local/ready-priority/audit/`. The efficiency changes passed ordered ABCABC and
+single-fryer overlap again in `efficiency/`. Final checks in `final/` cover
+existing board work, raw catch recovery, the bounded backup, ready food arriving
+during placement, and single-fryer overlap. In the bounded-backup run, potato
+`-45020` was chopped while basket `535360` cooked chicken; the first chicken
+arrived on plate `536828`, and the cooked potato arrived in that basket.
+
+The action regressions additionally cover retaining a partially chopped copy
+when an identical raw copy is held, loading already prepared food before more
+chopping, inaccessible ready food, and refusing new raw stock with a full pan
+and a prepared backup. Repository checks and the action suite passed. Initial
+efficiency-fixture failures are retained in `efficiency/`: they assumed a raw
+object stayed on its board after conversion, required a catch to remain held
+through native use release, and requested a third empty counter where only two
+existed. The final fixtures use observed native identities and available holders.
+
+Selection uses two bounded passes over at most ten entries, reusing the frame's
+inventory and resolving each source once. Rechecking before work happens only
+at an action boundary. There are no new per-frame scene scans or worker waits;
+the existing secondary process continues handling graph searches, throw batches
+and encoding. These behavior runs are not a matched live-game FPS benchmark.
