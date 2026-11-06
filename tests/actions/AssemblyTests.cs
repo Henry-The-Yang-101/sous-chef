@@ -235,6 +235,25 @@ internal static partial class Program
     private static void AssemblyProofs()
     {
         {
+            var w=new World();var counter=w.Delivery();var plate=AssemblyPlate(w,counter);
+            var fish=AssemblyFood(w,w.Target,"fish");var rice=AssemblyFood(w,w.Delivery(),"rice");
+            var request=AssemblyJob(w,new[]{plate},new[]{fish,rice},Leaf("fish"),Leaf("rice"));StartAssembly(w,request);
+            w.Target.GetComponent<ServerAttachStation>().Item=null;w.Hold(fish);
+            var flags=System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic;
+            var schedule=(AssemblySchedule)typeof(TaskActions).GetField("assembly",flags).GetValue(w.Tasks);
+            schedule.Base=plate;schedule.Root.Vessel=plate;
+            var inventory=(LogisticsInventory)typeof(TaskActions).GetField("inventory",flags).GetValue(w.Tasks);
+            var catalog=(Json.Record)w.Navigation.Available(w.Chef);catalog["complete"]=false;catalog["destinations"]=new List<object>();
+            inventory.BeginObservation();inventory.Refresh(w.Chef,catalog);w.Chef.GroundCollider=null;
+            var select=typeof(TaskActions).GetMethod("SelectAssemblyWork",flags);var job=select.Invoke(w.Tasks,null);
+            Check(job!=null && (string)job.GetType().GetField("Operation").GetValue(job)=="transfer_contents" &&
+                (GameObject)job.GetType().GetField("Source").GetValue(job)==fish,
+                "incomplete broad map keeps useful held food for targeted route planning instead of swapping to another ingredient");
+            catalog["complete"]=true;
+            Check(select.Invoke(w.Tasks,null)==null,"completed unreachable route evidence does not authorize speculative normal assembly work");
+            inventory.EndObservation();
+        }
+        {
             var w=new World();var plate=AssemblyPlate(w,w.Delivery());var fish=AssemblyFood(w,w.Target,"fish");
             var rice=AssemblyFood(w,w.Delivery(),"rice");
             plate.Add(new ClientPlate {Accepts=item=>item==rice || !RecipeProof.Empty(RecipeProof.Composition(plate))});
