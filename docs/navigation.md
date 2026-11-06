@@ -441,7 +441,7 @@ plus the collision skin) with an independently checked landing and supported con
 Treads and wedges can overlap the capsule simultaneously.
 The game resolves that contact under neutral input; the bridge never adjusts the
 chef's position. Other blocking overlaps still stop the action. Settling forces
-replanning and must finish within the existing two-second stall interval. This
+replanning and must finish within the two-second native ground-contact timeout. This
 does not allow airborne steering across holes.
 
 The continuous-support height bound allows floating-point roundoff on flat

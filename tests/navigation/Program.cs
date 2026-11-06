@@ -336,6 +336,19 @@ internal static class Program
         Check(Reroutes(navigation) == 0 && navigation.Action.State == "navigating",
             "slow ground-relative progress prevents a false stall despite zero world displacement");
 
+        w = new World(); floor = w.AddFloor((x,z) => Math.Abs(x)<5 && Math.Abs(z)<5 ? 0 : (float?)null);
+        w.Chef.transform.position = new Vector3(0,0,-2.5f); navigation = w.Navigate(w.AddStation());
+        Time.deltaTime = Time.unscaledDeltaTime = .05f; navigation.Tick(w.Chef);
+        local = w.Chef.transform.position;
+        for (int i=0; i<16; i++)
+        {
+            floor.transform.yaw += (float)Math.PI; local += new Vector3(0,0,.01f);
+            w.Chef.transform.position = floor.transform.TransformPoint(local);
+            Time.realtimeSinceStartup += .05f; navigation.Tick(w.Chef);
+        }
+        Check(Reroutes(navigation) == 0 && navigation.Action.State == "navigating",
+            "rotation cannot cancel accumulated local walking progress between samples");
+
         w = new World(); w.AddFloor((x,z) => Math.Abs(x)<4 && Math.Abs(z)<4 ? 0 : (float?)null);
         w.Chef.transform.position = new Vector3(0,0,-2.5f); navigation = w.Navigate(w.AddStation());
         Time.deltaTime = Time.unscaledDeltaTime = .05f; navigation.Tick(w.Chef);
@@ -345,7 +358,11 @@ internal static class Program
             Time.realtimeSinceStartup += .05f; navigation.Tick(w.Chef);
         }
         Time.realtimeSinceStartup += 10; navigation.ResumeAfterPause(10); navigation.Tick(w.Chef);
-        for (int i=0; i<9; i++) { Time.realtimeSinceStartup += .05f; navigation.Tick(w.Chef); }
+        for (int i=0; i<9; i++)
+        {
+            w.Chef.transform.position += new Vector3(i%2 == 0 ? .005f : -.005f,0,0);
+            Time.realtimeSinceStartup += .05f; navigation.Tick(w.Chef);
+        }
         Check(Reroutes(navigation) == 0, "resume starts a fresh stall interval without counting paused time");
         Time.realtimeSinceStartup += .05f; navigation.Tick(w.Chef);
         Check(Reroutes(navigation) == 1, "contact jitter does not continually reset the 500 ms watchdog");

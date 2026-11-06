@@ -36,6 +36,15 @@ It also checks live exclusions on cached edges and shortcuts, support-relative
 exclusion transforms, clearing recovery without corrupting geometry caches, and
 refusal to escape over a hole when no alternate route exists.
 
+Stall-recovery validation on 2026-11-05 passed the complete `scripts/check.py`
+suite (391 navigation checks). An isolated native `s_wizard_school_3_4` runtime
+also completed 2/2 Chocolate → Egg round trips at requested 20 FPS: all four
+legs arrived, with zero stall reroutes during normal stair movement. This is a
+native regression check; the forced-stall/detour case above uses analytical
+geometry. Local traces are in `.local/stall-recovery-native/stairs-20/`; the
+tested plugin SHA-256 is
+`cf9e9547cdc54592f19faa2e65d32b8259a94177bf0bf201489384cb845c6c68`.
+
 These doubles do not emulate PhysX, native step projection, friction or Unity
 update ordering. Building against the installed assemblies checks API compatibility;
 real level traversal and low-FPS/native-input behavior still need live validation.

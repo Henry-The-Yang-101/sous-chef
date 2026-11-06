@@ -7,7 +7,7 @@ namespace SousChef.Plugin.Navigation
     {
         private const float StallSeconds = .5f, ProgressTolerance = .03f;
         private Transform walkingSupport;
-        private Vector3 walkingLocalPosition, walkingDisplacement, walkingHeading;
+        private Vector3 walkingLocalPosition, walkingLocalOrigin, walkingDisplacement, walkingHeading;
         private float walkingSampleTime, walkingCommandUntil, stationarySeconds;
         private int stallReroutes;
 
@@ -22,6 +22,11 @@ namespace SousChef.Plugin.Navigation
             if (ground == null) { ResetWalkingProgress(); return; }
             walkingSupport = ground.transform;
             walkingLocalPosition = walkingSupport.InverseTransformPoint(position);
+            // Carry the accumulated progress origin into each new support frame.
+            // Summing world-space steps would cancel real walking if the ground
+            // rotated between samples, and resetting on contact changes would
+            // let jitter between neighbouring floor colliders hide a stall.
+            walkingLocalOrigin = walkingSupport.InverseTransformPoint(position - walkingDisplacement);
             // Store a point as well as the pose so rotating ground transports the
             // failed heading into the same frame as the next observation.
             walkingHeading = walkingSupport.InverseTransformPoint(position + heading.normalized);
@@ -33,8 +38,8 @@ namespace SousChef.Plugin.Navigation
         {
             if (walkingSupport == null || chef.GroundCollider == null) return true;
             Vector3 previous = walkingSupport.TransformPoint(walkingLocalPosition);
-            Vector3 displacement = position - previous; displacement.y = 0;
-            walkingDisplacement += displacement;
+            walkingDisplacement = position - walkingSupport.TransformPoint(walkingLocalOrigin);
+            walkingDisplacement.y = 0;
             float now = Time.realtimeSinceStartup;
             // Count only the time covered by a nonzero, checked walking command.
             // Neutral phases and resume reset this clock; native input expiry
