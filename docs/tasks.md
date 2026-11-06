@@ -108,7 +108,8 @@ and transport reservations, and any parked handoff per entry. A belt dispatch
 reserves its unit; it counts after the recipient can collect it.
 `completedRepetitions` is the number of full lists delivered. For example,
 three A and zero B on a one-A/one-B request still means zero full repetitions.
-The wire request and Stop behavior are unchanged.
+The wire request and Stop behavior are unchanged. See the
+[native scheduler checks](preparation-scheduler.md) for the exact fixtures and receipts.
 
 Chopping boards are scheduled the same way. Food already on a board, such as food
 the human threw there, is chopped in place and preferred to an equal-stage copy
