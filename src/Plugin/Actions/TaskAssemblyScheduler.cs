@@ -11,7 +11,7 @@ namespace SousChef.Plugin.Actions
             public AssemblySchedule.Stage Stage;
             public GameObject Source, Destination;
             public string Operation;
-            public bool Rescue;
+            public bool Rescue, Storage;
         }
         private static AssembledDefinitionNode StageContents(AssemblySchedule.Stage stage)
         { return stage.Processing && stage.Mixing ? RecipeProof.MixingInputs(stage.Vessel) : RecipeProof.Composition(stage.Vessel); }
@@ -124,7 +124,21 @@ namespace SousChef.Plugin.Actions
             // processing dependencies advance and finished food is rescued.
             if (!System.Object.ReferenceEquals(assembly.Base, null) && (assembly.Base == null || !AssemblyBaseValid(assembly.Base))) return null;
             if (assembly.Plating != null && StageComplete(assembly.Root)) return SelectStageWork(assembly.Plating);
-            return SelectStageWork(assembly.Root);
+            return SelectStageWork(assembly.Root) ?? StoreEmptyAssemblyUtensil();
+        }
+        private AssemblyJob StoreEmptyAssemblyUtensil()
+        {
+            var held = ActionObservations.Held(chef);
+            if (held == null || !(assembly.Equipment.Contains(held) || assembly.Components.Contains(held)) ||
+                held.GetComponent<ServerIngredientContainer>() == null || !LogisticsInventory.Empty(held) ||
+                held.GetComponent<PreparationContainer>() != null || held.GetComponent<ServerPlate>() != null) return null;
+            // Returning an empty assigned utensil while food cooks avoids
+            // spending the next ready batch's spoil window freeing our hands.
+            var excluded = new HashSet<GameObject>();
+            foreach (var pair in assembly.RetryAt) if (AssemblyDeferred(pair.Key)) excluded.Add(pair.Key);
+            var counter = Parking(held, excluded: excluded, probeUnknown: true);
+            return counter == null ? null : new AssemblyJob { Stage = assembly.Root, Source = held,
+                Destination = counter, Operation = "place_at", Storage = true };
         }
         private AssemblyJob SelectStageWork(AssemblySchedule.Stage stage)
         {
@@ -260,7 +274,7 @@ namespace SousChef.Plugin.Actions
         private IEnumerable<TaskStep> ExecuteAssembly(AssemblyJob job)
         {
             var stage = job.Stage; var item = job.Source; var target = job.Destination;
-            assembly.Record(job.Rescue ? "rescue_finished_batch" : job.Operation, stage, item, target);
+            assembly.Record(job.Rescue ? "rescue_finished_batch" : job.Storage ? "park_empty_utensil" : job.Operation, stage, item, target);
             Func<bool> valid = () => StageFits(stage);
             string operation = job.Operation;
             if (operation == "pick_component")
@@ -271,7 +285,7 @@ namespace SousChef.Plugin.Actions
                     AssemblyTransfer(item, stage.Vessel, stage.Inputs, stage.Processing && stage.Mixing);
             }
             else if (operation == "place_at")
-                valid = () => StageFits(stage) && System.Object.ReferenceEquals(ActionObservations.Held(chef), item) && ActionObservations.Occupant(target) == null &&
+                valid = () => (job.Storage ? LogisticsInventory.Empty(item) : StageFits(stage)) && System.Object.ReferenceEquals(ActionObservations.Held(chef), item) && ActionObservations.Occupant(target) == null &&
                     (!TaskNative.Equipment(target) || ProcessingStationFor(stage, target) && (stage.Mixing ? RecipeProof.Subset(StageContents(stage), stage.Inputs) : RecipeProof.Equal(RecipeProof.Composition(item), stage.Inputs)));
             else if (operation == "activate")
                 valid = () => StageFits(stage) && System.Object.ReferenceEquals(ActionObservations.Occupant(target), item) &&
@@ -290,7 +304,7 @@ namespace SousChef.Plugin.Actions
             };
             if (operation == "pick_up") next.UseHeld = cargo => System.Object.ReferenceEquals(cargo, item);
             var abandon = next.AbandonBeforePress;
-            next.AbandonBeforePress = () => abandon() || !job.Rescue && AssemblyHeatDue();
+            next.AbandonBeforePress = () => abandon() || !job.Rescue && !job.Storage && AssemblyHeatDue();
             yield return next;
             if (!next.Succeeded)
             {

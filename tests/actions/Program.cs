@@ -779,10 +779,15 @@ internal static partial class Program
             Check((GameObject)processing.Invoke(w.Tasks,new object[] {true,true})==w.Target,
                 "incomplete moving-kitchen discovery can propose ready equipment on the current support");
             var parking=typeof(TaskActions).GetMethod("Parking",flags);
-            Check((GameObject)parking.Invoke(w.Tasks,new object[] {food,null,false,null,Single.MaxValue})==counter,
+            Check((GameObject)parking.Invoke(w.Tasks,new object[] {food,null,false,null,Single.MaxValue,false})==counter,
                 "monitoring proves a local safe counter even while the kitchen-wide catalogue is incomplete");
+            var support=w.Chef.GroundCollider;w.Chef.GroundCollider=null;
+            Check(parking.Invoke(w.Tasks,new object[] {food,null,false,null,Single.MaxValue,false})==null &&
+                (GameObject)parking.Invoke(w.Tasks,new object[] {food,null,false,null,Single.MaxValue,true})==counter && !w.Inputs.Contains(1),
+                "urgent storage can propose a native-compatible counter for directed navigation without claiming a route or issuing input");
+            w.Chef.GroundCollider=support;
             counter.GetComponent<Placement>().Accepts=cargo=>false;
-            Check(parking.Invoke(w.Tasks,new object[] {food,null,false,null,Single.MaxValue})==null,
+            Check(parking.Invoke(w.Tasks,new object[] {food,null,false,null,Single.MaxValue,true})==null,
                 "local monitoring storage still respects the native placement veto");
             var remove=typeof(TaskActions).GetMethod("RemoveReady",flags);
             var steps=((IEnumerable<TaskStep>)remove.Invoke(w.Tasks,new object[] {w.Target,food})).GetEnumerator();
@@ -822,7 +827,7 @@ internal static partial class Program
         w.Tasks.Cancel("stopped");
         var occupied=w.Delivery();var recipient=new GameObject("empty plate");recipient.Add(new ServerIngredientContainer());recipient.Add(new ServerPlate());occupied.GetComponent<ServerAttachStation>().Item=recipient;
         var parking=typeof(TaskActions).GetMethod("Parking",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic);
-        var selected=(GameObject)parking.Invoke(w.Tasks,new object[] {pan,null,false,null,Single.MaxValue});
+        var selected=(GameObject)parking.Invoke(w.Tasks,new object[] {pan,null,false,null,Single.MaxValue,false});
         Check(selected!=null && selected!=occupied,"parking excludes an empty plate on a counter: native placement there would transfer food rather than park the held object");
         cooking.m_ServerData.m_cookingState=ProcessingState.Completed;
         var plate=new GameObject("plate");var contents=plate.Add(new ServerIngredientContainer());plate.Add(new ServerPlate {m_ingredientContainer=contents});w.Hold(plate);

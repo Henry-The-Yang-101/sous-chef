@@ -56,8 +56,8 @@ internal static partial class Program
                 if(RecipeProof.Empty(RecipeProof.Composition(cargo)))continue;
                 if(contents.GetContentsCount()!=0 && !consume)continue;
                 var addition=RecipeProof.Composition(cargo);
-                if(ActionObservations.Receiver(target).GetComponent<ServerPlate>()!=null && contents.Contents.Any(n=>n is CompositeAssembledNode))
-                {var existing=contents.Contents.ToArray();contents.Contents.Clear();contents.Contents.Add(new CompositeAssembledNode {m_composition=existing.SelectMany(n=>n is CompositeAssembledNode c ? c.m_composition : new[]{n}).Concat(addition is CompositeAssembledNode ac ? ac.m_composition : new[]{addition}).ToArray()});}
+                if(ActionObservations.Receiver(target).GetComponent<ServerPlate>()!=null && contents.Contents.Any(n=>n.GetType()==typeof(CompositeAssembledNode)))
+                {var existing=contents.Contents.ToArray();contents.Contents.Clear();contents.Contents.Add(new CompositeAssembledNode {m_composition=existing.SelectMany(n=>n.GetType()==typeof(CompositeAssembledNode) ? ((CompositeAssembledNode)n).m_composition : new[]{n}).Concat(addition.GetType()==typeof(CompositeAssembledNode) ? ((CompositeAssembledNode)addition).m_composition : new[]{addition}).ToArray()});}
                 else contents.Contents.Add(addition);
                 if(consume){
                     var source=cargo.GetComponent<ServerIngredientContainer>();
@@ -98,6 +98,28 @@ internal static partial class Program
     }
     private static void AssemblyProcessing()
     {
+        {
+            var w=new World();var plate=AssemblyPlate(w,w.Delivery());var step=new CookingStepData {m_uID=31};
+            var pans=new List<GameObject>();var goals=new List<AssembledDefinitionNode>();ServerCookingHandler pending=null;
+            foreach(var name in new[]{"rice","meat"})
+            {
+                var holder=w.Delivery();holder.Add(new Pickup());if(name=="meat")holder.Add(new ServerCookingStation());
+                var pan=new GameObject(name+" vessel");pan.Add(new PhysicalAttachment());pan.Add(new Pickup());pan.Add(new IngredientTransfer());
+                pan.Add(new ServerIngredientContainer()).Contents.Add(Leaf(name));pan.Add(new CookingHandler {m_cookingType=step});pan.Add(new CookableContainer());
+                var cooking=pan.Add(new ServerCookingHandler());pan.Add(new ProcessorComposition {Step=step});holder.GetComponent<ServerAttachStation>().Item=pan;
+                if(name=="rice")cooking.m_ServerData.m_cookingState=ProcessingState.Completed;else pending=cooking;
+                pans.Add(pan);goals.Add(new CookedCompositeAssembledNode {m_composition=new[]{Leaf(name)},m_cookingStep=step,m_progress=CookedCompositeOrderNode.CookingProgress.Cooked});
+            }
+            var request=AssemblyJob(w,new[]{plate},new[]{pans[0]},goals.ToArray());request.Assembly.Equipment.Add(w.Navigation.RegisterItem(pans[1]));
+            var burner=UnityEngine.Object.FindObjectsOfType<ServerAttachStation>().First(s=>s.Item==pans[1]).gameObject;request.Assembly.Equipment.Add(w.IdOf(burner));
+            StartAssembly(w,request);bool storedEmpty=false;
+            int additions=DriveAssembly(w,onTick:()=>{
+                if(pans[0].GetComponent<ServerIngredientContainer>().GetContentsCount()==0 && w.Carrier.Item!=pans[0] &&
+                    UnityEngine.Object.FindObjectsOfType<ServerAttachStation>().Any(s=>s.Item==pans[0]))
+                { storedEmpty=true;pending.m_ServerData.m_cookingState=ProcessingState.Completed; }
+            });
+            Check(storedEmpty && additions==2 && w.Tasks.Run.State=="succeeded","empty allocated cookware is put aside while another recipe batch cooks, before its rescue needs free hands: "+Json.Encode(w.Tasks.Describe()));
+        }
         {
             var w=new World();var plate=AssemblyPlate(w,w.Delivery());var counter=w.Delivery();counter.Add(new Pickup());
             var pan=new GameObject("assembled cold batch");pan.Add(new PhysicalAttachment());pan.Add(new Pickup());

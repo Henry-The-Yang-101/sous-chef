@@ -192,7 +192,7 @@ namespace SousChef.Plugin.Actions
                 distance = navigation.LocalApproachDistance(target, maximum);
             return distance;
         }
-        private GameObject Parking(GameObject item, GameObject preferred = null, bool burners = false, HashSet<GameObject> excluded = null, float maxDistance = Single.MaxValue)
+        private GameObject Parking(GameObject item, GameObject preferred = null, bool burners = false, HashSet<GameObject> excluded = null, float maxDistance = Single.MaxValue, bool probeUnknown = false)
         {
             RefreshWorld(); GameObject best = null; float cost = Single.MaxValue;
             foreach (GameObject target in navigation.Targets())
@@ -203,8 +203,10 @@ namespace SousChef.Plugin.Actions
                 // A conveyor is a transport, not stable storage for a hot pot.
                 if (TaskNative.Component<ServerConveyorStation>(target) != null) continue;
                 float distance = StorageDistance(target, maxDistance);
+                bool provisional = distance == Single.MaxValue && probeUnknown && !botSearchComplete;
+                if (provisional) distance = Vector3.Distance(chef.transform.position, target.transform.position);
                 if (distance == Single.MaxValue || distance > maxDistance) continue;
-                float score = distance + (target == preferred ? 0 : burners && target.GetComponent<CookingStation>() != null ? 1000 : 2000);
+                float score = distance + (provisional ? 20000 : 0) + (target == preferred ? 0 : burners && target.GetComponent<CookingStation>() != null ? 1000 : 2000);
                 if (score < cost) { cost = score; best = target; }
             }
             if (burners && best != preferred && !botSearchComplete) return null;
@@ -217,7 +219,7 @@ namespace SousChef.Plugin.Actions
             {
                 GameObject destination = null;
                 yield return Until("waiting_for_safe_counter", delegate {
-                    destination = Parking(item, preferred, burners, excluded);
+                    destination = Parking(item, preferred, burners, excluded, probeUnknown: assembly != null && AssemblyHeatDue());
                     if (destination == null && Time.realtimeSinceStartup - rejectedAt > 5) excluded.Clear();
                     return destination != null;
                 });
