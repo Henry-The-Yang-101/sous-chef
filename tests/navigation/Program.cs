@@ -663,6 +663,22 @@ internal static class Program
         Check(!physics.Stand(new Vector3(10.612249f,0,-3.917242f),out point,out ground),
             "the same unsupported point is not offered as a new route from inside the floor");
     }
+    private static void CapturedCounterContact()
+    {
+        var w=new World();var shape=w.Chef.GetComponent<CapsuleCollider>();shape.radius=.4f;shape.height=2;shape.center=Vector3.up;
+        var boxes=RecordedBox.Install("pasta-counter-contact.json");w.Chef.GroundCollider=boxes.Single(b=>b.Ground);
+        w.Chef.transform.position=new Vector3(20.6221905f,0,-6.4683046f);var physics=w.Ready();
+        Vector3 start=w.Chef.transform.position, inward=start-Vector3.right*.6f;
+        Check(physics.Segment(start,inward),"captured moving-counter contact permits a supported step out of its native separation plane");
+        Check(!physics.Segment(start,start+Vector3.right*.6f),"contact recovery cannot cross through the counter");
+        Check(!physics.Segment(start,start+Vector3.forward*.6f),"contact recovery cannot follow the wall without leaving the penetration");
+        Check(!physics.Segment(inward,start),"planned routes cannot enter a contact allowed only for live escape");
+        w.Chef.transform.position=start+Vector3.right*.08f;physics.Refresh(w.Chef);
+        Check(!physics.Segment(w.Chef.transform.position,inward),"deep body overlaps are not excused by shallow contact recovery");
+        w.Chef.transform.position=start;boxes.Single(b=>!b.Ground).gameObject.tag="Hazard";
+        Time.realtimeSinceStartup+=.21f;physics.Refresh(w.Chef);
+        Check(!physics.Segment(start,inward),"hazards do not receive a contact exception");
+    }
     private static void CapturedStairContact()
     {
         var w = new World();
@@ -1420,7 +1436,7 @@ internal static class Program
     }
     private static void Main()
     {
-        WalkingStallRecovery(); StallAvoidanceGeometry(); DoorwayChanges(); StationConnectorReuse(); FocusedPlanning(); SearchContinuity(); ShallowCeilingContacts(); EquivalentVerticalStarts(); ConveyorSearchContinuity(); CertifiedStart(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedFryerEdge(); CapturedPizzaStairs(); CapturedStairCorner(); CapturedFloorCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); DirectedConveyors(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
+        WalkingStallRecovery(); StallAvoidanceGeometry(); DoorwayChanges(); StationConnectorReuse(); FocusedPlanning(); SearchContinuity(); ShallowCeilingContacts(); EquivalentVerticalStarts(); ConveyorSearchContinuity(); CertifiedStart(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedCounterContact(); CapturedFryerEdge(); CapturedPizzaStairs(); CapturedStairCorner(); CapturedFloorCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); DirectedConveyors(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
         WorkerStartingStateChanges(); LoosePickupBodies(); StationaryThrowStances();
         Console.WriteLine("PASS: " + checks + " navigator integration checks (analytical geometry; not PhysX)");
     }

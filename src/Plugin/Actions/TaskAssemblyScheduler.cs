@@ -407,7 +407,10 @@ namespace SousChef.Plugin.Actions
                 return allowed;
             };
             if (operation == "pick_up") next.UseHeld = cargo => System.Object.ReferenceEquals(cargo, item);
-            if (job.Rescue) next.FreeHands = ClearAssemblyHands;
+            // All assembly pickups use the same storage planning and failed-route
+            // history. Generic hand clearing can otherwise wait indefinitely for
+            // a broad catalogue in a kitchen whose counters keep moving.
+            next.FreeHands = ClearAssemblyHands;
             var abandon = next.AbandonBeforePress;
             float planningSince = -1;
             next.AbandonBeforePress = () => abandon() || !job.Rescue &&
@@ -437,7 +440,7 @@ namespace SousChef.Plugin.Actions
             while (System.Object.ReferenceEquals(ActionObservations.Held(chef), held))
             {
                 var storage = StoreAssemblyCargo(held);
-                if (storage == null) { yield return AssemblyWait("waiting_for_heat_storage"); continue; }
+                if (storage == null) { yield return AssemblyWait(AssemblyHeatDue(true) ? "waiting_for_heat_storage" : "waiting_for_assembly_storage"); continue; }
                 foreach (var step in ExecuteAssembly(storage)) yield return step;
             }
         }

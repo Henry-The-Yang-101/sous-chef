@@ -106,3 +106,19 @@ three cases and retains the prior unsupported-corner regressions.
 444 analytical navigation checks. Native replay of this floor-edge correction
 is pending. Trace-only native penetration details were added to distinguish
 the separate moving-counter contact from a planning-margin error.
+
+Replay 04 reproduced marinara's stall with a native separation depth of 0.02219
+units against a moving worktop. Live connectors now permit outward movement
+from a box contact within the existing skin, requiring the native separation
+plane, non-increasing penetration at every sample, and unchanged support/hazard
+checks. This does not change cached geometry or permit movement through/along
+the contact. The captured regression rejects those directions, deeper contacts,
+new routes into the overlap, and hazards.
+
+Ordinary assembly pickups now use the same hand-clearing storage scheduler as
+heat rescue. Previously, generic hand clearing could wait for a complete broad
+map while the assembly scheduler could probe a concrete empty counter.
+`scripts/check.py` passes (`.local/assembly-recovery-check-09.log`, including
+451 navigation checks). Native replay of these changes is pending. Replay 04's
+fryer case lacked enough reachable empty counters for its initial fixture;
+no assembly was started, so that setup attempt is not a behavioral result.

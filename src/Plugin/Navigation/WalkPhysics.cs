@@ -444,7 +444,7 @@ namespace SousChef.Plugin.Navigation
             RaycastHit centre;
             return Stand(guess, out point, out support, clearance, out centre);
         }
-        private bool Stand(Vector3 guess, out Vector3 point, out Collider support, float clearance, out RaycastHit hit, float dropDistance = -1)
+        private bool Stand(Vector3 guess, out Vector3 point, out Collider support, float clearance, out RaycastHit hit, float dropDistance = -1, Vector3? escapeTo = null)
         {
             point = guess; support = null;
             if (!Ground(guess, out hit, dropDistance)) return Fail("ground_probe", guess);
@@ -468,7 +468,9 @@ namespace SousChef.Plugin.Navigation
             Vector3 low, high; Capsule(point, out low, out high, bodyRadius);
             int count = Physics.OverlapCapsuleNonAlloc(low, high, bodyRadius, overlaps, ~0, QueryTriggerInteraction.Collide); Queries++;
             if (count == overlaps.Length) { Overflow = true; return false; }
-            for (int i = 0; i < count; i++) if (BlocksWalkingBody(overlaps[i], point.y, point.y, low.y - bodyRadius, high.y + bodyRadius)) return Fail("body_overlap", point, overlaps[i]);
+            for (int i = 0; i < count; i++)
+                if (BlocksWalkingBody(overlaps[i], point.y, point.y, low.y - bodyRadius, high.y + bodyRadius) &&
+                    !(escapeTo.HasValue && EscapingContact(overlaps[i], point, escapeTo.Value))) return Fail("body_overlap", point, overlaps[i]);
             return true;
         }
         private bool FloorCentreSupported(Vector3 point, Collider support, bool liveConnector = false)
@@ -675,6 +677,7 @@ namespace SousChef.Plugin.Navigation
             // Recovery constraints are live routing policy, never cached geometry.
             if (checkFlow && !AvoidsStalledHeadings(from, to)) return false;
             Vector3 previous = from;
+            Vector3? escapeTo = clearance < radius - .0001f && Vector3.Distance(from, Position) < .02f ? to : (Vector3?)null;
             RaycastHit previousGround = new RaycastHit(); bool havePrevious = false;
             IMovingSurface currentSurface = null, priorSurface = null;
             if (checkFlow && initialHistory == 0 && Vector3.Distance(from, Position) < .02f)
@@ -692,7 +695,7 @@ namespace SousChef.Plugin.Navigation
                 // collision: use consistent native clearance along this connector.
                 // Lattice nodes and edges retain padded clearance. The contact skin
                 // is bounded, and every sample still checks support and hazards.
-                if (!Stand(guess, out point, out ground, clearance, out centre)) return false;
+                if (!Stand(guess, out point, out ground, clearance, out centre, escapeTo: escapeTo)) return false;
                 if (!WalkHeight.Connected(guess.y, point.y, StepHeight) || !WalkHeight.Connected(previous.y, point.y, StepHeight))
                     return Fail("support_height", point, ground);
                 bool nativeStep = havePrevious && !ContinuousSupport(previousGround, centre) &&
@@ -727,7 +730,7 @@ namespace SousChef.Plugin.Navigation
                 // ramps cannot: sweep the actual continuous body trajectory, so
                 // a raised endpoint cannot hide a collision at the ramp's side.
                 float bodyRadius = centre.normal.y < .99f || havePrevious && previousGround.normal.y < .99f ? Mathf.Min(clearance, nativeRadius) : clearance;
-                if (!(nativeStep ? StepSweep(previous, point, bodyRadius) : Sweep(previous, point, bodyRadius))) return false;
+                if (!(nativeStep ? StepSweep(previous, point, bodyRadius) : Sweep(previous, point, bodyRadius, escapeTo))) return false;
                 if (samples != null) samples.Add(new GroundSample { Point = centre.point, Ground = ground });
                 previous = point; previousGround = centre; havePrevious = true;
                 return true;
@@ -821,14 +824,16 @@ namespace SousChef.Plugin.Navigation
             return Sweep(from, raisedFrom, clearance) && Sweep(raisedFrom, raisedTo, clearance) && Sweep(raisedTo, to, clearance);
         }
         private float ContactRadius { get { return Mathf.Max(.01f, nativeRadius - .02f); } }
-        private bool Sweep(Vector3 from, Vector3 to, float clearance)
+        private bool Sweep(Vector3 from, Vector3 to, float clearance, Vector3? escapeTo = null)
         {
             Vector3 delta = to - from, low, high; float length = delta.magnitude;
             if (length < .0001f) return true;
             Capsule(from, out low, out high, clearance);
             int count = Physics.CapsuleCastNonAlloc(low, high, clearance, delta / length, hits, length, ~0, QueryTriggerInteraction.Collide); Queries++;
             if (count == hits.Length) { Overflow = true; return false; }
-            for (int i = 0; i < count; i++) if (BlocksWalkingBody(hits[i].collider, Mathf.Min(from.y, to.y), Mathf.Max(from.y, to.y), low.y - clearance + Mathf.Min(0, delta.y), high.y + clearance + Mathf.Max(0, delta.y))) return Fail("body_sweep", from, hits[i].collider);
+            for (int i = 0; i < count; i++)
+                if (BlocksWalkingBody(hits[i].collider, Mathf.Min(from.y, to.y), Mathf.Max(from.y, to.y), low.y - clearance + Mathf.Min(0, delta.y), high.y + clearance + Mathf.Max(0, delta.y)) &&
+                    !(escapeTo.HasValue && EscapingContact(hits[i].collider, from, escapeTo.Value) && EscapingContact(hits[i].collider, to, escapeTo.Value))) return Fail("body_sweep", from, hits[i].collider);
             return true;
         }
         private void TrackSurface(Collider ground, Vector3 point, ref IMovingSurface current, ref IMovingSurface previous)
