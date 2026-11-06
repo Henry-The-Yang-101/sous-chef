@@ -102,7 +102,10 @@ namespace SousChef.Plugin.Actions
                     childStarted = false;
                     if (child.Run.State != "succeeded" && (step.Outcome == null || !step.Outcome()))
                     {
-                        if (step.ReplanOnBlock && child.CanRetry) { step = null; Wait(child.Run.Reason); return; }
+                        // The exact pickup cargo no longer exists. Choosing a
+                        // fresh source cannot replay a transfer of that item.
+                        if (step.ReplanOnBlock && (child.CanRetry || child.Run.Reason == "pickup_item_destroyed"))
+                        { step = null; Wait(child.Run.Reason); return; }
                         // Pressed or released: the plan reconciles the cargo's
                         // observed fate itself and never replays the press.
                         if (step.ReplanAfterPress && child.Run.State != "cancelled") { step = null; Wait(child.Run.Reason); return; }

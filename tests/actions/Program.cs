@@ -849,6 +849,33 @@ internal static class Program
     }
     private static void MovingPickups()
     {
+        foreach(bool pressed in new[] {false,true})
+        {
+            var destroyed=new World();var food=destroyed.Ingredient("fish");
+            destroyed.Target.GetComponent<ServerAttachStation>().Item=food;
+            Check(destroyed.Start("pick_up")==null,"exact pickup destruction fixture starts");
+            if(pressed) {destroyed.Arrive();destroyed.Tick(.2f);Check(!destroyed.Skills.CanRetry,"pickup edge was issued before destruction");}
+            food.Destroyed=true;destroyed.Target.GetComponent<ServerAttachStation>().Item=null;destroyed.Tick();
+            Check(destroyed.Skills.Run.State=="blocked" && destroyed.Skills.Run.Reason=="pickup_item_destroyed",
+                "permanently destroyed pickup cargo terminates instead of waiting indefinitely, pressed="+pressed);
+        }
+        {
+            var retry=new World();var human=new GameObject("human");human.Add(new PlayerIDProvider {Id=0});
+            human.Add(new PlayerControls {GroundCollider=retry.Chef.GroundCollider});human.Add(new ServerPlayerAttachmentCarrier());
+            var food=retry.Ingredient("fish");retry.Target.GetComponent<ServerAttachStation>().Item=food;
+            var request=new TaskRequest {Action="prepare_near_player"};request.Items.Add(new PreparationRequest {Selector="fish",Preparation="raw",Quantity=1});
+            Check(retry.Tasks.Start(retry.Chef,1,new ControlCommand {Id="survives-belt-bin",Operation="task",Task=request})==null,"preparation starts with finite belt cargo");
+            for(int i=0;i<10 && !retry.Skills.Run.Running;i++)retry.Tick();
+            retry.Arrive();retry.Tick(.2f);Check(!retry.Skills.CanRetry,"preparation issued its original pickup edge");
+            food.Destroyed=true;retry.Target.GetComponent<ServerAttachStation>().Item=null;retry.Tick();
+            for(int i=0;i<10;i++)retry.Tick(.25f);
+            Check(retry.Tasks.Run.Running && retry.Tasks.Run.Phase=="waiting_for_ingredient" && retry.Tasks.Run.RequestId=="survives-belt-bin",
+                "preparation abandons destroyed cargo and waits under the same request");
+            var next=retry.Ingredient("fish");retry.Target.GetComponent<ServerAttachStation>().Item=next;
+            for(int i=0;i<10 && !retry.Skills.Run.Running;i++)retry.Tick(.25f);
+            Check(retry.Skills.Run.Running && retry.Skills.Run.Operation=="pick_up" && retry.Tasks.Run.RequestId=="survives-belt-bin" && retry.Releases==0,
+                "the same preparation request collects a fresh spawn without losing ownership");retry.Tasks.Cancel("test_end");
+        }
         var w=new World();var item=w.Ingredient("tomato");w.Target.GetComponent<ServerAttachStation>().Item=item;
         Check(w.Start("pick_up")==null,"moving counter pickup starts");w.Target.transform.position+=new Vector3(.1f,0,0);w.Tick();
         Check(w.Inputs.Contains(1) && w.Navigation.Action.State=="idle","a native moving pickup opportunity does not require relative settling");

@@ -311,6 +311,11 @@ namespace SousChef.Plugin.Actions
                 // The last plate can destroy its own source stack. Verify the
                 // surviving carried identity before requiring a live source.
                 if (pressed && command.Operation == "pick_up" && Outcome()) { Finish("succeeded", "outcome_observed"); return; }
+                // Belt cargo can enter a bin between native selection and the
+                // pickup edge. A destroyed exact item cannot return; unlike a
+                // temporarily disabled station, waiting cannot recover it.
+                if (command.Operation == "pick_up" && !System.Object.ReferenceEquals(expectedPickup, null) && expectedPickup == null)
+                { Finish("blocked", "pickup_item_destroyed"); return; }
                 if (target == null || !target.activeInHierarchy)
                 {
                     if (Run.Phase == "navigating")
