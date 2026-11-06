@@ -558,7 +558,8 @@ namespace SousChef.Plugin.Actions
                 (container == null ? initialSourceContents != 0 : container.GetContentsCount() != initialSourceContents) ||
                 ActionObservations.StackCount(receiver) != initialStack) return false;
             var stack = receiver.GetComponent<ServerStack>();
-            return expectedTopPlate == null || stack != null && System.Object.ReferenceEquals(stack.InspectTopOfStack(), expectedTopPlate);
+            return System.Object.ReferenceEquals(expectedTopPlate, null) ||
+                expectedTopPlate != null && stack != null && System.Object.ReferenceEquals(stack.InspectTopOfStack(), expectedTopPlate);
         }
         private void SetPhase(string phase) { Run.Advance(phase); phaseStarted = Time.realtimeSinceStartup; }
         private string recoveryReason;

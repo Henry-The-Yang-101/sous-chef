@@ -1141,6 +1141,11 @@ internal static partial class Program
         w=new World();w.Target.Add(new PickupItemSpawner {m_itemPrefab=w.Ingredient("tomato")});
         w.Skills.Start(w.Chef,1,new ControlCommand {Operation="pick_up",Destination=w.Id,Indefinite=true});w.Arrive();w.Verify();w.Tick(3);
         Check(w.Skills.Run.Reason=="outcome_not_observed" && !w.Skills.CanRetry,"unchanged infinite supply is insufficient evidence for replaying a possibly spawned item");
+        w=new World(t=>{t.Add(new PlateStackBase());t.Add(new ServerStack());});
+        var oldTop=new GameObject("original top plate");oldTop.Add(new ServerPlate());var unchangedStack=w.Target.GetComponent<ServerStack>();unchangedStack.m_stackItems.Add(oldTop);
+        w.Skills.Start(w.Chef,1,new ControlCommand {Operation="pick_up",Destination=w.Id,Indefinite=true});w.Arrive();w.Verify();
+        oldTop.Destroyed=true;unchangedStack.m_stackItems[0]=new GameObject("replacement top plate");w.Tick(3);
+        Check(w.Skills.Run.Reason=="outcome_not_observed" && !w.Skills.CanRetry,"destroyed top plate cannot masquerade as an originally absent top plate when stack count is unchanged");
 
         w=new World();item=w.Ingredient("tomato");w.Target.GetComponent<ServerAttachStation>().Item=item;
         w.Start("pick_up");w.Target.GetComponent<ServerAttachStation>().Item=w.Ingredient("onion");w.Arrive();
