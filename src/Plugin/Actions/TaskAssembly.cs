@@ -46,7 +46,9 @@ namespace SousChef.Plugin.Actions
             if (item == null || !item.activeInHierarchy || item.GetComponent<ServerPlate>() != null && item.GetComponent<ServerPlate>().IsReserved()) return null;
             foreach (var entry in inventory.Items)
             {
-                if (entry.Supply || entry.InUse) continue;
+                // Native additions/conveyors can destroy a cached item between
+                // observation and the next pre-press heat check.
+                if (entry.Item == null || entry.Supply || entry.InUse) continue;
                 if (System.Object.ReferenceEquals(entry.Item, item)) return entry;
                 var stack = entry.Item.GetComponent<ServerStack>();
                 if (stack != null && entry.Item.GetComponent<CleanPlateStack>() != null && System.Object.ReferenceEquals(stack.InspectTopOfStack(), item)) return entry;

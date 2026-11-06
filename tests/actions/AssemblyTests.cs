@@ -245,10 +245,12 @@ internal static partial class Program
             var inventory=(LogisticsInventory)typeof(TaskActions).GetField("inventory",flags).GetValue(w.Tasks);
             var catalog=(Json.Record)w.Navigation.Available(w.Chef);catalog["complete"]=false;catalog["destinations"]=new List<object>();
             inventory.BeginObservation();inventory.Refresh(w.Chef,catalog);w.Chef.GroundCollider=null;
+            inventory.Items.Insert(0,new LogisticsItem {Item=null});
             var select=typeof(TaskActions).GetMethod("SelectAssemblyWork",flags);var job=select.Invoke(w.Tasks,null);
             Check(job!=null && (string)job.GetType().GetField("Operation").GetValue(job)=="transfer_contents" &&
                 (GameObject)job.GetType().GetField("Source").GetValue(job)==fish,
                 "incomplete broad map keeps useful held food for targeted route planning instead of swapping to another ingredient");
+            Check(w.Tasks.Run.Running,"retired inventory entries between native consumption and refresh do not terminate the task");
             catalog["complete"]=true;
             Check(select.Invoke(w.Tasks,null)==null,"completed unreachable route evidence does not authorize speculative normal assembly work");
             inventory.EndObservation();
