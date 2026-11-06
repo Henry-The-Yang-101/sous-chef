@@ -14,10 +14,11 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from clients.actions import ActionClient
-from clients.capabilities import ACTION_NAMES, contract, registry, wire_command
+from clients.capabilities import ACTION_NAMES, registry
 from clients.control import ControlError
-from harness.capabilities import snapshot as capability_snapshot, assess_arguments
+from harness.capabilities import snapshot as capability_snapshot
 from harness.contents import ContentsObserver
+from harness.scheduler import Scheduler, QueueConflict, context_of
 from harness.sharing import PhoneShare, lan_addresses
 
 
@@ -45,7 +46,7 @@ class HarnessBridge:
     POLL_SECONDS = .2
     STALE_SECONDS = 1.5
 
-    def __init__(self, port=24703, factory=None, clock=time.monotonic, focus=focus_game, contents=None):
+    def __init__(self, port=24703, factory=None, clock=time.monotonic, focus=focus_game, contents=None, journal_path=':memory:'):
         self.factory = factory or (lambda: ActionClient(port, timeout=1.0))
         self.clock = clock
         self.focus = focus
@@ -62,6 +63,7 @@ class HarnessBridge:
                       'bridgeVersion': None, 'supportedActions': None, 'nativeCapabilities': None,
                       'control': {}, 'error': 'Connecting to the game bridge',
                       'lastCommand': None}
+        self.scheduler = Scheduler(self, journal_path)
 
     def start(self):
         self.thread = threading.Thread(target=self._run, name='bridge-observer', daemon=True)
@@ -70,6 +72,12 @@ class HarnessBridge:
     def _run(self):
         while not self.halt.is_set():
             self.poll()
+            try:
+                self.scheduler.tick()
+            except Exception as error:
+                # A journal error must stop dispatch while leaving Stop usable.
+                with self.state_lock:
+                    self.value['error'] = 'Queue unavailable: ' + str(error)
             self.halt.wait(self.POLL_SECONDS)
 
     def _connect(self):
@@ -77,13 +85,17 @@ class HarnessBridge:
             self.client = self.factory()
         return self.client
 
-    def _publish(self, catalog, control):
+    def _publish(self, catalog, control, hello=None):
         with self.state_lock:
+            hello = hello or self.client.hello
+            prior = self.value['control']
+            if self.value['sessionId'] == hello['sessionId'] and prior.get('dispatchGeneration', -1) > control.get('dispatchGeneration', -1):
+                return  # A pre-Stop response must not roll back the native fence.
             self.observed = self.clock()
-            self.value.update(connected=True, sessionId=self.client.hello['sessionId'],
-                              bridgeVersion=self.client.hello.get('bridgeVersion'),
-                              supportedActions=self.client.hello.get('actions'),
-                              nativeCapabilities=self.client.hello.get('capabilities'),
+            self.value.update(connected=True, sessionId=hello['sessionId'],
+                              bridgeVersion=hello.get('bridgeVersion'),
+                              supportedActions=hello.get('actions'),
+                              nativeCapabilities=hello.get('capabilities'),
                               catalog=catalog, control=control, error=None,
                               updatedAt=time.time())
             if not control.get('ownedByYou'):
@@ -124,41 +136,40 @@ class HarnessBridge:
             result['capabilities'] = capability_snapshot(result)
             if self.contents:
                 self.contents.decorate(result)
-            return result
+        result['queue'] = self.scheduler.snapshot()
+        result['queue']['nativeContext'] = context_of(result)
+        return result
 
     def navigate(self, viewer, session, destination, instance):
         return self.act(viewer, session, destination, instance, 'navigate_to')
 
     def act(self, viewer, session, destination, instance, operation, arguments=None):
-        allowed = (set(ACTION_NAMES) - {'stop'}) | {'task'}
+        if operation == 'task':
+            raise HarnessError('Task controls use the shared plan queue')
+        allowed = set(ACTION_NAMES) - {'stop'}
         jobs = {c['name'] for c in registry()['contracts'] if c.get('category') == 'logistics'}
         if not isinstance(operation, str):
             raise HarnessError('Unsupported action')
         arguments = {} if arguments is None else arguments
         keys = {'work_at': {'until', 'timeout'}, 'wait_until': {'condition', 'timeout'},
-                'activate': {'desired_state'}, 'task': {'action', 'repetitions'} | {key for c in registry()['contracts'] if c['kind'] == 'task' for key in c['parameters']['properties']}, 'move_item': {'item_id', 'source_instance_id'},
+                'activate': {'desired_state'}, 'move_item': {'item_id', 'source_instance_id'},
                 'stage_item': {'item_id', 'source_instance_id'}, 'clear_station': {'station_id', 'source_instance_id'},
                 'fetch_ingredient': {'ingredient'}, 'get_utensil': {'utensil_type'}}.get(operation, set())
         if operation not in allowed or not isinstance(arguments, dict) or arguments.keys() - keys:
             raise HarnessError('Unsupported action or arguments')
         if operation == 'wait_until' and 'condition' not in arguments:
             raise HarnessError('Choose a wait condition')
-        if operation == 'task':
-            try:
-                name = arguments.get('action')
-                if contract(name)['kind'] != 'task':
-                    raise ValueError('Choose a supported task')
-                task_arguments = {k: v for k, v in arguments.items() if k not in ('action', 'repetitions')}
-                wire_command(name, task_arguments, arguments.get('repetitions', 1))
-            except ValueError as error:
-                raise HarnessError(str(error)) from error
+        try:
+            self.scheduler.immediate()
+        except QueueConflict as error:
+            raise HarnessError(str(error)) from error
         with self.state_lock:
             generation = self.generation
         with self.io_lock:
             with self.state_lock:
                 if generation != self.generation:
                     raise HarnessError('Cancelled by Stop')
-                if not self.state()['fresh'] or self.client is None:
+                if self.observed is None or self.clock() - self.observed > self.STALE_SECONDS or self.client is None:
                     raise HarnessError('Live game state is unavailable')
                 if session != self.client.hello['sessionId']:
                     raise HarnessError('The game restarted; choose a current destination')
@@ -184,12 +195,7 @@ class HarnessBridge:
                     # before validating the exact target and issuing the sole command.
                     catalog = self.client.available_actions()
                     self._publish(catalog, self.client.last_response['control'])
-                if operation == 'task':
-                    if assess_arguments(name, task_arguments, catalog.get('semanticCatalog', {}))['state'] == 'not_applicable':
-                        raise HarnessError('Those arguments contradict the observed native capability')
-                    if arguments.get('action') not in [t.get('name') for t in catalog.get('taskOptions', [])]:
-                        raise HarnessError('That task is no longer available')
-                options = [{'id': 'task', 'objectInstanceId': 0, 'operations': ['task']}] if operation == 'task' else catalog.get('destinations', []) if operation == 'navigate_to' else (
+                options = catalog.get('destinations', []) if operation == 'navigate_to' else (
                     catalog.get('players', []) if operation == 'throw_to_player' else
                     catalog.get('items', []) if operation == 'return_utensil' else
                     catalog.get('deliveryDestinations', []) if operation in jobs else catalog.get('targets', []))
@@ -232,7 +238,11 @@ class HarnessBridge:
                     if generation != self.generation:
                         raise HarnessError('Cancelled by Stop')
                 target = chosen['playerId'] if operation == 'throw_to_player' else destination
-                control = self.client.run_task(**arguments) if operation == 'task' else (getattr(self.client, operation)(*job_args) if job_args is not None else getattr(self.client, operation)(target, **arguments))
+                # The same fence protects immediate actions from a racing Stop.
+                context = context_of(self.state())
+                if context and isinstance(self.client, ActionClient):
+                    self.client.dispatch_context = context
+                control = (getattr(self.client, operation)(*job_args) if job_args is not None else getattr(self.client, operation)(target, **arguments))
                 with self.state_lock:
                     self.owner = viewer
                     self.value['lastCommand'] = {'operation': operation, 'ok': True,
@@ -247,22 +257,84 @@ class HarnessBridge:
                 self._failed(error)
                 raise HarnessError('Bridge disconnected; command was not retried') from error
 
-    def stop(self):
-        with self.state_lock:
-            self.generation += 1
+    def queue_io(self, operation, entry):
+        if operation == 'cancel':
+            # A separate socket bypasses a normal action/catalog request waiting
+            # on I/O. Native priority and fences decide the actual ordering.
+            with self.factory() as client:
+                ctx = entry['context']
+                if client.hello['sessionId'] != ctx['session']:
+                    raise HarnessError('Bridge session changed during cancellation')
+                receipt = client.cancel(entry['id'], ctx['epoch'], ctx['fence'])
+                self._publish({}, client.last_response['control'], client.hello)
+                return receipt
         with self.io_lock:
             try:
                 client = self._connect()
-                control = client.stop()
-                with self.state_lock:
-                    self.owner = None
-                    self.value['lastCommand'] = {'operation': 'stop', 'ok': True, 'message': 'Stopped'}
-                # Discard the old catalogue; the next poll establishes fresh options.
-                self._publish({}, control)
-                return self.state()
+                ctx = entry['context']
+                if client.hello['sessionId'] != ctx['session']:
+                    raise HarnessError('Bridge session changed; dispatch was withheld')
+                if operation == 'receipt':
+                    receipt = client.receipt(entry['requestId'])
+                else:
+                    spec = entry['spec']
+                    receipt = client.execute(entry['requestId'], ctx['epoch'], ctx['fence'],
+                        spec['action'], spec['arguments'], spec['repeat'].get('count'), version=spec['capability_version'])
+                self._publish(self.value['catalog'], client.last_response['control'])
+                return receipt
             except (OSError, ControlError, ValueError, KeyError) as error:
                 self._failed(error)
-                raise HarnessError('Bridge unavailable; owning connection closed') from error
+                raise
+
+    def accept_plan(self, plan, context, focus=False):
+        try:
+            result = self.scheduler.accept(plan, context)
+        except ValueError as error:
+            raise HarnessError(str(error)) from error
+        if focus:
+            # Only an explicit manual Run now click may foreground the game.
+            try:
+                self.focus()
+            except HarnessError:
+                pass  # Accepted work remains visibly waiting for native input.
+        return dict(self.state(), operationResult=result)
+
+    def edit_queue(self, request):
+        try:
+            result = self.scheduler.edit(request)
+        except ValueError as error:
+            raise HarnessError(str(error)) from error
+        return dict(self.state(), operationResult=result)
+
+    def stop(self):
+        with self.state_lock:
+            self.generation += 1
+        # Native Stop remains available even if the local journal cannot write.
+        journal_error = None
+        try:
+            barrier = self.scheduler.stop()
+        except Exception as error:
+            journal_error = error
+            self.scheduler.freeze('Queue journal failed during Stop')
+            barrier = None
+        try:
+            client = self.factory()
+            try:
+                control = client.stop()
+                hello = client.hello
+            finally:
+                client.close()
+            self._publish({}, control, hello)
+            if barrier:
+                self.scheduler.confirm_stop(barrier['id'], context_of(self.state()))
+            with self.state_lock:
+                self.owner = None
+                self.value['lastCommand'] = {'operation': 'stop', 'ok': True, 'message': 'Stopped'}
+            if journal_error:
+                raise HarnessError('Native work stopped; queue journal failed: ' + str(journal_error))
+            return self.state()
+        except (OSError, ControlError, ValueError, KeyError) as error:
+            raise HarnessError('Stop is unconfirmed; dispatch is held until the bridge reconnects') from error
 
     def leave(self, viewer):
         # Page lifetime is independent of an accepted job. Stop is the explicit
@@ -277,6 +349,7 @@ class HarnessBridge:
             self.thread.join(timeout=4)
         with self.io_lock:
             self._failed('Harness stopped')
+        self.scheduler.close()
 
 
 ASSETS = Path(__file__).parent / 'web'
@@ -349,7 +422,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             size = int(self.headers.get('Content-Length', '0'))
-            if not 0 < size <= 4096:
+            if not 0 < size <= 32768:
                 raise ValueError('Invalid request size')
             data = json.loads(self.rfile.read(size))
             if not isinstance(data, dict) or not isinstance(data.get('token'), str) or not secrets.compare_digest(data['token'], self.server.token):
@@ -368,10 +441,12 @@ class Handler(BaseHTTPRequestHandler):
                     if not isinstance(data.get('operation'), str):
                         raise ValueError('Missing action')
                     result = self.server.bridge.act(viewer, data['sessionId'], data['destinationId'], data['objectInstanceId'], data['operation'], data.get('arguments'))
-            elif path == '/api/task':
-                if not isinstance(data.get('sessionId'), str):
-                    raise ValueError('Missing game session')
-                result = self.server.bridge.act(viewer, data['sessionId'], 'task', 0, 'task', data.get('arguments'))
+            elif path == '/api/plan':
+                if type(data.get('focus', False)) is not bool:
+                    raise ValueError('Invalid focus setting')
+                result = self.server.bridge.accept_plan(data.get('plan'), data.get('context'), data.get('focus', False))
+            elif path == '/api/queue':
+                result = self.server.bridge.edit_queue(data.get('edit'))
             elif path == '/api/stop':
                 result = self.server.bridge.stop()
             elif path == '/api/leave':
@@ -387,9 +462,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send(400, {'error': str(error)})
 
 
-def serve(port=8765, bridge_port=24703, local_only=False, tunnel=None, public_url=None, state_port=24702):
+def serve(port=8765, bridge_port=24703, local_only=False, tunnel=None, public_url=None, state_port=24702, journal_path=None):
     contents = ContentsObserver(state_port)
-    bridge = HarnessBridge(bridge_port, contents=contents)
+    journal_path = journal_path or Path(__file__).resolve().parents[1] / '.local' / f'queue-{bridge_port}.sqlite3'
+    bridge = HarnessBridge(bridge_port, contents=contents, journal_path=journal_path)
     server = ThreadingHTTPServer(('127.0.0.1' if local_only else '0.0.0.0', port), Handler)
     server.bridge, server.token = bridge, secrets.token_urlsafe(32)
     server.sharing = PhoneShare(server.server_port, server.token,
@@ -425,6 +501,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--port', type=int, default=8765)
     parser.add_argument('--bridge-port', type=int, default=24703)
+    parser.add_argument('--queue-journal', type=Path, help='Local SQLite journal (one harness per journal)')
     parser.add_argument('--state-port', type=int, default=24702, help='Full observation stream for live item contents')
     parser.add_argument('--local-only', action='store_true', help='Disable access over local Wi-Fi')
     sharing = parser.add_mutually_exclusive_group()
@@ -433,7 +510,7 @@ def main(argv=None):
     sharing.add_argument('--public-url', help='Existing forwarded http(s) origin to encode in the phone QR code')
     args = parser.parse_args(argv)
     try:
-        serve(args.port, args.bridge_port, args.local_only, args.tunnel, args.public_url, args.state_port)
+        serve(args.port, args.bridge_port, args.local_only, args.tunnel, args.public_url, args.state_port, args.queue_journal)
     except (RuntimeError, ValueError, OSError) as error:
         parser.exit(1, str(error) + '\n')
 

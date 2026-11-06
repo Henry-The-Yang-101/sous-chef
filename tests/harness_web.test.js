@@ -33,12 +33,12 @@ function fixture() {
   el('throw-kind').replaceChildren({value: 'throw_to_player'}, {value: 'throw_to'});
   const context = vm.createContext({
     capabilityRegistry: JSON.parse(fs.readFileSync(path.join(__dirname, '../clients/capabilities.json'), 'utf8')),
-    el, document: {createElement: () => ({})}, pending: false, displayedCatalog: {}, displayScope: null,
-    state: {connected: true, fresh: true, sessionId: 'session', control: {available: true}, kitchenMap: {levelEpoch: 1}},
+    el, document: {createElement: () => ({})}, draftTasks: [], pending: false, displayedCatalog: {}, displayScope: null,
+    state: {connected: true, fresh: true, sessionId: 'session', control: {available: true}, capabilities: {compatible: true}, queue: {revision: 1, nativeContext: {}, pending: [], capacity: 10}, kitchenMap: {levelEpoch: 1}},
     nameOf: target => target.label, number: value => String(value), explain: reason => reason,
     fresh: () => context.state.fresh,
   });
-  vm.runInContext(helpers + labels + tasks, context);
+  vm.runInContext(helpers + labels + tasks + source.slice(source.indexOf('function selectedTaskSpec('), source.indexOf('async function submitPlan(')), context);
   return {context, el, row};
 }
 const preparation = [{id: 'tomato', label: 'Tomato', utensil: false}, {id: 'pot', label: 'pot', utensil: true}];
@@ -86,12 +86,12 @@ test('all tasks and jobs remain selectable while unavailable, pending or busy', 
   c.renderTasks({taskOptions: [{name: 'wash_dishes'}]}, visible, false, true);
   assert.equal(el('task-run').disabled, false);
   c.renderTasks({}, visible, false, true);
-  assert.equal(el('task-run').disabled, true); assert.equal(el('task-kind').value, 'wash_dishes');
+  assert.equal(el('task-run').disabled, false); assert.equal(el('task-kind').value, 'wash_dishes');
   c.pending = true; c.renderTasks({taskOptions: [{name: 'wash_dishes'}]}, visible, false, true);
   assert.equal(el('task-run').disabled, true); assert.equal(el('task-kind').disabled, false);
   c.pending = false; c.state.control = {available: false, reason: 'paused'};
   c.renderTasks({taskOptions: [{name: 'wash_dishes'}]}, visible, false, true);
-  assert.equal(el('task-run').disabled, true); assert.equal(el('task-kind').value, 'wash_dishes');
+  assert.equal(el('task-run').disabled, false); assert.equal(el('task-kind').value, 'wash_dishes');
 });
 
 test('task labels, repetition limits and future operations come from shared registry', () => {
@@ -107,7 +107,7 @@ test('task labels, repetition limits and future operations come from shared regi
   assert.equal(c.actionChoices({possibleOperations: ['transfer_contents', 'move_to_region']}).length, 0);
 });
 
-test('semantic choices survive suspension and never grant start eligibility', () => {
+test('semantic choices survive suspension while required allocations remain explicit', () => {
   const {context: c, el} = fixture();
   c.state.control = {available: false, reason: 'paused'};
   const catalog = {semanticCatalog: {targets: [], assemblyOrders: [{id: 'current:7', recipe: 'Sushi'}],
@@ -191,4 +191,25 @@ test('temporary missing map/stale data retains choices; level changes and remova
   const empty = {targets: [], displayOptions: {ingredients: []}};
   assert.equal(c.displayChoices(empty), empty);
   c.state.connected = false; assert.equal(Object.keys(c.displayChoices({})).length, 0);
+});
+
+
+test('queue Add works while busy; unlimited and dependent Run now are blocked', () => {
+  const {context: c, el} = fixture();
+  c.renderTasks({}, visible, true, true); el('task-kind').value = 'wash_dishes';
+  c.renderTasks({}, visible, true, true);
+  assert.equal(el('task-run').disabled, false);
+  assert.equal(el('task-now').disabled, false);
+  c.state.queue.active = {id: 'active', spec: {repeat: {mode: 'until_cancelled'}}};
+  c.renderTasks({}, visible, true, true);
+  assert.equal(el('task-run').disabled, true);
+  assert.equal(el('task-now').disabled, false);
+  c.state.queue.active.spec.repeat = {mode: 'finite', count: 1};
+  c.state.queue.pending = [{id: 'next', dependsOn: ['active'], spec: {repeat: {mode: 'finite', count: 1}}}];
+  c.renderTasks({}, visible, true, true);
+  assert.equal(el('task-run').disabled, false);
+  assert.equal(el('task-now').disabled, true);
+  c.state.queue.barrier = {id: 'stopping'};
+  c.renderTasks({}, visible, true, true);
+  assert.equal(el('task-run').disabled, true);
 });

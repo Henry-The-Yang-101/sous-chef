@@ -15,6 +15,9 @@ let state = null;
 let receivedAt = 0;
 let pending = false;
 let lastError = '';
+let draftTasks = [];
+let draftOrigin = null;
+const newId = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
 let sessionId = null;
 let displayedCatalog = {};
 let displayScope = null;
@@ -249,6 +252,10 @@ function renderMap(catalog, visible, destinations, busy, live) {
 }
 function render() {
   const live = fresh();
+  if (draftOrigin && state?.queue && (state.queue.commandGeneration !== draftOrigin.generation ||
+      (state.queue.nativeContext && JSON.stringify(state.queue.nativeContext) !== JSON.stringify(draftOrigin.context)))) {
+    draftTasks = []; draftOrigin = null;
+  }
   const control = state?.control || {};
   const nav = control.navigation || {};
   const receipt = control.action || {};
@@ -260,6 +267,7 @@ function render() {
   renderThrows(catalog, visible, busy, live);
   renderJobs(catalog, visible, busy, live);
   renderTasks(catalog, visible, busy, live);
+  renderQueue();
   const destinations = targetsWithRoutes(visible);
   const currentTargets = targetsWithRoutes(catalog);
   const catalogReason = catalog.reason || catalog.navigation?.catalogReason || control.reason;
@@ -409,6 +417,7 @@ async function runJob(event) {
   finally { pending = false; render(); }
 }
 async function stop() {
+  draftTasks = []; draftOrigin = null;
   if (!token) return;
   lastError = '';
   try { state = await post('/api/stop'); receivedAt = performance.now(); }
@@ -600,14 +609,35 @@ function renderTasks(catalog, visible, busy, live) {
   const validItems = !preparing || (el('task-items').children.length > 0 && Array.from(el('task-items').children).every(row =>
     row.children[0].value && row.children[2].checkValidity()));
   const playerPresent = !preparing || (catalog.semanticCatalog?.players || catalog.players || []).some(player => String(player.playerId) === el('task-player').value);
-  el('task-run').disabled = actionBlocked(busy, live) || !eligible || !validItems || !playerPresent || !validAssembly;
-  let message = blockedReason(busy, live);
-  if (!message && !kind) message = 'Choose a task. All tasks stay listed; Start task enables when the selected task can run.';
-  else if (!message && !validAssembly) message = 'Choose an order and at least one suitable plate. Assign each resource to only one group.';
-  else if (!message && !validItems) message = 'Choose a level ingredient or utensil and quantity for every preparation row.';
-  else if (!message && !playerPresent) message = 'The selected receiving player is not in this kitchen.';
-  else if (!message && !eligible) message = 'This task is currently unavailable. Start task enables automatically when the kitchen allows it.';
+  const queueReady = live && !pending && state?.capabilities?.compatible && state?.queue?.nativeContext && !state.queue.barrier && !state.queue.error;
+  const validSelection = Boolean(kind && validItems && playerPresent && validAssembly);
+  const unlimitedDraft = draftTasks.some(t => t.repeat.mode === 'until_cancelled');
+  el('task-stage').disabled = !queueReady || !validSelection || draftTasks.length >= (capabilityRegistry?.max_plan_tasks || 5) || unlimitedDraft;
+  const proposed = draftTasks.length ? draftTasks : validSelection ? [selectedTaskSpec()] : [];
+  const pendingTasks = state?.queue?.pending || [];
+  const activeTask = state?.queue?.active;
+  const appendForever = [activeTask, ...pendingTasks].some(t => t?.spec.repeat.mode === 'until_cancelled');
+  el('task-run').disabled = !queueReady || !proposed.length || appendForever || pendingTasks.length + proposed.length > (state?.queue?.capacity || 10);
+  const dependentActive = activeTask && pendingTasks.some(t => t.dependsOn.includes(activeTask.id));
+  const nowForever = proposed.some(t => t.repeat.mode === 'until_cancelled') && pendingTasks.length > 0;
+  el('task-now').disabled = !queueReady || !proposed.length || dependentActive || nowForever || pendingTasks.length + proposed.length > (state?.queue?.capacity || 10);
+  let message = !live ? 'Waiting for fresh game state.' : !queueReady ? 'Queue unavailable or reconciling. Stop remains independent.' : '';
+  if (!message && !validSelection && !draftTasks.length) message = 'Choose a task and its required ingredients, recipient or exact allocation.';
+  else if (!message && appendForever) message = 'Cannot add behind unlimited work. Stop or explicitly replace that assignment.';
+  else if (!message && !eligible) message = 'This task may wait until native start conditions are met.';
+  if (draftTasks.length) message += ` ${draftTasks.length}-step plan ready; all steps are accepted together.`;
   el('task-run').title = message;
+  el('task-now').title = dependentActive ? 'Replace the dependent plan before interrupting its active step.' : 'Cancel active work, retain independent pending tasks, and run this plan.';
+  el('plan-draft').hidden = !draftTasks.length;
+  const signature = JSON.stringify(draftTasks);
+  if (el('plan-steps').dataset.signature !== signature) {
+    el('plan-steps').dataset.signature = signature;
+    el('plan-steps').replaceChildren(...draftTasks.map((spec, index) => {
+      const li = document.createElement('li'); li.textContent = taskDescription(spec);
+      const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Remove step';
+      remove.onclick = () => { draftTasks.splice(index, 1); render(); }; li.append(remove); return li;
+    }));
+  }
   const progress = task?.operation === 'task' ? `${taskLabels()[task.details?.taskAction] || 'Task'}: ${task.state} · ${(task.phase || '').replaceAll('_', ' ')} · ${task.details?.completedRepetitions || 0} repetitions completed${task.state === 'running' && task.details?.waitingReason ? ' · waiting: ' + explain(task.details.waitingReason) : ''}` : '';
   el('task-status').textContent = [progress, message].filter(Boolean).join(' · ');
 }
@@ -615,21 +645,85 @@ el('task-kind').addEventListener('change', render);
 el('task-add-item').addEventListener('click', () => { addTaskItem(); render(); });
 el('task-player').addEventListener('change', render);
 for (const id of ['assembly-order', 'assembly-bases', 'assembly-components', 'assembly-equipment']) el(id).addEventListener('change', render);
-el('task-form').addEventListener('submit', async event => {
-  event.preventDefault(); if (el('task-run').disabled) return;
+function selectedTaskSpec() {
   const action = el('task-kind').value;
-  const args = {action, repetitions: el('task-repeat').value === 'forever' ? null : Number(el('task-repeat').value)};
+  const args = {};
   if (action === 'assemble_dish') {
-    args.repetitions = 1; args.order_id = el('assembly-order').value;
+    args.order_id = el('assembly-order').value;
     args.bases = selectedResources('assembly-bases'); args.components = selectedResources('assembly-components'); args.equipment = selectedResources('assembly-equipment');
   }
   if (action === 'prepare_near_player') {
     args.player_id = Number(el('task-player').value);
     args.items = Array.from(el('task-items').children).map(row => ({ingredient: row.children[0].value, preparation: row.children[1].value, quantity: Number(row.children[2].value)}));
   }
+  return {kind: 'native_task', action, capability_version: capability(action).version, arguments: args,
+    repeat: el('task-repeat').value === 'forever' ? {mode: 'until_cancelled'} : {mode: 'finite', count: Number(el('task-repeat').value)}};
+}
+function taskDescription(spec) {
+  const repeat = spec.repeat.mode === 'until_cancelled' ? 'until Stop' : `${spec.repeat.count} × ${capability(spec.action)?.repeat.unit.replaceAll('_', ' ') || 'once'}`;
+  let details = '';
+  if (spec.arguments.items) details = ' · ' + spec.arguments.items.map(i => `${i.quantity} ${i.preparation} ${i.ingredient}`).join(', ') + ` → Player ${spec.arguments.player_id}`;
+  if (spec.arguments.order_id) details = ' · ticket ' + spec.arguments.order_id;
+  return `${taskLabels()[spec.action] || actionNames[spec.action]} · ${repeat}${details}`;
+}
+async function submitPlan(edit) {
+  if (el(edit === 'append' ? 'task-run' : 'task-now').disabled) return;
+  const plan = {schema_version: capabilityRegistry.plan_schema_version, capability_version: capabilityRegistry.version,
+    command_id: newId(), expected_queue_revision: draftOrigin?.revision ?? state.queue.revision, queue_edit: edit,
+    tasks: draftTasks.length ? [...draftTasks] : [selectedTaskSpec()], after_plan: 'continue_pending', on_failure: 'pause_pending'};
+  const context = draftOrigin?.context || state.queue.nativeContext;
   pending = true; lastError = ''; render();
-  try { state = await post('/api/task', {sessionId: state.sessionId, arguments: args}); receivedAt = performance.now(); }
+  try {
+    state = await post('/api/plan', {plan, context, focus: edit === 'replace_active'});
+    receivedAt = performance.now(); draftTasks = []; draftOrigin = null;
+  } catch (error) { lastError = error.message; }
+  finally { pending = false; render(); }
+}
+function renderQueue() {
+  const queue = state?.queue;
+  const enabled = Boolean(token && queue && !pending && !queue.error);
+  el('queue-status').textContent = !queue ? 'Waiting for the queue…' : queue.error || (queue.barrier ? 'Stopping native work; dispatch held.' : queue.paused ? 'Dispatch paused.' : 'Dispatch enabled.') +
+    ` ${queue.pending.length} / ${queue.capacity} pending.` + (queue.reason ? ' ' + explain(queue.reason) : '');
+  el('queue-active').textContent = queue?.active ? `${taskDescription(queue.active.spec)} · ${queue.active.state.replaceAll('_', ' ')}${queue.active.reason ? ' · ' + explain(queue.active.reason) : ''}` : 'No active queued task.';
+  el('queue-pause').disabled = !enabled || queue.paused;
+  el('queue-resume').disabled = !enabled || !queue.paused || !fresh() || Boolean(queue.barrier) || queue.active?.state === 'reconciling';
+  el('queue-clear').disabled = !enabled || !queue.pending.length;
+  el('queue-skip').disabled = !enabled || !queue.active || Boolean(queue.barrier) || queue.pending.some(t => t.dependsOn.includes(queue.active?.id));
+  const signature = JSON.stringify([queue?.pending, enabled]);
+  if (el('queue-pending').dataset.signature !== signature) {
+    el('queue-pending').dataset.signature = signature;
+    el('queue-pending').replaceChildren(...(queue?.pending || []).map((entry, index, all) => {
+      const li = document.createElement('li'); const text = document.createElement('span');
+      text.textContent = `${taskDescription(entry.spec)} · ${entry.state.replaceAll('_', ' ')}${entry.reason ? ' · ' + explain(entry.reason) : ''}`;
+      li.append(text);
+      const button = (label, disabled, action) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = label; b.disabled = !enabled || disabled; b.onclick = action; li.append(b); };
+      button('Remove', all.some(t => t.dependsOn.includes(entry.id)), () => queueEdit('remove_pending', {task_id: entry.id}));
+      for (const [label, delta] of [['↑', -1], ['↓', 1]]) {
+        const reordered = [...all]; const other = index + delta;
+        if (other >= 0 && other < all.length) [reordered[index], reordered[other]] = [reordered[other], reordered[index]];
+        const positions = new Map(reordered.map((t, i) => [t.id, i]));
+        const breaksDependency = reordered.some(t => t.dependsOn.some(dep => positions.has(dep) && positions.get(dep) > positions.get(t.id)));
+        const breaksUnlimited = reordered.slice(0, -1).some(t => t.spec.repeat.mode === 'until_cancelled');
+        button(label, other < 0 || other >= all.length || breaksDependency || breaksUnlimited, () => queueEdit('reorder_pending', {task_ids: reordered.map(t => t.id)}));
+      }
+      return li;
+    }));
+  }
+  const last = queue?.outcomes.at(-1);
+  el('queue-outcome').textContent = last ? `Last outcome: ${taskDescription(last.spec)} · ${last.state} · ${explain(last.reason)}` : queue?.lastOperation?.message || '';
+}
+async function queueEdit(operation, fields = {}) {
+  if (!state?.queue || pending) return;
+  const edit = {operation_id: newId(), expected_queue_revision: state.queue.revision, operation, ...fields};
+  pending = true; lastError = ''; render();
+  try { state = await post('/api/queue', {edit}); receivedAt = performance.now(); }
   catch (error) { lastError = error.message; }
   finally { pending = false; render(); }
-});
+}
+el('task-form').addEventListener('submit', event => { event.preventDefault(); submitPlan('append'); });
+el('task-now').addEventListener('click', () => submitPlan('replace_active'));
+el('task-stage').addEventListener('click', () => { if (!el('task-stage').disabled) { if (!draftTasks.length) draftOrigin = {revision: state.queue.revision, generation: state.queue.commandGeneration, context: state.queue.nativeContext}; draftTasks.push(selectedTaskSpec()); render(); } });
+el('plan-clear').addEventListener('click', () => { draftTasks = []; draftOrigin = null; render(); });
+el('task-repeat').addEventListener('change', render);
+for (const [id, operation] of [['queue-pause', 'pause_pending'], ['queue-resume', 'resume_pending'], ['queue-clear', 'clear_pending'], ['queue-skip', 'skip_active']]) el(id).addEventListener('click', () => queueEdit(operation));
 addTaskItem();

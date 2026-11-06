@@ -126,3 +126,10 @@ pre { font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; backgroun
 .task-item { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
 .task-item input { min-width: 100px; max-width: 220px; }
 .task-item input[type=number] { width: 70px; min-width: 50px; }
+
+.queue-buttons { display: flex; flex-wrap: wrap; gap: .6rem; margin: .8rem 0; }
+#queue-pending, #plan-steps { padding-left: 1.5rem; }
+#queue-pending li, #plan-steps li { margin: .8rem 0; line-height: 1.6; }
+#queue-pending li span { display: block; overflow-wrap: anywhere; }
+#queue-pending button, #plan-steps button { margin: .3rem .4rem .1rem 0; min-height: 40px; }
+#queue-active, #queue-outcome { overflow-wrap: anywhere; }

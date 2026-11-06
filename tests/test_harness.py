@@ -10,6 +10,9 @@ from urllib.parse import urlsplit
 from clients.control import ControlError
 from harness.server import Handler, HarnessBridge, HarnessError, main, serve
 from harness.sharing import PhoneShare
+from test_scheduler import plan, spec
+from harness.scheduler import context_of
+from clients.capabilities import registry, REGISTRY_HASH, REGISTRY_VERSION
 
 
 class FakeBridge:
@@ -28,6 +31,18 @@ class FakeBridge:
         self.job_options = None
         self.tasks = []
         self.display_options = {}
+
+    def enable_queue(self):
+        self.hello['capabilities'] = dict(version=REGISTRY_VERSION, registryHash=REGISTRY_HASH,
+            tasks=[c['name'] for c in registry()['contracts'] if c['kind'] == 'task'],
+            actions=[c['name'] for c in registry()['contracts'] if c['kind'] == 'action'])
+        self.control.update(receiptProtocolVersion=1, kitchenEpoch='epoch', dispatchGeneration=0, chefInstanceId=8)
+
+    def execute(self, request_id, epoch, generation, name, arguments, repetitions=1, version=None):
+        self.run_task(name, repetitions, **arguments)
+        receipt = dict(id=request_id, epoch=epoch, state='running', reason=None)
+        self.last_response = {'control': copy.deepcopy(self.control), 'receipt': receipt}
+        return receipt
 
     def available_actions(self):
         if self.failure:
@@ -116,6 +131,13 @@ class HarnessTests(unittest.TestCase):
         self.native = FakeBridge()
         self.bridge = HarnessBridge(factory=lambda: self.native, clock=lambda: self.now)
         self.bridge.poll()
+        self.addCleanup(self.bridge.close)
+
+    def queue(self, task):
+        self.native.enable_queue(); self.bridge.poll()
+        result = self.bridge.accept_plan(plan(tasks=[task]), context_of(self.bridge.state()))
+        self.bridge.scheduler.tick()
+        return result
 
     def navigate(self):
         return self.bridge.navigate('tab-a', 'test-session', 'd7', 77)
@@ -126,30 +148,20 @@ class HarnessTests(unittest.TestCase):
         self.bridge.poll()
         self.assertEqual(self.bridge.state()['catalog']['destinations'], [])
 
-    def test_task_requires_live_eligibility_and_preserves_infinite_repeat(self):
-        self.native.tasks = [{'name': 'monitor_equipment'}]
-        self.bridge.poll()
-        result = self.bridge.act('viewer', 'test-session', 'task', 0, 'task', {'action': 'monitor_equipment', 'repetitions': None})
-        self.assertTrue(result['control']['ownedByYou'])
+    def test_tasks_use_shared_queue_and_preserve_infinite_repeat(self):
+        self.queue(spec('monitor_equipment', None))
         self.assertEqual(self.native.calls[-1], ('task', 'monitor_equipment', None, {}))
-        self.native.tasks = []
-        with self.assertRaises(HarnessError):
+        with self.assertRaisesRegex(HarnessError, 'shared plan queue'):
             self.bridge.act('viewer', 'test-session', 'task', 0, 'task', {'action': 'wash_dishes'})
-        self.assertEqual(len([c for c in self.native.calls if c[0] == 'task']), 1)
 
-    def test_deliver_completed_dishes_uses_live_task_dispatch(self):
-        self.native.tasks = [{'name': 'deliver_completed_dishes'}]
-        self.bridge.poll()
-        self.bridge.act('viewer', 'test-session', 'task', 0, 'task', {'action': 'deliver_completed_dishes', 'repetitions': 2})
+    def test_deliver_completed_dishes_uses_shared_queue(self):
+        self.queue(spec('deliver_completed_dishes', 2))
         self.assertEqual(self.native.calls[-1], ('task', 'deliver_completed_dishes', 2, {}))
 
     def test_assembly_forwards_explicit_ticket_and_resource_allocation(self):
-        self.native.tasks = [{'name': 'assemble_dish'}]
-        self.bridge.poll()
         allocation = {'order_id': 'flow:One:7', 'bases': ['d1', 'd2'],
                       'components': ['d3'], 'equipment': ['d4', 'd5']}
-        self.bridge.act('viewer', 'test-session', 'task', 0, 'task',
-                        {'action': 'assemble_dish', 'repetitions': 1, **allocation})
+        self.queue(spec('assemble_dish', arguments=allocation))
         self.assertEqual(self.native.calls[-1], ('task', 'assemble_dish', 1, allocation))
 
     def test_task_contract_errors_fail_before_focus_or_native_io(self):
@@ -173,7 +185,7 @@ class HarnessTests(unittest.TestCase):
         }
         self.bridge.poll()
         self.assertEqual(self.bridge.state()['catalog']['displayOptions'], self.native.display_options)
-        with self.assertRaisesRegex(HarnessError, 'task is no longer available'):
+        with self.assertRaisesRegex(HarnessError, 'shared plan queue'):
             self.bridge.act('viewer', 'test-session', 'task', 0, 'task', {'action': 'wash_dishes'})
         with self.assertRaises(HarnessError):
             self.bridge.act('viewer', 'test-session', 'd7', 77, 'fetch_ingredient', {'ingredient': 'tomato'})
@@ -471,6 +483,38 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(data['registry'], bootstrap['capabilityRegistry'])
         self.assertEqual(self.request('GET', '/api/capabilities', headers={'Origin': 'https://evil.example'})[0], 403)
 
+    def test_plan_and_queue_endpoints_share_auth_revision_and_journal(self):
+        self.native.enable_queue(); self.bridge.poll()
+        body = dict(token='test-token', viewerId='tab', plan=plan(tasks=[spec(), spec()]), context=context_of(self.bridge.state()))
+        self.assertEqual(self.request('POST', '/api/plan', body, {'Origin': 'https://evil.example'})[0], 403)
+        self.assertEqual(self.request('POST', '/api/plan', dict(body, token='wrong'))[0], 403)
+        code, raw = self.request('POST', '/api/plan', body)
+        self.assertEqual(code, 200)
+        result = json.loads(raw)
+        self.assertEqual(len(result['queue']['pending']), 2)
+        self.assertEqual(self.native.calls, [])  # HTTP acceptance never dispatches a draft.
+        duplicate = json.loads(self.request('POST', '/api/plan', body)[1])
+        self.assertEqual(duplicate['operationResult'], result['operationResult'])
+        stale = dict(body, plan=dict(body['plan'], command_id='stale'))
+        self.assertEqual(self.request('POST', '/api/plan', stale)[0], 409)
+        edit = dict(operation_id='clear', expected_queue_revision=1, operation='clear_pending')
+        self.assertEqual(self.request('POST', '/api/queue', dict(token='test-token', viewerId='tab', edit=edit))[0], 200)
+        self.assertEqual(self.bridge.scheduler.snapshot()['pending'], [])
+        for data in (None, [], {'unexpected': True}):
+            self.assertIn(self.request('POST', '/api/plan', dict(body, plan=data))[0], (400, 409))
+        self.assertEqual(self.request('POST', '/api/task', body)[0], 404)
+
+    def test_stop_does_not_wait_for_normal_io_lock(self):
+        self.bridge.io_lock.acquire()
+        try:
+            result = []
+            worker = threading.Thread(target=lambda: result.append(self.bridge.stop()))
+            worker.start(); worker.join(1)
+            self.assertFalse(worker.is_alive(), 'Stop blocked on ordinary bridge I/O')
+            self.assertEqual(result[0]['lastCommand']['message'], 'Stopped')
+        finally:
+            self.bridge.io_lock.release()
+
     def test_foreign_origin_host_and_missing_token_are_rejected(self):
         for headers in [{'Origin': 'https://example.com'}, {'Host': 'example.com'}]:
             self.assertEqual(self.request('GET', '/api/bootstrap', headers=headers)[0], 403)
@@ -506,7 +550,7 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertTrue(json.loads(body)['viewerOwnsAction'])
         self.assertEqual(self.request('POST', '/api/stop', data, headers)[0], 200)
-        self.assertEqual(self.native.calls, [('navigate_to', 'd7'), ('stop',)])
+        self.assertEqual(self.native.calls, [('navigate_to', 'd7'), ('stop',), ('close',)])
 
     def test_forwarded_host_does_not_bypass_origin_or_token_checks(self):
         headers = {'Host': 'test.trycloudflare.com', 'Origin': 'https://evil.example',
@@ -525,7 +569,7 @@ class HttpTests(unittest.TestCase):
         code, response = self.request('POST', '/api/stop', body)
         self.assertEqual(code, 200)
         self.assertEqual(json.loads(response)['control']['navigation']['state'], 'idle')
-        self.assertEqual(self.native.calls, [('navigate_to', 'd7'), ('stop',)])
+        self.assertEqual(self.native.calls, [('navigate_to', 'd7'), ('stop',), ('close',)])
 
     def test_expired_destination_returns_conflict_without_movement(self):
         self.native.destinations.clear()

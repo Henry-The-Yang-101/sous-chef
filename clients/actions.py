@@ -19,6 +19,13 @@ class ActionClient(ControlClient):
     def run_capability(self, name, arguments, repetitions=1, *, version=None):
         """Shared validated adapter; names are registry keys, never method names."""
         operation, tokens = wire_command(name, arguments, repetitions, version)
+        context = getattr(self, 'dispatch_context', None)
+        if context and name != 'stop':
+            import uuid
+            receipt = self.execute(uuid.uuid4().hex, context['epoch'], context['fence'], name, arguments, repetitions, version=version)
+            if receipt is None or receipt['state'] == 'rejected':
+                raise ControlError((receipt or {}).get('reason', 'Missing native receipt'))
+            return self.last_response['control']
         return self._request(operation, *tokens)
 
     def execute(self, request_id, epoch, generation, name, arguments, repetitions=1, *, version=None):

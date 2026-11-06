@@ -53,7 +53,7 @@
       <div id="map-overlaps" class="map-overlaps" hidden></div>
       <div class="map-selection">
         <p id="map-selection">Choose an available target.</p>
-        <div id="map-action-controls"><label class="sr-only" for="map-action">Action for selected target</label><select id="map-action" disabled></select><button id="map-run" type="button" disabled>Run action</button></div>
+        <div id="map-action-controls"><label class="sr-only" for="map-action">Action for selected target</label><select id="map-action" disabled></select><button id="map-run" type="button" disabled>Run action now</button></div>
       </div>
     </section>
     <section class="throwing" aria-labelledby="throwing-title">
@@ -69,7 +69,7 @@
     </section>
     <section class="logistics" aria-labelledby="tasks-title">
       <h2 id="tasks-title">Tasks</h2>
-      <p>All tasks stay listed. Start task enables when your selection can run. Run once, 2–10 times, or until Stop.</p>
+      <p>Add tasks to the shared queue, or build a plan of up to five steps. Run now cancels the active task and preserves independent pending work. Each step waits for verified success.</p>
       <form id="task-form" aria-describedby="task-status">
         <label>Task<select id="task-kind"></select></label>
         <label>Repeat<select id="task-repeat"></select></label>
@@ -85,9 +85,28 @@
           <label>Assigned components<select id="assembly-components" multiple size="5"></select></label>
           <label>Cookware and processing stations<select id="assembly-equipment" multiple size="5"></select></label>
         </div>
-        <button id="task-run" type="submit" disabled>Start task</button>
+        <div class="queue-buttons">
+          <button id="task-stage" type="button" disabled>Add step to plan</button>
+          <button id="task-run" type="submit" disabled>Add to queue</button>
+          <button id="task-now" type="button" disabled>Run now</button>
+        </div>
       </form>
+      <div id="plan-draft" hidden><h3>Plan preview</h3><ol id="plan-steps"></ol><button id="plan-clear" type="button">Discard draft</button></div>
       <p id="task-status" role="status" aria-live="polite"></p>
+    </section>
+    <section class="logistics" aria-labelledby="queue-title">
+      <h2 id="queue-title">Task queue</h2>
+      <p id="queue-status" role="status" aria-live="polite">Waiting for the queue…</p>
+      <p id="queue-active"></p>
+      <ol id="queue-pending"></ol>
+      <div class="queue-buttons">
+        <button id="queue-pause" type="button">Pause dispatch</button>
+        <button id="queue-resume" type="button">Resume dispatch</button>
+        <button id="queue-clear" type="button">Clear pending</button>
+        <button id="queue-skip" type="button">Skip active task</button>
+      </div>
+      <p id="queue-outcome"></p>
+      <p>Pause holds future dispatch; the active task continues. Removing or reordering a dependent step requires replacing its plan. Stop cancels everything. Immediate actions below pause pending dispatch.</p>
     </section>
     <section class="logistics" aria-labelledby="logistics-title">
       <h2 id="logistics-title">Move supplies</h2>
@@ -96,7 +115,7 @@
         <label>Job<select id="job-kind"></select></label>
         <label id="job-source-label"><span id="job-source-name">Item</span><select id="job-source"></select></label>
         <label id="job-destination-label">Destination<select id="job-destination"></select></label>
-        <button id="job-run" type="submit" disabled>Run job</button>
+        <button id="job-run" type="submit" disabled>Run job now</button>
         <button id="job-map" type="button">Choose on map</button>
       </form>
       <p id="job-status" role="status" aria-live="polite"></p>
