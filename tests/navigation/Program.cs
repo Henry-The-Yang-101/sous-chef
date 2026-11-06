@@ -422,6 +422,29 @@ internal static class Program
 
     private static void ArrivalMotion()
     {
+        for (int mode=0; mode<4; mode++)
+        {
+            var raftWorld=new World(); raftWorld.AddFloor((x,z) => Math.Abs(x)<3 && Math.Abs(z)<3 ? 0 : (float?)null);
+            var raft=new GameObject("moving support").transform;
+            raftWorld.Chef.transform.parent=raft; raftWorld.Chef.transform.position=new Vector3(0,0,-1);
+            var raftStation=raftWorld.AddStation(); if (mode != 2) raftStation.transform.parent=raft;
+            var raftNavigation=raftWorld.Navigate(raftStation);
+            // Native raft parenting carries transforms without adding either
+            // Rigidbody velocity or SurfaceMovable velocity.
+            if (mode == 3) raftWorld.Chef.Motion.Velocity=new Vector3(.5f,0,0);
+            for (int i=0; i<4; i++)
+            {
+                Time.realtimeSinceStartup += .06f;
+                if (mode == 1) raft.yaw += .03f; else raft.position += new Vector3(.03f,0,0);
+                raftWorld.Chef.transform.position=raft.TransformPoint(new Vector3(0,0,-1));
+                if (mode != 2) { raftStation.transform.position=raft.position; raftStation.transform.yaw=raft.yaw; }
+                raftNavigation.Tick(raftWorld.Chef);
+            }
+            if (mode < 2)
+                Check(raftNavigation.Action.Reason == "arrived", "native parent translation and rotation can settle relative to a shared raft station");
+            else
+                Check(raftNavigation.Action.State == "navigating", "parent motion past a separate target or pending native walking cannot count as settled");
+        }
         var w=new World(); w.AddFloor((x,z) => Math.Abs(x)<2 && Math.Abs(z)<2 ? 0 : (float?)null);
         w.Chef.transform.position=new Vector3(0,0,-1); var station=w.AddStation(); var navigation=w.Navigate(station);
         w.Chef.WindReceiver.Velocity=new Vector3(.5f,0,0);
@@ -525,6 +548,22 @@ internal static class Program
         Time.realtimeSinceStartup += .02f; cruiseNavigation.Tick(cruise.Chef);
         Check(cruise.LastMilliseconds == 17 && cruiseNavigation.Action.State == "navigating",
             "blocked continuation retains only the original checked movement window");
+        for (int moving=0; moving<3; moving++)
+        {
+            cruise = new World(); var floor=cruise.AddFloor((x,z) => Math.Abs(x)<4 && Math.Abs(z)<4 ? 0 : (float?)null);
+            cruise.Chef.transform.position = new Vector3(0,0,-1.3f);
+            if (moving == 0) cruise.Chef.WindReceiver.Velocity = new Vector3(.5f,0,0);
+            else if (moving == 1) cruise.Chef.SurfaceMovable.Velocity = new Vector3(.5f,0,0);
+            else
+            {
+                cruise.Chef.PhysicsSurface = floor.gameObject.Add(new PlayerPhysicsSurface());
+                cruise.Chef.PhysicsSurface.Properties.Slippiness = .5f;
+            }
+            cruiseNavigation = cruise.Navigate(cruise.AddStation());
+            Time.realtimeSinceStartup += .02f; cruiseNavigation.Tick(cruise.Chef);
+            Check(cruise.LastMilliseconds == 17 && cruise.LastInput.magnitude > .9f,
+                "external flow and sliding keep their original final-approach movement windows");
+        }
         var w=new World(); w.AddFloor((x,z) => Math.Abs(x)<2 && Math.Abs(z)<2 ? 0 : (float?)null);
         w.Chef.transform.position=new Vector3(0,0,-1.3f); var station=w.AddStation(); var navigation=w.Navigate(station);
         Time.deltaTime=Time.unscaledDeltaTime=.1f; Time.realtimeSinceStartup += .1f; navigation.Tick(w.Chef);

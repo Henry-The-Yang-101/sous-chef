@@ -326,8 +326,9 @@ are unchanged). It checks the entire extra travel plus one fixed physics step.
 If the extended corridor is blocked, the shorter certified command remains usable.
 Within 0.8 units of arrival, that optional continuation is shortened so its motion
 plus the fixed-step tail cannot pass the point of closest approach to the working
-stance, accounting for target motion. Slippery final approaches retain the original
-window. Arrival braking still uses the original frame horizon, and portal entry
+stance, accounting for target motion. Final approaches under wind, surface motion
+or slipperiness retain the original window. Arrival braking still uses the
+original frame horizon, and portal entry
 keeps its existing windows. This prevents normal Update jitter from zeroing a
 walking command just before the native controller reads it, including the last
 few steps toward a counter, while preserving the actual arrival checks.
@@ -342,6 +343,13 @@ Settling checks combine native locomotion, wind/platform drift and observed pose
 changes. The previous chef pose is transported with the target's transform to
 account for shared platform translation and rotation; a first observation cannot
 establish settled speed.
+Native raft parenting also transports the chef without adding that velocity to
+its Rigidbody or SurfaceMovable. The navigator measures the actual parent's
+translation/rotation at the previous chef pose and includes it when comparing
+native velocity with destination motion, both for braking and settling. Changing
+parents does not count as a velocity sample. This prevents a chef standing still
+on a moving raft from repeatedly failing alignment, while still rejecting real
+motion past the target, native walking momentum, wind and conveyor drift.
 Neutral braking can begin one native movement window before the checked stance,
 because the previous movement command can still integrate after an Update changes
 input. That prediction never counts as arrival; the actual pose and settling

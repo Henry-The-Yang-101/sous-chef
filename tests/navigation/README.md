@@ -29,6 +29,10 @@ and rejected overshoot. The core suite separately checks input expiry while
 retaining ownership and renewal after frame jitter. Open-corridor continuation,
 final-approach continuation bounded by stopping distance, rejection of obstructed
 extensions and unchanged arrival braking have production-controller checks.
+Wind, surface flow and slippery final approaches retain their original windows.
+Native raft-parent translation/rotation is tested separately from surface velocity;
+shared-parent arrival must succeed, while motion past a separate target and pending
+native walking must still prevent arrival.
 
 Stall recovery checks the 499/500 ms boundary, successful rerouting around an
 unreported contact, small contact jitter, moving/rotating ground independent of

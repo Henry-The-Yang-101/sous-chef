@@ -43,7 +43,8 @@ namespace SousChef.Plugin.Navigation
         private int nextId, waypoint, warmTicks;
         private PlayerControls chef;
         private float lastPlan = -1, started, facingSince = -1;
-        private Vector3 motionPosition, motionLocalPosition, targetVelocity;
+        private Vector3 motionPosition, motionLocalPosition, motionParentPosition, targetVelocity, parentVelocity;
+        private Transform motionParent;
         private float motionTime, observedRelativeSpeed;
         private bool haveMotion, motionSampleValid;
         private long revision;
@@ -561,13 +562,16 @@ namespace SousChef.Plugin.Navigation
                 if (Vector3.Distance(position, target.Approach) <= .8f)
                 {
                     Vector3 remaining = target.Approach - position; remaining.y = 0;
-                    Vector3 relative = movement - targetVelocity; relative.y = 0;
+                    Vector3 relative = movement + parentVelocity - targetVelocity; relative.y = 0;
                     float untilClosest = relative.sqrMagnitude > .0001f ? Vector3.Dot(remaining, relative) / relative.sqrMagnitude : 0;
                     int beforeStance = (int)Math.Floor(Mathf.Max(0, untilClosest - Time.fixedDeltaTime) * 1000f);
                     continuation = Math.Min(continuation, Math.Max(commandMilliseconds, beforeStance));
-                    // Retained sliding momentum has its own existing checks;
-                    // do not extend its final approach using walking speed alone.
-                    if (surface != null && surface.Slippiness > .05f) continuation = commandMilliseconds;
+                    // Native flow can change at a belt/volume boundary during
+                    // this window. Keep its established final-approach timing,
+                    // as with retained sliding momentum, rather than assuming
+                    // the current velocity remains valid through that crossing.
+                    if (drift.sqrMagnitude > .0001f || (surface != null && surface.Slippiness > .05f))
+                        continuation = commandMilliseconds;
                 }
                 // A preceding native velocity may integrate for one fixed step
                 // before the expired input is read and neutralized.
@@ -624,7 +628,7 @@ namespace SousChef.Plugin.Navigation
             Vector3 velocity = chef.Motion.GetVelocityXZ();
             if (chef.WindReceiver != null) velocity += chef.WindReceiver.GetVelocity();
             if (chef.SurfaceMovable != null) velocity += chef.SurfaceMovable.GetVelocity();
-            velocity -= targetVelocity;
+            velocity += parentVelocity - targetVelocity;
             float window = Mathf.Max(Time.fixedDeltaTime, Mathf.Max(commandMilliseconds / 1000f, Time.deltaTime));
             // The preceding native motion can still integrate before neutral
             // takes effect. Brake on its predicted arrival, but only actual pose,
@@ -654,9 +658,20 @@ namespace SousChef.Plugin.Navigation
         private void SampleMotion(Vector3 position)
         {
             float now = Time.realtimeSinceStartup, elapsed = now - motionTime;
+            Transform parent = chef.transform.parent;
+            parentVelocity = Vector3.zero;
             motionSampleValid = haveMotion && elapsed > .00001f;
             if (motionSampleValid)
             {
+                // DynamicLandscapeParenting carries the chef with its attach
+                // transform, separately from Rigidbody and SurfaceMovable motion.
+                // Compare those native velocities and the destination in one
+                // world frame. Never interpret a reparent as physical velocity.
+                if (parent != null && parent == motionParent)
+                {
+                    parentVelocity = (parent.TransformPoint(motionParentPosition) - motionPosition) / elapsed;
+                    parentVelocity.y = 0;
+                }
                 // Transport the previous chef pose with the destination. This
                 // measures translation/rotation of a shared moving platform
                 // without mistaking it for movement past the target.
@@ -669,6 +684,8 @@ namespace SousChef.Plugin.Navigation
             else { targetVelocity = Vector3.zero; observedRelativeSpeed = Single.PositiveInfinity; }
             Transform support = target.IsPoint ? target.PointSupport.transform : target.Object.transform;
             motionPosition = position; motionLocalPosition = support.InverseTransformPoint(position);
+            motionParent = parent;
+            if (parent != null) motionParentPosition = parent.InverseTransformPoint(position);
             motionTime = now; haveMotion = true;
         }
         private void Align(Vector3 position, int commandMilliseconds)
@@ -700,7 +717,7 @@ namespace SousChef.Plugin.Navigation
             bool selected = target.IsPoint || Selected(target.Object), canPickup, canPlace, canUse;
             Readiness(out canPickup, out canPlace, out canUse);
             bool ready = target.IsPoint || canPickup || canPlace || canUse;
-            Vector3 relativeVelocity = velocity + drift - targetVelocity; relativeVelocity.y = 0;
+            Vector3 relativeVelocity = velocity + drift + parentVelocity - targetVelocity; relativeVelocity.y = 0;
             float relativeSpeed = target.IsPoint && motionSampleValid ? observedRelativeSpeed : Mathf.Max(observedRelativeSpeed, relativeVelocity.magnitude);
             // Throw certification reserves PositionTolerance, not the wider
             // station-settling hysteresis. Refine an overshot generated stance.
