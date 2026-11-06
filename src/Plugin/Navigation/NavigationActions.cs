@@ -132,10 +132,11 @@ namespace SousChef.Plugin.Navigation
         { Collider ground; return physics.StationaryStand(point, out stance, out ground); }
         public bool TryStance(Vector3 point, out Vector3 stance, out Collider support)
         { return physics.StationaryStand(point, out stance, out support); }
-        public bool CanApproachLocally(GameObject go)
+        public bool CanApproachLocally(GameObject go) { return LocalApproachDistance(go, Single.MaxValue) != Single.MaxValue; }
+        public float LocalApproachDistance(GameObject go, float maximum)
         {
             Destination d;
-            if (go == null || !identities.TryGetValue(go.GetInstanceID(), out d)) return false;
+            if (go == null || !identities.TryGetValue(go.GetInstanceID(), out d)) return Single.MaxValue;
             foreach (Collider c in d.Colliders)
             {
                 for (int side = 0; side < 8; side++)
@@ -143,10 +144,15 @@ namespace SousChef.Plugin.Navigation
                     float angle = side * Mathf.PI / 4;
                     Vector3 seed = c.bounds.center + new Vector3(Mathf.Cos(angle), 0, Mathf.Sin(angle)) * 1.2f;
                     seed.y = physics.Position.y; Vector3 stance;
-                    if (physics.Approach(seed, c, out stance) && CanWalkTo(stance)) return true;
+                    if (!physics.Approach(seed, c, out stance)) continue;
+                    float direct = Vector3.Distance(physics.Position, stance);
+                    if (direct > maximum) continue;
+                    float cost = RouteCost(stance);
+                    if (cost < Single.MaxValue && cost <= maximum) return cost;
+                    if (physics.Segment(physics.Position, stance)) return direct;
                 }
             }
-            return false;
+            return Single.MaxValue;
         }
         public bool CanReachFloor(Vector3 floor)
         {

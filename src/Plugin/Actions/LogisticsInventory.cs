@@ -29,8 +29,9 @@ namespace SousChef.Plugin.Actions
         private readonly Dictionary<int, GameObject> homes = new Dictionary<int, GameObject>();
         private readonly Dictionary<int, GameObject> homeItems = new Dictionary<int, GameObject>();
         private readonly NavigationActions navigation;
-        private readonly Dictionary<string, float> distances = new Dictionary<string, float>();
+        private readonly Dictionary<int, float> distances = new Dictionary<int, float>();
         private readonly List<GameObject> otherHeldItems = new List<GameObject>();
+        public IEnumerable<GameObject> OtherHeldItems { get { return otherHeldItems; } }
         private bool snapshot, refreshed;
         public Json.Record Catalog { get; private set; }
         public void BeginObservation() { snapshot = true; refreshed = false; }
@@ -38,7 +39,7 @@ namespace SousChef.Plugin.Actions
         public LogisticsInventory(NavigationActions nav) { navigation = nav; }
         public void Reset() { Items.Clear(); Errors.Clear(); homes.Clear(); homeItems.Clear(); distances.Clear(); otherHeldItems.Clear(); }
         public float DistanceTo(GameObject target)
-        { float cost; string id = Id(target); return id != null && distances.TryGetValue(id, out cost) ? cost : Single.MaxValue; }
+        { float cost; return target != null && distances.TryGetValue(target.GetInstanceID(), out cost) ? cost : Single.MaxValue; }
         public static string Normalize(string text)
         {
             var result = new StringBuilder();
@@ -138,7 +139,7 @@ namespace SousChef.Plugin.Actions
                 GameObject otherHeld = ActionObservations.Held(player);
                 if (otherHeld != null) otherHeldItems.Add(otherHeld);
             }
-            foreach (Json.Record d in (List<object>)catalog["destinations"]) distances[(string)d["id"]] = (float)d["routeDistance"];
+            foreach (Json.Record d in (List<object>)catalog["destinations"]) distances[(int)d["objectInstanceId"]] = (float)d["routeDistance"];
             GameObject held = ActionObservations.Held(chef);
             if (held != null) navigation.RegisterItem(held);
             var targets = navigation.Targets(); var seen = new HashSet<int>();
@@ -160,12 +161,12 @@ namespace SousChef.Plugin.Actions
                     TryAdd(chef, source, source, false, distances, seen);
             }
         }
-        private void TryAdd(PlayerControls chef, GameObject item, GameObject source, bool supply, Dictionary<string, float> distances, HashSet<int> seen)
+        private void TryAdd(PlayerControls chef, GameObject item, GameObject source, bool supply, Dictionary<int, float> distances, HashSet<int> seen)
         {
             try { Add(chef, item, source, supply, distances, seen); }
             catch (Exception) { Errors.Add(Json.Object("sourceId", Id(source), "reason", "logistics_observation_unavailable")); }
         }
-        private void Add(PlayerControls chef, GameObject item, GameObject source, bool supply, Dictionary<string, float> distances, HashSet<int> seen)
+        private void Add(PlayerControls chef, GameObject item, GameObject source, bool supply, Dictionary<int, float> distances, HashSet<int> seen)
         {
             if (!supply && !seen.Add(item.GetInstanceID())) return;
             var entry = new LogisticsItem { Item = item, Source = source, Holder = source != item && !supply ? source : null, Supply = supply, Empty = Empty(item),
@@ -178,8 +179,8 @@ namespace SousChef.Plugin.Actions
             var interaction = source.GetComponent<ClientInteractable>();
             entry.InUse = HeldByOther(item) || (interaction != null && interaction.InteractorCount() > 0);
             if (System.Object.ReferenceEquals(ActionObservations.Held(chef), item)) entry.Distance = 0;
-            else { float cost; if (distances.TryGetValue(entry.SourceId ?? "", out cost)) entry.Distance = cost;
-                else if (distances.TryGetValue(entry.ItemId ?? "", out cost)) { entry.Distance = cost; entry.Source = item; entry.SourceId = entry.ItemId; } }
+            else { float cost; if (distances.TryGetValue(source.GetInstanceID(), out cost)) entry.Distance = cost;
+                else if (!supply && distances.TryGetValue(item.GetInstanceID(), out cost)) { entry.Distance = cost; entry.Source = item; entry.SourceId = entry.ItemId; } }
             Items.Add(entry);
             if (entry.UtensilType != null && !supply && source != item && source.GetComponent<ServerAttachStation>() != null &&
                 (!homeItems.ContainsKey(item.GetInstanceID()) || !System.Object.ReferenceEquals(homeItems[item.GetInstanceID()], item)))

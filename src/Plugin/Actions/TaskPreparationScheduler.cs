@@ -50,7 +50,7 @@ namespace SousChef.Plugin.Actions
                 // every render frame; navigation continues its bounded search.
                 float retry = Time.realtimeSinceStartup + .2f;
                 yield return Until(boardWait != BoardWait.None ? "waiting_for_chopping_board" :
-                    preparation.Cooking.Count != 0 ? "waiting_for_prepared_ingredients" : "waiting_for_ingredient",
+                    preparation.Cooking.Count != 0 ? "waiting_for_prepared_ingredients" : pendingDeliveries.Count != 0 ? "waiting_for_transport_delivery" : "waiting_for_ingredient",
                     () => Time.realtimeSinceStartup >= retry);
             }
         }
@@ -297,7 +297,15 @@ namespace SousChef.Plugin.Actions
                 deferred = (urgent || SelectPreparation(Single.MaxValue, ref unused, lane) != null) && Parking(item) != null;
                 return deferred;
             };
-            foreach (var step in Give(item, request.Player, true, true, defer)) yield return step;
+            bool dispatched = false;
+            Action<GameObject, int> dispatch = (cargo, player) => {
+                dispatched = true; lane.InTransit++;
+                DispatchDelivery(cargo, player, () => cargo != null && cargo.activeInHierarchy &&
+                    (!Passive(lane.Order) || !LogisticsInventory.Empty(cargo) && !TaskNative.Burnt(cargo)),
+                    received => { lane.InTransit--; if (received) completed = preparation.Complete(lane); });
+            };
+            foreach (var step in Give(item, request.Player, dispatch, true, defer)) yield return step;
+            if (dispatched) yield break;
             if (deliveredItems.Contains(item)) completed = preparation.Complete(lane);
             else if (deferred && System.Object.ReferenceEquals(item, ActionObservations.Held(chef)))
             {

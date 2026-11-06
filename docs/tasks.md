@@ -3,7 +3,9 @@
 `ActionClient.run_task(action, repetitions=1, items=None, player_id=1)` owns one
 request and control lease until all steps and repetitions finish. Use `None` for
 unlimited repetitions; finite counts are 1–10. No model is invoked by the executor.
-Each repetition executes a complete batch. Completion leaves P2 idle.
+Each task owns its repeat policy under that lease. Serving counts verified dishes,
+washing counts batches, and preparation tracks the demand for each requested
+ingredient across the entire request. Completion leaves P2 idle.
 
 Held items do not hide otherwise eligible tasks. A task uses an already-held
 ingredient, empty utensil, dirty stack or tool when it supports the requested
@@ -59,7 +61,9 @@ their 256-byte parser bound.
 `prepare_near_player` takes `items=[{'ingredient': 'chicken', 'preparation':
 'chopped', 'quantity': 2}, {'ingredient': 'pot', 'preparation': 'empty'}]`.
 Preparation states are `raw`, `chopped`, `cooked`, `mixed`, and `empty` (utensils
-and plates). Each repetition prepares the entire list. Native ingredient IDs
+and plates). A finite request owes exactly `repetitions × quantity` of each
+entry. A missing ingredient does not hold up the next repetition of another
+entry. Native ingredient IDs
 from the catalogue also work. Chopping follows the native output prefab;
 cooking/mixing uses compatible empty containers on equipment, or stages the
 ingredient while retrieving and installing an empty compatible container.
@@ -79,18 +83,29 @@ a counter is occupied: placing food there may transfer contents while retaining
 the carried object. A movement stall before any button press selects an alternate
 destination; if all alternatives are blocked, the same task waits and retries.
 
-The scheduler starts passive processing before short deliveries, performs other
-requested preparation while equipment runs, and collects completed containers
-before starting more work. Processing remains native and uses native progress/time.
-Missing ingredients defer only their own units; other available requested food
-continues. On moving supports, an incomplete background catalogue may propose a
-local processor. A board also needs a checked route to an interaction stance
-before P2 picks up food.
-It retains exact containers and stations between visits. Native remaining cooking
-time and conservative estimates of travel/chopping prevent starting long work
-just before a pot finishes. Full equipment defers new cooking units instead of
-holding an ingredient that would prevent collecting an earlier unit. Ready
-contents prefer a serving plate/utensil, leaving the processor available.
+Preparation visits entries in list order, respecting quantity: two A and one B
+normally give A, A, B, A, A, B. With A, B, C and no B available, P2 gives A, C,
+A, C. B becomes eligible again when its source or equipment is available. A
+useful catch or a pan about to burn can change the order. Finished loose food
+and food on boards/counters are candidates at every dispatch, including after
+a catch. A new raw potato cannot displace an already chopped potato for the
+same chopped request. Items already handed to the human stay reserved.
+
+Cooking and mixing reserve one unit of demand per occupied container. The
+scheduler compares native time remaining with estimated travel and chopping
+time. It can chop a second chicken while the first cooks, even with only one pan:
+the second portion stays on its board until it can be loaded. Ready containers
+are collected in order of time remaining before ruin. A pan removed or emptied
+by another chef no longer owns that unit of demand. A blocked handoff can be
+parked on a safe counter while other work proceeds; P2 remembers the exact meal
+and comes back for it. Without safe storage it retains the cargo.
+
+The action receipt's `details.preparation` lists delivered quantities, processing
+and transport reservations, and any parked handoff per entry. A belt dispatch
+reserves its unit; it counts after the recipient can collect it.
+`completedRepetitions` is the number of full lists delivered. For example,
+three A and zero B on a one-A/one-B request still means zero full repetitions.
+The wire request and Stop behavior are unchanged.
 
 Chopping boards are scheduled the same way. Food already on a board, such as food
 the human threw there, is chopped in place and preferred to an equal-stage copy

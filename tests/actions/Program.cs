@@ -107,7 +107,7 @@ internal static class Program
         var request=new TaskRequest {Action="prepare_near_player",Repetitions=2};request.Items.Add(new PreparationRequest {Selector="tomato",Preparation="raw",Quantity=1});
         Check(w.Tasks.Start(w.Chef,1,new ControlCommand {Id="two-batches",Operation="task",Task=request})==null,"finite preparation task accepted");
         var shipment=new GameObject("ingredient still in transit");
-        typeof(TaskActions).GetMethod("DispatchDelivery",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic).Invoke(w.Tasks,new object[] {shipment,1});
+        w.Tasks.DispatchDelivery(shipment,1);
         int pickups=0;
         for(int n=0;n<150 && w.Tasks.Run.Running;n++)
         {

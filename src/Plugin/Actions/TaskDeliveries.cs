@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using SousChef.Core;
 using UnityEngine;
@@ -6,13 +7,13 @@ namespace SousChef.Plugin.Actions
 {
     internal sealed partial class TaskActions
     {
-        private sealed class PendingDelivery { public GameObject Item; public int Player; }
+        private sealed class PendingDelivery { public GameObject Item; public int Player; public Func<bool> Intact; public Action<bool> Receipt; }
         private readonly List<PendingDelivery> pendingDeliveries = new List<PendingDelivery>();
         private float nextDeliveryCheck;
-        internal void DispatchDelivery(GameObject item, int player)
+        internal void DispatchDelivery(GameObject item, int player, Func<bool> intact = null, Action<bool> receipt = null)
         {
             deliveredItems.Add(item); // In transit is already allocated to the human.
-            pendingDeliveries.Add(new PendingDelivery { Item = item, Player = player });
+            pendingDeliveries.Add(new PendingDelivery { Item = item, Player = player, Intact = intact, Receipt = receipt });
         }
         private void ObserveDeliveries()
         {
@@ -24,8 +25,14 @@ namespace SousChef.Plugin.Actions
             {
                 RefreshHuman(player); // One read-only route slice per player, not per shipment.
                 for (int n = pendingDeliveries.Count - 1; n >= 0; n--)
-                    if (pendingDeliveries[n].Player == player && HumanCanCollect(pendingDeliveries[n].Item, player, false))
-                        pendingDeliveries.RemoveAt(n);
+                {
+                    var delivery = pendingDeliveries[n];
+                    if (delivery.Player != player) continue;
+                    bool intact = delivery.Intact == null || delivery.Intact();
+                    if (intact && !HumanCanCollect(delivery.Item, player, false)) continue;
+                    pendingDeliveries.RemoveAt(n);
+                    if (delivery.Receipt != null) delivery.Receipt(intact);
+                }
             }
         }
     }

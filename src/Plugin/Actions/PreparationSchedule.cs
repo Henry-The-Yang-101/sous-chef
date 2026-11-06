@@ -14,10 +14,10 @@ namespace SousChef.Plugin.Actions
         {
             public PreparationRequest Order;
             public long Delivered, Limit;
-            public int InFlight;
+            public int InFlight, InTransit;
             public float RetryAt;
             public GameObject ParkedMeal;
-            public bool WantsMore { get { return System.Object.ReferenceEquals(ParkedMeal, null) && Delivered + InFlight < Limit; } }
+            public bool WantsMore { get { return System.Object.ReferenceEquals(ParkedMeal, null) && Delivered + InFlight + InTransit < Limit; } }
         }
         internal sealed class Batch
         {
@@ -45,7 +45,7 @@ namespace SousChef.Plugin.Actions
             var rows = new List<object>();
             foreach (var lane in Lanes)
                 rows.Add(Json.Object("ingredient", lane.Order.Selector, "preparation", lane.Order.Preparation,
-                    "delivered", lane.Delivered, "processing", lane.InFlight,
+                    "delivered", lane.Delivered, "processing", lane.InFlight, "inTransit", lane.InTransit,
                     "parkedHandoff", lane.ParkedMeal == null ? null : (object)lane.ParkedMeal.GetInstanceID()));
             return rows;
         }

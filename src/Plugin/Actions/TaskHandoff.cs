@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using SousChef.Core;
+using SousChef.Plugin.Navigation;
 using UnityEngine;
 
 namespace SousChef.Plugin.Actions
@@ -38,10 +39,17 @@ namespace SousChef.Plugin.Actions
             foreach (GameObject target in navigation.Targets())
             {
                 if (blockedTargets.Contains(target) || !Counter(target) || ActionObservations.Occupant(target) != null ||
-                    HumanDistance(target) > 5 || TaskNative.Component<ServerConveyorStation>(target) != null) continue;
-                bool walk = Reachable(target) && CanDeliver(item, target);
+                    TaskNative.Component<ServerConveyorStation>(target) != null) continue;
+                float humanCost = HumanDistance(target);
+                NavigationActions observer;
+                if (humanCost == Single.MaxValue && !humanSearchComplete && Vector3.Distance(human.transform.position, target.transform.position) < 7 &&
+                    observers.TryGetValue(player, out observer) && observer.SharesCurrentSupport(target))
+                    humanCost = observer.LocalApproachDistance(target, 5);
+                if (humanCost > 5) continue;
+                float botCost = StorageDistance(target, Single.MaxValue);
+                bool walk = botCost < Single.MaxValue && CanDeliver(item, target);
                 if (!walk && !ThrowPossible(item, target)) continue;
-                float candidate = HumanDistance(target) * 100 + (walk ? inventory.DistanceTo(target) : 50);
+                float candidate = humanCost * 100 + (walk ? botCost : 50);
                 if (candidate < score) { best = target; throwItem = !walk; score = candidate; }
             }
             if (best != null) return new Handoff { Target = best, Throw = throwItem, Mode = throwItem ? "throw_near_player" : "counter_near_player" };
@@ -104,7 +112,7 @@ namespace SousChef.Plugin.Actions
         }
         // With `lossTolerant`, a pass that leaves P2's hands without reaching the
         // human ends here undelivered (absent from deliveredItems) for the caller.
-        private IEnumerable<TaskStep> Give(GameObject item, int player = 1, bool backgroundTransport = false, bool lossTolerant = false, Func<bool> defer = null)
+        private IEnumerable<TaskStep> Give(GameObject item, int player = 1, Action<GameObject, int> dispatch = null, bool lossTolerant = false, Func<bool> defer = null)
         {
             groundPass.Reset();
             Func<bool> lost = () => item == null || !System.Object.ReferenceEquals(ActionObservations.Held(chef), item);
@@ -169,7 +177,7 @@ namespace SousChef.Plugin.Actions
                 }
                 if (choice.Transport)
                 {
-                    if (backgroundTransport) DispatchDelivery(item, player);
+                    if (dispatch != null) dispatch(item, player);
                     else yield return Until("waiting_for_transport_delivery", delegate { return HumanCanCollect(item, player); });
                 }
                 deliveredItems.Add(item);
