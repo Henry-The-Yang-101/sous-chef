@@ -13,14 +13,16 @@ namespace SousChef.Plugin.Actions
             inventory.Refresh(chef); GameObject best = null; float score = Single.MaxValue;
             foreach (GameObject station in navigation.Targets())
             {
-                if (!TaskNative.Equipment(station) || !Reachable(station)) continue;
+                if (!TaskNative.Equipment(station)) continue;
+                float distance = ApproachCost(station);
+                if (distance == Single.MaxValue) continue;
                 bool mixer = TaskNative.IsMixer(station);
                 if (mixer && !includeMixing) continue;
                 GameObject item = ActionObservations.Receiver(station);
                 if (TaskNative.Burnt(item) || TaskNative.State(item, mixer) == null) continue;
                 if (LogisticsInventory.Empty(item) && ActionObservations.Container(station) != null) continue;
                 if (readyOnly && !TaskNative.Ready(item, mixer)) continue;
-                float cost = (TaskNative.Ready(item, mixer) ? TaskNative.Remaining(item, mixer, true) * 100 : 100000) + inventory.DistanceTo(station);
+                float cost = (TaskNative.Ready(item, mixer) ? TaskNative.Remaining(item, mixer, true) * 100 : 100000) + distance;
                 if (cost < score) { best = station; score = cost; }
             }
             return best;
@@ -76,7 +78,9 @@ namespace SousChef.Plugin.Actions
             LogisticsItem serving = null;
             yield return Until("checking_serving_utensils", delegate {
                 RefreshWorld();
-                if (!botSearchComplete && !ServingRecipient(ActionObservations.Held(chef), item) && !urgent()) return false;
+                // Optional plating must not wait for kitchen-wide discovery:
+                // moving equipment can invalidate that frontier indefinitely.
+                // Rescue the container now if no safe utensil is observed.
                 serving = ServingUtensil(item, station); return true;
             });
             if (serving != null)
@@ -106,7 +110,6 @@ namespace SousChef.Plugin.Actions
             GameObject holder = null; LogisticsItem plate = null;
             yield return Until("checking_serving_utensils", delegate {
                 RefreshWorld();
-                if (!botSearchComplete) return false;
                 foreach (LogisticsItem candidate in inventory.Items)
                     if (System.Object.ReferenceEquals(candidate.Item, item)) { holder = candidate.Holder; break; }
                 if (holder != null) plate = ServingUtensil(item, holder, true);

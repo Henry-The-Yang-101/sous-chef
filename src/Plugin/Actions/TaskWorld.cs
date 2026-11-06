@@ -48,7 +48,11 @@ namespace SousChef.Plugin.Actions
                 if (System.Object.ReferenceEquals(holder.InspectItem(), item) && Equipment(holder.gameObject)) return holder.gameObject;
             return null;
         }
-        public static bool IsMixer(GameObject target) { return Component<MixingStation>(StationFor(target)) != null; }
+        public static bool IsMixer(GameObject target)
+        {
+            GameObject station = StationFor(target);
+            return Component<ServerMixingStation>(station) != null || Component<MixingStation>(station) != null;
+        }
         public static bool ReadyAt(GameObject target)
         {
             GameObject item = ActionObservations.Receiver(target);
@@ -69,7 +73,14 @@ namespace SousChef.Plugin.Actions
             return Math.Max(0, (float)property.GetValue(h, null) * (untilRuined ? 2 : 1) - progress);
         }
         public static bool Equipment(GameObject go)
-        { return go != null && (go.GetComponent<CookingStation>() != null || go.GetComponent<MixingStation>() != null || go.GetComponent<ServerCookingRegion>() != null); }
+        {
+            // These native drivers advance food without a chef working there.
+            // Their cooking-step definitions cover fryers, ovens, grills, pots,
+            // heated cookers and mixers without a prefab/recipe allowlist.
+            return go != null && (go.GetComponent<ServerCookingStation>() != null ||
+                go.GetComponent<ServerMixingStation>() != null || go.GetComponent<ServerCookingRegion>() != null ||
+                go.GetComponent<CookingStation>() != null || go.GetComponent<MixingStation>() != null);
+        }
         public static bool Dirty(GameObject go) { return Component<ServerDirtyPlateStack>(go) != null; }
     }
     internal sealed partial class TaskActions
@@ -177,7 +188,7 @@ namespace SousChef.Plugin.Actions
         private float StorageDistance(GameObject target, float maximum)
         {
             float distance = inventory.DistanceTo(target);
-            if (distance == Single.MaxValue && !botSearchComplete && Run.Running && preparation != null && navigation.SharesCurrentSupport(target))
+            if (distance == Single.MaxValue && !botSearchComplete && Run.Running && navigation.SharesCurrentSupport(target))
                 distance = navigation.LocalApproachDistance(target, maximum);
             return distance;
         }

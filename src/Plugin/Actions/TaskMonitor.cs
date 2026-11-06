@@ -9,7 +9,8 @@ namespace SousChef.Plugin.Actions
         private bool MonitorAvailable()
         {
             inventory.Refresh(chef);
-            foreach (GameObject target in navigation.Targets()) if (TaskNative.Equipment(target) && Reachable(target)) return true;
+            foreach (GameObject target in navigation.Targets())
+                if (TaskNative.Equipment(target) && ApproachCost(target) != float.MaxValue) return true;
             return false;
         }
         private IEnumerable<TaskStep> MonitorEquipment()

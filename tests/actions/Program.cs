@@ -643,6 +643,54 @@ internal static class Program
             w.Tasks.Cancel("test_end");
         }
     }
+    private static void EquipmentMonitoring()
+    {
+        foreach (string driver in new[] { "cooker", "mixer", "region" })
+        {
+            var w=new World(t=> {
+                if(driver=="cooker") t.Add(new ServerCookingStation());
+                else if(driver=="mixer") t.Add(new ServerMixingStation());
+                else t.Add(new ServerCookingRegion());
+            });
+            var food=new GameObject("arbitrary processing container");food.Add(new PhysicalAttachment());
+            food.Add(new ServerIngredientContainer()).Contents.Add(new AssembledDefinitionNode("food"));
+            var cooking=food.Add(new ServerCookingHandler());
+            cooking.m_ServerData.m_cookingState=driver=="mixer" ? ProcessingState.Progressing : ProcessingState.Completed;
+            if(driver=="mixer") food.Add(new ServerMixingHandler()).m_serverData.m_mixingState=ProcessingState.Completed;
+            w.Target.GetComponent<ServerAttachStation>().Item=food;
+            Check(TaskNative.Equipment(w.Target) && TaskNative.IsMixer(w.Target)==(driver=="mixer") && TaskNative.ReadyAt(food),
+                "native "+driver+" drivers identify unattended processing and its current stage without prefab names");
+            Check(!TaskNative.Equipment(food),"a processing handler on portable food alone does not make a cold counter equipment");
+            Check(w.Tasks.Start(w.Chef,1,new ControlCommand {Id="monitor",Operation="task",Task=new TaskRequest {Action="monitor_equipment"}})==null,
+                "monitoring accepts native "+driver+" equipment");
+            var counter=w.Delivery();
+            var flags=System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic;
+            var inventory=(LogisticsInventory)typeof(TaskActions).GetField("inventory",flags).GetValue(w.Tasks);
+            var catalog=(Json.Record)w.Navigation.Available(w.Chef);
+            catalog["complete"]=false;catalog["destinations"]=new List<object>();
+            inventory.BeginObservation();inventory.Refresh(w.Chef,catalog);
+            var processing=typeof(TaskActions).GetMethod("ProcessingStation",flags);
+            Check((GameObject)processing.Invoke(w.Tasks,new object[] {true,true})==w.Target,
+                "incomplete moving-kitchen discovery can propose ready equipment on the current support");
+            var parking=typeof(TaskActions).GetMethod("Parking",flags);
+            Check((GameObject)parking.Invoke(w.Tasks,new object[] {food,null,false,null,Single.MaxValue})==counter,
+                "monitoring proves a local safe counter even while the kitchen-wide catalogue is incomplete");
+            counter.GetComponent<Placement>().Accepts=cargo=>false;
+            Check(parking.Invoke(w.Tasks,new object[] {food,null,false,null,Single.MaxValue})==null,
+                "local monitoring storage still respects the native placement veto");
+            var remove=typeof(TaskActions).GetMethod("RemoveReady",flags);
+            var steps=((IEnumerable<TaskStep>)remove.Invoke(w.Tasks,new object[] {w.Target,food})).GetEnumerator();
+            Check(steps.MoveNext() && steps.Current.Ready(),"ready food passes the native readiness wait");
+            Check(steps.MoveNext() && steps.Current.Ready(),"optional plating never delays rescue until global discovery completes");
+            steps.Dispose();
+            catalog["complete"]=true;inventory.BeginObservation();inventory.Refresh(w.Chef,catalog);
+            Check(processing.Invoke(w.Tasks,new object[] {true,true})==null,
+                "completed discovery with no certified route withholds unreachable equipment");
+            inventory.EndObservation();w.Tasks.Cancel("test_end");
+        }
+        var board=new World();
+        Check(!TaskNative.Equipment(board.Target),"ordinary chopping boards require active work and are excluded from monitoring");
+    }
     private static void MixerReadiness()
     {
         var w=new World(t=>t.Add(new MixingStation()));
@@ -1975,6 +2023,6 @@ internal static class Program
         Check(planner.Prepare(w.Chef,item,human,groundHandoff:true)==null && planner.RestoreGround(plan),
             "a selected landing stays valid while the chef faces elsewhere; the cargo lands along its planned throw");
     }
-    private static void Main() { CounterForecasts();PersistentTasks();HumanSinkEligibility();NativeUtensilDefinitions();PreparationEquipmentDiscovery();PreparedIngredientSources();AutomaticPreparationSources();AvailablePreparationWork();ReadyPreparationPriority();OccupiedBoards();HeldItemTasks();ReconciledHandoffs();MixerReadiness();ReadyFoodTasks();DishDeliveryTasks();PauseTimers();MovingPickups();Transactions();IngredientsAndDisposal();WorkAndWait();ImmediateNativeWork();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();GroundThrows();RaftLandingFallback();CurrentPoseLandingClearance();SupportedLandingArea();WalkingLandingClearance();LandingFootprintOrientation();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
+    private static void Main() { CounterForecasts();PersistentTasks();HumanSinkEligibility();NativeUtensilDefinitions();PreparationEquipmentDiscovery();PreparedIngredientSources();AutomaticPreparationSources();AvailablePreparationWork();ReadyPreparationPriority();OccupiedBoards();HeldItemTasks();ReconciledHandoffs();EquipmentMonitoring();MixerReadiness();ReadyFoodTasks();DishDeliveryTasks();PauseTimers();MovingPickups();Transactions();IngredientsAndDisposal();WorkAndWait();ImmediateNativeWork();Activation();BallisticsAndLifecycle();NativeItemGeometry();Throws();IncrementalThrowPlanning();ClosePlayerPassPositions();GeneratedStances();LogisticsJobs();JobRecovery();PreparationSupplies();ValidJobOptions();RawIngredientSupplies();InventoryObservationCost();WindAndHeight();HeightOptions();CookerThrows();NearbyHandoffs();GroundThrows();RaftLandingFallback();CurrentPoseLandingClearance();SupportedLandingArea();WalkingLandingClearance();LandingFootprintOrientation();Console.WriteLine("PASS: "+checks+" action checks (production executor, mocked native state; no game launched)"); }
     private static ClientInteractable GetCurrentlyInteractingForTest(this PlayerControls chef) { return chef.GetComponent<ClientPlayerControlsImpl_Default>().Current; }
 }
