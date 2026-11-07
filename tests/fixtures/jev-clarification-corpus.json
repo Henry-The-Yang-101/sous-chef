@@ -1,0 +1,1663 @@
+{
+  "audit": {
+    "boundary": "Source-audited native contracts and synthetic catalog consistency, not a live-game execution test.",
+    "negative_policy": "Clear unsupported commands require rejection. Missing meaning requires clarification. Neither is a supported-command failure."
+  },
+  "worlds": {
+    "base": {
+      "capabilities": {
+        "fresh": true,
+        "compatible": true,
+        "version": 1,
+        "registry_hash": "1bbd735d6d22423a40fc9b7ae9595a9b4878b8466c3765ad6f15e9d2459d2c00",
+        "entries": [
+          {
+            "name": "assemble_dish",
+            "support": "implemented"
+          },
+          {
+            "name": "prepare_near_player",
+            "support": "implemented"
+          },
+          {
+            "name": "take_ready",
+            "support": "implemented"
+          },
+          {
+            "name": "wash_dishes",
+            "support": "implemented"
+          },
+          {
+            "name": "deliver_dirty_dishes",
+            "support": "implemented"
+          },
+          {
+            "name": "put_out_fire",
+            "support": "implemented"
+          },
+          {
+            "name": "toss_burnt_food",
+            "support": "implemented"
+          },
+          {
+            "name": "monitor_equipment",
+            "support": "implemented"
+          },
+          {
+            "name": "deliver_completed_dishes",
+            "support": "implemented"
+          },
+          {
+            "name": "navigate_to",
+            "support": "implemented"
+          },
+          {
+            "name": "pick_up",
+            "support": "implemented"
+          },
+          {
+            "name": "place_at",
+            "support": "implemented"
+          },
+          {
+            "name": "add_ingredient",
+            "support": "implemented"
+          },
+          {
+            "name": "collect_contents",
+            "support": "implemented"
+          },
+          {
+            "name": "work_at",
+            "support": "implemented"
+          },
+          {
+            "name": "activate",
+            "support": "implemented"
+          },
+          {
+            "name": "discard",
+            "support": "implemented"
+          },
+          {
+            "name": "wait_until",
+            "support": "implemented"
+          },
+          {
+            "name": "throw_to",
+            "support": "implemented"
+          },
+          {
+            "name": "throw_to_player",
+            "support": "implemented"
+          },
+          {
+            "name": "stop",
+            "support": "implemented"
+          },
+          {
+            "name": "move_item",
+            "support": "implemented"
+          },
+          {
+            "name": "fetch_ingredient",
+            "support": "implemented"
+          },
+          {
+            "name": "get_plate",
+            "support": "implemented"
+          },
+          {
+            "name": "get_utensil",
+            "support": "implemented"
+          },
+          {
+            "name": "stage_item",
+            "support": "implemented"
+          },
+          {
+            "name": "return_utensil",
+            "support": "implemented"
+          },
+          {
+            "name": "clear_station",
+            "support": "implemented"
+          }
+        ],
+        "semantic_catalog": {
+          "players": [
+            {
+              "playerId": 1
+            },
+            {
+              "playerId": 3
+            }
+          ],
+          "targets": [
+            {
+              "id": "d1",
+              "objectInstanceId": 101,
+              "label": "Sink",
+              "possibleOperations": [
+                "navigate_to",
+                "work_at"
+              ]
+            }
+          ],
+          "displayOptions": {
+            "preparationOptions": [
+              {
+                "id": "carrot",
+                "label": "Carrot",
+                "preparations": {
+                  "raw": "applicable",
+                  "chopped": "applicable",
+                  "cooked": "unknown",
+                  "empty": "not_applicable"
+                }
+              },
+              {
+                "id": "onion",
+                "label": "Onion",
+                "preparations": {
+                  "raw": "applicable",
+                  "chopped": "applicable",
+                  "cooked": "unknown",
+                  "empty": "not_applicable"
+                }
+              },
+              {
+                "id": "rice",
+                "label": "Rice",
+                "preparations": {
+                  "raw": "applicable",
+                  "chopped": "not_applicable",
+                  "cooked": "applicable",
+                  "empty": "not_applicable"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "alternate": {
+      "capabilities": {
+        "fresh": true,
+        "compatible": true,
+        "version": 1,
+        "registry_hash": "1bbd735d6d22423a40fc9b7ae9595a9b4878b8466c3765ad6f15e9d2459d2c00",
+        "entries": [
+          {
+            "name": "assemble_dish",
+            "support": "implemented"
+          },
+          {
+            "name": "prepare_near_player",
+            "support": "implemented"
+          },
+          {
+            "name": "take_ready",
+            "support": "implemented"
+          },
+          {
+            "name": "wash_dishes",
+            "support": "implemented"
+          },
+          {
+            "name": "deliver_dirty_dishes",
+            "support": "implemented"
+          },
+          {
+            "name": "put_out_fire",
+            "support": "implemented"
+          },
+          {
+            "name": "toss_burnt_food",
+            "support": "implemented"
+          },
+          {
+            "name": "monitor_equipment",
+            "support": "implemented"
+          },
+          {
+            "name": "deliver_completed_dishes",
+            "support": "implemented"
+          },
+          {
+            "name": "navigate_to",
+            "support": "implemented"
+          },
+          {
+            "name": "pick_up",
+            "support": "implemented"
+          },
+          {
+            "name": "place_at",
+            "support": "implemented"
+          },
+          {
+            "name": "add_ingredient",
+            "support": "implemented"
+          },
+          {
+            "name": "collect_contents",
+            "support": "implemented"
+          },
+          {
+            "name": "work_at",
+            "support": "implemented"
+          },
+          {
+            "name": "activate",
+            "support": "implemented"
+          },
+          {
+            "name": "discard",
+            "support": "implemented"
+          },
+          {
+            "name": "wait_until",
+            "support": "implemented"
+          },
+          {
+            "name": "throw_to",
+            "support": "implemented"
+          },
+          {
+            "name": "throw_to_player",
+            "support": "implemented"
+          },
+          {
+            "name": "stop",
+            "support": "implemented"
+          },
+          {
+            "name": "move_item",
+            "support": "implemented"
+          },
+          {
+            "name": "fetch_ingredient",
+            "support": "implemented"
+          },
+          {
+            "name": "get_plate",
+            "support": "implemented"
+          },
+          {
+            "name": "get_utensil",
+            "support": "implemented"
+          },
+          {
+            "name": "stage_item",
+            "support": "implemented"
+          },
+          {
+            "name": "return_utensil",
+            "support": "implemented"
+          },
+          {
+            "name": "clear_station",
+            "support": "implemented"
+          }
+        ],
+        "semantic_catalog": {
+          "players": [
+            {
+              "playerId": 1
+            },
+            {
+              "playerId": 4
+            }
+          ],
+          "targets": [
+            {
+              "id": "d14",
+              "objectInstanceId": 714,
+              "label": "Sink",
+              "possibleOperations": [
+                "navigate_to",
+                "work_at"
+              ]
+            }
+          ],
+          "displayOptions": {
+            "preparationOptions": [
+              {
+                "id": "tomato",
+                "label": "Tomato",
+                "utensil": false,
+                "preparations": {
+                  "raw": "applicable",
+                  "chopped": "applicable",
+                  "cooked": "not_applicable",
+                  "mixed": "not_applicable",
+                  "empty": "not_applicable"
+                }
+              },
+              {
+                "id": "cucumber",
+                "label": "Cucumber",
+                "utensil": false,
+                "preparations": {
+                  "raw": "applicable",
+                  "chopped": "applicable",
+                  "cooked": "not_applicable",
+                  "mixed": "not_applicable",
+                  "empty": "not_applicable"
+                }
+              },
+              {
+                "id": "pasta",
+                "label": "Pasta",
+                "utensil": false,
+                "preparations": {
+                  "raw": "applicable",
+                  "chopped": "not_applicable",
+                  "cooked": "applicable",
+                  "mixed": "not_applicable",
+                  "empty": "not_applicable"
+                }
+              },
+              {
+                "id": "pot",
+                "label": "Pot",
+                "utensil": true,
+                "preparations": {
+                  "raw": "not_applicable",
+                  "chopped": "not_applicable",
+                  "cooked": "not_applicable",
+                  "mixed": "not_applicable",
+                  "empty": "applicable"
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "queues": {
+    "empty": {
+      "revision": 0,
+      "active": null,
+      "pending": []
+    },
+    "busy": {
+      "revision": 7,
+      "active": {
+        "id": "active",
+        "spec": {
+          "kind": "native_task",
+          "action": "take_ready",
+          "capability_version": 1,
+          "arguments": {},
+          "repeat": {
+            "mode": "finite",
+            "count": 1
+          }
+        },
+        "state": "running"
+      },
+      "pending": [
+        {
+          "id": "pending-one",
+          "spec": {
+            "kind": "native_task",
+            "action": "wash_dishes",
+            "capability_version": 1,
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          },
+          "state": "pending"
+        },
+        {
+          "id": "pending-two",
+          "spec": {
+            "kind": "native_task",
+            "action": "toss_burnt_food",
+            "capability_version": 1,
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          },
+          "state": "pending"
+        }
+      ]
+    },
+    "paused": {
+      "revision": 7,
+      "active": {
+        "id": "active",
+        "spec": {
+          "kind": "native_task",
+          "action": "take_ready",
+          "capability_version": 1,
+          "arguments": {},
+          "repeat": {
+            "mode": "finite",
+            "count": 1
+          }
+        },
+        "state": "running"
+      },
+      "pending": [
+        {
+          "id": "pending-one",
+          "spec": {
+            "kind": "native_task",
+            "action": "wash_dishes",
+            "capability_version": 1,
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          },
+          "state": "pending"
+        },
+        {
+          "id": "pending-two",
+          "spec": {
+            "kind": "native_task",
+            "action": "toss_burnt_food",
+            "capability_version": 1,
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          },
+          "state": "pending"
+        }
+      ],
+      "paused": true
+    }
+  },
+  "development": [
+    {
+      "id": "cooked",
+      "text": "Bring me four cooked pasta portions.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "prepare_near_player",
+            "arguments": {
+              "items": [
+                {
+                  "ingredient": "pasta",
+                  "preparation": "cooked",
+                  "quantity": 4
+                }
+              ],
+              "player_id": 1
+            },
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "world": "alternate",
+      "audit": [
+        {
+          "action": "prepare_near_player",
+          "source": "src/Plugin/Actions/TaskPreparation.cs",
+          "native_preconditions": "Obtainable native ingredient root or utensil, required board/compatible processor, delivery space and eligible recipient; catalog state must permit the requested preparation."
+        }
+      ]
+    },
+    {
+      "id": "ready",
+      "text": "Rescue the food that is ready on a cooker.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "take_ready",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "audit": [
+        {
+          "action": "take_ready",
+          "source": "src/Plugin/Actions/TaskTakeReady.cs",
+          "native_preconditions": "Reachable cooking equipment and removable ready output; excludes mixing."
+        }
+      ]
+    },
+    {
+      "id": "fire",
+      "text": "Deal with the fires.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "put_out_fire",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "audit": [
+        {
+          "action": "put_out_fire",
+          "source": "src/Plugin/Actions/TaskFire.cs",
+          "native_preconditions": "Reachable fires and obtainable usable extinguisher; one count is a sweep."
+        }
+      ]
+    },
+    {
+      "id": "serve",
+      "text": "Send out one finished plated dish.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "deliver_completed_dishes",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "queue": "busy",
+      "audit": [
+        {
+          "action": "deliver_completed_dishes",
+          "source": "src/Plugin/Actions/TaskDishDelivery.cs",
+          "native_preconditions": "Obtainable completed plated dish and reachable serving destination."
+        }
+      ]
+    },
+    {
+      "id": "utensil",
+      "text": "Get two empty pots for me.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "prepare_near_player",
+            "arguments": {
+              "items": [
+                {
+                  "ingredient": "pot",
+                  "preparation": "empty",
+                  "quantity": 2
+                }
+              ],
+              "player_id": 1
+            },
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "world": "alternate",
+      "audit": [
+        {
+          "action": "prepare_near_player",
+          "source": "src/Plugin/Actions/TaskPreparation.cs",
+          "native_preconditions": "Obtainable native ingredient root or utensil, required board/compatible processor, delivery space and eligible recipient; catalog state must permit the requested preparation."
+        }
+      ]
+    },
+    {
+      "id": "correction",
+      "text": "Bring player four two\u2014sorry, five\u2014chopped cucumbers.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "prepare_near_player",
+            "arguments": {
+              "items": [
+                {
+                  "ingredient": "cucumber",
+                  "preparation": "chopped",
+                  "quantity": 5
+                }
+              ],
+              "player_id": 4
+            },
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "world": "alternate",
+      "audit": [
+        {
+          "action": "prepare_near_player",
+          "source": "src/Plugin/Actions/TaskPreparation.cs",
+          "native_preconditions": "Obtainable native ingredient root or utensil, required board/compatible processor, delivery space and eligible recipient; catalog state must permit the requested preparation."
+        }
+      ]
+    },
+    {
+      "id": "repeat",
+      "text": "Do three washing batches.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "wash_dishes",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 3
+            }
+          }
+        ]
+      },
+      "queue": "busy",
+      "audit": [
+        {
+          "action": "wash_dishes",
+          "source": "src/Plugin/Actions/TaskWashing.cs",
+          "native_preconditions": "Obtainable dirty batch and reachable sink; count is batches, not plates or seconds."
+        }
+      ]
+    },
+    {
+      "id": "repeated_tasks",
+      "text": "Wash a batch, put out the fires, then wash another batch.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "wash_dishes",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          },
+          {
+            "action": "put_out_fire",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          },
+          {
+            "action": "wash_dishes",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "audit": [
+        {
+          "action": "wash_dishes",
+          "source": "src/Plugin/Actions/TaskWashing.cs",
+          "native_preconditions": "Obtainable dirty batch and reachable sink; count is batches, not plates or seconds."
+        },
+        {
+          "action": "put_out_fire",
+          "source": "src/Plugin/Actions/TaskFire.cs",
+          "native_preconditions": "Reachable fires and obtainable usable extinguisher; one count is a sweep."
+        }
+      ]
+    },
+    {
+      "id": "sequential",
+      "text": "Dispose of the burnt food, then deliver a finished dish.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "toss_burnt_food",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          },
+          {
+            "action": "deliver_completed_dishes",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "audit": [
+        {
+          "action": "toss_burnt_food",
+          "source": "src/Plugin/Actions/TaskBurntFood.cs",
+          "native_preconditions": "Obtainable ruined food and reachable bin; return surviving utensil."
+        },
+        {
+          "action": "deliver_completed_dishes",
+          "source": "src/Plugin/Actions/TaskDishDelivery.cs",
+          "native_preconditions": "Obtainable completed plated dish and reachable serving destination."
+        }
+      ]
+    },
+    {
+      "id": "navigate",
+      "text": "Go stand at the sink.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "pause_pending",
+        "tasks": [
+          {
+            "action": "navigate_to",
+            "arguments": {
+              "destination_id": "d14"
+            },
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "world": "alternate",
+      "audit": [
+        {
+          "action": "navigate_to",
+          "source": "clients/capabilities.json",
+          "native_preconditions": "Exact observed target; route must be feasible. Compiler pauses pending work after standalone navigation."
+        }
+      ]
+    },
+    {
+      "id": "remove",
+      "text": "Drop only the second waiting job; keep the rest.",
+      "expected": {
+        "kind": "queue_edit",
+        "operation": "remove_pending",
+        "task_id": "pending-two"
+      },
+      "queue": "busy",
+      "audit": [
+        {
+          "source": "harness/scheduler.py",
+          "native_preconditions": "Harness queue edit, not a native timed or simultaneous task; ordinal references count only pending jobs."
+        }
+      ]
+    },
+    {
+      "id": "wash",
+      "text": "Please get a batch of plates washed.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "wash_dishes",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "audit": [
+        {
+          "action": "wash_dishes",
+          "source": "src/Plugin/Actions/TaskWashing.cs",
+          "native_preconditions": "Obtainable dirty batch and reachable sink; count is batches, not plates or seconds."
+        }
+      ]
+    },
+    {
+      "id": "raw_player4",
+      "text": "Player four needs two tomatoes, left raw.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "prepare_near_player",
+            "arguments": {
+              "items": [
+                {
+                  "ingredient": "tomato",
+                  "preparation": "raw",
+                  "quantity": 2
+                }
+              ],
+              "player_id": 4
+            },
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "world": "alternate",
+      "audit": [
+        {
+          "action": "prepare_near_player",
+          "source": "src/Plugin/Actions/TaskPreparation.cs",
+          "native_preconditions": "Obtainable native ingredient root or utensil, required board/compatible processor, delivery space and eligible recipient; catalog state must permit the requested preparation."
+        }
+      ]
+    },
+    {
+      "id": "same_ingredient",
+      "text": "Give me one raw tomato and three chopped tomatoes.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "prepare_near_player",
+            "arguments": {
+              "items": [
+                {
+                  "ingredient": "tomato",
+                  "preparation": "raw",
+                  "quantity": 1
+                },
+                {
+                  "ingredient": "tomato",
+                  "preparation": "chopped",
+                  "quantity": 3
+                }
+              ],
+              "player_id": 1
+            },
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "world": "alternate",
+      "audit": [
+        {
+          "action": "prepare_near_player",
+          "source": "src/Plugin/Actions/TaskPreparation.cs",
+          "native_preconditions": "Obtainable native ingredient root or utensil, required board/compatible processor, delivery space and eligible recipient; catalog state must permit the requested preparation."
+        }
+      ]
+    },
+    {
+      "id": "monitor",
+      "text": "Keep watching unattended cooking and mixing equipment and rescuing ready output.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "monitor_equipment",
+            "arguments": {},
+            "repeat": {
+              "mode": "until_cancelled"
+            }
+          }
+        ]
+      },
+      "audit": [
+        {
+          "action": "monitor_equipment",
+          "source": "src/Plugin/Actions/TaskMonitor.cs",
+          "native_preconditions": "Reachable cooking or mixing equipment; each repetition waits for and rescues output."
+        }
+      ]
+    },
+    {
+      "id": "dirty",
+      "text": "Fetch dirty dishes and pass the batch to me; I will wash it.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "deliver_dirty_dishes",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "audit": [
+        {
+          "action": "deliver_dirty_dishes",
+          "source": "src/Plugin/Actions/TaskDirtyDelivery.cs",
+          "native_preconditions": "Dirty batch and human-accessible sink; complete route evidence that P2 cannot reach a sink (TaskWashing.Sink(true))."
+        }
+      ]
+    }
+  ],
+  "holdout": [
+    {
+      "id": "wash",
+      "text": "Collect some dirty plates and wash the batch.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "wash_dishes",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "audit": [
+        {
+          "action": "wash_dishes",
+          "source": "src/Plugin/Actions/TaskWashing.cs",
+          "native_preconditions": "Obtainable dirty batch and reachable sink; count is batches, not plates or seconds."
+        }
+      ]
+    },
+    {
+      "id": "fire",
+      "text": "Fetch an extinguisher and put out the reachable fires.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "put_out_fire",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "audit": [
+        {
+          "action": "put_out_fire",
+          "source": "src/Plugin/Actions/TaskFire.cs",
+          "native_preconditions": "Reachable fires and obtainable usable extinguisher; one count is a sweep."
+        }
+      ]
+    },
+    {
+      "id": "ready",
+      "text": "Remove ready food from a cooker, parking or serving what you take.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "take_ready",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "audit": [
+        {
+          "action": "take_ready",
+          "source": "src/Plugin/Actions/TaskTakeReady.cs",
+          "native_preconditions": "Reachable cooking equipment and removable ready output; excludes mixing."
+        }
+      ]
+    },
+    {
+      "id": "monitor",
+      "text": "Keep monitoring unattended equipment until I cancel, rescuing its ready output.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "monitor_equipment",
+            "arguments": {},
+            "repeat": {
+              "mode": "until_cancelled"
+            }
+          }
+        ]
+      },
+      "audit": [
+        {
+          "action": "monitor_equipment",
+          "source": "src/Plugin/Actions/TaskMonitor.cs",
+          "native_preconditions": "Reachable cooking or mixing equipment; each repetition waits for and rescues output."
+        }
+      ]
+    },
+    {
+      "id": "serve",
+      "text": "Deliver one already finished plated order to the serving hatch.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "deliver_completed_dishes",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "queue": "busy",
+      "audit": [
+        {
+          "action": "deliver_completed_dishes",
+          "source": "src/Plugin/Actions/TaskDishDelivery.cs",
+          "native_preconditions": "Obtainable completed plated dish and reachable serving destination."
+        }
+      ]
+    },
+    {
+      "id": "dirty",
+      "text": "Pass the dirty batch to me so I can wash it.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "deliver_dirty_dishes",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "audit": [
+        {
+          "action": "deliver_dirty_dishes",
+          "source": "src/Plugin/Actions/TaskDirtyDelivery.cs",
+          "native_preconditions": "Dirty batch and human-accessible sink; complete route evidence that P2 cannot reach a sink (TaskWashing.Sink(true))."
+        }
+      ]
+    },
+    {
+      "id": "cooked",
+      "text": "Bring player one four pasta portions, cooked.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "prepare_near_player",
+            "arguments": {
+              "items": [
+                {
+                  "ingredient": "pasta",
+                  "preparation": "cooked",
+                  "quantity": 4
+                }
+              ],
+              "player_id": 1
+            },
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "world": "alternate",
+      "audit": [
+        {
+          "action": "prepare_near_player",
+          "source": "src/Plugin/Actions/TaskPreparation.cs",
+          "native_preconditions": "Obtainable native ingredient root or utensil, required board/compatible processor, delivery space and eligible recipient; catalog state must permit the requested preparation."
+        }
+      ]
+    },
+    {
+      "id": "utensil",
+      "text": "Deliver two empty pots to me.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "prepare_near_player",
+            "arguments": {
+              "items": [
+                {
+                  "ingredient": "pot",
+                  "preparation": "empty",
+                  "quantity": 2
+                }
+              ],
+              "player_id": 1
+            },
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "world": "alternate",
+      "audit": [
+        {
+          "action": "prepare_near_player",
+          "source": "src/Plugin/Actions/TaskPreparation.cs",
+          "native_preconditions": "Obtainable native ingredient root or utensil, required board/compatible processor, delivery space and eligible recipient; catalog state must permit the requested preparation."
+        }
+      ]
+    },
+    {
+      "id": "raw_player4",
+      "text": "Take two raw tomatoes to player four.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "prepare_near_player",
+            "arguments": {
+              "items": [
+                {
+                  "ingredient": "tomato",
+                  "preparation": "raw",
+                  "quantity": 2
+                }
+              ],
+              "player_id": 4
+            },
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "world": "alternate",
+      "audit": [
+        {
+          "action": "prepare_near_player",
+          "source": "src/Plugin/Actions/TaskPreparation.cs",
+          "native_preconditions": "Obtainable native ingredient root or utensil, required board/compatible processor, delivery space and eligible recipient; catalog state must permit the requested preparation."
+        }
+      ]
+    },
+    {
+      "id": "repeat",
+      "text": "Wash a batch three times.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "wash_dishes",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 3
+            }
+          }
+        ]
+      },
+      "queue": "busy",
+      "audit": [
+        {
+          "action": "wash_dishes",
+          "source": "src/Plugin/Actions/TaskWashing.cs",
+          "native_preconditions": "Obtainable dirty batch and reachable sink; count is batches, not plates or seconds."
+        }
+      ]
+    },
+    {
+      "id": "sequential",
+      "text": "Throw away the burnt food before serving a completed plated order.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "toss_burnt_food",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          },
+          {
+            "action": "deliver_completed_dishes",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "audit": [
+        {
+          "action": "toss_burnt_food",
+          "source": "src/Plugin/Actions/TaskBurntFood.cs",
+          "native_preconditions": "Obtainable ruined food and reachable bin; return surviving utensil."
+        },
+        {
+          "action": "deliver_completed_dishes",
+          "source": "src/Plugin/Actions/TaskDishDelivery.cs",
+          "native_preconditions": "Obtainable completed plated dish and reachable serving destination."
+        }
+      ]
+    },
+    {
+      "id": "navigate",
+      "text": "Move to the sink and wait there.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "pause_pending",
+        "tasks": [
+          {
+            "action": "navigate_to",
+            "arguments": {
+              "destination_id": "d14"
+            },
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "world": "alternate",
+      "audit": [
+        {
+          "action": "navigate_to",
+          "source": "clients/capabilities.json",
+          "native_preconditions": "Exact observed target; route must be feasible. Compiler pauses pending work after standalone navigation."
+        }
+      ]
+    },
+    {
+      "id": "pause",
+      "text": "Hold the pending jobs; let the currently active job finish.",
+      "expected": {
+        "kind": "queue_edit",
+        "operation": "pause_pending"
+      },
+      "queue": "busy",
+      "audit": [
+        {
+          "source": "harness/scheduler.py",
+          "native_preconditions": "Harness queue edit, not a native timed or simultaneous task; ordinal references count only pending jobs."
+        }
+      ]
+    },
+    {
+      "id": "correction",
+      "text": "Prepare two chopped cucumbers for player four; actually, five cucumbers.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "prepare_near_player",
+            "arguments": {
+              "items": [
+                {
+                  "ingredient": "cucumber",
+                  "preparation": "chopped",
+                  "quantity": 5
+                }
+              ],
+              "player_id": 4
+            },
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "world": "alternate",
+      "audit": [
+        {
+          "action": "prepare_near_player",
+          "source": "src/Plugin/Actions/TaskPreparation.cs",
+          "native_preconditions": "Obtainable native ingredient root or utensil, required board/compatible processor, delivery space and eligible recipient; catalog state must permit the requested preparation."
+        }
+      ]
+    },
+    {
+      "id": "repeated_tasks",
+      "text": "Wash a batch, then extinguish the fires, then wash a batch again.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "wash_dishes",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          },
+          {
+            "action": "put_out_fire",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          },
+          {
+            "action": "wash_dishes",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "audit": [
+        {
+          "action": "wash_dishes",
+          "source": "src/Plugin/Actions/TaskWashing.cs",
+          "native_preconditions": "Obtainable dirty batch and reachable sink; count is batches, not plates or seconds."
+        },
+        {
+          "action": "put_out_fire",
+          "source": "src/Plugin/Actions/TaskFire.cs",
+          "native_preconditions": "Reachable fires and obtainable usable extinguisher; one count is a sweep."
+        }
+      ]
+    },
+    {
+      "id": "same_ingredient",
+      "text": "I need one tomato raw and three tomatoes chopped, brought to me.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "prepare_near_player",
+            "arguments": {
+              "items": [
+                {
+                  "ingredient": "tomato",
+                  "preparation": "raw",
+                  "quantity": 1
+                },
+                {
+                  "ingredient": "tomato",
+                  "preparation": "chopped",
+                  "quantity": 3
+                }
+              ],
+              "player_id": 1
+            },
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "world": "alternate",
+      "audit": [
+        {
+          "action": "prepare_near_player",
+          "source": "src/Plugin/Actions/TaskPreparation.cs",
+          "native_preconditions": "Obtainable native ingredient root or utensil, required board/compatible processor, delivery space and eligible recipient; catalog state must permit the requested preparation."
+        }
+      ]
+    },
+    {
+      "id": "remove",
+      "text": "Remove pending job number two, leaving the other jobs as they are.",
+      "expected": {
+        "kind": "queue_edit",
+        "operation": "remove_pending",
+        "task_id": "pending-two"
+      },
+      "queue": "busy",
+      "audit": [
+        {
+          "source": "harness/scheduler.py",
+          "native_preconditions": "Harness queue edit, not a native timed or simultaneous task; ordinal references count only pending jobs."
+        }
+      ]
+    },
+    {
+      "id": "mixed_list",
+      "text": "Bring me two chopped carrots and one raw onion.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "prepare_near_player",
+            "arguments": {
+              "player_id": 1,
+              "items": [
+                {
+                  "ingredient": "carrot",
+                  "preparation": "chopped",
+                  "quantity": 2
+                },
+                {
+                  "ingredient": "onion",
+                  "preparation": "raw",
+                  "quantity": 1
+                }
+              ]
+            },
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "world": "base",
+      "audit": [
+        {
+          "action": "prepare_near_player",
+          "source": "src/Plugin/Actions/TaskPreparation.cs",
+          "native_preconditions": "Obtainable native ingredient root or utensil, required board/compatible processor, delivery space and eligible recipient; catalog state must permit the requested preparation."
+        }
+      ]
+    },
+    {
+      "id": "timed",
+      "text": "Wash for sixty seconds and then stop.",
+      "world": "alternate",
+      "expected": {
+        "kind": "rejected"
+      },
+      "audit": [
+        {
+          "source": "clients/capabilities.json",
+          "reason": "Intentionally unsupported or missing a material field; excluded from positive completion denominator."
+        }
+      ]
+    },
+    {
+      "id": "concurrent",
+      "text": "Wash dishes while also chopping cucumbers for me.",
+      "world": "alternate",
+      "expected": {
+        "kind": "rejected"
+      },
+      "audit": [
+        {
+          "source": "clients/capabilities.json",
+          "reason": "Intentionally unsupported or missing a material field; excluded from positive completion denominator."
+        }
+      ]
+    },
+    {
+      "id": "region",
+      "text": "Go to the upper-left area of the kitchen.",
+      "world": "alternate",
+      "expected": {
+        "kind": "rejected"
+      },
+      "audit": [
+        {
+          "source": "clients/capabilities.json",
+          "reason": "Intentionally unsupported or missing a material field; excluded from positive completion denominator."
+        }
+      ]
+    },
+    {
+      "id": "unavailable",
+      "text": "Bring me three chopped mushrooms.",
+      "world": "alternate",
+      "expected": {
+        "kind": "rejected"
+      },
+      "audit": [
+        {
+          "source": "clients/capabilities.json",
+          "reason": "Intentionally unsupported or missing a material field; excluded from positive completion denominator."
+        }
+      ]
+    },
+    {
+      "id": "out_of_range",
+      "text": "Bring me twenty raw tomatoes.",
+      "world": "alternate",
+      "expected": {
+        "kind": "rejected"
+      },
+      "audit": [
+        {
+          "source": "clients/capabilities.json",
+          "reason": "Intentionally unsupported or missing a material field; excluded from positive completion denominator."
+        }
+      ]
+    },
+    {
+      "id": "invalid_preparation",
+      "text": "Bring me two chopped pots.",
+      "world": "alternate",
+      "expected": {
+        "kind": "rejected"
+      },
+      "audit": [
+        {
+          "source": "clients/capabilities.json",
+          "reason": "Intentionally unsupported or missing a material field; excluded from positive completion denominator."
+        }
+      ]
+    },
+    {
+      "id": "preparation_missing",
+      "text": "Bring one cucumber to me.",
+      "world": "alternate",
+      "expected": {
+        "kind": "clarification"
+      },
+      "audit": [
+        {
+          "source": "clients/capabilities.json",
+          "reason": "Intentionally unsupported or missing a material field; excluded from positive completion denominator."
+        }
+      ]
+    },
+    {
+      "id": "speech_conflict",
+      "text": "Bring me three chopped tomatoes.",
+      "world": "alternate",
+      "expected": {
+        "kind": "clarification"
+      },
+      "utterance_fields": {
+        "segments": [
+          {
+            "text": "Bring me three chopped tomatoes.",
+            "alternatives": [
+              "Bring me three chopped tomatoes.",
+              "Bring me eight chopped tomatoes."
+            ]
+          }
+        ]
+      },
+      "audit": [
+        {
+          "source": "clients/capabilities.json",
+          "reason": "Intentionally unsupported or missing a material field; excluded from positive completion denominator."
+        }
+      ]
+    }
+  ]
+}

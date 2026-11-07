@@ -36,7 +36,52 @@ def score_outcome(expected, outcome):
         return 'correct_completion' if semantic_result(outcome['result']) == expected else 'incorrect_completion'
     if expected['kind'] == 'blocked' and status in ('rejected', 'clarification'):
         return 'safe_block'
+    # New corpora distinguish a clear unsupported request from missing meaning.
+    # Preserve the historical 'blocked' score for older published evaluations.
+    if expected['kind'] == 'rejected':
+        return 'correct_rejection' if status == 'rejected' else 'unnecessary_clarification'
+    if expected['kind'] == 'clarification':
+        return 'correct_clarification' if status == 'clarification' else 'incorrect_rejection'
     return 'clarification' if status == 'clarification' else 'unexpected_rejection'
+
+
+def audit_case(case, world, queue):
+    """Reject invalid positive gold before sending anything to the playground.
+
+    Contract/catalog consistency is necessary, not proof of physical execution.
+    Native prerequisites and source references remain explicit corpus metadata.
+    """
+    from clients.capabilities import wire_command
+    from harness.capabilities import assess_arguments
+    from harness.decision.compiler import task_spec
+    from harness.plans import validate_plan
+    expected = case['expected']
+    if expected['kind'] != 'plan':
+        return
+    tasks = []
+    for entry in expected['tasks']:
+        count = entry['repeat'].get('count')
+        wire_command(entry['action'], entry['arguments'], count)
+        semantic = world['capabilities']['semantic_catalog']
+        assessment = assess_arguments(entry['action'], entry['arguments'], semantic)
+        if assessment['state'] == 'not_applicable':
+            raise ValueError(f"{case['id']}: gold contradicts native preparation catalog")
+        if entry['action'] == 'prepare_near_player':
+            options = {x['id'] for x in semantic['displayOptions']['preparationOptions']}
+            if any(x['ingredient'] not in options for x in entry['arguments']['items']):
+                raise ValueError(f"{case['id']}: gold ingredient absent from catalog")
+            if entry['arguments']['player_id'] not in {p['playerId'] for p in semantic['players']}:
+                raise ValueError(f"{case['id']}: gold recipient absent from catalog")
+        if entry['action'] == 'navigate_to':
+            if entry['arguments']['destination_id'] not in {t['id'] for t in semantic['targets']}:
+                raise ValueError(f"{case['id']}: gold destination absent from catalog")
+        tasks.append(task_spec(entry['action'], entry['arguments'], count))
+    from clients.capabilities import REGISTRY_VERSION, registry
+    validate_plan({'schema_version': registry()['plan_schema_version'], 'capability_version': REGISTRY_VERSION,
+                   'command_id': 'audit', 'expected_queue_revision': queue['revision'],
+                   'queue_edit': expected['queue_edit'], 'tasks': tasks,
+                   'after_plan': expected['after_plan'], 'on_failure': 'pause_pending'},
+                  capabilities=world['capabilities'])
 
 
 def main():
@@ -57,6 +102,8 @@ def main():
     if args.operation == 'prepare':
         fingerprint = hashlib.sha256((args.source_root/'harness/decision/compiler.py').read_bytes()).hexdigest()
         for case in corpus[args.cohort]:
+            audit_case(case, corpus['worlds'][case.get('world', 'base')],
+                       corpus['queues'][case.get('queue', 'empty')])
             name = prefix + case['id']
             path = args.directory/(name+'.json')
             if path.exists(): parser.error(f'{name} already exists; use a new variant')
