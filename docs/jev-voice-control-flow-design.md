@@ -1269,14 +1269,16 @@ real microphone input and game sound, not only generated test audio.
 Implementation status, 6 November 2026: the Python adapter, compiler, inbox,
 clarification flow and preview controls are implemented. See the
 [setup and runtime boundaries](jev-interpreter.md) and
-[paired Chrome playground evaluation](jev-playground-round3.md). The default remains
-Preview. No Python Jev API/SDK call was made. The third round, 7 November, recorded
-206 additional observations after refining task boundaries and field context.
-On 20 fresh held-out commands, the revised interpreter completed 6/14 supported
-requests versus 4/14 previously; both blocked all six unsupported/ambiguous
-requests. Sixteen deliberately incorrect or
-ambiguous final-plan proposals were also blocked. Frequent clarifications and
-some regressions remain. This establishes
+[paired Chrome playground evaluation](jev-playground-round4.md). The default remains
+Preview. No Python Jev API/SDK call was made. The fourth round, 7 November, recorded
+549 additional observations after clarifying draft progress and supplying grounded
+discovery context. After correcting synthetic preparation certainty to native
+`unknown` and repeating the paired comparison, the revised interpreter completed
+12/18 supported requests versus 7/18 previously. Both explicitly rejected 4/6
+unsupported requests, unnecessarily clarified two, and correctly clarified two
+ambiguous requests. Sixteen deliberately incorrect or ambiguous verifier proposals
+were also blocked. Some completion gains are borderline across runs, and explicit
+rejection did not improve overall. This establishes
 the implemented review flow, not reliable unattended acceptance. Live Python
 connectivity, microphone-to-game execution and broader confidence calibration
 remain unverified.
