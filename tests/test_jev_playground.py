@@ -8,17 +8,18 @@ import unittest
 from harness.decision.compiler import Compiler, Clarification, build_context
 from harness.decision.config import Settings
 from harness.decision.protocol import DecisionError, validate_request, validate_response
-from scripts.jev_evaluate import score_outcome, semantic_result
+from scripts.jev_evaluate import audit_case, score_outcome, semantic_result
 from scripts.jev_playground import next_request
 import test_decision as support
 
 ROOT = Path(__file__).resolve().parents[1]
-EVIDENCE = json.loads((ROOT / 'docs/jev-playground-round3.json').read_text())
+EVIDENCE = json.loads((ROOT / 'docs/jev-playground-round4.json').read_text())
+ROUND3 = json.loads((ROOT / 'docs/jev-playground-round3.json').read_text())
 PREVIOUS = json.loads((ROOT / 'docs/jev-playground-round2.json').read_text())
 PREVIOUS_TRIALS = {trial['id']: trial for trial in PREVIOUS['trials']}
 TRIALS = {trial['id']: trial for trial in EVIDENCE['trials']}
 CASES = {case['name']: case for case in EVIDENCE['sessions']}
-RELEASE = [case for case in CASES.values() if case.get('variant') == 'release' and case['type'] == 'command']
+RELEASE = [case for case in CASES.values() if case.get('variant') == 'nativerelease' and case['type'] == 'command']
 
 
 def session(case):
@@ -29,14 +30,15 @@ def session(case):
 class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
     def test_current_and_historical_wire_observations_validate(self):
         historical = json.loads((ROOT / 'docs/jev-playground-evaluation.json').read_text())
-        for trial in list(TRIALS.values()) + PREVIOUS['trials'] + historical['trials']:
+        for trial in list(TRIALS.values()) + ROUND3['trials'] + PREVIOUS['trials'] + historical['trials']:
             with self.subTest(trial=trial['id']):
                 validate_request(trial['request'])
                 validate_response(trial['request'], trial['response'])
 
-    async def test_all_34_final_command_cases_use_exact_production_requests(self):
-        self.assertEqual(len(RELEASE), 34)
-        for case in RELEASE:
+    async def test_all_52_final_command_cases_use_exact_production_requests(self):
+        current = [c for c in CASES.values() if c.get('variant') in ('release', 'nativerelease') and c['type'] == 'command']
+        self.assertEqual(len(current), 52)
+        for case in current:
             with self.subTest(case=case['name']):
                 # Any changed prompt fails; a missing observation returns request.
                 outcome = await next_request(session(case))
@@ -51,16 +53,17 @@ class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
             if case['cohort'] != 'holdout':
                 continue
             outcome = await next_request(session(case))
-            name = case['name'].removeprefix('release_holdout_')
+            name = case['name'].removeprefix('nativerelease_holdout_')
             if outcome['status'] == 'complete':
                 self.assertEqual(semantic_result(outcome['result']), case['expected'])
                 completed.add(name)
-            elif case['expected']['kind'] == 'blocked':
+            elif case['expected']['kind'] in ('rejected', 'clarification'):
                 self.assertIn(outcome['status'], ('clarification', 'rejected'))
                 blocked.add(name)
-        self.assertEqual(completed, {'dirty', 'pause', 'raw_player4', 'ready', 'repeat', 'wash'})
+        self.assertEqual(completed, {'cooked', 'correction', 'fire', 'monitor', 'pause', 'raw_player4', 'ready', 'repeat',
+                                         'repeated_tasks', 'same_ingredient', 'serve', 'wash'})
         self.assertEqual(blocked, {'timed', 'concurrent', 'unavailable', 'out_of_range', 'speech_conflict',
-                                  'preparation_missing'})
+                                  'preparation_missing', 'region', 'invalid_preparation'})
 
     async def test_complete_plan_confirmation_keeps_exact_fields_without_more_model_io(self):
         confirmations = 0
@@ -143,14 +146,14 @@ class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
 
     def test_holdout_provenance_has_no_reused_responses(self):
         holdout = [case for case in CASES.values() if case.get('cohort') == 'holdout']
-        self.assertEqual(len(holdout), 40)
+        self.assertEqual(len(holdout), 104)
         self.assertTrue(all(not case.get('reused_observations') for case in holdout))
-        self.assertEqual(len({key for case in holdout for key in case['trial_ids']}), 112)
-        path = 'tests/fixtures/jev-context-corpus.json'
+        self.assertEqual(len({key for case in holdout for key in case['trial_ids']}), 445)
+        path = 'tests/fixtures/jev-clarification-corpus.json'
         self.assertEqual(hashlib.sha256((ROOT/path).read_bytes()).hexdigest(), EVIDENCE['freeze']['sha256'][path])
 
     def test_scoring_does_not_reward_abstention_or_partial_matches(self):
-        case = CASES['release_holdout_raw_player4']
+        case = CASES['nativerelease_holdout_raw_player4']
         outcome = copy.deepcopy(case['outcome'])
         for field, value in (('player_id', 1), ('items', [])):
             wrong = copy.deepcopy(outcome)
@@ -158,6 +161,46 @@ class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(score_outcome(case['expected'], wrong), 'incorrect_completion')
         self.assertEqual(score_outcome(case['expected'], {'status': 'clarification'}), 'clarification')
         self.assertEqual(score_outcome({'kind': 'blocked'}, {'status': 'clarification'}), 'safe_block')
+        self.assertEqual(score_outcome({'kind': 'rejected'}, {'status': 'clarification'}), 'unnecessary_clarification')
+        self.assertEqual(score_outcome({'kind': 'rejected'}, {'status': 'rejected'}), 'correct_rejection')
+        self.assertEqual(score_outcome({'kind': 'clarification'}, {'status': 'rejected'}), 'incorrect_rejection')
+
+    async def test_timed_washing_is_rejected_without_a_partial_plan(self):
+        for name in ('release_holdout_timed', 'nativerelease_holdout_timed', 'timed_repeat_control'):
+            case = CASES[name]
+            outcome = await next_request(session(case))
+            self.assertEqual(outcome['status'], 'rejected')
+            self.assertEqual(len(case['trial_ids']), 1)
+            self.assertNotIn('result', outcome)
+
+    def test_positive_corpus_matches_contracts_and_native_catalog_certainty(self):
+        corpus = json.loads((ROOT/'tests/fixtures/jev-clarification-corpus.json').read_text())
+        for case in corpus['development'] + corpus['holdout']:
+            audit_case(case, corpus['worlds'][case.get('world', 'base')], corpus['queues'][case.get('queue', 'empty')])
+            self.assertTrue(case['audit'])
+            for entry in case['audit']:
+                self.assertTrue((ROOT/entry['source']).exists())
+        for world in corpus['worlds'].values():
+            for item in world['capabilities']['semantic_catalog']['displayOptions']['preparationOptions']:
+                if not item.get('utensil'):
+                    self.assertEqual(item['preparations']['cooked'], 'unknown')
+                    self.assertEqual(item['preparations']['mixed'], 'unknown')
+
+    def test_corpus_audit_rejects_impossible_positive_expectations(self):
+        corpus = json.loads((ROOT/'tests/fixtures/jev-clarification-corpus.json').read_text())
+        original = next(c for c in corpus['holdout'] if c['id'] == 'utensil')
+        kitchen, queue = corpus['worlds']['alternate'], corpus['queues']['empty']
+        mutations = [lambda a: a['items'][0].update(preparation='chopped'),
+                     lambda a: a['items'][0].update(quantity=11),
+                     lambda a: a['items'][0].update(ingredient='absent-item'),
+                     lambda a: a.update(player_id=3)]
+        for mutate in mutations:
+            case = copy.deepcopy(original)
+            mutate(case['expected']['tasks'][0]['arguments'])
+            with self.assertRaises(ValueError): audit_case(case, kitchen, queue)
+        case = copy.deepcopy(original)
+        case['expected']['tasks'][0]['repeat'] = {'mode': 'finite', 'count': None}
+        with self.assertRaises(ValueError): audit_case(case, kitchen, queue)
 
 
 if __name__ == '__main__':

@@ -206,6 +206,30 @@ class CompilerTests(unittest.IsolatedAsyncioTestCase):
             for limit in task['limitations']:
                 self.assertIn(limit, description)
 
+    def test_discovery_context_uses_observed_identities_and_retains_uncertainty(self):
+        kitchen = world()
+        semantic = kitchen['capabilities']['semantic_catalog']
+        semantic['players'] = [{'playerId': 2}, {'playerId': 3}]
+        semantic['displayOptions']['preparationOptions'] = [
+            {'id': 'native-root-73', 'label': 'Rice', 'utensil': False,
+             'preparations': {'raw': 'applicable', 'cooked': 'unknown'}}]
+        c = Compiler({'id': 'scope', 'text': 'Bring cooked rice to player three'},
+                     build_context(kitchen, {'revision': 0}), None)
+        request = c.state(discovery=True)
+        self.assertEqual(request['world']['eligible_recipients'], [3])
+        observed = request['world']['preparation_options'][0]
+        self.assertEqual(observed['id'], 'native-root-73')
+        self.assertEqual(observed['preparations']['cooked'], 'unknown')
+        observed['preparations']['cooked'] = 'applicable'
+        self.assertEqual(c.context['semantic']['displayOptions']['preparationOptions'][0]['preparations']['cooked'], 'unknown')
+
+    async def test_repeat_default_excludes_explicit_ongoing_work(self):
+        c, s = compiler('Keep washing', [{'repeat': 'until_cancelled'}])
+        self.assertIsNone(await c.repeat('wash_dishes', 1))
+        criteria = s.requests[0]['questions']['repeat']['criteria']
+        self.assertIn('neither a repetition count nor ongoing-work wording', criteria['count_1'])
+        self.assertIn('until_cancelled', criteria)
+
     async def test_native_verification_includes_the_selected_target_meaning(self):
         c, script = compiler('Go stand at the sink', [{'simple_coverage': 0}, {'next_task': 'native_action'},
             {'action': 'navigate_to'}, {'destination_id': 'value_0'}, {}, {'next_task': 'done'}, {}])

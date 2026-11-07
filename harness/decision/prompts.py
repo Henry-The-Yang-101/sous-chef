@@ -1,5 +1,18 @@
 """Independent intent and constraint questions; no generated plans or selectors."""
 
+INTERPRETATION_POLICY = (
+    'Interpret the requested plan, not whether work has physically finished. '
+    'Use ordinary paraphrases and the supplied contract defaults. '
+    'Clarify only when unresolved meaning changes the action or a required field; '
+    'alternative phrasings with the same executable meaning are not ambiguity. '
+    'If a clear request has no supported match, choose unsupported when offered; never force the closest task. ')
+
+PROGRESS_CONTEXT = (
+    'already_interpreted and items are parts of this utterance already captured in a draft, including their full counts. '
+    'They are not execution history. done means no further requested entries remain to parse, not that the chef finished. '
+    'Internal procedure steps in a task contract are already covered by that task. '
+    'A correction replaces only the affected field; other fields retain their stated values.')
+
 INTENT_ROUTE = {'type': 'choice', 'instructions':
     'Classify what change the utterance requests, independently of whether it is supported or its arguments are complete. '
     'A positive request for new work is task_plan, including work with unsupported constraints. Separate constraint questions check those constraints. '

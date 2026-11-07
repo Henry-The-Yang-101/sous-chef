@@ -54,13 +54,16 @@ def audit_case(case, world, queue):
     from clients.capabilities import wire_command
     from harness.capabilities import assess_arguments
     from harness.decision.compiler import task_spec
-    from harness.plans import validate_plan
+    from harness.plans import Repeat, validate_plan
     expected = case['expected']
+    if expected['kind'] == 'queue_edit' and expected['operation'] == 'remove_pending':
+        if expected['task_id'] not in {entry['id'] for entry in queue['pending']}:
+            raise ValueError(f"{case['id']}: gold removal target absent from pending queue")
     if expected['kind'] != 'plan':
         return
     tasks = []
     for entry in expected['tasks']:
-        count = entry['repeat'].get('count')
+        count = Repeat.parse(entry['action'], entry['repeat']).count
         wire_command(entry['action'], entry['arguments'], count)
         semantic = world['capabilities']['semantic_catalog']
         assessment = assess_arguments(entry['action'], entry['arguments'], semantic)
