@@ -26,3 +26,34 @@ EXECUTION_CONSTRAINTS = {
         'Does the utterance request movement to a kitchen AREA or relative region rather than a named object or exact target? '
         'Return YES for region destinations. Movement to a specific station, item or player is NO; no movement request is also NO. '
         'Judge the requested destination, not physical reachability. Respect negations and corrections.'}}
+
+# Interpretation notes refine existing contracts; they neither enable a task nor
+# replace registry limits, candidate generation or native feasibility checks.
+TASK_BOUNDARIES = {
+    'prepare_near_player': 'Requested result: ingredient portions or empty utensils delivered to a player. '
+        'Raw, chopped, cooked and mixed describe ingredient preparation, not a completed plated order. '
+        'Fetching and processing are steps within this assignment; a list for one recipient is one task.',
+    'deliver_completed_dishes': 'Requested result: an already completed plated order delivered to the serving window. '
+        'This does not prepare ingredient portions for a player or assemble an unfinished dish.',
+    'take_ready': 'Requested result: collect food from cooking equipment when ready, then park or serve it. '
+        'The responsibility is removing ready food from heat; mixing equipment is excluded. '
+        'Incidental parking or serving is part of this collection, not another requested task.',
+    'monitor_equipment': 'Requested responsibility: watch unattended cooking or mixing equipment and rescue ready output. '
+        'Monitoring may start before food is ready. It is one responsibility, not concurrent jobs. '
+        'Duration/repetition is resolved separately; watching alone does not imply unlimited repetition.',
+    'wash_dishes': 'Requested result: the agent washes dirty dishes. Collecting a dirty batch is part of washing. '
+        'One repetition washes a batch, not one individual plate.',
+    'deliver_dirty_dishes': 'Requested result: hand a dirty batch to the human for the human to wash. '
+        'The agent does not wash it. Route conditions affect native execution, not the intended task family.',
+    'put_out_fire': 'Requested result: extinguish reachable fires. Fetching the extinguisher is part of the task. '
+        'One repetition is a reachable-fire sweep, not one flame.',
+    'toss_burnt_food': 'Requested result: dispose of ruined food and return any surviving empty utensil. '
+        'Returning the utensil is included, not an additional requested assignment.',
+    'assemble_dish': 'Requested result: assemble an exact ticket from explicitly allocated resources. '
+        'Natural-language automatic resource allocation is unsupported; do not substitute serving or ingredient preparation.',
+}
+
+
+def task_description(spec):
+    return ' '.join(filter(None, (spec['label'] + '.', TASK_BOUNDARIES.get(spec['name']),
+                                 spec['description'], *spec['limitations'])))

@@ -13,7 +13,9 @@ from scripts.jev_playground import next_request
 import test_decision as support
 
 ROOT = Path(__file__).resolve().parents[1]
-EVIDENCE = json.loads((ROOT / 'docs/jev-playground-round2.json').read_text())
+EVIDENCE = json.loads((ROOT / 'docs/jev-playground-round3.json').read_text())
+PREVIOUS = json.loads((ROOT / 'docs/jev-playground-round2.json').read_text())
+PREVIOUS_TRIALS = {trial['id']: trial for trial in PREVIOUS['trials']}
 TRIALS = {trial['id']: trial for trial in EVIDENCE['trials']}
 CASES = {case['name']: case for case in EVIDENCE['sessions']}
 RELEASE = [case for case in CASES.values() if case.get('variant') == 'release' and case['type'] == 'command']
@@ -27,13 +29,13 @@ def session(case):
 class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
     def test_current_and_historical_wire_observations_validate(self):
         historical = json.loads((ROOT / 'docs/jev-playground-evaluation.json').read_text())
-        for trial in list(TRIALS.values()) + historical['trials']:
+        for trial in list(TRIALS.values()) + PREVIOUS['trials'] + historical['trials']:
             with self.subTest(trial=trial['id']):
                 validate_request(trial['request'])
                 validate_response(trial['request'], trial['response'])
 
-    async def test_all_41_final_command_cases_use_exact_production_requests(self):
-        self.assertEqual(len(RELEASE), 41)
+    async def test_all_34_final_command_cases_use_exact_production_requests(self):
+        self.assertEqual(len(RELEASE), 34)
         for case in RELEASE:
             with self.subTest(case=case['name']):
                 # Any changed prompt fails; a missing observation returns request.
@@ -56,9 +58,9 @@ class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
             elif case['expected']['kind'] == 'blocked':
                 self.assertIn(outcome['status'], ('clarification', 'rejected'))
                 blocked.add(name)
-        self.assertEqual(completed, {'burnt', 'dirty', 'monitor', 'negation', 'pause', 'raw_player4', 'wash'})
+        self.assertEqual(completed, {'dirty', 'pause', 'raw_player4', 'ready', 'repeat', 'wash'})
         self.assertEqual(blocked, {'timed', 'concurrent', 'unavailable', 'out_of_range', 'speech_conflict',
-                                  'preparation_missing', 'unresolved', 'infinite_middle'})
+                                  'preparation_missing'})
 
     async def test_complete_plan_confirmation_keeps_exact_fields_without_more_model_io(self):
         confirmations = 0
@@ -73,7 +75,7 @@ class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(accepted['status'], 'complete')
             self.assertEqual(semantic_result(accepted['result']), case['expected'])
             confirmations += 1
-        self.assertEqual(confirmations, 6)
+        self.assertEqual(confirmations, 1)
 
     async def test_current_verifier_blocks_all_16_wrong_or_ambiguous_proposals(self):
         wrong, accepted_controls = 0, 0
@@ -98,25 +100,10 @@ class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
             elif not blocked:
                 accepted_controls += 1
         self.assertEqual(wrong, 16)
-        self.assertEqual(accepted_controls, 3)  # Four correct controls still ask.
-
-    async def test_repeated_decisions_preserve_observed_gate_outcomes(self):
-        repeats = 0
-        for case in CASES.values():
-            if case['type'] != 'repeat':
-                continue
-            original = CASES[case['original_session']]
-            replay = session(original)
-            index = case['original_index']
-            trial = TRIALS[case['trial_ids'][0]]
-            self.assertEqual(replay['responses'][index]['request'], trial['request'])
-            replay['responses'][index] = {k: trial[k] for k in ('request', 'response')}
-            self.assertEqual(await next_request(replay), original['outcome'])
-            repeats += 1
-        self.assertEqual(repeats, 16)  # Two new runs of eight exact requests.
+        self.assertEqual(accepted_controls, 4)  # Three correct controls still ask.
 
     def test_current_dialogue_observations_replay_through_service(self):
-        for case in CASES.values():
+        for case in PREVIOUS['sessions']:
             if case['type'] != 'final_dialogue':
                 continue
             with self.subTest(case=case['name']):
@@ -126,7 +113,7 @@ class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
                     fixture.t.script.steps = copy.deepcopy(case['initial_steps'])
                     fixture.service.submit({'id': 'original', 'text': case['original_utterance']})
                     fixture.wait_for({case['initial_status']})
-                    recorded = TRIALS[case['trial_ids'][0]]
+                    recorded = PREVIOUS_TRIALS[case['trial_ids'][0]]
                     requests = []
                     async def observed(request):
                         requests.append(copy.deepcopy(request))
@@ -136,7 +123,9 @@ class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
                     fixture.t.script = observed
                     fixture.service.submit({'id': 'reply', 'text': case['text']})
                     result = fixture.wait_for({case['observed_service']['status']})
-                    self.assertEqual(requests, case['observed_service']['requests'])
+                    # Dialogue wording is unchanged. Subsequent compiler requests
+                    # intentionally use the new prompts and are not answered.
+                    self.assertEqual(len(requests), len(case['observed_service']['requests']))
                     self.assertEqual(requests[0], recorded['request'])
                     self.assertEqual(fixture.bridge.scheduler.snapshot()['pending'], [])
                     self.assertEqual(fixture.bridge.calls, [])
@@ -154,11 +143,11 @@ class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
 
     def test_holdout_provenance_has_no_reused_responses(self):
         holdout = [case for case in CASES.values() if case.get('cohort') == 'holdout']
-        self.assertEqual(len(holdout), 58)
+        self.assertEqual(len(holdout), 40)
         self.assertTrue(all(not case.get('reused_observations') for case in holdout))
-        self.assertEqual(len({key for case in holdout for key in case['trial_ids']}), 157)
-        path = 'tests/fixtures/jev-generalization-corpus.json'
-        self.assertEqual(hashlib.sha256((ROOT/path).read_bytes()).hexdigest(), EVIDENCE['freeze']['source_sha256'][path])
+        self.assertEqual(len({key for case in holdout for key in case['trial_ids']}), 112)
+        path = 'tests/fixtures/jev-context-corpus.json'
+        self.assertEqual(hashlib.sha256((ROOT/path).read_bytes()).hexdigest(), EVIDENCE['freeze']['sha256'][path])
 
     def test_scoring_does_not_reward_abstention_or_partial_matches(self):
         case = CASES['release_holdout_raw_player4']

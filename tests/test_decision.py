@@ -182,6 +182,30 @@ class CompilerTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(Clarification): await c.compile()
         self.assertEqual(len(script.requests), 2)
 
+    async def test_field_context_retains_references_without_unrelated_queue_policy(self):
+        ctx = build_context(world(), {'revision': 4, 'pending': [
+            {'id': 'queued', 'spec': spec('take_ready'), 'state': 'pending'}]})
+        c, script = compiler('Wash two batches', [{'simple_coverage': 0},
+            {'next_task': 'wash_dishes'}, {'repeat': 'count_2'}, {'next_task': 'done'}, {}], ctx)
+        await c.compile()
+        request = next(r for r in script.requests if 'repeat' in r['questions'])
+        self.assertNotIn('scheduler', request['state'])
+        self.assertIn('Take ready food off heat', request['state']['accepted_work']['pending'][0])
+        self.assertEqual([x['name'] for x in request['state']['capabilities']], ['wash_dishes'])
+        self.assertEqual(request['state']['capabilities'][0]['repetition']['unit'], 'washing_batch')
+        self.assertNotIn('Omitted scheduling', request['questions']['repeat']['instructions'])
+        self.assertEqual(script.requests[-1]['state']['scheduler']['pending'][0]['id'], 'queued')
+
+    def test_interpretation_notes_are_tied_to_registered_task_contracts(self):
+        from harness.decision.prompts import TASK_BOUNDARIES, task_description
+        tasks = {c['name']: c for c in registry()['contracts'] if c['kind'] == 'task'}
+        self.assertEqual(set(TASK_BOUNDARIES), set(tasks))
+        for name, task in tasks.items():
+            description = task_description(task)
+            self.assertIn(task['description'], description)
+            for limit in task['limitations']:
+                self.assertIn(limit, description)
+
     async def test_native_verification_includes_the_selected_target_meaning(self):
         c, script = compiler('Go stand at the sink', [{'simple_coverage': 0}, {'next_task': 'native_action'},
             {'action': 'navigate_to'}, {'destination_id': 'value_0'}, {}, {'next_task': 'done'}, {}])
