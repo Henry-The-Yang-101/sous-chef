@@ -1,7 +1,8 @@
 {
   "audit": {
     "boundary": "Source-audited native contracts and synthetic catalog consistency, not a live-game execution test.",
-    "negative_policy": "Clear unsupported commands require rejection. Missing meaning requires clarification. Neither is a supported-command failure."
+    "negative_policy": "Clear unsupported commands require rejection. Missing meaning requires clarification. Neither is a supported-command failure.",
+    "native_catalog_source": "src/Plugin/Actions/SemanticCatalog.cs: Preparation always emits cooked/mixed unknown for ingredients; utensil states come from HarnessOptions.cs."
   },
   "worlds": {
     "base": {
@@ -153,7 +154,8 @@
                   "raw": "applicable",
                   "chopped": "applicable",
                   "cooked": "unknown",
-                  "empty": "not_applicable"
+                  "empty": "not_applicable",
+                  "mixed": "unknown"
                 }
               },
               {
@@ -163,7 +165,8 @@
                   "raw": "applicable",
                   "chopped": "applicable",
                   "cooked": "unknown",
-                  "empty": "not_applicable"
+                  "empty": "not_applicable",
+                  "mixed": "unknown"
                 }
               },
               {
@@ -172,8 +175,9 @@
                 "preparations": {
                   "raw": "applicable",
                   "chopped": "not_applicable",
-                  "cooked": "applicable",
-                  "empty": "not_applicable"
+                  "cooked": "unknown",
+                  "empty": "not_applicable",
+                  "mixed": "unknown"
                 }
               }
             ]
@@ -330,8 +334,8 @@
                 "preparations": {
                   "raw": "applicable",
                   "chopped": "applicable",
-                  "cooked": "not_applicable",
-                  "mixed": "not_applicable",
+                  "cooked": "unknown",
+                  "mixed": "unknown",
                   "empty": "not_applicable"
                 }
               },
@@ -342,8 +346,8 @@
                 "preparations": {
                   "raw": "applicable",
                   "chopped": "applicable",
-                  "cooked": "not_applicable",
-                  "mixed": "not_applicable",
+                  "cooked": "unknown",
+                  "mixed": "unknown",
                   "empty": "not_applicable"
                 }
               },
@@ -354,8 +358,8 @@
                 "preparations": {
                   "raw": "applicable",
                   "chopped": "not_applicable",
-                  "cooked": "applicable",
-                  "mixed": "not_applicable",
+                  "cooked": "unknown",
+                  "mixed": "unknown",
                   "empty": "not_applicable"
                 }
               },
