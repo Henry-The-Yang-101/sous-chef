@@ -11,6 +11,7 @@ from clients.capabilities import REGISTRY_HASH, ValidationError
 from harness.plans import identity, validate_plan
 from harness.scheduler import context_of
 from .compiler import Compiler, Clarification, Unsupported, build_context, choice
+from .prompts import examples
 from .config import MODEL, Settings, load_settings
 from .protocol import DecisionError, validate_response
 from .transport import DecisionClient, HttpTransport
@@ -207,7 +208,7 @@ class InterpreterService:
                                                **({'unfinished_interpretation': Compiler.describe(active['compiler'].tasks)}
                                                   if active['compiler'].tasks else {})},
                        'questions': {'relationship': choice('Classify how the new utterance relates to the unfinished command. '
-                           'No work from the unfinished command has been accepted yet. Do not treat an explicit correction as appended work.', options)}}
+                           'No work from the unfinished command has been accepted yet. Do not treat an explicit correction as appended work.' + examples('relationship'), options)}}
             response = await self.client.ask(request, active['generation'], active['budget'], lambda: self._current(active))
             answer = response['answers']['relationship']
             key = answer['choice']
@@ -280,7 +281,7 @@ class InterpreterService:
             request = {'model': MODEL, 'state': {'original_utterance': active['compiler'].command['text'],
                 'pending_question': clarification.message, 'allowed_answers': clarification.options, 'reply': command['text']},
                 'questions': {'route': choice('Does the reply answer the pending question, cancel it, or give a new complete command?', options),
-                              'answer': choice('If the reply answers the pending question, which allowed answer does it select? Read only the reply and pending question.', values)}}
+                              'answer': choice('If the reply answers the pending question, which allowed answer does it select? Read only the reply and pending question.' + examples('reply_answer'), values)}}
             # Reply has its own per-request deadline but consumes the original request count.
             active['budget']['deadline'] = time.monotonic() + self.settings.compile_seconds
             response = validate_response(request, await self.client.ask(request, active['generation'], active['budget'], lambda: self._current(active)))

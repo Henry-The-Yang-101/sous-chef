@@ -39,8 +39,10 @@ The `.env` file is ignored by Git; the key is absent from browser state and logs
   Field questions receive the selected contract's interpretation and repetition
   policy. Already accepted work is provided as labelled semantic references;
   exact queue identities remain available for removal and final verification.
-- Discovery also receives observed preparation types, recipients and target
-  identities. Draft-progress context explains that `done` ends parsing and that
+- Task-family discovery defers ingredient, recipient and target catalog fit to
+  grounded argument questions. Short paired examples clarify task boundaries,
+  parsing progress, counts, queue edits, follow-ups and final plan coverage.
+  Draft-progress context explains that `done` ends parsing and that
   full quantities are already represented. Corrections preserve unaffected fields;
   clarification is reserved for meaning that changes the executable plan.
 - Counts are locally extracted candidates, never Score values or generated JSON.
@@ -73,7 +75,7 @@ The provisional gates after playground tuning are .85 for ordinary choices,
 destructive edits and explicit spoken clarification answers. Destructive edits
 also require separate deletion/interruption evidence or a direct scoped answer.
 These are policy thresholds, not calibrated probabilities of correctness.
-The [latest paired playground evaluation](jev-playground-round4.md), repeated with
+The [previous-prompt paired playground evaluation](jev-playground-round4.md), repeated with
 native catalog certainty corrected, completed 12/18 supported requests without
 clarification, versus 7/18 previously. Both explicitly rejected 4/6 unsupported
 requests and unnecessarily clarified two; both correctly clarified two ambiguous
@@ -97,6 +99,20 @@ UI diagnostics report request attempts, last latency and actual input/output tok
 usage. No raw audio is sent or recorded by this interpreter. Finalized text and
 relevant semantic choices are sent only after enabling Jev.
 
+## Selective prompt revision — 7 November 2026
+
+Short contrasts are attached only to questions with overlapping meanings. Task
+selection no longer receives the kitchen catalog; binding still uses observed
+identities and local compatibility checks. Target identity does not prove
+reachability, unknown preparation applicability does not prove incompatibility,
+and accepted dialogue plans do not prove completed execution.
+
+This revision has not been tested or evaluated with Jev, at the user's request.
+The round-4 scores above describe the previous prompts; they do not establish
+performance for this revision. Acceptance thresholds and native validation remain
+unchanged. Historical response tests now explicitly inject mock choices instead
+of claiming that old responses were produced by the new prompts.
+
 ## Verification
 
 `python3 -m unittest discover -s tests -p 'test_*.py'`
@@ -107,14 +123,16 @@ Offline tests cover typed compilation, repeated tasks/items, corrections, limits
 clarification replay, invalid provider data, explicit queue scope, mute before
 actual transmission and during backoff, preview acceptance, stale manual edits,
 round changes, target identity and unlimited queue policies. Recorded playground
-responses also replay through the exact production request builder. These checks
+responses validate against their recorded wire requests and serve as mocked
+choices for control-flow regressions. Exact playground replay rejects responses
+from older prompts. These checks
 do not establish live Python API connectivity, native execution or microphone
 accuracy.
 
 `scripts/jev_playground.py` exports exact production requests and replays copied
 playground responses without any network code. Its kitchen is explicitly synthetic.
-Playground observations, tuning, fixed-prompt holdout results and limitations are
-recorded in the [current evaluation report](jev-playground-round4.md) and its
+Historical playground observations, tuning, fixed-prompt holdout results and limitations are
+recorded in the [previous-prompt evaluation report](jev-playground-round4.md) and its
 [raw request/response evidence](jev-playground-round4.json). The paired corpus
 runner, `scripts/jev_evaluate.py`, audits positive gold against native contracts
 and catalogs, and scores explicit rejection separately from clarification.

@@ -1,4 +1,8 @@
-"""Offline replay of real Chrome playground observations. Never uses HTTP."""
+"""Historical wire validation and scripted decision regressions. Never uses HTTP.
+
+Old responses are mock decisions for current control flow, NOT measurements of
+the revised prompts. Production playground replay still rejects changed requests.
+"""
 import copy
 import hashlib
 import json
@@ -27,6 +31,21 @@ def session(case):
             'responses': [{k: copy.deepcopy(TRIALS[key][k]) for k in ('request', 'response')} for key in case['trial_ids']]}
 
 
+async def scripted_replay(recorded):
+    """Rebuild current requests and inject historical choices as explicit mocks."""
+    current = {**copy.deepcopy(recorded), 'responses': []}
+    for item in recorded['responses']:
+        pending = await next_request(current)
+        if pending['status'] != 'request':
+            # Exact user confirmation can finish without consuming the old
+            # verifier decision, as production replay also permits.
+            return pending
+        request = pending['request']
+        validate_response(request, item['response'])
+        current['responses'].append({'request': request, 'response': item['response']})
+    return await next_request(current)
+
+
 class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
     def test_current_and_historical_wire_observations_validate(self):
         historical = json.loads((ROOT / 'docs/jev-playground-evaluation.json').read_text())
@@ -35,24 +54,29 @@ class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
                 validate_request(trial['request'])
                 validate_response(trial['request'], trial['response'])
 
-    async def test_all_52_final_command_cases_use_exact_production_requests(self):
+    async def test_production_replay_refuses_previous_prompt_responses(self):
+        outcome = await next_request(session(RELEASE[0]))
+        self.assertEqual(outcome['status'], 'rejected')
+        self.assertIn('Prompt changed', outcome['message'])
+
+    async def test_52_historical_decision_sequences_preserve_control_flow(self):
         current = [c for c in CASES.values() if c.get('variant') in ('release', 'nativerelease') and c['type'] == 'command']
         self.assertEqual(len(current), 52)
         for case in current:
             with self.subTest(case=case['name']):
-                # Any changed prompt fails; a missing observation returns request.
-                outcome = await next_request(session(case))
+                # These are scripted decisions, not fresh model observations.
+                outcome = await scripted_replay(session(case))
                 self.assertEqual(outcome, case['outcome'])
                 self.assertEqual(score_outcome(case['expected'], outcome), case['score'])
                 self.assertNotIn(case['score'], ('incomplete', 'incorrect_completion', 'unexpected_rejection'))
 
-    async def test_heldout_completions_match_every_executable_field(self):
+    async def test_historical_choices_preserve_every_executable_field(self):
         completed = set()
         blocked = set()
         for case in RELEASE:
             if case['cohort'] != 'holdout':
                 continue
-            outcome = await next_request(session(case))
+            outcome = await scripted_replay(session(case))
             name = case['name'].removeprefix('nativerelease_holdout_')
             if outcome['status'] == 'complete':
                 self.assertEqual(semantic_result(outcome['result']), case['expected'])
@@ -71,23 +95,23 @@ class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
             if case['outcome'].get('stage') != 'coverage':
                 continue
             replay = session(case)
-            pending = await next_request(replay)
+            pending = await scripted_replay(replay)
             replay['clarifications'] = [{'stage': pending['stage'], 'field': pending['field'],
                 'key': 'confirm_plan', 'question': pending['question'], 'answer': pending['options']['confirm_plan']}]
-            accepted = await next_request(replay)
+            accepted = await scripted_replay(replay)
             self.assertEqual(accepted['status'], 'complete')
             self.assertEqual(semantic_result(accepted['result']), case['expected'])
             confirmations += 1
         self.assertEqual(confirmations, 1)
 
-    async def test_current_verifier_blocks_all_16_wrong_or_ambiguous_proposals(self):
+    async def test_verifier_gates_block_16_historical_negative_decisions(self):
         wrong, accepted_controls = 0, 0
         for case in CASES.values():
             if case['type'] != 'final_verifier':
                 continue
             trial = TRIALS[case['trial_ids'][0]]
             async def observed(request):
-                self.assertEqual(request, trial['request'])
+                validate_response(request, trial['response'])
                 return trial['response']
             compiler = Compiler({'id': case['name'], 'text': case['text'], **case['utterance_fields']},
                                 build_context(case['world'], case['queue']), observed)
@@ -105,7 +129,7 @@ class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(wrong, 16)
         self.assertEqual(accepted_controls, 4)  # Three correct controls still ask.
 
-    def test_current_dialogue_observations_replay_through_service(self):
+    def test_historical_dialogue_choices_exercise_service_control_flow(self):
         for case in PREVIOUS['sessions']:
             if case['type'] != 'final_dialogue':
                 continue
@@ -126,10 +150,10 @@ class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
                     fixture.t.script = observed
                     fixture.service.submit({'id': 'reply', 'text': case['text']})
                     result = fixture.wait_for({case['observed_service']['status']})
-                    # Dialogue wording is unchanged. Subsequent compiler requests
-                    # intentionally use the new prompts and are not answered.
+                    # Historical dialogue choices are mocks for the revised prompts.
+                    # Subsequent compiler requests are not answered.
                     self.assertEqual(len(requests), len(case['observed_service']['requests']))
-                    self.assertEqual(requests[0], recorded['request'])
+                    validate_response(requests[0], recorded['response'])
                     self.assertEqual(fixture.bridge.scheduler.snapshot()['pending'], [])
                     self.assertEqual(fixture.bridge.calls, [])
                     self.assertEqual(len(fixture.service.inbox), case['observed_service']['inbox_count'])
@@ -168,7 +192,7 @@ class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
     async def test_timed_washing_is_rejected_without_a_partial_plan(self):
         for name in ('release_holdout_timed', 'nativerelease_holdout_timed', 'timed_repeat_control'):
             case = CASES[name]
-            outcome = await next_request(session(case))
+            outcome = await scripted_replay(session(case))
             self.assertEqual(outcome['status'], 'rejected')
             self.assertEqual(len(case['trial_ids']), 1)
             self.assertNotIn('result', outcome)

@@ -13,6 +13,24 @@ PROGRESS_CONTEXT = (
     'Internal procedure steps in a task contract are already covered by that task. '
     'A correction replaces only the affected field; other fields retain their stated values.')
 
+# Small contrasts illustrate semantic boundaries. They are never parsed by code
+# or used as phrase-to-plan shortcuts. Attach only to the relevant question.
+EXAMPLES = {
+    'discovery': '"Fetch dirty plates and wash them" is washing; "bring me dirty plates so I can wash them" is handoff. "Bring me cooked rice" prepares a portion; "serve the completed plate" serves an order.',
+    'progress': 'For "wash then put out fires", a draft containing washing still needs fire extinguishing; a draft containing both chooses done even before execution.',
+    'queue_edit': '"Do this next" inserts after the active job; "stop the active job and do this" replaces the active job. Neither deletes pending jobs.',
+    'ingredient': 'For "two raw onions and one chopped onion", the raw entry represents both raw onions; the chopped entry is still required.',
+    'quantity': '"Three raw carrots for player four" gives quantity three; "three, actually two raw carrots" gives quantity two.',
+    'coverage': 'Request "wash then put out fires": a plan with both in that order is equivalent; only washing or the reversed order is different.',
+    'relationship': 'After unfinished "bring two raw onions", "actually three" corrects it; "then wash dishes" adds separate work.',
+    'reply_answer': 'For raw/chopped choices, "yes" is ambiguous. For an explicit confirm_plan choice, "yes, that plan" can select confirm_plan.',
+}
+
+
+def examples(stage):
+    return ' Examples: ' + EXAMPLES[stage] + ' '
+
+
 INTENT_ROUTE = {'type': 'choice', 'instructions':
     'Classify what change the utterance requests, independently of whether it is supported or its arguments are complete. '
     'A positive request for new work is task_plan, including work with unsupported constraints. Separate constraint questions check those constraints. '

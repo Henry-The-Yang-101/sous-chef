@@ -206,19 +206,22 @@ class CompilerTests(unittest.IsolatedAsyncioTestCase):
             for limit in task['limitations']:
                 self.assertIn(limit, description)
 
-    def test_discovery_context_uses_observed_identities_and_retains_uncertainty(self):
+    async def test_catalog_is_deferred_to_binding_and_retains_uncertainty(self):
         kitchen = world()
         semantic = kitchen['capabilities']['semantic_catalog']
         semantic['players'] = [{'playerId': 2}, {'playerId': 3}]
         semantic['displayOptions']['preparationOptions'] = [
             {'id': 'native-root-73', 'label': 'Rice', 'utensil': False,
              'preparations': {'raw': 'applicable', 'cooked': 'unknown'}}]
+        script = Script([{'ingredient': 'ingredient_rice'}, {'preparation': 'cooked'},
+                         {'quantity': 'count_1'}, {'ingredient': 'done'}, {'recipient': 'player_3'}])
         c = Compiler({'id': 'scope', 'text': 'Bring cooked rice to player three'},
-                     build_context(kitchen, {'revision': 0}), None)
-        request = c.state(discovery=True)
-        self.assertEqual(request['world']['eligible_recipients'], [3])
-        observed = request['world']['preparation_options'][0]
-        self.assertEqual(observed['id'], 'native-root-73')
+                     build_context(kitchen, {'revision': 0}), script)
+        self.assertNotIn('world', c.state(discovery=True))
+        bound = await c.preparation(1)
+        self.assertEqual(bound['items'][0]['ingredient'], 'native-root-73')
+        self.assertEqual(bound['player_id'], 3)
+        observed = script.requests[1]['state']['compiler']['ingredient']
         self.assertEqual(observed['preparations']['cooked'], 'unknown')
         observed['preparations']['cooked'] = 'applicable'
         self.assertEqual(c.context['semantic']['displayOptions']['preparationOptions'][0]['preparations']['cooked'], 'unknown')
