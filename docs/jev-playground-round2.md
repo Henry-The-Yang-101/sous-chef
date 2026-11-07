@@ -1,5 +1,9 @@
 # Jev playground generalization round — 6 November 2026
 
+Historical round at `0038a4a`. The [third round](jev-playground-round3.md) evaluates
+the current task-boundary and scoped-context changes on fresh paired commands.
+Descriptions of current prompts/tests below refer to this round's snapshot.
+
 The revised interpreter completed **7 of 21 supported held-out requests without
 clarification**, compared with **5 of 21** for the previous version. Both versions
 blocked all eight unsupported or ambiguous requests. Neither accepted an incorrect

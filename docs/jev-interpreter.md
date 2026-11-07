@@ -34,6 +34,11 @@ The `.env` file is ignored by Git; the key is absent from browser state and logs
   duties, external deadlines and region destinations. These vetoes do not replace
   full-plan verification. Later stages retain exact queue entries and target
   bindings for scoped edits and native arguments.
+- Task selection includes explicit boundaries between preparation, plated-dish
+  serving, ready-food collection, monitoring and other registered assignments.
+  Field questions receive the selected contract's interpretation and repetition
+  policy. Already accepted work is provided as labelled semantic references;
+  exact queue identities remain available for removal and final verification.
 - Counts are locally extracted candidates, never Score values or generated JSON.
   Contract defaults apply only to omitted fields; unspecified preparation asks
   for clarification. Counts outside native limits are not clamped.
@@ -64,9 +69,9 @@ The provisional gates after playground tuning are .85 for ordinary choices,
 destructive edits and explicit spoken clarification answers. Destructive edits
 also require separate deletion/interruption evidence or a direct scoped answer.
 These are policy thresholds, not calibrated probabilities of correctness.
-The [paired playground evaluation](jev-playground-round2.md) completed 7/21
-supported held-out requests without clarification, versus 5/21 previously. Both
-versions blocked all eight unsupported/ambiguous requests; no wrong complete
+The [latest paired playground evaluation](jev-playground-round3.md) completed 6/14
+supported held-out requests without clarification, versus 4/14 previously. Both
+versions blocked all six unsupported/ambiguous requests; no wrong complete
 result passed in that sample. Clarifications remain frequent, including correct
 drafts. Preview remains the recommended mode; automatic acceptance is an explicit
 experimental opt-in.
@@ -103,8 +108,8 @@ accuracy.
 `scripts/jev_playground.py` exports exact production requests and replays copied
 playground responses without any network code. Its kitchen is explicitly synthetic.
 Playground observations, tuning, fixed-prompt holdout results and limitations are
-recorded in the [current evaluation report](jev-playground-round2.md) and its
-[raw request/response evidence](jev-playground-round2.json). The paired corpus
+recorded in the [current evaluation report](jev-playground-round3.md) and its
+[raw request/response evidence](jev-playground-round3.json). The paired corpus
 runner, `scripts/jev_evaluate.py`, also keeps completion, clarification and safe
 blocking scores separate. The [first round](jev-playground-evaluation.md) remains
 available as historical evidence.
