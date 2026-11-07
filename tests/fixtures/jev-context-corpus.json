@@ -1,0 +1,1189 @@
+{
+  "worlds": {
+    "base": {
+      "capabilities": {
+        "fresh": true,
+        "compatible": true,
+        "version": 1,
+        "registry_hash": "1bbd735d6d22423a40fc9b7ae9595a9b4878b8466c3765ad6f15e9d2459d2c00",
+        "entries": [
+          {
+            "name": "assemble_dish",
+            "support": "implemented"
+          },
+          {
+            "name": "prepare_near_player",
+            "support": "implemented"
+          },
+          {
+            "name": "take_ready",
+            "support": "implemented"
+          },
+          {
+            "name": "wash_dishes",
+            "support": "implemented"
+          },
+          {
+            "name": "deliver_dirty_dishes",
+            "support": "implemented"
+          },
+          {
+            "name": "put_out_fire",
+            "support": "implemented"
+          },
+          {
+            "name": "toss_burnt_food",
+            "support": "implemented"
+          },
+          {
+            "name": "monitor_equipment",
+            "support": "implemented"
+          },
+          {
+            "name": "deliver_completed_dishes",
+            "support": "implemented"
+          },
+          {
+            "name": "navigate_to",
+            "support": "implemented"
+          },
+          {
+            "name": "pick_up",
+            "support": "implemented"
+          },
+          {
+            "name": "place_at",
+            "support": "implemented"
+          },
+          {
+            "name": "add_ingredient",
+            "support": "implemented"
+          },
+          {
+            "name": "collect_contents",
+            "support": "implemented"
+          },
+          {
+            "name": "work_at",
+            "support": "implemented"
+          },
+          {
+            "name": "activate",
+            "support": "implemented"
+          },
+          {
+            "name": "discard",
+            "support": "implemented"
+          },
+          {
+            "name": "wait_until",
+            "support": "implemented"
+          },
+          {
+            "name": "throw_to",
+            "support": "implemented"
+          },
+          {
+            "name": "throw_to_player",
+            "support": "implemented"
+          },
+          {
+            "name": "stop",
+            "support": "implemented"
+          },
+          {
+            "name": "move_item",
+            "support": "implemented"
+          },
+          {
+            "name": "fetch_ingredient",
+            "support": "implemented"
+          },
+          {
+            "name": "get_plate",
+            "support": "implemented"
+          },
+          {
+            "name": "get_utensil",
+            "support": "implemented"
+          },
+          {
+            "name": "stage_item",
+            "support": "implemented"
+          },
+          {
+            "name": "return_utensil",
+            "support": "implemented"
+          },
+          {
+            "name": "clear_station",
+            "support": "implemented"
+          }
+        ],
+        "semantic_catalog": {
+          "players": [
+            {
+              "playerId": 1
+            },
+            {
+              "playerId": 3
+            }
+          ],
+          "targets": [
+            {
+              "id": "d1",
+              "objectInstanceId": 101,
+              "label": "Sink",
+              "possibleOperations": [
+                "navigate_to",
+                "work_at"
+              ]
+            }
+          ],
+          "displayOptions": {
+            "preparationOptions": [
+              {
+                "id": "carrot",
+                "label": "Carrot",
+                "preparations": {
+                  "raw": "applicable",
+                  "chopped": "applicable",
+                  "cooked": "unknown",
+                  "empty": "not_applicable"
+                }
+              },
+              {
+                "id": "onion",
+                "label": "Onion",
+                "preparations": {
+                  "raw": "applicable",
+                  "chopped": "applicable",
+                  "cooked": "unknown",
+                  "empty": "not_applicable"
+                }
+              },
+              {
+                "id": "rice",
+                "label": "Rice",
+                "preparations": {
+                  "raw": "applicable",
+                  "chopped": "not_applicable",
+                  "cooked": "applicable",
+                  "empty": "not_applicable"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "alternate": {
+      "capabilities": {
+        "fresh": true,
+        "compatible": true,
+        "version": 1,
+        "registry_hash": "1bbd735d6d22423a40fc9b7ae9595a9b4878b8466c3765ad6f15e9d2459d2c00",
+        "entries": [
+          {
+            "name": "assemble_dish",
+            "support": "implemented"
+          },
+          {
+            "name": "prepare_near_player",
+            "support": "implemented"
+          },
+          {
+            "name": "take_ready",
+            "support": "implemented"
+          },
+          {
+            "name": "wash_dishes",
+            "support": "implemented"
+          },
+          {
+            "name": "deliver_dirty_dishes",
+            "support": "implemented"
+          },
+          {
+            "name": "put_out_fire",
+            "support": "implemented"
+          },
+          {
+            "name": "toss_burnt_food",
+            "support": "implemented"
+          },
+          {
+            "name": "monitor_equipment",
+            "support": "implemented"
+          },
+          {
+            "name": "deliver_completed_dishes",
+            "support": "implemented"
+          },
+          {
+            "name": "navigate_to",
+            "support": "implemented"
+          },
+          {
+            "name": "pick_up",
+            "support": "implemented"
+          },
+          {
+            "name": "place_at",
+            "support": "implemented"
+          },
+          {
+            "name": "add_ingredient",
+            "support": "implemented"
+          },
+          {
+            "name": "collect_contents",
+            "support": "implemented"
+          },
+          {
+            "name": "work_at",
+            "support": "implemented"
+          },
+          {
+            "name": "activate",
+            "support": "implemented"
+          },
+          {
+            "name": "discard",
+            "support": "implemented"
+          },
+          {
+            "name": "wait_until",
+            "support": "implemented"
+          },
+          {
+            "name": "throw_to",
+            "support": "implemented"
+          },
+          {
+            "name": "throw_to_player",
+            "support": "implemented"
+          },
+          {
+            "name": "stop",
+            "support": "implemented"
+          },
+          {
+            "name": "move_item",
+            "support": "implemented"
+          },
+          {
+            "name": "fetch_ingredient",
+            "support": "implemented"
+          },
+          {
+            "name": "get_plate",
+            "support": "implemented"
+          },
+          {
+            "name": "get_utensil",
+            "support": "implemented"
+          },
+          {
+            "name": "stage_item",
+            "support": "implemented"
+          },
+          {
+            "name": "return_utensil",
+            "support": "implemented"
+          },
+          {
+            "name": "clear_station",
+            "support": "implemented"
+          }
+        ],
+        "semantic_catalog": {
+          "players": [
+            {
+              "playerId": 1
+            },
+            {
+              "playerId": 4
+            }
+          ],
+          "targets": [
+            {
+              "id": "d14",
+              "objectInstanceId": 714,
+              "label": "Sink",
+              "possibleOperations": [
+                "navigate_to",
+                "work_at"
+              ]
+            }
+          ],
+          "displayOptions": {
+            "preparationOptions": [
+              {
+                "id": "tomato",
+                "label": "Tomato",
+                "utensil": false,
+                "preparations": {
+                  "raw": "applicable",
+                  "chopped": "applicable",
+                  "cooked": "not_applicable",
+                  "mixed": "not_applicable",
+                  "empty": "not_applicable"
+                }
+              },
+              {
+                "id": "cucumber",
+                "label": "Cucumber",
+                "utensil": false,
+                "preparations": {
+                  "raw": "applicable",
+                  "chopped": "applicable",
+                  "cooked": "not_applicable",
+                  "mixed": "not_applicable",
+                  "empty": "not_applicable"
+                }
+              },
+              {
+                "id": "pasta",
+                "label": "Pasta",
+                "utensil": false,
+                "preparations": {
+                  "raw": "applicable",
+                  "chopped": "not_applicable",
+                  "cooked": "applicable",
+                  "mixed": "not_applicable",
+                  "empty": "not_applicable"
+                }
+              },
+              {
+                "id": "pot",
+                "label": "Pot",
+                "utensil": true,
+                "preparations": {
+                  "raw": "not_applicable",
+                  "chopped": "not_applicable",
+                  "cooked": "not_applicable",
+                  "mixed": "not_applicable",
+                  "empty": "applicable"
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "queues": {
+    "empty": {
+      "revision": 0,
+      "active": null,
+      "pending": []
+    },
+    "busy": {
+      "revision": 7,
+      "active": {
+        "id": "active",
+        "spec": {
+          "kind": "native_task",
+          "action": "take_ready",
+          "capability_version": 1,
+          "arguments": {},
+          "repeat": {
+            "mode": "finite",
+            "count": 1
+          }
+        },
+        "state": "running"
+      },
+      "pending": [
+        {
+          "id": "pending-one",
+          "spec": {
+            "kind": "native_task",
+            "action": "wash_dishes",
+            "capability_version": 1,
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          },
+          "state": "pending"
+        },
+        {
+          "id": "pending-two",
+          "spec": {
+            "kind": "native_task",
+            "action": "toss_burnt_food",
+            "capability_version": 1,
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          },
+          "state": "pending"
+        }
+      ]
+    },
+    "paused": {
+      "revision": 7,
+      "active": {
+        "id": "active",
+        "spec": {
+          "kind": "native_task",
+          "action": "take_ready",
+          "capability_version": 1,
+          "arguments": {},
+          "repeat": {
+            "mode": "finite",
+            "count": 1
+          }
+        },
+        "state": "running"
+      },
+      "pending": [
+        {
+          "id": "pending-one",
+          "spec": {
+            "kind": "native_task",
+            "action": "wash_dishes",
+            "capability_version": 1,
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          },
+          "state": "pending"
+        },
+        {
+          "id": "pending-two",
+          "spec": {
+            "kind": "native_task",
+            "action": "toss_burnt_food",
+            "capability_version": 1,
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          },
+          "state": "pending"
+        }
+      ],
+      "paused": true
+    }
+  },
+  "development": [
+    {
+      "id": "cooked",
+      "text": "Bring me four cooked pasta portions.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "prepare_near_player",
+            "arguments": {
+              "items": [
+                {
+                  "ingredient": "pasta",
+                  "preparation": "cooked",
+                  "quantity": 4
+                }
+              ],
+              "player_id": 1
+            },
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "world": "alternate"
+    },
+    {
+      "id": "ready",
+      "text": "Rescue the food that is ready on a cooker.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "take_ready",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "fire",
+      "text": "Deal with the fires.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "put_out_fire",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "serve",
+      "text": "Send out one finished plated dish.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "deliver_completed_dishes",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "queue": "busy"
+    },
+    {
+      "id": "utensil",
+      "text": "Get two empty pots for me.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "prepare_near_player",
+            "arguments": {
+              "items": [
+                {
+                  "ingredient": "pot",
+                  "preparation": "empty",
+                  "quantity": 2
+                }
+              ],
+              "player_id": 1
+            },
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "world": "alternate"
+    },
+    {
+      "id": "correction",
+      "text": "Bring player four two\u2014sorry, five\u2014chopped cucumbers.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "prepare_near_player",
+            "arguments": {
+              "items": [
+                {
+                  "ingredient": "cucumber",
+                  "preparation": "chopped",
+                  "quantity": 5
+                }
+              ],
+              "player_id": 4
+            },
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "world": "alternate"
+    },
+    {
+      "id": "repeat",
+      "text": "Do three washing batches.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "wash_dishes",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 3
+            }
+          }
+        ]
+      },
+      "queue": "busy"
+    },
+    {
+      "id": "repeated_tasks",
+      "text": "Wash a batch, put out the fires, then wash another batch.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "wash_dishes",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          },
+          {
+            "action": "put_out_fire",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          },
+          {
+            "action": "wash_dishes",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "sequential",
+      "text": "Dispose of the burnt food, then deliver a finished dish.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "toss_burnt_food",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          },
+          {
+            "action": "deliver_completed_dishes",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "navigate",
+      "text": "Go stand at the sink.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "pause_pending",
+        "tasks": [
+          {
+            "action": "navigate_to",
+            "arguments": {
+              "destination_id": "d14"
+            },
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "world": "alternate"
+    },
+    {
+      "id": "remove",
+      "text": "Drop only the second waiting job; keep the rest.",
+      "expected": {
+        "kind": "queue_edit",
+        "operation": "remove_pending",
+        "task_id": "pending-two"
+      },
+      "queue": "busy"
+    },
+    {
+      "id": "wash",
+      "text": "Please get a batch of plates washed.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "wash_dishes",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "raw_player4",
+      "text": "Player four needs two tomatoes, left raw.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "prepare_near_player",
+            "arguments": {
+              "items": [
+                {
+                  "ingredient": "tomato",
+                  "preparation": "raw",
+                  "quantity": 2
+                }
+              ],
+              "player_id": 4
+            },
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "world": "alternate"
+    },
+    {
+      "id": "same_ingredient",
+      "text": "Give me one raw tomato and three chopped tomatoes.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "prepare_near_player",
+            "arguments": {
+              "items": [
+                {
+                  "ingredient": "tomato",
+                  "preparation": "raw",
+                  "quantity": 1
+                },
+                {
+                  "ingredient": "tomato",
+                  "preparation": "chopped",
+                  "quantity": 3
+                }
+              ],
+              "player_id": 1
+            },
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "world": "alternate"
+    }
+  ],
+  "holdout": [
+    {
+      "id": "wash",
+      "text": "Wash up one batch for us.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "wash_dishes",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "fire",
+      "text": "Grab the extinguisher and extinguish the fires.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "put_out_fire",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "ready",
+      "text": "Take the ready food from the stove and park or serve it.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "take_ready",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "monitor",
+      "text": "Keep watching unattended cooking and mixing equipment and rescuing ready output.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "monitor_equipment",
+            "arguments": {},
+            "repeat": {
+              "mode": "until_cancelled"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "serve",
+      "text": "Take a completed plated order to the serving window.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "deliver_completed_dishes",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "queue": "busy"
+    },
+    {
+      "id": "dirty",
+      "text": "Fetch dirty dishes and pass the batch to me; I will wash it.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "deliver_dirty_dishes",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "cooked",
+      "text": "Prepare four portions of cooked pasta and give them to player one.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "prepare_near_player",
+            "arguments": {
+              "items": [
+                {
+                  "ingredient": "pasta",
+                  "preparation": "cooked",
+                  "quantity": 4
+                }
+              ],
+              "player_id": 1
+            },
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "world": "alternate"
+    },
+    {
+      "id": "utensil",
+      "text": "Fetch me two pots with nothing in them.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "prepare_near_player",
+            "arguments": {
+              "items": [
+                {
+                  "ingredient": "pot",
+                  "preparation": "empty",
+                  "quantity": 2
+                }
+              ],
+              "player_id": 1
+            },
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "world": "alternate"
+    },
+    {
+      "id": "raw_player4",
+      "text": "Give player four two tomatoes without processing them; keep them raw.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "prepare_near_player",
+            "arguments": {
+              "items": [
+                {
+                  "ingredient": "tomato",
+                  "preparation": "raw",
+                  "quantity": 2
+                }
+              ],
+              "player_id": 4
+            },
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "world": "alternate"
+    },
+    {
+      "id": "repeat",
+      "text": "Complete three batches of washing.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "wash_dishes",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 3
+            }
+          }
+        ]
+      },
+      "queue": "busy"
+    },
+    {
+      "id": "sequential",
+      "text": "First bin burnt food. Afterwards serve a completed dish.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "toss_burnt_food",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          },
+          {
+            "action": "deliver_completed_dishes",
+            "arguments": {},
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "navigate",
+      "text": "Walk to the sink and stay there.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "pause_pending",
+        "tasks": [
+          {
+            "action": "navigate_to",
+            "arguments": {
+              "destination_id": "d14"
+            },
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "world": "alternate"
+    },
+    {
+      "id": "pause",
+      "text": "Pause the waiting queue without interrupting the active job.",
+      "expected": {
+        "kind": "queue_edit",
+        "operation": "pause_pending"
+      },
+      "queue": "busy"
+    },
+    {
+      "id": "correction",
+      "text": "Chop two cucumbers for player four. Correction: make the quantity five.",
+      "expected": {
+        "kind": "plan",
+        "queue_edit": "append",
+        "after_plan": "continue_pending",
+        "tasks": [
+          {
+            "action": "prepare_near_player",
+            "arguments": {
+              "items": [
+                {
+                  "ingredient": "cucumber",
+                  "preparation": "chopped",
+                  "quantity": 5
+                }
+              ],
+              "player_id": 4
+            },
+            "repeat": {
+              "mode": "finite",
+              "count": 1
+            }
+          }
+        ]
+      },
+      "world": "alternate"
+    },
+    {
+      "id": "timed",
+      "text": "Wash for sixty seconds and then stop.",
+      "expected": {
+        "kind": "blocked"
+      }
+    },
+    {
+      "id": "concurrent",
+      "text": "Simultaneously watch the cookers and chop cucumbers for me.",
+      "expected": {
+        "kind": "blocked"
+      },
+      "world": "alternate"
+    },
+    {
+      "id": "unavailable",
+      "text": "Bring player four chopped mushrooms.",
+      "expected": {
+        "kind": "blocked"
+      },
+      "world": "alternate"
+    },
+    {
+      "id": "out_of_range",
+      "text": "Prepare twenty raw tomatoes for me.",
+      "expected": {
+        "kind": "blocked"
+      },
+      "world": "alternate"
+    },
+    {
+      "id": "speech_conflict",
+      "text": "Bring two chopped tomatoes to me.",
+      "expected": {
+        "kind": "blocked"
+      },
+      "world": "alternate",
+      "utterance_fields": {
+        "segments": [
+          {
+            "text": "Bring two chopped tomatoes to me.",
+            "alternatives": [
+              "Bring two chopped tomatoes to me.",
+              "Bring ten chopped tomatoes to me."
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "preparation_missing",
+      "text": "Get me a cucumber.",
+      "expected": {
+        "kind": "blocked"
+      },
+      "world": "alternate"
+    }
+  ]
+}
