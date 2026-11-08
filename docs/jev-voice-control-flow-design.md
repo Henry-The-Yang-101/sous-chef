@@ -1305,20 +1305,238 @@ types survive; mute blocks later stages and retries; manual edits defeat stale
 results; confidence thresholds are evaluated on held-out examples. Enable actual
 automatic acceptance only after these checks, with clear mode indication.
 
-### Milestone 5 — Semantic map and movement
+### Milestone 5 — Grounded destinations and movement
 
-Deliver:
+Revised design agreed **8 November 2026**; implementation remains pending. This
+milestone supersedes the semantic-region selection proposal in section 12.3 and
+earlier `move_to_region` examples and schema sketches. Physical supports,
+connectivity, orientation and evidence remain necessary, but named semantic
+regions are no longer a prerequisite for movement. Earlier references to that
+capability describe the original proposal, not an additional required executor.
 
-- Region/support/connection graph with explicit orientation, evidence and unknowns.
-- Moving-platform aggregation with station and occupant summaries.
-- Native-backed `move_to_region` candidates and arrival-and-idle execution.
-- Standalone repositioning pauses preserved pending dispatch; explicit subsequent
-  tasks continue. No invented physics, closure times or platform rides.
+#### Intent and responsibilities
 
-Acceptance: bottom/opposite-side commands reach the intended supported region;
-moving supports retain identity; blocked/unknown routes never become fabricated
-permission; geometry changes cause safe revalidation; map extraction stays
-bounded and does not materially degrade gameplay frame times.
+Jev interprets the utterance and selects or approves grounded destinations.
+Local code discovers safe standing positions, supplies factual spatial context,
+checks physical feasibility, chooses between semantically equivalent positions,
+executes navigation and proves arrival. Jev does not invent coordinates, routes,
+crossings or platform arrival times.
+
+Keep physical connectivity separate from the meaning of words such as "bottom"
+and "right side." A single floor can be split into disconnected walking areas
+by counters. As those counters move, the partition can change from top/bottom
+to left/right. Conversely, a completely connected open floor still supports
+"go to the top left." No level-specific partition rules or permanent
+`bottom_region`/`right_region` labels should be needed for either case.
+
+Build connectivity from valid standing positions and native-checked walkable
+edges. Connected components describe ordinary bidirectional walking; preserve
+direction for portals and other supported directed transitions. A platform's
+physical identity remains separate from connectivity: two rafts do not become
+one support merely because a temporary crossing connects them. Incomplete graph
+coverage must remain explicit; failure to find a path within a bounded search
+does not prove that two areas are disconnected.
+
+#### One movement capability, three destination bindings
+
+Expose movement-only as a first-class interpreter and scheduler capability,
+building on `navigate_to` rather than requiring every command to name a region.
+The exact versioned wire schema is an implementation decision; it must support
+these bindings through locally registered, validated references:
+
+| Destination binding | Example utterance | Jev's responsibility | Native responsibility |
+| --- | --- | --- | --- |
+| Station/object | "Move to the sink" or "move to the chopping board" | Select the intended observed station, using context to distinguish copies. | Find and revalidate a valid approach beside that object. |
+| Physical support/platform | "Move onto the moving platform" or "onto the right raft" | Select the intended observed platform. | Choose a safe standing position attached to that support and verify boarding and arrival. |
+| Floor position | "Move to the top left," "go to the bottom," or "move onto the right side" | Select or approve representative floor destinations that satisfy the utterance in context. | Resolve the registered standing position, route and arrival checks. |
+
+The utterance and scene determine which binding applies. "Right side" might
+refer to ordinary floor or a particular platform; do not force that distinction
+through a keyword rule. Multiple genuinely different interpretations require
+clarification. Several interchangeable standing positions do not.
+
+Each candidate description should contain only decision-relevant facts:
+
+- A registry reference bound to its kitchen epoch and actual object/support or
+  floor position, separate from its human-readable description.
+- Position in an explicit player-facing orientation, with normalized spatial
+  coordinates and concise relative descriptions where useful. Verify the
+  relationship between the game camera and harness map; world axes alone do not
+  establish what the player means by top, bottom, left or right.
+- Support identity and height layer, nearby named stations, relevant player
+  positions and relationships, and platform occupants/station summaries.
+- Standing-position validity and current route status as separate facts, with
+  observation freshness, evidence and coverage limitations.
+
+Descriptions such as "near the upper-left corner, beside the chopping boards"
+are spatial facts about a candidate, not permanent semantic-region identities.
+Use playable geometry for spatial normalization, excluding scenery. Preserve
+distinct decks even when their screen projections overlap. Summarize moving
+platforms through native ownership/hierarchy; equal observed velocity alone
+does not establish shared support.
+
+#### Deterministic candidate generation and bounded selection
+
+Keep the full navigation geometry local. For general floor movement, generate a
+small, spatially diverse menu of representative safe standing positions:
+
+1. Discover standing positions using native support, capsule clearance and hazard
+   checks. Prefer reasonable clearance from obstacles and edges, while retaining
+   valid destinations in narrow playable spaces.
+2. Reserve coverage for distinct supports, height layers and known disconnected
+   walking areas. Discovery must cover observed areas beyond P2's current
+   reachable search tree; undiscovered or uncertified areas remain unknown.
+3. Within that coverage, repeatedly select the safe position farthest from those
+   already represented, using a defined spatial distance and stable tie-breaking.
+   This is a deterministic starting algorithm for covering floor extremities and
+   interiors, not an assertion that its first tuning will suit every kitchen.
+4. Deduplicate nearby redundant choices without merging different supports,
+   decks or separated walking areas. Keep named station and platform choices
+   separately addressable; a sink must not disappear because no floor sample
+   happened to be beside it.
+5. Start evaluation with roughly **12–20 floor candidates**. This is a proposed
+   menu budget, not a measured optimum or an API limit. Measure whether it covers
+   intended destinations and adjust it. If required coverage exceeds the budget,
+   expand or stage selection instead of silently omitting an entire area.
+
+Narrow by geometry and redundancy rather than having code guess the meaning of
+the utterance first. In particular, do not restrict the menu to the nearest
+positions or to currently reachable positions. Jev must see enough of the
+kitchen to interpret the original request.
+
+For a large or complicated kitchen, allow coarse-to-fine selection: Jev first
+chooses a broadly suitable representative destination, then receives a few
+finer alternatives nearby if needed. These are sampling groups, not persistent
+semantic regions. Refinement must respect support, layer and obstacle boundaries
+and retain a way to reject an unsuitable first selection. Station and platform
+requests can usually bypass the broad floor menu. Avoid extra stages when the
+initial candidates already express the request adequately.
+
+#### Equivalent destinations and semantic validation
+
+"Go to the top left" generally permits several standing positions. Do not ask
+Jev to identify an exact tile supposedly specified by the user or treat divided
+probability among equally acceptable tiles as proof of ambiguous intent.
+
+Evaluate either of these bounded approaches:
+
+- Ask independent Noul questions, batched in one request, about whether each
+  candidate satisfies the utterance. Local code can choose among accepted,
+  semantically interchangeable destinations using verified travel distance and
+  clearance, with stable tie-breaking.
+- Ask a Choice over meaningfully distinct candidates, paired with a check that
+  a candidate actually satisfies the request. Validate the chosen interpretation
+  through the existing whole-plan verification flow.
+
+Jev owns semantic suitability in both approaches. Local cost ranking must not
+relax a requested support, side, station identity or other material constraint.
+If plausible candidates represent different meanings, clarify rather than
+choosing the cheapest interpretation. If no candidate fits, expand/refine the
+menu within bounds or clarify; a forced best-of-a-bad-list choice is not consent
+to move somewhere else. Do not lower confidence gates merely to make tile
+selection pass; evaluate equivalence handling and thresholds on held-out cases.
+
+TypeSafe documents [Choice](https://docs.typesafe.ai/primitives/choice) with up to
+255 options, and [companion Noul](https://docs.typesafe.ai/patterns/companion-noul)
+checks including independent per-option questions. These support the proposed
+request shapes; they do not establish reliability for our spatial commands.
+Compare candidate coverage, semantic correctness, clarification rate, request
+count, token cost and latency before selecting the default approach.
+
+#### Reachability, waiting and changing geometry
+
+A known destination can have a valid standing position without a route from P2
+right now. Keep destination identity separate from execution eligibility. The
+current public `destinations` list is filtered by verified current reachability;
+milestone 5 therefore needs a broader observed destination registry with route
+status, not just a smaller projection of that existing list.
+
+Distinguish a verified route, observed current blockage, and unknown reachability
+due to incomplete observation/search. Only a native-verified route permits
+movement. A speculative future connection, observed motion or remembered cycle
+does not authorize a crossing or establish its opening time.
+
+For the moving-counter example, retain destinations on both sides of the
+barrier. If "go to the bottom" binds a bottom-side destination while passage is
+closed, retain that destination and wait with neutral input, using bounded local
+rechecks. Once a route becomes valid, execute it. Do not substitute a reachable
+position on the wrong side. Waiting is not success and must remain cancellable.
+The same policy applies when a raft is identified but cannot yet be boarded;
+boarding requires an implemented native transition policy and fresh checks.
+
+Bind ordinary floor movement to the selected floor location and layer. Bind
+platform movement to the actual support identity and a support-local position,
+so that the destination moves with the platform. Resolve labels such as "right
+raft" against the interpretation snapshot, then retain the selected identity
+even if the rafts exchange sides. Preserve the relevant reference context for
+relative phrases such as "opposite side from me" across queue delays.
+
+Revalidate at acceptance, dispatch and during execution. Route changes may be
+handled locally while retaining the destination binding. If counters occupy the
+standing position itself, the support disappears, or the binding becomes stale,
+wait or clarify as appropriate. Any local adjustment must remain within an
+explicit arrival tolerance or previously approved equivalent destination set;
+do not silently select a new side, support or semantic target. A level reset
+invalidates old bindings. Routine moving-geometry updates must not cause a new
+Jev request every frame or continual reinterpretation of an accepted command.
+
+#### Execution, completion and existing foundations
+
+"Move to the sink" walks beside the sink and finishes without washing, picking
+up, placing held cargo or starting another interaction. A station's work
+availability is separate from whether it is a movement destination. The same
+applies to empty chopping boards and other named stations.
+
+Standalone repositioning finishes idle and pauses preserved pending dispatch.
+An explicit sequence such as "move to the sink, then wash dishes" continues into
+the subsequent requested task. Existing queue-operation semantics still apply:
+ordinary commands append, and interruption or replacement requires the
+corresponding user intent. Movement-only does not itself authorize cancelling
+active work. "Stay on the bottom and handle dishes" remains a separate future
+persistent constraint, not something fulfilled by arriving once.
+
+Completion must prove arrival within the destination's tolerance, on the correct
+support/layer, with suitable stability relative to that support. Reaching an old
+world coordinate after the raft has moved is not completion. Preserve existing
+Stop, suspension, ownership, stale-result, receipt and queue-failure behavior.
+
+Reuse the existing named-target `navigate_to` approach/route machinery and the
+internal support-relative point walking in `NavigationActions.StartPosition`.
+That point path currently serves generated stances and is not a general public
+floor-movement contract. Extract a general implementation with proper identity,
+validation, waiting/recovery and completion semantics rather than exposing its
+throw-specific assumptions unchanged. Register the new destination bindings in
+the capability, client, compiler, scheduler and native interfaces; replace the
+current blanket semantic-region veto with grounded movement resolution only
+when the corresponding executor exists.
+
+#### Deliverables and acceptance
+
+Deliver the observed destination registry, deterministic candidate sampler,
+compact spatial context, Jev selection/approval flow, native movement bindings,
+waiting/revalidation behavior, and movement-only preview/status reporting.
+Bound discovery, caching, candidate generation and periodic rechecks; report
+incomplete coverage instead of performing unbounded scans or fabricating facts.
+
+Acceptance requires separate evidence for candidate coverage, language
+interpretation and actual native execution:
+
+| Scenario | Required outcome |
+| --- | --- |
+| Connected open floor | Top-left, bottom and right-side commands select sensible destinations without requiring disconnected or named regions. |
+| Moving counters on one floor | Both top/bottom and left/right partitions are handled from live geometry; closed passage retains the intended destination, and opening passage permits checked movement. |
+| Temporarily connecting rafts | Each raft retains identity; boarding waits for a verified transition; arrival is checked relative to the selected moving support. |
+| Multiple decks and irregular floor shapes | Overlapping projections, holes and narrow spaces do not merge supports or generate unsupported destinations. |
+| Sink and chopping-board commands | Correct observed station is selected; empty stations remain usable movement targets; arrival performs no work or cargo manipulation. |
+| Several acceptable positions | Equivalent destinations do not create needless clarification; deterministic local ranking preserves every material semantic constraint. |
+| Ambiguous or missing destination | Distinct plausible meanings clarify; absent shortlist coverage can expand/refine; no unsuitable fallback is silently accepted. |
+| Blocked, unknown or stale geometry | Incomplete search is not proof of disconnection; stale points, vanished supports and changed routes are revalidated without arbitrary retargeting. |
+| Queue and lifecycle | Standalone movement holds pending dispatch after arrival; explicit follow-on work continues; Stop, suspension, queue edits and level changes preserve their contracts. |
+| Performance and generalization | Bounded discovery and selection work across unfamiliar layouts without level-name rules; record frame-time impact, interpretation latency, request count and token cost. |
+
+Use native scenarios for physical movement and recorded, labeled command/context
+fixtures for interpretation. A passing mocked choice does not prove Jev spatial
+understanding, and a correct Jev choice does not prove safe native movement.
 
 ### Milestone 6 — Evaluation and broader capabilities
 
