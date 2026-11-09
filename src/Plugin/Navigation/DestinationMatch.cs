@@ -35,7 +35,9 @@ namespace SousChef.Plugin.Navigation
             {
                 this.nav = nav;
                 this.destination = destination;
-                retained = destination.IsPoint ? destination.Approach : destination.Object.transform.TransformPoint(destination.LocalApproach);
+                bool walkingToStation = !destination.IsPoint && nav.target != null && destination.Id == nav.target.Id;
+                retained = destination.IsPoint ? destination.Approach :
+                    destination.Object.transform.TransformPoint((walkingToStation ? nav.target : destination).LocalApproach);
                 if (destination.IsPoint)
                 {
                     float reach=WalkPhysics.Spacing*2;
@@ -57,7 +59,7 @@ namespace SousChef.Plugin.Navigation
                     };
                     if ((area.Right - area.Left) * (area.Top - area.Bottom) <= 900) regions.Add(area);
                     Vector3 stance;
-                    if (destination == nav.target && !preferRetained && Vector3.Distance(nav.physics.Position, retained) < 1f &&
+                    if (walkingToStation && !preferRetained && Vector3.Distance(nav.physics.Position, retained) < 1f &&
                         nav.physics.Approach(retained, collider, out stance) && Vector3.Distance(stance, retained) < .04f)
                         preferRetained = true;
                 }
@@ -151,12 +153,6 @@ namespace SousChef.Plugin.Navigation
                     nav.available[destination.Id]=destination; return;
                 }
                 Vector3 local = destination.Object.transform.InverseTransformPoint(chosen.Stance);
-                if (nav.target == destination && destination.Object.transform.TransformVector(local - destination.LocalApproach).magnitude >= .04f)
-                {
-                    nav.arrival.Reset();
-                    nav.facingSince = -1;
-                    nav.arrivalDetails = null;
-                }
                 destination.Goal = chosen.Cell;
                 destination.Approach = chosen.Stance;
                 destination.LocalApproach = local;

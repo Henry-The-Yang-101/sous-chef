@@ -1178,11 +1178,14 @@ internal static class Program
         var focused = (Json.Record)options[0];
         Check(!(bool)((Json.Record)((Json.Record)catalog["navigation"])["diagnostics"])["searchComplete"],
             "the target can be certified before exhausting the lattice");
+        var route = typeof(NavigationActions).GetField("route", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        object activeRoute = route.GetValue(nav);
         Time.realtimeSinceStartup += .2f;
         nav.Tick(w.Chef);
         catalog = (Json.Record)nav.Available(w.Chef);
         options = (List<object>)catalog["destinations"];
-        Check(options.Count == 2 && (bool)catalog["complete"], "a catalogue poll restores full matching at the next active replan");
+        Check(options.Count == 2 && (bool)catalog["complete"], "a catalogue poll restores full matching while walking");
+        Check(ReferenceEquals(activeRoute, route.GetValue(nav)), "catalogue refresh leaves the checked active route in place");
         var matched = options.Cast<Json.Record>().Single(row => Equals(row["id"],focused["id"]));
         Check(Equals(matched["routeDistance"],focused["routeDistance"]), "focused and unrestricted search certify the same route cost");
         nav.Stop("recovery_fixture");

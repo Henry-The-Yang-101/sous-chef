@@ -20,6 +20,9 @@ namespace SousChef.Plugin.Navigation
             public bool IsPoint, StrictPointArrival, MovementOnly, DirectRoute;
             public Transform PointAnchor;
             public Collider PointSupport;
+
+            // Keep the certified stance independent of later catalogue matches.
+            public Destination CopyForWalk() { return (Destination)MemberwiseClone(); }
         }
         private readonly WalkPhysics physics = new WalkPhysics();
         public readonly ChefActionState Action = new ChefActionState();
@@ -401,7 +404,7 @@ namespace SousChef.Plugin.Navigation
             if (!available.TryGetValue(destination, out chosen)) return unavailable ?? "destination_unavailable";
             if (!Action.Start(owner, destination, true)) return "action_in_progress";
             recoveryTarget = null;
-            target = chosen; lastDestination = Identity(chosen); started = Time.realtimeSinceStartup;
+            lastDestination = Identity(chosen); started = Time.realtimeSinceStartup;
             ResetWalkingProgress(); stallReroutes = 0;
             arrivalDetails = null; arrival.Reset(); facingSince = -1; haveMotion = motionSampleValid = false;
             settlingSince = -1; teleportsCompleted = 0; executionTrace.Clear(); SetRoute(chosen); Trace("start", chosen.Approach, Vector3.zero); return null;
@@ -433,7 +436,11 @@ namespace SousChef.Plugin.Navigation
                 if (WaitForGroundedRoute(unavailable ?? "route_blocked")) return false;
                 Stop(unavailable ?? "destination_unreachable"); return false;
             }
-            movementWaiting = null; waitingPortalRoute = false; portalReplanUntil = 0; target = current; SetRoute(current); return true;
+            if (!current.IsPoint && Vector3.Distance(target.Approach, current.Approach) >= .04f)
+            {
+                arrival.Reset(); facingSince = -1; arrivalDetails = null;
+            }
+            movementWaiting = null; waitingPortalRoute = false; portalReplanUntil = 0; SetRoute(current); return true;
         }
         private bool RemainingRouteClear()
         {
@@ -462,6 +469,7 @@ namespace SousChef.Plugin.Navigation
         }
         private void SetRoute(Destination chosen)
         {
+            target = chosen.IsPoint ? chosen : chosen.CopyForWalk();
             route = new List<Vector3>(); routeAnchors.Clear(); portalSteps.Clear();
             foreach (WalkCell cell in chosen.DirectRoute ? new List<WalkCell>() : search.Route(chosen.Goal))
             {
@@ -539,10 +547,17 @@ namespace SousChef.Plugin.Navigation
             // next command live. Moving supports don't need a full search on
             // every animation frame. An invalid next connector replans below.
             if (physics.Changed) UpdateRouteAnchors();
-            if ((physics.Changed && physics.HasPortals) || Time.realtimeSinceStartup - lastPlan >= .1f || TargetMoved())
+            bool catalogueDue = Time.realtimeSinceStartup - lastPlan >= .1f;
+            if ((physics.HasPortals && (physics.Changed || catalogueDue)) || TargetMoved())
             {
                 Refresh(player, true, true, movementReference != null);
                 if (!ApplyPlan()) return;
+            }
+            else if (catalogueDue && !target.IsPoint)
+            {
+                // Update the catalogue without sending the chef back around a
+                // corner it is already following. The next step is checked below.
+                Refresh(player, true, true, true);
             }
             if (route == null || route.Count == 0) { Stop("destination_unreachable"); return; }
             Vector3 position = physics.Position;
@@ -944,7 +959,7 @@ namespace SousChef.Plugin.Navigation
                 focusedPlan = station != null && (station.IsPoint || requested != null || recoveryTarget != null || !fullCatalogueRequested);
                 var candidates = target != null && target.IsPoint ? new List<Destination> { target } : Discover(player, focusedPlan ? station : null);
                 candidateCount = candidates.Count;
-                DestinationMatch focused = focusedPlan && candidates.Count == 1 ? new DestinationMatch(this, station) : null;
+                DestinationMatch focused = focusedPlan && candidates.Count == 1 ? new DestinationMatch(this, candidates[0]) : null;
                 DestinationMatch nextFocus = physics.HasPortals ? null : focused;
                 bool hadIncremental = incrementalSearch;
                 bool sameFocus = nextFocus == null ? searchFocus == null : nextFocus.SameRegion(searchFocus);
