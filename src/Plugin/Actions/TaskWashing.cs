@@ -6,7 +6,17 @@ namespace SousChef.Plugin.Actions
 {
     internal sealed partial class TaskActions
     {
-        partial void RegisterWashing() { Register("wash_dishes", WashingAvailable, WashDishes); }
+        partial void RegisterWashing() { Register("wash_dishes", WashingSupported, WashDishes); }
+        private bool WashingSupported()
+        {
+            // Dispatch owns the task even when plates or a route are pending.
+            // WashDishes checks reachability and cargo before issuing inputs.
+            foreach (GameObject target in navigation.Targets())
+                if (target.GetComponent<ServerWashingStation>() != null) return true;
+            foreach (LogisticsItem item in inventory.Items)
+                if (TaskNative.Component<ServerWaterGunSpray>(item.Item) != null) return true;
+            return false;
+        }
         private List<LogisticsItem> DirtySources()
         {
             inventory.Refresh(chef); var sources = new List<LogisticsItem>();

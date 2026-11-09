@@ -65,6 +65,7 @@ const reasons = {
   released: 'Control released.',
   navigation_timeout: 'Stopped: navigation timed out.',
   no_progress: 'Stopped: Player 2 was not making progress.',
+  waiting_for_wash_access: 'Needs reachable dirty dishes and a usable sink or water gun.',
 };
 const explain = reason => reasons[reason] || (reason ? reason.replaceAll('_', ' ') : '');
 const kindName = kind => (kind || 'destination').replaceAll('_', ' ');
