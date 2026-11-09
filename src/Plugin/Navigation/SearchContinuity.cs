@@ -7,9 +7,7 @@ namespace SousChef.Plugin.Navigation
     internal sealed partial class WalkPhysics
     {
         private struct GroundProof { public Collider Ground; public float Speed; public IMovingSurface Surface; }
-        private struct WindProof { public WindVolume Wind; public Vector3 Velocity; public int Key, Filter; public bool Active; }
         private readonly List<GroundProof> searchGrounds = new List<GroundProof>();
-        private readonly List<WindProof> searchWinds = new List<WindProof>();
         private long geometryVersion, savedGeometryVersion, sceneRevision, savedSceneRevision;
         private bool searchRemembered, searchBackfaces;
         private Vector3 searchPosition;
@@ -23,13 +21,13 @@ namespace SousChef.Plugin.Navigation
         private bool CannotContinue(string reason) { ContinuityFailure = reason; return false; }
 
         private void ForgetSearch()
-        { searchRemembered = false; searchGrounds.Clear(); searchWinds.Clear(); searchConveyors.Clear(); searchPreviousSurface = null; currentStarts = savedStarts = null; geometryVersion++; }
+        { searchRemembered = false; searchGrounds.Clear(); searchConveyors.Clear(); searchPreviousSurface = null; currentStarts = savedStarts = null; geometryVersion++; }
 
         // Search progress is main-thread state, separate from the geometry cache.
         // Keep exact values, not a lossy hash or a time-based freshness guess.
         public bool RememberSearch(bool retainGrounds = false)
         {
-            searchRemembered = false; if (!retainGrounds) searchGrounds.Clear(); searchWinds.Clear();
+            searchRemembered = false; if (!retainGrounds) searchGrounds.Clear();
             if (geometryCacheEvicted) return CannotContinue("geometry_cache_evicted");
             // Native conveyors have an explicit continuity proof. Arbitrary
             // moving surfaces and portal readiness retain fresh searches.
@@ -49,13 +47,6 @@ namespace SousChef.Plugin.Navigation
                 if (!known) searchGrounds.Add(new GroundProof { Ground = ground, Speed = pair.Value, Surface = MovingSurface(ground) });
             }
             if (!RememberConveyors()) return CannotContinue("untracked_conveyor_rules");
-            foreach (var pair in winds)
-            {
-                WindVolume wind = pair.Value;
-                if (wind == null) return CannotContinue("missing_wind");
-                searchWinds.Add(new WindProof { Key = pair.Key, Wind = wind, Velocity = wind.GetVelocity(),
-                    Filter = ((LayerMask)windFilter.GetValue(wind)).value, Active = wind.isActiveAndEnabled });
-            }
             searchChef = chef; searchHeld = held; searchGround = chef.GroundCollider;
             searchPosition = Position; savedGeometryVersion = geometryVersion; savedSceneRevision = sceneRevision; savedStarts = currentStarts;
             searchSpeed = walkingSpeed; searchRadius = radius; searchNativeRadius = nativeRadius;
@@ -76,7 +67,7 @@ namespace SousChef.Plugin.Navigation
                 walkingSpeed != searchSpeed || radius != searchRadius ||
                 nativeRadius != searchNativeRadius || height != searchHeight ||
                 StepHeight != searchStep || Physics.queriesHitBackfaces != searchBackfaces ||
-                portals.Count > 0 || winds.Count != searchWinds.Count) return CannotContinue("starting_state_or_movement_rules_changed");
+                portals.Count > 0) return CannotContinue("starting_state_or_movement_rules_changed");
             foreach (GroundProof proof in searchGrounds)
             {
                 if (!System.Object.ReferenceEquals(proof.Ground, null) && proof.Ground == null) return CannotContinue("support_removed");
@@ -84,13 +75,6 @@ namespace SousChef.Plugin.Navigation
                 if (!System.Object.ReferenceEquals(moving, proof.Surface) || Speed(proof.Ground) != proof.Speed) return CannotContinue("surface_rules_changed");
             }
             if (!ConveyorsUnchanged()) return CannotContinue("conveyor_rules_changed");
-            foreach (WindProof proof in searchWinds)
-            {
-                WindVolume wind;
-                if (proof.Wind == null || !winds.TryGetValue(proof.Key, out wind) || wind != proof.Wind ||
-                    wind.isActiveAndEnabled != proof.Active || !wind.GetVelocity().Equals(proof.Velocity) ||
-                    ((LayerMask)windFilter.GetValue(wind)).value != proof.Filter) return CannotContinue("wind_changed");
-            }
             if (!Position.Equals(searchPosition) || pivotToFoot != searchPivot)
             {
                 // Standing chefs can oscillate vertically by float ULPs. Prove

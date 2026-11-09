@@ -12,7 +12,11 @@ namespace SousChef.Plugin.Navigation
     {
         public const float Spacing = .4f, HeightBand = .2f, Range = 60f;
         private const float Skin = .045f;
+        // GroundCast.FindGround and ProcessGroundHit in the installed player.
+        private const float GroundContactDistance = .3f;
+        private static readonly float MinimumGroundNormal = Mathf.Cos(58f * Mathf.Deg2Rad);
         private static readonly FieldInfo landscape = typeof(GroundCast).GetField("m_landscapeMask", BindingFlags.Instance | BindingFlags.NonPublic);
+        private static readonly FieldInfo groundCastRadius = typeof(GroundCast).GetField("m_radius", BindingFlags.Instance | BindingFlags.NonPublic);
         private static readonly FieldInfo windFilter = typeof(WindVolume).GetField("m_windFilter", BindingFlags.Instance | BindingFlags.NonPublic);
         private static readonly FieldInfo gridSelection = typeof(PlayerControls).GetField("m_bGridSelection", BindingFlags.Instance | BindingFlags.NonPublic);
         private static readonly FieldInfo interactionMask = typeof(PlayerControls).GetField("m_interactMask", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -25,7 +29,7 @@ namespace SousChef.Plugin.Navigation
         private readonly Dictionary<int, GeometryStamp> stamps = new Dictionary<int, GeometryStamp>();
         private readonly Dictionary<int, MeshStamp> meshes = new Dictionary<int, MeshStamp>();
         private readonly List<Bounds> changed = new List<Bounds>();
-        private readonly Dictionary<int, WindVolume> winds = new Dictionary<int, WindVolume>();
+        private Dictionary<int, WindField> winds = new Dictionary<int, WindField>(), previousWinds = new Dictionary<int, WindField>();
         private readonly Dictionary<int, bool> dangers = new Dictionary<int, bool>();
         private readonly Dictionary<int, bool> nativeSteps = new Dictionary<int, bool>();
         private readonly Dictionary<int, IMovingSurface> surfaces = new Dictionary<int, IMovingSurface>();
@@ -41,6 +45,7 @@ namespace SousChef.Plugin.Navigation
         private int groundMask, collisionMask, interactMask;
         private bool useGridSelection;
         private float radius, nativeRadius, height, pivotToFoot, lastReconcile, walkingSpeed, stepHeight, bodyContactOffset;
+        private float seamRadius, roundedRise, roundedReach;
         public bool TraceEnabled;
         public readonly List<object> GeometryChanges = new List<object>();
         public object StartFailures { get; private set; }
@@ -80,13 +85,24 @@ namespace SousChef.Plugin.Navigation
         private sealed class Probe { public bool Valid; public Vector3 Point; public Collider Ground; public StationConnector Connector; }
         private struct GroundSample { public Vector3 Point; public Collider Ground; }
         private sealed class CachedEdge { public WalkEdge Edge; public GroundSample[] Support; }
-        private sealed class GeometryStamp { public Collider Collider; public Bounds Bounds, Obstruction; public Matrix4x4 Matrix; public int Layer, Shape; public bool Trigger, Danger, Step; }
+        private sealed class GeometryStamp { public Collider Collider; public Bounds Bounds; public Matrix4x4 Matrix; public int Layer, Shape; public bool Trigger, Danger, Step, AffectsWalking; }
+        private struct WindField
+        {
+            public Matrix4x4 WorldToLocal;
+            public Vector3 Centre, Half, Velocity;
+            public bool Matches(WindField other)
+            {
+                return WorldToLocal.Equals(other.WorldToLocal) && Centre.Equals(other.Centre) &&
+                    Half.Equals(other.Half) && Velocity.Equals(other.Velocity);
+            }
+        }
         private sealed class MeshStamp { public Mesh Mesh; public Vector3[] Vertices; public int[] Triangles; public int Scan, Seen, Revision; }
 
         public void Reset()
         {
             ClearStallAvoidance();
             ForgetSearch();
+            winds.Clear(); previousWinds.Clear();
             chef = null; ClearGeometryCache(); stamps.Clear(); meshes.Clear(); dangers.Clear(); nativeSteps.Clear(); surfaces.Clear(); surfaceHistories.Clear(); properties.Clear(); grids.Clear(); ignoredChefColliders.Clear(); ignoredLooseColliders.Clear(); portals.Clear(); portalEntries.Clear(); portalExits.Clear(); exitPortal = null;
         }
         public string Refresh(PlayerControls player)
@@ -110,6 +126,7 @@ namespace SousChef.Plugin.Navigation
             int nextCollisionMask = 0;
             for (int i = 0; i < 32; i++) if (!Physics.GetIgnoreLayerCollision(chef.gameObject.layer, i)) nextCollisionMask |= 1 << i;
             nativeRadius = capsule.radius * Mathf.Max(Mathf.Abs(capsule.transform.lossyScale.x), Mathf.Abs(capsule.transform.lossyScale.z));
+            float nextSeamRadius = groundCastRadius == null ? 0 : Mathf.Min(nativeRadius, Mathf.Max(0, (float)groundCastRadius.GetValue(ground)));
             float nextRadius = nativeRadius + .025f;
             float nextBodyContact = Mathf.Min(.01f, Mathf.Max(0, capsule.contactOffset));
             float nextHeight = Mathf.Max(2 * nextRadius, capsule.height * Mathf.Abs(capsule.transform.lossyScale.y));
@@ -117,9 +134,14 @@ namespace SousChef.Plugin.Navigation
             // turns. Retain the padded dimensions through that numerical noise;
             // otherwise every turn discards the complete graph. The tolerance is
             // far smaller than the extra 0.025-unit collision margin.
-            if (groundMask != nextGroundMask || collisionMask != nextCollisionMask || bodyContactOffset != nextBodyContact ||
+            if (groundMask != nextGroundMask || collisionMask != nextCollisionMask || bodyContactOffset != nextBodyContact || Mathf.Abs(seamRadius - nextSeamRadius) > .0001f ||
                 Mathf.Abs(radius - nextRadius) > .0001f || Mathf.Abs(height - nextHeight) > .0001f || stepHeight != StepHeight)
-            { ClearGeometryCache(); Changed = true; radius = nextRadius; height = nextHeight; stepHeight = StepHeight; bodyContactOffset = nextBodyContact; }
+            {
+                ClearGeometryCache(); Changed = true; radius = nextRadius; height = nextHeight; stepHeight = StepHeight; bodyContactOffset = nextBodyContact;
+                seamRadius = nextSeamRadius;
+                roundedRise = Mathf.Min(GroundContactDistance, seamRadius * (1 - MinimumGroundNormal));
+                roundedReach = (float)Math.Sqrt(roundedRise * (2 * seamRadius - roundedRise));
+            }
             groundMask = nextGroundMask; collisionMask = nextCollisionMask;
             pivotToFoot = chef.transform.position.y - capsule.bounds.min.y;
             nearbyCount = Physics.OverlapSphereNonAlloc(chef.transform.position, Range, nearby, ~0, QueryTriggerInteraction.Collide); Queries++;
@@ -142,7 +164,8 @@ namespace SousChef.Plugin.Navigation
                 var attachment = physical == null ? null : physical.GetComponent<ServerPhysicalAttachment>();
                 if (attachment != null && !attachment.IsAttached()) ignoredLooseColliders.Add(c.GetInstanceID());
             }
-            changed.Clear(); winds.Clear();
+            changed.Clear();
+            var previous = previousWinds; previousWinds = winds; winds = previous; winds.Clear();
             GeometryChanges.Clear();
             geometryScan++;
             bool reconcile = Time.realtimeSinceStartup - lastReconcile >= .2f;
@@ -152,19 +175,21 @@ namespace SousChef.Plugin.Navigation
                 lastReconcile = Time.realtimeSinceStartup;
             }
             var present = new HashSet<int>();
+            bool sceneChanged = false;
             for (int i = 0; i < nearbyCount; i++)
             {
                 Collider c = nearby[i];
                 if (c == null || Own(c)) continue;
                 int id = c.GetInstanceID(); present.Add(id);
-                WindVolume wind = c.GetComponent<WindVolume>();
-                if (wind != null) winds[id] = wind;
+                ObserveWind(c, id);
                 GeometryStamp old;
                 Bounds bounds = c.bounds; Matrix4x4 matrix = c.transform.localToWorldMatrix;
-                Bounds obstruction = bounds;
-                int shapeKey = ShapeKey(c, reconcile); bool danger = Dangerous(c), step = NativeStep(c);
+                int layer = c.gameObject.layer, shapeKey = ShapeKey(c, reconcile);
+                bool trigger = c.isTrigger, danger = Dangerous(c), step = NativeStep(c);
+                bool affectsWalking = danger || !trigger && (((groundMask | collisionMask) & (1 << layer)) != 0);
                 if (!stamps.TryGetValue(id, out old) || old.Collider != c || !old.Bounds.Equals(bounds) ||
-                    !old.Obstruction.Equals(obstruction) || old.Matrix != matrix || old.Layer != c.gameObject.layer || old.Trigger != c.isTrigger || old.Shape != shapeKey || old.Danger != danger || old.Step != step ||
+                    old.Matrix != matrix || old.Layer != layer || old.Trigger != trigger || old.Shape != shapeKey ||
+                    old.Danger != danger || old.Step != step || old.AffectsWalking != affectsWalking ||
                     (reconcile && c is TerrainCollider))
                 {
                     if (TraceEnabled && GeometryChanges.Count < 12)
@@ -172,13 +197,20 @@ namespace SousChef.Plugin.Navigation
                             "oldCentre", old == null ? null : Values.Vector(old.Bounds.center), "centre", Values.Vector(bounds.center),
                             "boundsChanged", old == null || !old.Bounds.Equals(bounds), "matrixChanged", old == null || old.Matrix != matrix,
                             "shapeChanged", old == null || old.Shape != shapeKey));
-                    if (old != null) changed.Add(old.Obstruction);
-                    changed.Add(obstruction);
-                    stamps[id] = new GeometryStamp { Collider = c, Bounds = bounds, Obstruction = obstruction, Matrix = matrix, Layer = c.gameObject.layer, Trigger = c.isTrigger, Shape = shapeKey, Danger = danger, Step = step };
+                    sceneChanged = true;
+                    if (old != null && old.AffectsWalking) changed.Add(old.Bounds);
+                    if (affectsWalking) changed.Add(bounds);
+                    stamps[id] = new GeometryStamp { Collider = c, Bounds = bounds, Matrix = matrix, Layer = layer,
+                        Trigger = trigger, Shape = shapeKey, Danger = danger, Step = step, AffectsWalking = affectsWalking };
                 }
             }
             var removed = new List<int>();
-            foreach (var pair in stamps) if (!present.Contains(pair.Key)) { changed.Add(pair.Value.Obstruction); removed.Add(pair.Key); }
+            foreach (var pair in stamps)
+                if (!present.Contains(pair.Key))
+                {
+                    if (pair.Value.AffectsWalking) changed.Add(pair.Value.Bounds);
+                    sceneChanged = true; removed.Add(pair.Key);
+                }
             foreach (int id in removed) { stamps.Remove(id); dangers.Remove(id); nativeSteps.Remove(id); surfaces.Remove(id); properties.Remove(id); }
             if (reconcile)
             {
@@ -189,14 +221,11 @@ namespace SousChef.Plugin.Navigation
             // Compare readable mesh contents at reconciliation rather than treating
             // every unchanged mesh as a geometry edit. Large kill-plane meshes can
             // otherwise invalidate an entire kitchen before its graph finishes warming.
-            if (changed.Count > 0)
-            {
-                bool touchesLattice = InvalidateGeometryCache();
-                sceneRevision++;
-                // Wind fields use transformed, padded volumes and have their own
-                // dependencies beyond the footprint of a walking capsule.
-                if (touchesLattice || winds.Count > 0 || searchWinds.Count > 0) geometryVersion++;
-            }
+            if (sceneChanged) sceneRevision++;
+            if (changed.Count > 0 && InvalidateGeometryCache()) geometryVersion++;
+            // A wind volume changes directed edge feasibility, never the cached
+            // native collision probes. Compare the effective field separately.
+            if (!WindsUnchanged()) Changed = true;
             RefreshPortals();
             if (Changed) geometryVersion++;
             return player.GroundCollider == null ? "not_grounded" : null;
@@ -333,7 +362,7 @@ namespace SousChef.Plugin.Navigation
             for (int i = 0; i < count; i++)
             {
                 var hit = hits[i];
-                if (hit.collider == null || Own(hit.collider) || Dangerous(hit.collider) || hit.normal.y < .52992f ||
+                if (hit.collider == null || Own(hit.collider) || Dangerous(hit.collider) || hit.normal.y < MinimumGroundNormal ||
                     hit.distance <= 0 || hit.distance >= distance) continue;
                 // SphereCast returns the contact point, not the capsule's foot.
                 // Index and sweep the supported body pose; retain the native normal.
@@ -373,7 +402,7 @@ namespace SousChef.Plugin.Navigation
             RaycastHit contact;
             bool current = Vector3.Distance(guess, Position) < .02f;
             float footprint = current ? nativeRadius + .01f : radius;
-            if (!Stand(guess, out point, out support, current ? ContactRadius : radius, out contact)) return false;
+            if (!Stand(guess, out point, out support, current ? ContactRadius : radius, out contact, bridgeGap: false)) return false;
             if (NativeStep(support)) return true;
             var box = support as BoxCollider;
             bool flatBox = box != null && Mathf.Abs(box.transform.up.y) > .9999f;
@@ -409,7 +438,8 @@ namespace SousChef.Plugin.Navigation
             RaycastHit centre;
             return Stand(guess, out point, out support, clearance, out centre);
         }
-        private bool Stand(Vector3 guess, out Vector3 point, out Collider support, float clearance, out RaycastHit hit, float dropDistance = -1)
+        private bool Stand(Vector3 guess, out Vector3 point, out Collider support, float clearance, out RaycastHit hit,
+            float dropDistance = -1, bool bridgeGap = true)
         {
             point = guess; support = null;
             if (!Ground(guess, out hit, dropDistance)) return Fail("ground_probe", guess);
@@ -419,7 +449,7 @@ namespace SousChef.Plugin.Navigation
             // on its top rather than shortcut around an overhanging corner.
             if (MovingSurface(support) is Travelator && !ConveyorSupport(point, hit.normal, clearance))
                 return Fail("conveyor_side_support", point, support);
-            if (!FloorCentreSupported(point, support)) return Fail("floor_centre_unsupported", point, support);
+            if (!FloorCentreSupported(point, support, bridgeGap)) return Fail("floor_centre_unsupported", point, support);
             if (!SlopeInterior(point, support, clearance)) return Fail("slope_side_clearance", point, support);
             // GroundCast supports the rounded capsule across narrow tread seams.
             // Requiring a ray under every footprint edge rejects real stairs even
@@ -431,7 +461,7 @@ namespace SousChef.Plugin.Navigation
             for (int i = 0; i < count; i++) if (BlocksWalkingBody(overlaps[i], point.y, point.y, low.y - clearance, high.y + clearance)) return Fail("body_overlap", point, overlaps[i]);
             return true;
         }
-        private bool FloorCentreSupported(Vector3 point, Collider support)
+        private bool FloorCentreSupported(Vector3 point, Collider support, bool bridgeGap)
         {
             var box = support as BoxCollider;
             if (box == null || NativeStep(support) || Mathf.Abs(box.transform.up.y) < .9999f) return true;
@@ -444,30 +474,25 @@ namespace SousChef.Plugin.Navigation
             // a walkable ramp. Adjacent coplanar floors and real stair wedges can
             // still support the centre; native Steppable contact is kept above.
             RaycastHit plane = FloorBelow(point, nativeRadius + .01f);
-            if (Overflow || plane.collider != null && (Dangerous(plane.collider) || plane.normal.y < .52992f)) return false;
-            // Native belts can sit one contact offset above a continuous floor.
-            // Require that floor directly below the centre, even at a belt lip.
-            float tolerance = MovingSurface(support) is Travelator ? .0101f : .0025f;
-            if (plane.collider != null && (plane.normal.y < .99f || Mathf.Abs(plane.point.y - box.bounds.max.y) < tolerance)) return true;
-            if (outsideX && outsideZ) return false;
+            if (Overflow || plane.collider != null && (Dangerous(plane.collider) || plane.normal.y < MinimumGroundNormal)) return false;
+            if (plane.collider != null)
+                return plane.normal.y < .99f || Mathf.Abs(plane.point.y - box.bounds.max.y) <= Mathf.Max(.0025f, roundedRise);
+            if (!bridgeGap || outsideX && outsideZ || roundedReach <= 0) return false;
 
-            // A piloted floor can dock with a small horizontal gap and a small
-            // height offset. GroundCast still rides the rounded box edge until
-            // the other floor takes over. Verify an opposing floor at the same
-            // section of the seam, even when the centre ray is over the gap.
+            // A round contact can reach from either bank. Look for the second
+            // bank across this face, never around the unsupported box corner.
+            // Segment still checks native support and a body sweep at every
+            // sample, so a bank beyond actual contact range cannot join a route.
             Vector3 side = outsideX ? Vector3.right * Math.Sign(local.x) : Vector3.forward * Math.Sign(local.z);
             Vector3 across = box.transform.TransformVector(side).normalized;
             local.x = Mathf.Clamp(local.x, -half.x, half.x);
             local.z = Mathf.Clamp(local.z, -half.z, half.z);
             Vector3 edge = box.transform.TransformPoint(local + box.center);
             edge.y = box.bounds.max.y;
-            RaycastHit opposite = FloorBelow(edge + across * Skin, Skin + .001f);
-            var dock = opposite.collider as BoxCollider;
-            if (Overflow || dock == null || dock == box || Dangerous(dock) || opposite.normal.y < .9999f ||
-                Mathf.Abs(dock.transform.up.y) < .9999f || Mathf.Abs(opposite.point.y - edge.y) > Skin ||
-                (box.GetComponent<FollowPilotMoved>() == null && dock.GetComponent<FollowPilotMoved>() == null)) return false;
-            // Past the gap, require the centre to be over that same floor.
-            return plane.collider == dock || plane.collider == null && Vector3.Dot(point - edge, across) <= Skin;
+            if (Vector3.Dot(point - edge, across) > roundedReach) return false;
+            RaycastHit opposite = FloorBelow(edge + across * (2 * roundedReach), roundedRise + .001f);
+            return !Overflow && opposite.collider != null && opposite.collider != box && !Dangerous(opposite.collider) &&
+                opposite.normal.y >= .99f && Mathf.Abs(opposite.point.y - edge.y) <= roundedRise;
         }
         private RaycastHit FloorBelow(Vector3 point, float reach)
         {
@@ -703,7 +728,7 @@ namespace SousChef.Plugin.Navigation
             // The support and sweep capsule already use Skin. At low Update
             // rates native motion can reach that skin before GroundCast's next
             // update; do not reject the same clear pose using a smaller epsilon.
-            if (gap >= -Skin && gap <= landingDrop && (chef.GroundCollider == null || gap > .3f))
+            if (gap >= -Skin && gap <= landingDrop && (chef.GroundCollider == null || gap > GroundContactDistance))
             {
                 if (!Sweep(position, support, ContactRadius))
                 { if (TraceEnabled) Settlement = Json.Object("rejected", "landing_sweep", "failure", Failure); return false; }
@@ -791,19 +816,42 @@ namespace SousChef.Plugin.Navigation
         }
         public Vector3 Flow(Vector3 at, Collider ground, IMovingSurface previous = null)
         {
-            Vector3 drift = Vector3.zero;
             IMovingSurface surface = MovingSurface(ground);
-            if (surface != null) drift += surface.CalculateVelocityAtPoint(at, previous);
+            Vector3 drift = surface == null ? Vector3.zero : surface.CalculateVelocityAtPoint(at, previous);
+            drift += WindAt(at); drift.y = 0; return drift;
+        }
+        private void ObserveWind(Collider collider, int id)
+        {
+            var box = collider as BoxCollider;
+            if (box == null) return;
+            var wind = box.GetComponent<WindVolume>();
+            if (wind == null || !wind.isActiveAndEnabled ||
+                (((LayerMask)windFilter.GetValue(wind)).value & (1 << chef.gameObject.layer)) == 0) return;
+            Vector3 velocity = wind.GetVelocity(); velocity.y = 0;
+            if (velocity.sqrMagnitude == 0) return;
+            winds[id] = new WindField { WorldToLocal = box.transform.worldToLocalMatrix, Centre = box.center,
+                Half = box.size * .5f + new Vector3(radius, 0, radius), Velocity = velocity };
+        }
+        private bool WindsUnchanged()
+        {
+            if (winds.Count != previousWinds.Count) return false;
             foreach (var pair in winds)
             {
-                WindVolume wind = pair.Value;
-                if (wind == null || !wind.isActiveAndEnabled || (((LayerMask)windFilter.GetValue(wind)).value & (1 << chef.gameObject.layer)) == 0) continue;
-                var box = wind.GetComponent<BoxCollider>();
-                Vector3 local = box.transform.InverseTransformPoint(at + Vector3.up * (height * .5f)) - box.center;
-                Vector3 half = box.size * .5f;
-                if (Mathf.Abs(local.x) <= half.x + radius && Mathf.Abs(local.y) <= half.y && Mathf.Abs(local.z) <= half.z + radius) drift += wind.GetVelocity();
+                WindField prior;
+                if (!previousWinds.TryGetValue(pair.Key, out prior) || !pair.Value.Matches(prior)) return false;
             }
-            drift.y = 0; return drift;
+            return true;
+        }
+        private Vector3 WindAt(Vector3 at)
+        {
+            Vector3 drift = Vector3.zero; at.y += height * .5f;
+            foreach (WindField wind in winds.Values)
+            {
+                Vector3 local = wind.WorldToLocal.MultiplyPoint3x4(at) - wind.Centre;
+                if (Mathf.Abs(local.x) <= wind.Half.x && Mathf.Abs(local.y) <= wind.Half.y && Mathf.Abs(local.z) <= wind.Half.z)
+                    drift += wind.Velocity;
+            }
+            return drift;
         }
         private IMovingSurface MovingSurface(Collider ground)
         {
@@ -834,6 +882,8 @@ namespace SousChef.Plugin.Navigation
             if ((to - from).sqrMagnitude < .0001f) return true;
             float speed = Speed(ground);
             IMovingSurface surface = MovingSurface(ground);
+            if (winds.Count == 0 && surface == null) return speed > .1f;
+            Vector3 velocity = surface == null ? Vector3.zero : surface.CalculateVelocityAtPoint(at, previous);
             if (surface is Travelator)
             {
                 // Treat a floor conveyor as directed navigation. Even when the
@@ -841,7 +891,6 @@ namespace SousChef.Plugin.Navigation
                 // take most of the action timeout and snag at native corners.
                 // Use native world velocity, including borders and entry history;
                 // sideways exits remain legal when the flow solver can steer them.
-                Vector3 velocity = surface.CalculateVelocityAtPoint(at, previous);
                 Vector3 direction = to - from; direction.y = 0; velocity.y = 0;
                 if (Vector3.Dot(direction.normalized, velocity) < -.01f)
                 {
@@ -850,8 +899,7 @@ namespace SousChef.Plugin.Navigation
                     return false;
                 }
             }
-            if (winds.Count == 0 && surface == null) return speed > .1f;
-            Vector3 drift = Flow(at, ground, previous); float x, z;
+            Vector3 drift = velocity + WindAt(at); float x, z;
             return WalkingSteering.Direction(to.x - from.x, to.z - from.z, drift.x, drift.z, speed, out x, out z);
         }
         private IGridLocation Grid(Collider target)

@@ -199,6 +199,12 @@ internal static class Program
         physics=w.Ready();
         Check(!physics.Neighbours(start).Any(e => e.Cell.Equals(end)),"interior wind is checked at support samples");
         Check(!physics.Segment(Vector3.zero,new Vector3(1,0,0)),"wind near the start cannot hide outside a long segment's midpoint");
+        int cached = physics.CachedEdgeCount;
+        wind.transform.position += Vector3.forward * 2;
+        physics.Refresh(w.Chef);
+        Check(physics.Changed && physics.CachedEdgeCount == cached &&
+            physics.Neighbours(start).Any(e => e.Cell.Equals(end)),
+            "moving wind rechecks directed feasibility while retaining the collision probes");
 
         w=new World(); var incoming=w.AddFloor((x,z) => x < .1f ? 0 : (float?)null);
         var entering=incoming.gameObject.Add(new Belt {Velocity=new Vector3(1,0,0)});
@@ -643,10 +649,8 @@ internal static class Program
         Vector3 aboard = new Vector3(15.8f, .03f, 3.66f), ashore = new Vector3(17, 0, 3.66f);
         w.Chef.transform.position = aboard;
         var physics = w.Ready();
-        Check(!physics.Segment(aboard, ashore), "ordinary offset floor boxes do not imply a dock");
-        platform.gameObject.Add(new FollowPilotMoved());
         Check(physics.Segment(aboard, ashore) && physics.Segment(ashore, aboard),
-            "the native pilot floor connects to the dock in both directions");
+            "the offset floor connects to the dock in both directions");
         var edge = new WalkCell(40, 0, 9);
         var bank = new WalkCell(41, 0, 9);
         Check(physics.Neighbours(edge).Any(next => next.Cell.Equals(bank)),
@@ -654,7 +658,7 @@ internal static class Program
         Vector3 point; Collider support;
         Check(!physics.StationaryStand(new Vector3(16.18f, .03f, 3.66f), out point, out support),
             "a walking connection does not certify the dock seam as a stationary stance");
-        Vector3 drift = -Vector3.right * .15f;
+        Vector3 drift = -Vector3.right * .7f;
         platform.Centre += drift;
         platform.transform.position += drift;
         platform.testBounds = new Bounds(platform.testBounds.center + drift, platform.testBounds.size);
@@ -673,7 +677,8 @@ internal static class Program
         Vector3 floor = new Vector3(18, 0, -2.4f), belt = new Vector3(18, .01f, -3.6f);
         w.Chef.transform.position = floor;
         var physics = w.Ready();
-        Check(!physics.Segment(floor, belt), "an ordinary raised floor edge keeps the existing centre support rule");
+        Check(physics.Segment(floor, belt) && physics.Segment(belt, floor),
+            "the rounded chef body can cross a shallow raised floor");
         boxes[1].gameObject.Add(new Travelator { Velocity = new Vector3(2.5f, 0, 0) });
         Time.realtimeSinceStartup += .21f;
         physics.Refresh(w.Chef);
@@ -683,6 +688,21 @@ internal static class Program
         Vector3 point; Collider support;
         Check(!physics.Stand(new Vector3(18, .005f, -2.933f), out point, out support),
             "a conveyor lip without a centre floor remains unsupported");
+    }
+    private static void CapturedBalloonSeam()
+    {
+        var w = new World();
+        var shape = w.Chef.GetComponent<CapsuleCollider>(); shape.radius = .4f; shape.height = 2; shape.center = Vector3.up;
+        var boxes = RecordedBox.Install("balloon-floor-seam.json");
+        w.Chef.GroundCollider = boxes[0];
+        Vector3 floor = new Vector3(15.2f, 0, -3.6f), basket = new Vector3(16.4f, 0, -3.6f);
+        w.Chef.transform.position = floor;
+        var physics = w.Ready();
+        Check(physics.Segment(floor, basket) && physics.Segment(basket, floor),
+            "the native round contact connects the two banks of the balloon seam");
+        Vector3 point; Collider support;
+        Check(!physics.StationaryStand(new Vector3(15.8f, 0, -3.6f), out point, out support),
+            "crossing contact does not make the middle of the seam a standing destination");
     }
     private static void CapturedStairContact()
     {
@@ -1514,7 +1534,7 @@ internal static class Program
     }
     private static void Main()
     {
-        WalkingStallRecovery(); StallAvoidanceGeometry(); DoorwayChanges(); StationConnectorReuse(); FocusedPlanning(); SearchContinuity(); ShallowCeilingContacts(); EquivalentVerticalStarts(); ConveyorSearchContinuity(); CertifiedStart(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedFloorCorner(); CapturedPlatformDock(); CapturedConveyorLip(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); DirectedConveyors(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
+        WalkingStallRecovery(); StallAvoidanceGeometry(); DoorwayChanges(); StationConnectorReuse(); FocusedPlanning(); SearchContinuity(); ShallowCeilingContacts(); EquivalentVerticalStarts(); ConveyorSearchContinuity(); CertifiedStart(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedFloorCorner(); CapturedPlatformDock(); CapturedConveyorLip(); CapturedBalloonSeam(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); DirectedConveyors(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
         WorkerStartingStateChanges(); LoosePickupBodies(); StationaryThrowStances(); GroundedMovement();
         Console.WriteLine("PASS: " + checks + " navigator integration checks (analytical geometry; not PhysX)");
     }

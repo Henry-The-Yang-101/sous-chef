@@ -64,7 +64,8 @@ namespace UnityEngine
         public Vector3 up { get { return TransformVector(Vector3.up).normalized; } }
         public Vector3 forward { get { return Rotate(Vector3.forward, yaw); } }
         public Vector3 right { get { return Rotate(Vector3.right, yaw); } }
-        public Matrix4x4 localToWorldMatrix { get { return new Matrix4x4 { Position = position, Yaw = yaw }; } }
+        public Matrix4x4 localToWorldMatrix { get { return new Matrix4x4 { Position = position, Yaw = yaw, Scale = lossyScale }; } }
+        public Matrix4x4 worldToLocalMatrix { get { return new Matrix4x4 { Position = position, Yaw = yaw, Scale = lossyScale, Inverse = true }; } }
         public bool IsChildOf(Transform other) { for (Transform t = this; t != null; t = t.parent) if (t == other) return true; return false; }
         private static Vector3 Rotate(Vector3 p, float angle) { float c = (float)Math.Cos(angle), s = (float)Math.Sin(angle); return new Vector3(p.x*c + p.z*s, p.y, p.z*c - p.x*s); }
         public Vector3 TransformPoint(Vector3 p) { return position + TransformVector(p); }
@@ -103,11 +104,20 @@ namespace UnityEngine
     public struct Quaternion { public float Yaw; public static Quaternion Inverse(Quaternion q) {return new Quaternion {Yaw=-q.Yaw};} public static Quaternion operator *(Quaternion a,Quaternion b) {return new Quaternion {Yaw=a.Yaw+b.Yaw};} public static Quaternion LookRotation(Vector3 d) { return new Quaternion { Yaw=(float)Math.Atan2(d.x,d.z) }; } public static Vector3 operator *(Quaternion q,Vector3 p) { float c=(float)Math.Cos(q.Yaw),s=(float)Math.Sin(q.Yaw);return new Vector3(p.x*c+p.z*s,p.y,p.z*c-p.x*s); } }
     public struct Matrix4x4
     {
-        public Vector3 Position; public float Yaw;
+        public Vector3 Position, Scale; public float Yaw; public bool Inverse;
+        public Vector3 MultiplyPoint3x4(Vector3 p)
+        {
+            if (Inverse)
+            {
+                p = new Quaternion { Yaw = -Yaw } * (p - Position);
+                return new Vector3(p.x / Scale.x, p.y / Scale.y, p.z / Scale.z);
+            }
+            return Position + new Quaternion { Yaw = Yaw } * new Vector3(p.x * Scale.x, p.y * Scale.y, p.z * Scale.z);
+        }
         public static bool operator ==(Matrix4x4 a,Matrix4x4 b) { return a.Equals(b); }
         public static bool operator !=(Matrix4x4 a,Matrix4x4 b) { return !a.Equals(b); }
-        public override bool Equals(object o) { return o is Matrix4x4 m && Position.Equals(m.Position) && Yaw==m.Yaw; }
-        public override int GetHashCode() { return HashCode.Combine(Position,Yaw); }
+        public override bool Equals(object o) { return o is Matrix4x4 m && Position.Equals(m.Position) && Scale.Equals(m.Scale) && Yaw==m.Yaw && Inverse==m.Inverse; }
+        public override int GetHashCode() { return HashCode.Combine(Position,Scale,Yaw,Inverse); }
     }
     public struct Bounds
     {
@@ -189,6 +199,7 @@ public interface IParentable { UnityEngine.Transform GetAttachPoint(UnityEngine.
 #pragma warning disable CS0414 // Reflection fields must match the installed game.
 public class GroundCast : UnityEngine.MonoBehaviour {
     private UnityEngine.LayerMask m_landscapeMask = (1 << 9) | (1 << 28);
+    private float m_radius = .4f;
     public UnityEngine.Vector3 Normal = UnityEngine.Vector3.up;
     public UnityEngine.Vector3 GetGroundPoint() { return transform.position; }
     public UnityEngine.Vector3 GetGroundNormal() { return Normal; }
@@ -253,7 +264,6 @@ public class Travelator : UnityEngine.MonoBehaviour, IMovingSurface
 public class PlayerPhysicsSurfaceProperties { public bool UseOverrideGravityNormal; public float Slidiness,Slippiness,SpeedMultiplier=1; }
 public class PlayerPhysicsSurface : UnityEngine.MonoBehaviour { public PlayerPhysicsSurfaceProperties Properties = new PlayerPhysicsSurfaceProperties(); }
 public class Steppable : UnityEngine.MonoBehaviour { }
-public class FollowPilotMoved : UnityEngine.MonoBehaviour { }
 public class RespawnCollider : UnityEngine.MonoBehaviour { }
 public class ServerFireHazard : UnityEngine.MonoBehaviour { }
 public class ManualAnimation { public float m_CurveTime = 1; public UnityEngine.Vector3 m_TargetPositionValue; }

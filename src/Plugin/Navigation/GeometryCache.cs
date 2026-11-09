@@ -73,7 +73,8 @@ namespace SousChef.Plugin.Navigation
         {
             bool touchesSearch = false;
             dirtyProbes.Clear();
-            float padding = radius + Spacing * 1.5f; // includes a full diagonal edge
+            // Include a full diagonal edge and its furthest supporting bank.
+            float padding = Mathf.Max(radius, 2 * roundedReach) + Spacing * 1.5f;
             foreach (Bounds bounds in changed)
             {
                 if (dirtyProbes.Count == probes.Count) break;

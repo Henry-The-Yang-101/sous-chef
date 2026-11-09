@@ -71,8 +71,8 @@ namespace SousChef.Plugin.Navigation
                 stance = saved.Stance;
                 return Sight(stance, target);
             }
-            Vector3 supported; Collider support;
-            if (!Stand(stance, out supported, out support) || Mathf.Abs(supported.y - foot.y) > .22f) return false;
+            Vector3 supported; Collider support; RaycastHit contact;
+            if (!Stand(stance, out supported, out support, radius, out contact, bridgeGap: false) || Mathf.Abs(supported.y - foot.y) > .22f) return false;
             stance = supported;
             // Alignment uses neutral walking and requires settled native motion.
             // A running belt cannot supply that stance: choose another reachable
