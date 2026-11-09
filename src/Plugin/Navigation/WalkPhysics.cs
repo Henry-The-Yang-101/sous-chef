@@ -436,20 +436,46 @@ namespace SousChef.Plugin.Navigation
             var box = support as BoxCollider;
             if (box == null || NativeStep(support) || Mathf.Abs(box.transform.up.y) < .9999f) return true;
             Vector3 local = box.transform.InverseTransformPoint(point) - box.center;
-            if (Mathf.Abs(local.x) <= box.size.x * .5f && Mathf.Abs(local.z) <= box.size.z * .5f) return true;
+            Vector3 half = box.size * .5f;
+            bool outsideX = Mathf.Abs(local.x) > half.x, outsideZ = Mathf.Abs(local.z) > half.z;
+            if (!outsideX && !outsideZ) return true;
             // A sphere grazing a horizontal floor's outside edge reports a
             // sloping normal. It must not turn an unsupported inside corner into
             // a walkable ramp. Adjacent coplanar floors and real stair wedges can
             // still support the centre; native Steppable contact is kept above.
-            int count = Physics.RaycastNonAlloc(point + Vector3.up * (nativeRadius + .01f), Vector3.down,
-                hits, 2 * nativeRadius + .02f, groundMask, QueryTriggerInteraction.Ignore); Queries++;
-            if (count == hits.Length) { Overflow = true; return false; }
+            RaycastHit plane = FloorBelow(point, nativeRadius + .01f);
+            if (Overflow || plane.collider != null && (Dangerous(plane.collider) || plane.normal.y < .52992f)) return false;
+            if (plane.collider != null && (plane.normal.y < .99f || Mathf.Abs(plane.point.y - box.bounds.max.y) < .0025f)) return true;
+            if (outsideX && outsideZ) return false;
+
+            // A piloted floor can dock with a small horizontal gap and a small
+            // height offset. GroundCast still rides the rounded box edge until
+            // the other floor takes over. Verify an opposing floor at the same
+            // section of the seam, even when the centre ray is over the gap.
+            Vector3 side = outsideX ? Vector3.right * Math.Sign(local.x) : Vector3.forward * Math.Sign(local.z);
+            Vector3 across = box.transform.TransformVector(side).normalized;
+            local.x = Mathf.Clamp(local.x, -half.x, half.x);
+            local.z = Mathf.Clamp(local.z, -half.z, half.z);
+            Vector3 edge = box.transform.TransformPoint(local + box.center);
+            edge.y = box.bounds.max.y;
+            RaycastHit opposite = FloorBelow(edge + across * Skin, Skin + .001f);
+            var dock = opposite.collider as BoxCollider;
+            if (Overflow || dock == null || dock == box || Dangerous(dock) || opposite.normal.y < .9999f ||
+                Mathf.Abs(dock.transform.up.y) < .9999f || Mathf.Abs(opposite.point.y - edge.y) > Skin ||
+                (box.GetComponent<FollowPilotMoved>() == null && dock.GetComponent<FollowPilotMoved>() == null)) return false;
+            // Past the gap, require the centre to be over that same floor.
+            return plane.collider == dock || plane.collider == null && Vector3.Dot(point - edge, across) <= Skin;
+        }
+        private RaycastHit FloorBelow(Vector3 point, float reach)
+        {
+            int count = Physics.RaycastNonAlloc(point + Vector3.up * reach, Vector3.down,
+                hits, 2 * reach, groundMask, QueryTriggerInteraction.Ignore); Queries++;
+            if (count == hits.Length) { Overflow = true; return new RaycastHit(); }
             float closest = Single.MaxValue; RaycastHit plane = new RaycastHit();
             for (int i = 0; i < count; i++)
                 if (hits[i].collider != null && !Own(hits[i].collider) && hits[i].distance < closest)
                 { closest = hits[i].distance; plane = hits[i]; }
-            if (plane.collider == null || Dangerous(plane.collider) || plane.normal.y < .52992f) return false;
-            return plane.normal.y < .99f || Mathf.Abs(plane.point.y - box.bounds.max.y) < .0025f;
+            return plane;
         }
         // A sphere can touch a ramp while its centre is outside the side face.
         // That diagonal approach is standable in isolation but native slope

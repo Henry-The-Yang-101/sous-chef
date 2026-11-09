@@ -253,6 +253,7 @@ public class Travelator : UnityEngine.MonoBehaviour, IMovingSurface
 public class PlayerPhysicsSurfaceProperties { public bool UseOverrideGravityNormal; public float Slidiness,Slippiness,SpeedMultiplier=1; }
 public class PlayerPhysicsSurface : UnityEngine.MonoBehaviour { public PlayerPhysicsSurfaceProperties Properties = new PlayerPhysicsSurfaceProperties(); }
 public class Steppable : UnityEngine.MonoBehaviour { }
+public class FollowPilotMoved : UnityEngine.MonoBehaviour { }
 public class RespawnCollider : UnityEngine.MonoBehaviour { }
 public class ServerFireHazard : UnityEngine.MonoBehaviour { }
 public class ManualAnimation { public float m_CurveTime = 1; public UnityEngine.Vector3 m_TargetPositionValue; }

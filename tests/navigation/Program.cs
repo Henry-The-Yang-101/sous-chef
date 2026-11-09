@@ -633,6 +633,37 @@ internal static class Program
         Check(physics.Stand(new Vector3(12.4f, -.053588f, -1.2f), out point, out ground),
             "explicit native step support retains spherical contact semantics");
     }
+    private static void CapturedPlatformDock()
+    {
+        var w = new World();
+        var shape = w.Chef.GetComponent<CapsuleCollider>(); shape.radius = .4f; shape.height = 2; shape.center = Vector3.up;
+        var boxes = RecordedBox.Install("platform-dock.json");
+        var platform = boxes[0];
+        w.Chef.GroundCollider = platform;
+        Vector3 aboard = new Vector3(15.8f, .03f, 3.66f), ashore = new Vector3(17, 0, 3.66f);
+        w.Chef.transform.position = aboard;
+        var physics = w.Ready();
+        Check(!physics.Segment(aboard, ashore), "ordinary offset floor boxes do not imply a dock");
+        platform.gameObject.Add(new FollowPilotMoved());
+        Check(physics.Segment(aboard, ashore) && physics.Segment(ashore, aboard),
+            "the native pilot floor connects to the dock in both directions");
+        var edge = new WalkCell(40, 0, 9);
+        var bank = new WalkCell(41, 0, 9);
+        Check(physics.Neighbours(edge).Any(next => next.Cell.Equals(bank)),
+            "the reachability catalogue can search across the dock");
+        Vector3 point; Collider support;
+        Check(!physics.StationaryStand(new Vector3(16.18f, .03f, 3.66f), out point, out support),
+            "a walking connection does not certify the dock seam as a stationary stance");
+        Vector3 drift = -Vector3.right * .15f;
+        platform.Centre += drift;
+        platform.transform.position += drift;
+        platform.testBounds = new Bounds(platform.testBounds.center + drift, platform.testBounds.size);
+        physics.Refresh(w.Chef);
+        Check(!physics.Segment(aboard, ashore) && !physics.Segment(ashore, aboard),
+            "the connection is rejected when the pilot floor moves away from the dock");
+        Check(!physics.Neighbours(edge).Any(next => next.Cell.Equals(bank)),
+            "moving the pilot floor invalidates the cached connection");
+    }
     private static void CapturedStairContact()
     {
         var w = new World();
@@ -1460,7 +1491,7 @@ internal static class Program
     }
     private static void Main()
     {
-        WalkingStallRecovery(); StallAvoidanceGeometry(); DoorwayChanges(); StationConnectorReuse(); FocusedPlanning(); SearchContinuity(); ShallowCeilingContacts(); EquivalentVerticalStarts(); ConveyorSearchContinuity(); CertifiedStart(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedFloorCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); DirectedConveyors(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
+        WalkingStallRecovery(); StallAvoidanceGeometry(); DoorwayChanges(); StationConnectorReuse(); FocusedPlanning(); SearchContinuity(); ShallowCeilingContacts(); EquivalentVerticalStarts(); ConveyorSearchContinuity(); CertifiedStart(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedFloorCorner(); CapturedPlatformDock(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); DirectedConveyors(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
         WorkerStartingStateChanges(); LoosePickupBodies(); StationaryThrowStances(); GroundedMovement();
         Console.WriteLine("PASS: " + checks + " navigator integration checks (analytical geometry; not PhysX)");
     }
