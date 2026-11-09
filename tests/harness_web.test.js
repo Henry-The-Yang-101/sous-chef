@@ -9,6 +9,7 @@ const source = fs.readFileSync(path.join(__dirname, '../harness/web/app.js'), 'u
 const helpers = source.slice(source.indexOf('const capabilityContracts ='), source.indexOf('function nameOf('));
 const labels = source.slice(source.indexOf('const taskLabels ='), source.indexOf('function addTaskItem('));
 const tasks = source.slice(source.indexOf('function selectedResources('), source.indexOf("el('task-kind').addEventListener"));
+const interpreter = source.slice(source.indexOf('function renderJevUsage('), source.indexOf('async function interpreterControl('));
 
 class Select {
   constructor(values = []) { this.dataset = {}; this.disabled = false; this.replaceChildren(...values.map(value => ({value, textContent: value}))); }
@@ -55,7 +56,7 @@ test('interpreter preview exposes exact native arguments and blocks accept durin
     pending: {id: 'preview', kind: 'preview'}, result: {plan: {queue_edit: 'append', after_plan: 'continue_pending',
       tasks: [{action: 'navigate_to', arguments: {destination_id: 'd1'}, repeat: {mode: 'finite', count: 1}}]}}}});
   c.state.capabilities.semantic_catalog = {targets: [{id: 'd1', label: 'Sink'}]};
-  vm.runInContext(source.slice(source.indexOf('function renderInterpreter()'), source.indexOf('async function interpreterControl(')), c);
+  vm.runInContext(interpreter, c);
   c.renderInterpreter();
   assert.match(el('interpreter-plan').options[0].textContent, /destination id: Sink \(d1\)/);
   assert.equal(el('interpreter-accept').disabled, false);
@@ -81,7 +82,7 @@ test('task clarification shows short choices and keeps their original answer key
       done: 'All requested occurrences have already been represented.',
     }},
   }});
-  vm.runInContext(source.slice(source.indexOf('function renderInterpreter()'), source.indexOf('async function interpreterControl(')), c);
+  vm.runInContext(interpreter, c);
   c.renderInterpreter();
   assert.equal(el('interpreter-clarification').hidden, false);
   assert.equal(el('interpreter-question').textContent, question);
@@ -98,6 +99,20 @@ test('task clarification shows short choices and keeps their original answer key
   assert.equal(el('interpreter-clarification').hidden, true);
   assert.match(el('interpreter-message').textContent, /expired before it was queued/);
   assert.equal(el('interpreter-submit').textContent, 'Send command');
+});
+
+test('Jev usage shows current and saved totals and recent rounds with sub-cent costs', () => {
+  const {context: c, el} = fixture();
+  vm.runInContext(interpreter, c);
+  c.renderJevUsage({currentInputTokens: 100_000, savedInputTokens: 1_000_001, savedRounds: [1, 1_000_000]});
+  assert.equal(el('jev-current-usage').textContent, '100,000 tokens · $0.0042');
+  assert.equal(el('jev-saved-usage').textContent, '1,000,001 tokens · $0.042000042');
+  const history = el('jev-usage-rounds');
+  assert.deepEqual(history.options.map(row => row.textContent), ['1,000,000 · $0.042', '1 · $0.000000042']);
+  const rows = history.options;
+  c.renderJevUsage({currentInputTokens: 0, savedInputTokens: 1_000_001, savedRounds: [1, 1_000_000]});
+  assert.equal(history.options, rows);
+  assert.equal(el('jev-current-usage').textContent, '0 tokens · $0.00');
 });
 
 test('assembly keeps allocation explicit, preserves choices and rejects overlaps', () => {

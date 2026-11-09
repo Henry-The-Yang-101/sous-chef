@@ -24,6 +24,8 @@ namespace SousChef.Plugin.Control
         private ReceiptBook.Entry activeReceipt;
         private string kitchenEpoch = Guid.NewGuid().ToString("N");
         private long dispatchGeneration;
+        private long roundSequence;
+        private bool localRound;
         private string receiptOperation;
         private void ChangeEpoch()
         {
@@ -157,6 +159,9 @@ namespace SousChef.Plugin.Control
         {
             if (disposed) return;
             KitchenGate gate = KitchenGate.Inspect();
+            bool inLocalRound = gate.InRound && gate.Role == "host";
+            if (inLocalRound && (!localRound || flow != gate.Flow)) roundSequence++;
+            localRound = inLocalRound;
             if (flow != gate.Flow) { Revoke("round_changed"); logistics.Reset("round_changed"); tasks.Reset("round_changed"); throwOptions.Reset(); semanticCatalog.Reset(); navigation.Reset("round_changed"); flow = gate.Flow; ChangeEpoch(); nextScan = 0; }
             if (Now >= nextScan) { Discover(); nextScan = Now + 0.25; }
             if (scheme != null && !Autonomous && !InputFocused) Revoke("game_unfocused");
@@ -376,6 +381,7 @@ namespace SousChef.Plugin.Control
         {
             int owner = lease.Owner(Now);
             return Json.Object("kitchenEpoch", kitchenEpoch, "dispatchGeneration", dispatchGeneration, "receiptProtocolVersion", 1, "player", 2, "navigation", navigation.Describe(), "action", lastWasTask ? tasks.Describe() : lastWasLogistics ? logistics.Describe() : interactions.Describe(), "available", unavailable == null, "reason", unavailable,
+                "roundId", localRound ? (object)roundSequence : null,
                 "worker", WorkerHost.Current == null ? Json.Object("state", "disabled") : Json.Object("state", WorkerHost.Current.Ready ? "ready" : "fallback", "pid", WorkerHost.Current.ProcessId, "error", WorkerHost.Current.Error, "encodedMessages", WorkerHost.Current.EncodedMessages, "throwBatches", WorkerHost.Current.Flights == null ? 0L : WorkerHost.Current.Flights.CompletedBatches),
                 "claimed", owner != 0, "ownedByYou", client != 0 && owner == client, "suspended", suspendedAt >= 0,
                 "lastRelease", lease.LastRelease, "inputTrace", traceInput ? inputTrace.ToArray() : null,

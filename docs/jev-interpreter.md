@@ -110,6 +110,15 @@ UI diagnostics report request attempts, last latency and actual input/output tok
 usage. No raw audio is sent or recorded by this interpreter. Finalized text and
 relevant semantic choices are sent only after enabling Jev.
 
+The top of the Jev section shows the current round's reported input tokens,
+previously saved rounds (newest first), and their saved total. Cost estimates use
+\$0.042 per million input tokens. On round end or clean harness shutdown, the
+harness writes one line per nonzero round to `.local/jev-input-tokens.csv`.
+The CSV contains counts only, with no header. An in-flight response goes toward
+the round that sent it. If no usage is returned (for example, on a timed-out
+request), the harness has no count to add. Install bridge 0.8.11 or later to keep
+the round identity stable through Player 2 reassignment.
+
 ## Selective prompt revision — 7 November 2026
 
 Short contrasts are attached only to questions with overlapping meanings. Task

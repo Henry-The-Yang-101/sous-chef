@@ -23,6 +23,7 @@ from harness.sharing import PhoneShare, lan_addresses
 from harness.voice import VoiceService
 from harness.voice.game_input import GamePushToTalk
 from harness.decision.service import InterpreterService
+from harness.decision.usage import RoundUsage, round_key
 
 
 class HarnessError(Exception):
@@ -49,7 +50,9 @@ class HarnessBridge:
     POLL_SECONDS = .2
     STALE_SECONDS = 1.5
 
-    def __init__(self, port=24703, factory=None, clock=time.monotonic, focus=focus_game, contents=None, journal_path=':memory:', decision_settings=None, decision_transport=None):
+    def __init__(self, port=24703, factory=None, clock=time.monotonic, focus=focus_game,
+                 contents=None, journal_path=':memory:', decision_settings=None,
+                 decision_transport=None, jev_usage_path=None):
         self.factory = factory or (lambda: ActionClient(port, timeout=1.0))
         self.clock = clock
         self.focus = focus
@@ -70,7 +73,8 @@ class HarnessBridge:
         self.voice = VoiceService()
         self.voice_endpoint = None
         self.game_voice = GamePushToTalk(self.voice, self._voice_endpoint)
-        self.interpreter = InterpreterService(self, self.voice.gate, decision_settings, decision_transport)
+        self.jev_usage = RoundUsage(jev_usage_path)
+        self.interpreter = InterpreterService(self, self.voice.gate, decision_settings, decision_transport, self.jev_usage)
         self.voice.on_command = self.interpreter.submit
         if self.interpreter.configured:
             self.voice.settings['inspection'] = 'jev'
@@ -117,6 +121,7 @@ class HarnessBridge:
                               nativeCapabilities=hello.get('capabilities'),
                               catalog=catalog, control=control, error=None,
                               updatedAt=time.time())
+            self.jev_usage.observe(round_key(hello['sessionId'], control))
             if not control.get('ownedByYou'):
                 self.owner = None
 
@@ -166,6 +171,7 @@ class HarnessBridge:
         result['voice'] = self.voice.snapshot()
         result['gamePushToTalkKey'] = self.game_voice.key
         result['interpreter'] = self.interpreter.snapshot()
+        result['interpreter']['usage'] = self.jev_usage.snapshot()
         return result
 
     def navigate(self, viewer, session, destination, instance):
@@ -387,6 +393,9 @@ class HarnessBridge:
             self.thread.join(timeout=4)
         with self.io_lock:
             self._failed('Harness stopped')
+        usage_error = self.jev_usage.close()
+        if usage_error:
+            print(usage_error, file=sys.stderr, flush=True)
         self.scheduler.close()
 
 
@@ -508,8 +517,10 @@ class Handler(BaseHTTPRequestHandler):
 
 def serve(port=8765, bridge_port=24703, local_only=False, tunnel=None, public_url=None, state_port=24702, journal_path=None):
     contents = ContentsObserver(state_port)
-    journal_path = journal_path or Path(__file__).resolve().parents[1] / '.local' / f'queue-{bridge_port}.sqlite3'
-    bridge = HarnessBridge(bridge_port, contents=contents, journal_path=journal_path)
+    local = Path(__file__).resolve().parents[1] / '.local'
+    journal_path = journal_path or local / f'queue-{bridge_port}.sqlite3'
+    bridge = HarnessBridge(bridge_port, contents=contents, journal_path=journal_path,
+                           jev_usage_path=local / 'jev-input-tokens.csv')
     server = ThreadingHTTPServer(('127.0.0.1' if local_only else '0.0.0.0', port), Handler)
     server.bridge, server.token = bridge, secrets.token_urlsafe(32)
     server.sharing = PhoneShare(server.server_port, server.token,

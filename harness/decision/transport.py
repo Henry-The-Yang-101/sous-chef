@@ -117,11 +117,12 @@ class HttpTransport:
 
 
 class DecisionClient:
-    def __init__(self, transport, gate, settings):
+    def __init__(self, transport, gate, settings, usage=None):
         self.transport, self.gate, self.settings = transport, gate, settings
+        self.usage = usage
         self.io_lock = asyncio.Lock()
 
-    async def ask(self, request, generation, budget, current=None):
+    async def ask(self, request, generation, budget, current=None, *, round_key=None):
         validate_request(request)
         for attempt in range(self.settings.retries + 1):
             self.gate.check(generation)
@@ -131,19 +132,37 @@ class DecisionClient:
             budget['requests'] += 1
             started = time.monotonic()
             try:
-                def send(write):
-                    def guarded_write():
-                        if current: current()
-                        if time.monotonic() >= budget['deadline']:
-                            raise DecisionError('Interpretation expired before transmission')
-                        write()
-                    self.gate.run(generation, guarded_write)
                 async def exchange():
                     # Discard/correction can start a new coroutine while the old
                     # socket is cancelling. Never interleave two HTTP exchanges.
                     async with self.io_lock:
                         if current: current()
-                        return await self.transport.exchange(request, send)
+                        finish = None
+                        tokens = 0
+
+                        def send(write):
+                            def guarded_write():
+                                nonlocal finish
+                                if current: current()
+                                if time.monotonic() >= budget['deadline']:
+                                    raise DecisionError('Interpretation expired before transmission')
+                                if self.usage is not None:
+                                    finish = self.usage.begin(round_key)
+                                write()
+                            self.gate.run(generation, guarded_write)
+
+                        try:
+                            response = await self.transport.exchange(request, send)
+                            # A response can consume input even when its answers
+                            # are invalid or the command is no longer current.
+                            usage = response.get('usage') if isinstance(response, dict) else None
+                            count = usage.get('input_tokens') if isinstance(usage, dict) else None
+                            if type(count) is int and count > 0:
+                                tokens = count
+                            return response
+                        finally:
+                            if finish is not None:
+                                finish(tokens)
                 response = await asyncio.wait_for(exchange(), min(remaining, self.settings.request_seconds))
                 self.gate.check(generation)
                 response = validate_response(request, response)

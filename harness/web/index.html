@@ -55,7 +55,19 @@
       <details><summary>Local transcript inspection</summary><pre id="voice-inspection-data">No commands yet.</pre></details>
       <p>Only the latest finalized turn is kept in memory. It expires after 10 minutes. Mute, Stop, and Clear discard it. No audio is recorded. Stop also cancels unfinished voice commands.</p>
       <div class="interpreter" aria-labelledby="interpreter-title">
-        <h3 id="interpreter-title">Command interpreter</h3>
+        <h3 id="interpreter-title">Jev interpreter</h3>
+        <div class="jev-usage" role="group" aria-label="Jev input token usage">
+          <div class="jev-usage-totals">
+            <span>This round: <strong id="jev-current-usage">—</strong></span>
+            <span>Saved total: <strong id="jev-saved-usage">—</strong></span>
+          </div>
+          <div class="jev-usage-history">
+            <span>Past rounds</span>
+            <ol id="jev-usage-rounds" tabindex="0" role="list" aria-label="Past rounds, newest first, with input tokens and cost" hidden></ol>
+            <span id="jev-usage-empty">—</span>
+          </div>
+          <p id="jev-usage-error" hidden></p>
+        </div>
         <p id="interpreter-status" role="status" aria-live="polite"></p>
         <div class="queue-buttons">
           <button id="interpreter-enable" type="button">Enable typed Jev commands</button>

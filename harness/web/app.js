@@ -757,8 +757,37 @@ const voiceStatusLabels = {muted: 'Muted · voice / Jev off', muting: 'Muting…
 let interpreterBusy = false;
 let interpreterFailure = '';
 let interpreterAnswers = '';
+function renderJevUsage(usage) {
+  const format = (tokens, unit = '') => {
+    if (tokens == null) return '—';
+    const cost = (tokens * 0.042 / 1_000_000).toLocaleString('en-US', {
+      style: 'currency', currency: 'USD', maximumFractionDigits: 9,
+    });
+    return `${tokens.toLocaleString('en-US')}${unit} · ${cost}`;
+  };
+  el('jev-current-usage').textContent = format(usage?.currentInputTokens, ' tokens');
+  el('jev-saved-usage').textContent = format(usage?.savedInputTokens, ' tokens');
+  const history = usage?.savedRounds || [];
+  const list = el('jev-usage-rounds');
+  const signature = history.join(',');
+  if (list.dataset.counts !== signature) {
+    list.dataset.counts = signature;
+    list.replaceChildren(...history.slice().reverse().map(tokens => {
+      const item = document.createElement('li');
+      item.textContent = format(tokens);
+      return item;
+    }));
+  }
+  list.hidden = !history.length;
+  el('jev-usage-empty').hidden = !!history.length;
+  el('jev-usage-empty').textContent = usage?.savedInputTokens == null ? '—' : 'None yet';
+  el('jev-usage-error').textContent = usage?.error || '';
+  el('jev-usage-error').hidden = !usage?.error;
+}
+
 function renderInterpreter() {
   const current = state?.interpreter;
+  renderJevUsage(current?.usage);
   const armed = !!current?.configured && state?.voice && !state.voice.muted && !!token;
   const resolvingReply = ['interpreting_reply', 'interpreting_followup'].includes(current?.status);
   const waiting = current?.pending;

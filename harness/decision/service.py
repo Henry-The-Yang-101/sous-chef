@@ -14,12 +14,13 @@ from harness.scheduler import context_of
 from .compiler import Compiler, Clarification, Unsupported, build_context, choice
 from .prompts import examples
 from .config import MODEL, Settings, load_settings
-from .protocol import DecisionError, validate_response
+from .protocol import DecisionError
 from .transport import DecisionClient, HttpTransport
+from .usage import round_key
 
 
 class InterpreterService:
-    def __init__(self, bridge, gate, settings=None, transport=None):
+    def __init__(self, bridge, gate, settings=None, transport=None, usage=None):
         self.bridge, self.gate = bridge, gate
         self.configuration_error = None
         try:
@@ -29,7 +30,7 @@ class InterpreterService:
             self.configuration_error = 'Jev configuration could not be loaded. Check the API key format and .env file permissions.'
         self.configured = bool(self.settings.api_key) or transport is not None
         self.transport = transport or HttpTransport(self.settings.api_key)
-        self.client = DecisionClient(self.transport, gate, self.settings)
+        self.client = DecisionClient(self.transport, gate, self.settings, usage)
         self.mode = 'preview'
         self.inbox, self.seen = deque(), {}
         self.active = self.pending = self.result = self.future = None
@@ -110,10 +111,10 @@ class InterpreterService:
             budget = dict(deadline=time.monotonic() + self.settings.compile_seconds,
                           requests=0, input_tokens=0, output_tokens=0, last_ms=None)
             async def ask(request):
-                self._current(active)
-                return await self.client.ask(request, generation, budget, lambda: self._current(active))
+                return await self._ask(active, request)
             compiler = Compiler(command, context, ask, self.settings)
             active = {'compiler': compiler, 'generation': generation, 'context': native,
+                      'round': round_key(world['sessionId'], world['control']),
                       'revision': queue['revision'], 'commandGeneration': queue.get('commandGeneration', 0),
                       'budget': budget, 'id': command['id']}
             self.active, self.result, self.status = active, None, 'interpreting'
@@ -128,13 +129,19 @@ class InterpreterService:
         if active is not self.active:
             raise DecisionError('This interpretation was discarded')
         world, queue = self.bridge.observation(), self.bridge.scheduler.snapshot()
-        if (context_of(world) != active['context'] or queue['revision'] != active['revision']
+        if (context_of(world) != active['context'] or round_key(world['sessionId'], world['control']) != active['round']
+                or queue['revision'] != active['revision']
                 or queue.get('commandGeneration', 0) != active['commandGeneration']
                 or world.get('capabilities', {}).get('registry_hash') != REGISTRY_HASH):
             raise DecisionError('Kitchen or queue changed; submit the command again')
         if deadline and time.monotonic() > active['budget']['deadline']:
             raise DecisionError('Interpretation expired; submit the command again')
         return world
+
+    async def _ask(self, active, request):
+        self._current(active)
+        return await self.client.ask(request, active['generation'], active['budget'],
+                                     lambda: self._current(active), round_key=active['round'])
 
     async def _compile(self, active):
         try:
@@ -203,7 +210,7 @@ class InterpreterService:
                                                   if active['compiler'].tasks else {})},
                        'questions': {'relationship': choice('Classify how the new utterance relates to the unfinished command. '
                            'No work from the unfinished command has been accepted yet. Do not treat an explicit correction as appended work.' + examples('relationship'), options)}}
-            response = await self.client.ask(request, active['generation'], active['budget'], lambda: self._current(active))
+            response = await self._ask(active, request)
             answer = response['answers']['relationship']
             key = answer['choice']
             if answer['probabilities'][key] < self.settings.critical_probability:
@@ -278,7 +285,7 @@ class InterpreterService:
                               'answer': choice('If the reply answers the pending question, which allowed answer does it select? Read only the reply and pending question.' + examples('reply_answer'), values)}}
             # Reply has its own per-request deadline but consumes the original request count.
             active['budget']['deadline'] = time.monotonic() + self.settings.compile_seconds
-            response = validate_response(request, await self.client.ask(request, active['generation'], active['budget'], lambda: self._current(active)))
+            response = await self._ask(active, request)
             with self.gate.lock:
                 self._current(active)
                 if self.pending is not pending or time.monotonic() >= pending['expires']:

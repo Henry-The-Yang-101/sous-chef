@@ -1,6 +1,8 @@
 import copy
 import http.client
 import json
+from pathlib import Path
+import tempfile
 import threading
 import unittest
 from unittest import mock
@@ -759,6 +761,55 @@ class SharingTests(unittest.TestCase):
         self.assertFalse(sharing.authorized('wrong'))
         self.assertFalse(sharing.authorized('☃'))
         self.assertTrue(sharing.authorized('token'))
+
+
+class JevRoundUsageTests(unittest.TestCase):
+    def test_round_end_and_harness_close_save_only_nonzero_counts(self):
+        native = FakeBridge()
+        native.enable_queue()
+        native.control['roundId'] = 1
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'tokens.csv'
+            path.write_text('25')  # Accept a valid existing row with no final newline.
+            bridge = HarnessBridge(factory=lambda: native, jev_usage_path=path)
+            try:
+                bridge.poll()
+                bridge.jev_usage.begin(('test-session', 1))(100)
+                # Player reassignment, pausing and temporary disconnects don't end a round.
+                native.control.update(kitchenEpoch='different-chef', dispatchGeneration=1, reason='paused')
+                bridge.poll()
+                native.failure = OSError('Transient disconnect')
+                bridge.poll()
+                native.failure = None
+                bridge.poll()
+                bridge.jev_usage.begin(('test-session', 1))(200)
+                usage = bridge.state()['interpreter']['usage']
+                self.assertEqual(usage['currentInputTokens'], 300)
+                self.assertEqual(usage['savedInputTokens'], 25)
+                self.assertEqual(path.read_text(), '25')
+
+                native.control.update(roundId=None, reason='outside_local_round')
+                bridge.poll()
+                bridge.poll()
+                self.assertEqual(path.read_text(), '25\n300\n')
+                self.assertEqual(bridge.state()['interpreter']['usage']['currentInputTokens'], 0)
+                native.control.update(roundId=2, reason=None)
+                bridge.poll()
+                native.control['roundId'] = 3  # The next observation can skip the lobby.
+                bridge.poll()
+                bridge.jev_usage.begin(('test-session', 3))(75)
+            finally:
+                bridge.close()
+            self.assertEqual(path.read_text(), '25\n300\n75\n')
+
+            restarted = HarnessBridge(factory=lambda: native, jev_usage_path=path)
+            try:
+                usage = restarted.state()['interpreter']['usage']
+                self.assertEqual(usage['savedRounds'], [25, 300, 75])
+                self.assertEqual(usage['savedInputTokens'], 400)
+            finally:
+                restarted.close()
+            self.assertEqual(path.read_text(), '25\n300\n75\n')
 
 
 class StartupTests(unittest.TestCase):

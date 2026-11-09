@@ -15,6 +15,7 @@ from harness.decision.config import MODEL, Settings, load_settings
 from harness.decision.protocol import DecisionError, validate_request, validate_response
 from harness.decision.service import InterpreterService
 from harness.decision.transport import DecisionClient, HttpTransport, ProviderError, retry_seconds
+from harness.decision.usage import RoundUsage, round_key
 from harness.scheduler import Scheduler, context_of
 from harness.voice.gate import DispatchGate
 from test_scheduler import Native, plan, spec
@@ -508,6 +509,36 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
         await DecisionClient(t,gate,Settings()).ask(p.request,generation,budget)
         self.assertEqual(t.sent,2);self.assertEqual(budget['requests'],2)
         self.assertEqual(budget['input_tokens'],100)
+
+    async def test_usage_follows_the_send_round_even_if_the_late_answer_is_invalid(self):
+        gate = DispatchGate()
+        generation = gate.invalidate(False)
+        round_one, round_two = ('game', 1), ('game', 2)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'tokens.csv'
+            usage = RoundUsage(path)
+            usage.observe(round_one)
+            sent, release = asyncio.Event(), asyncio.Event()
+
+            class LateTransport:
+                async def exchange(self, request, send):
+                    send(sent.set)
+                    await release.wait()
+                    return {'usage': {'input_tokens': 172, 'output_tokens': 63}}
+
+            client = DecisionClient(LateTransport(), gate, Settings(), usage)
+            request = ProtocolTests(); request.setUp()
+            budget = dict(deadline=time.monotonic()+2, requests=0, input_tokens=0, output_tokens=0)
+            task = asyncio.create_task(client.ask(request.request, generation, budget, round_key=round_one))
+            await asyncio.wait_for(sent.wait(), 1)
+            usage.observe(round_two)
+            self.assertFalse(path.exists())
+            release.set()
+            with self.assertRaises(DecisionError):
+                await task
+            self.assertEqual(path.read_text(), '172\n')
+            self.assertEqual(usage.snapshot()['currentInputTokens'], 0)
+            self.assertEqual(budget['input_tokens'], 0)
     async def test_mute_before_actual_send_blocks_deferred_transport(self):
         gate = DispatchGate(); generation = gate.invalidate(False)
         t = Transport([{}]); t.before_send = asyncio.Event()
@@ -551,7 +582,9 @@ class ServiceTests(unittest.TestCase):
     def setUp(self, settings=None):
         self.bridge = Bridge(); self.gate = DispatchGate()
         self.t = Transport([{'simple': 'wash_dishes_once'}, {}])
-        self.service = InterpreterService(self.bridge, self.gate, settings=settings, transport=self.t)
+        self.usage = RoundUsage()
+        self.usage.observe(round_key(self.bridge.world['sessionId'], self.bridge.world['control']))
+        self.service = InterpreterService(self.bridge, self.gate, settings=settings, transport=self.t, usage=self.usage)
         self.gate.invalidate(False)
         self.addCleanup(self.bridge.scheduler.close)
         self.addCleanup(self.service.close)
@@ -628,10 +661,12 @@ class ServiceTests(unittest.TestCase):
         self.control('mode', mode='automatic')
         self.service.submit({'id': 'first', 'text': 'Wash dishes, please'})
         self.wait_for({'accepted'})
+        self.assertEqual(self.usage.snapshot()['currentInputTokens'], 200)
         self.t.script.requests.clear()
         self.t.script.steps = [{'simple': 'take_ready_once'}, {}]
         self.service.submit({'id': 'second', 'text': 'Take ready food off the heat'})
         self.wait_for({'accepted'})
+        self.assertEqual(self.usage.snapshot()['currentInputTokens'], 400)
         self.assertTrue(self.t.script.requests)
         for request in self.t.script.requests:
             self.assertEqual(request['state']['utterance'], {'text': 'Take ready food off the heat'})
