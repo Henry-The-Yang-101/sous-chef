@@ -26,6 +26,36 @@ private struct Control: Decodable {
     let settings: Settings?
 }
 
+private final class MicrophoneOutput: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
+    let buffers: AsyncThrowingStream<AVAudioPCMBuffer, Error>
+    private let continuation: AsyncThrowingStream<AVAudioPCMBuffer, Error>.Continuation
+
+    override init() {
+        (buffers, continuation) = AsyncThrowingStream.makeStream(bufferingPolicy: .bufferingOldest(32))
+        super.init()
+    }
+
+    func captureOutput(_ output: AVCaptureOutput, didOutput sample: CMSampleBuffer, from connection: AVCaptureConnection) {
+        let frames = sample.numSamples
+        guard frames > 0 else { return }
+        guard let description = sample.formatDescription, description.mediaSubType == .linearPCM,
+              let format = AVAudioFormat(formatDescription: description),
+              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frames)) else {
+            continuation.finish(throwing: ServiceError(message: "Microphone did not provide PCM audio"))
+            return
+        }
+        buffer.frameLength = AVAudioFrameCount(frames)
+        do {
+            try sample.copyPCMData(fromRange: 0..<frames, into: buffer.mutableAudioBufferList)
+            if case .dropped = continuation.yield(buffer) {
+                continuation.finish(throwing: ServiceError(message: "Microphone processing fell behind; unfinished audio discarded"))
+            }
+        } catch {
+            continuation.finish(throwing: error)
+        }
+    }
+}
+
 @MainActor
 private final class Turn {
     let id: String
@@ -33,7 +63,7 @@ private final class Turn {
     let start: Double
     let analyzer: SpeechAnalyzer
     let input: AsyncStream<AnalyzerInput>.Continuation
-    var startup: Task<Void, Error>!
+    var analysis: Task<CMTime?, Error>!
     var results: Task<Void, Error>!
     var lastResult = 0
     var lastSpeech: Double?
@@ -51,7 +81,7 @@ private final class SpeechService {
     var sequence = 0
     var settings = Settings()
     var armed = false
-    var capture: CaptureInputSequenceProvider?
+    var capture: AVCaptureSession?
     var captureTask: Task<Void, Never>?
     var prepareTask: Task<Void, Never>?
     var finishTask: Task<Void, Never>?
@@ -62,8 +92,7 @@ private final class SpeechService {
     var locale: Locale?
     var timeline: Double = 0
     var lastMeter: Double = 0
-    var format: AVAudioFormat?
-    var preroll: [(AnalyzerInput, Double)] = []
+    var preroll: [(AVAudioPCMBuffer, Double)] = []
 
     @discardableResult
     func emit(_ type: String, _ fields: [String: Any] = [:], generation eventGeneration: Int? = nil) -> Int {
@@ -161,12 +190,24 @@ private final class SpeechService {
         guard let device = settings.deviceId.isEmpty ? AVCaptureDevice.default(for: .audio) : devices.first(where: { $0.uniqueID == settings.deviceId }) else {
             throw ServiceError(message: "Selected microphone is unavailable; select a connected input device")
         }
-        // Apple's provider converts the selected device's sample rate/channel
-        // layout into a format compatible with the speech module.
-        let provider = try await CaptureInputSequenceProvider.providerWithSession(from: device, compatibleWith: [module])
-        guard current == generation, !Task.isCancelled else { provider.captureSession.stopRunning(); return }
-        capture = provider; locale = chosenLocale; armed = true
-        timeline = 0; lastMeter = 0; format = nil
+        guard let speechFormat = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [module]) else {
+            throw ServiceError(message: "No compatible audio format for speech recognition")
+        }
+        guard current == generation, !Task.isCancelled else { return }
+        // Keep the PCM samples for metering and pre-roll before wrapping them
+        // as AnalyzerInput for a turn.
+        let session = AVCaptureSession()
+        let input = try AVCaptureDeviceInput(device: device)
+        let output = AVCaptureAudioDataOutput()
+        guard session.canAddInput(input) else { throw ServiceError(message: "Cannot open the selected microphone") }
+        session.addInput(input)
+        guard session.canAddOutput(output) else { throw ServiceError(message: "Cannot configure microphone audio output") }
+        output.audioSettings = speechFormat.settings
+        let microphone = MicrophoneOutput()
+        output.setSampleBufferDelegate(microphone, queue: DispatchQueue(label: "dev.souschef.microphone"))
+        session.addOutput(output)
+        capture = session; locale = chosenLocale; armed = true
+        timeline = 0; lastMeter = 0
         let deviceID = device.uniqueID
         deviceObserver = NotificationCenter.default.addObserver(forName: AVCaptureDevice.wasDisconnectedNotification,
             object: nil, queue: .main) { [weak self] notification in
@@ -178,7 +219,7 @@ private final class SpeechService {
                 }
             }
         sessionObserver = NotificationCenter.default.addObserver(forName: AVCaptureSession.runtimeErrorNotification,
-            object: provider.captureSession, queue: .main) { [weak self] _ in
+            object: session, queue: .main) { [weak self] _ in
                 Task { @MainActor in
                     guard let self, self.generation == current else { return }
                     self.fail("Audio capture failed; unfinished audio discarded")
@@ -186,9 +227,12 @@ private final class SpeechService {
             }
         captureTask = Task { [weak self] in
             do {
-                for try await input in provider.analyzerInputs {
+                for try await buffer in microphone.buffers {
                     guard let self, self.generation == current, self.armed, !Task.isCancelled else { break }
-                    try self.consume(input)
+                    guard buffer.format == speechFormat else {
+                        throw ServiceError(message: "Microphone produced \(buffer.format), expected \(speechFormat)")
+                    }
+                    try self.consume(buffer)
                 }
                 if let self, self.generation == current, self.armed, !Task.isCancelled {
                     self.fail("Microphone stream ended; unfinished audio discarded")
@@ -197,7 +241,7 @@ private final class SpeechService {
                 if let self, self.generation == current, !Task.isCancelled { self.fail(error.localizedDescription) }
             }
         }
-        provider.captureSession.startRunning()
+        session.startRunning()
         emit("status", ["status": "listening", "device_id": device.uniqueID, "device_name": device.localizedName])
         await inventory()
     }
@@ -206,16 +250,16 @@ private final class SpeechService {
         armed = false
         prepareTask?.cancel(); prepareTask = nil
         captureTask?.cancel(); captureTask = nil
-        capture?.captureSession.stopRunning(); capture = nil
+        capture?.stopRunning(); capture = nil
         if let observer = deviceObserver { NotificationCenter.default.removeObserver(observer) }
         if let observer = sessionObserver { NotificationCenter.default.removeObserver(observer) }
         deviceObserver = nil; sessionObserver = nil
         for turn in turns.values {
-            turn.input.finish(); turn.startup?.cancel(); turn.results?.cancel()
+            turn.input.finish(); turn.analysis?.cancel(); turn.results?.cancel()
             Task { await turn.analyzer.cancelAndFinishNow() }
         }
         finishTask?.cancel(); finishTask = nil
-        active = nil; turns.removeAll(); preroll.removeAll(); timeline = 0; format = nil
+        active = nil; turns.removeAll(); preroll.removeAll(); timeline = 0
     }
 
     func fail(_ message: String) {
@@ -243,17 +287,12 @@ private final class SpeechService {
         return sqrt(sum / Double(count * Int(buffer.format.channelCount)))
     }
 
-    func consume(_ input: AnalyzerInput) throws {
-        if let previous = format, previous != input.bufferFormat {
-            emit("device_changed", ["message": "Microphone audio format changed; arm voice again"])
-            cancelCapture(); return
-        }
-        format = input.bufferFormat
+    func consume(_ buffer: AVAudioPCMBuffer) throws {
         let start = timeline
-        let duration = CMTimeGetSeconds(input.bufferDuration) * 1000
+        let duration = Double(buffer.frameLength) / buffer.format.sampleRate * 1000
         guard duration.isFinite, duration > 0 else { throw ServiceError(message: "Invalid input audio timing") }
         timeline += duration
-        let rms = energy(input.buffer)
+        let rms = energy(buffer)
         let speech = rms >= settings.energyThreshold
         if timeline - lastMeter >= 100 {
             lastMeter = timeline
@@ -262,11 +301,11 @@ private final class SpeechService {
         if active == nil, settings.mode == "automatic", speech {
             let beginning = preroll.first?.1 ?? start
             try startTurn(id: UUID().uuidString, start: beginning)
-            for (buffer, at) in preroll { try feed(buffer, start: at) }
+            for (buffer, _) in preroll { try feed(buffer) }
             preroll.removeAll()
         }
         if let turn = active {
-            try feed(input, start: start)
+            try feed(buffer)
             turn.end = timeline
             if speech { turn.lastSpeech = timeline }
             if timeline - turn.start > settings.maxCommandMs {
@@ -276,17 +315,23 @@ private final class SpeechService {
                 boundary(reason: "audio_pause")
             }
         } else if settings.mode == "automatic" {
-            preroll.append((input, start))
+            preroll.append((buffer, start))
             preroll.removeAll { timeline - $0.1 > 250 }
         }
     }
 
-    func feed(_ input: AnalyzerInput, start: Double) throws {
+    func feed(_ buffer: AVAudioPCMBuffer) throws {
         guard let turn = active else { return }
-        let time = CMTime(seconds: (start - turn.start) / 1000, preferredTimescale: 1_000_000_000)
-        switch turn.input.yield(AnalyzerInput(buffer: input.buffer, bufferStartTime: time)) {
+        // Each turn contains consecutive PCM buffers. Let SpeechAnalyzer place
+        // them on its sample clock so rounded millisecond offsets cannot overlap.
+        switch turn.input.yield(AnalyzerInput(buffer: buffer)) {
         case .enqueued: break
-        default: throw ServiceError(message: "Speech processing fell behind; command discarded without truncation")
+        case .dropped:
+            throw ServiceError(message: "Speech processing fell behind; command discarded without truncation")
+        case .terminated:
+            throw ServiceError(message: "Speech analyzer stopped reading audio; unfinished command discarded")
+        @unknown default:
+            throw ServiceError(message: "Could not deliver audio to the speech analyzer")
         }
     }
 
@@ -323,7 +368,15 @@ private final class SpeechService {
                     "finalized_before_ms": turn.start + (finalized.isFinite ? max(0, finalized) : 0)])
             }
         }
-        turn.startup = Task { try await analyzer.start(inputSequence: stream) }
+        turn.analysis = Task { [weak self] in
+            do { return try await analyzer.analyzeSequence(stream) }
+            catch {
+                if let self, self.generation == turn.generation, !Task.isCancelled {
+                    self.fail(error.localizedDescription)
+                }
+                throw error
+            }
+        }
     }
 
     func boundary(reason: String) {
@@ -340,10 +393,10 @@ private final class SpeechService {
             await previous?.value
             guard let self, self.generation == turn.generation, self.armed, !Task.isCancelled else { return }
             do {
-                try await turn.startup.value
+                let end = try await turn.analysis.value
+                guard self.generation == turn.generation, self.armed, !Task.isCancelled else { return }
                 if cutoff > turn.start {
-                    let end = CMTime(seconds: (cutoff - turn.start) / 1000, preferredTimescale: 1_000_000_000)
-                    try await turn.analyzer.finalize(through: end)
+                    guard let end else { throw ServiceError(message: "Speech analyzer consumed no audio") }
                     try await turn.analyzer.finalizeAndFinish(through: end)
                 } else {
                     await turn.analyzer.cancelAndFinishNow()

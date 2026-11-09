@@ -9,7 +9,7 @@ No speech result from this milestone can run a native task.
 Run the harness normally with `python3 -m harness.server` and open **Voice
 commands**. Voice starts muted on every harness restart. The helper is built
 lazily when you enable the microphone or refresh devices, using Xcode command-line
-tools and macOS 27's native capture provider. Its binary is cached by source hash
+tools and macOS 27. Its binary is cached by source hash
 under `.local/apple-speech-service/`. A missing SDK or unsupported OS affects
 only voice; existing manual controls and the scheduler remain available.
 
@@ -49,8 +49,8 @@ stop it. All tabs observe shared state. Mute and Stop remain independent control
 
 ## Ownership and protocol
 
-- `scripts/apple_speech_service.swift`: persistent on-device helper, selected
-  device capture, compatible audio conversion, audio boundary policy, bounded
+- `scripts/apple_speech_service.swift`: persistent on-device helper, PCM capture
+  from the selected device in a speech-compatible format, audio boundary policy, bounded
   input buffering, Apple result consumption, lifecycle/error events.
 - `scripts/apple_speech_service.py`: source-hashed build and exec launcher, with
   microphone purpose strings embedded in the executable. Diagnostics use stderr.
@@ -93,8 +93,9 @@ supply an explicit consumer barrier:
 
 1. PTT release or the audio pause detector captures the end of the last input
    buffer assigned to the turn. Future audio belongs to another turn.
-2. Finish this turn's bounded input stream, then call `finalize(through:)` with
-   its exact relative cutoff, followed by `finalizeAndFinish(through:)`.
+2. Finish this turn's bounded input stream and await `analyzeSequence(_:)`
+   for the last audio sample the analyzer consumed. Pass that sample time to
+   `finalizeAndFinish(through:)`.
 3. Await the result-consumer task until the result stream is drained. This covers
    delayed result consumption and finalization without a replacement final event.
 4. Emit `finalize_completed` with cutoff, finalization watermark, last consumed
@@ -147,11 +148,6 @@ or game-sound measurements were run** for this milestone. Static checks only:
 - Python source compiled and JavaScript passed `node --check`.
 - `git diff --check` passed.
 
-The SDK emits two deprecation warnings for `AnalyzerInput.buffer`. The helper
-needs PCM samples for energy endpointing and per-turn retimestamping; the exposed
-replacement metadata properties do not provide sample access. Capture format
-conversion uses Apple's provider. This warning does not prevent compilation.
-
 Behavioral acceptance remains unverified: real overlapping/revised Apple results,
 empty and unchanged-final turns, result-consumer races, long pauses, repeated
 commands, PTT touch/keyboard cancellation, mute during preparation/finalization,
@@ -165,3 +161,12 @@ result-stream completion, and Python boundary receipt to immutable commit. These
 provide measurement points; energy activity is not proof of the last audible
 speech sample. Microphone evaluation must independently label that sample and
 compare the proposed 400/800/1,500 ms pause settings and fast-results modes.
+
+### Microphone crash fix (9 November 2026)
+
+On macOS 27.0.1, the deprecated `AnalyzerInput.buffer` getter trapped on the
+first captured buffer. The helper now gets PCM directly from AVFoundation and
+wraps the audio in `AnalyzerInput` after metering and assigning it to a turn.
+A local harness smoke test using the built-in Mac microphone verified device
+discovery, metering, transcription in both capture modes, and mute followed by
+re-arming. The test used local inspection with synthesized test phrases.
