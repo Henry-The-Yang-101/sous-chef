@@ -1381,10 +1381,69 @@ internal static class Program
         floor.enabled=false;Time.realtimeSinceStartup+=.05f;Time.frameCount++;nav.Tick(w.Chef);
         Check(nav.Action.State=="idle" && w.LastInput.sqrMagnitude<.001f,"lost release support neutralizes motion before another walking input");
     }
+    private sealed class PlatformOwner : MonoBehaviour, IParentable
+    { public Transform GetAttachPoint(GameObject actor) { return transform; } }
+    private static Json.Record ObserveMap(NavigationActions nav, World w)
+    {
+        Json.Record map=null;
+        for(int i=0;i<500;i++)
+        {
+            map=(Json.Record)nav.GroundedMap(w.Chef);
+            if((bool)((Json.Record)map["coverage"])["samplingComplete"]) return map;
+            Time.realtimeSinceStartup+=.02f; Time.frameCount++;
+        }
+        throw new Exception("bounded map sweep did not finish");
+    }
+    private static Vector3 MapPosition(Json.Record p)
+    { var a=(float[])p["position"]; return new Vector3(a[0],a[1],a[2]); }
+    private static void GroundedMovement()
+    {
+        var w=new World(); bool closed=true;
+        var floor=w.AddFloor((x,z)=>Math.Abs(x)<3 && Math.Abs(z)<3 && (!closed || Math.Abs(x)>.5f) ? 0 : (float?)null);
+        floor.testBounds=new Bounds(new Vector3(0,-.05f,0),new Vector3(6,.1f,6));
+        w.Chef.transform.position=new Vector3(-2,0,0);
+        var nav=new NavigationActions((v,ms)=>{w.LastInput=v;},()=>{w.LastInput=Vector3.zero;});
+        var camera=new GameObject("game camera").Add(new Camera());
+        camera.transform.Basis=new[]{Vector3.right,new Vector3(0,.7f,.7f),new Vector3(0,-.7f,.7f)}; Camera.main=camera;
+        var map=ObserveMap(nav,w); var points=((List<object>)map["points"]).Cast<Json.Record>().ToList();
+        Check(points.Any(p=>MapPosition(p).x>1) && points.Any(p=>MapPosition(p).x< -1),"observed registry discovers both sides of a closed passage independently of P2's tree");
+        Check((bool)((Json.Record)map["orientation"])["known"],"map reports native camera orientation");
+        Check(!(bool)((Json.Record)map["coverage"])["complete"],"sampling is explicitly incomplete physical coverage");
+        var chosen=points.OrderBy(p=>Vector3.Distance(MapPosition(p),new Vector3(2,0,0))).First(); string id=(string)chosen["id"];
+        Check(nav.StartGrounded(w.Chef,1,id)==null,"blocked destination identity is accepted");
+        for(int i=0;i<12;i++){Time.realtimeSinceStartup+=.1f;Time.frameCount++;nav.Tick(w.Chef);}
+        Check(nav.Action.State=="navigating" && nav.MovementWaiting!=null && w.LastInput.sqrMagnitude==0,"closed passage waits neutrally, never succeeds or retargets");
+        nav.ResumeAfterPause(3); Check(nav.Action.Destination==id,"suspension retains destination binding");
+        closed=false;
+        for(int i=0;i<300 && nav.Action.State=="navigating";i++)
+        {
+            Time.realtimeSinceStartup+=.02f;Time.frameCount++;nav.Tick(w.Chef);
+            w.Chef.transform.position+=w.LastInput*.06f;
+        }
+        Check(nav.Action.Reason=="arrived" && Vector3.Distance(w.Chef.transform.position,MapPosition(chosen))<.21f,"opened passage permits checked movement and strict point arrival without a facing object");
+        Check(w.LastInput.sqrMagnitude==0,"arrival releases movement");
+        nav.Reset("round_changed"); Check(nav.StartGrounded(w.Chef,1,id)=="destination_binding_stale","round reset invalidates floor references");
+
+        w=new World();float shift=0;
+        floor=w.AddFloor((x,z)=>Math.Abs(x-shift)<2 && Math.Abs(z)<2 ? 0 : (float?)null);
+        floor.testBounds=new Bounds(new Vector3(0,-.05f,0),new Vector3(4,.1f,4));
+        var owner=floor.gameObject.Add(new PlatformOwner());
+        nav=new NavigationActions((v,ms)=>{w.LastInput=v;},()=>{w.LastInput=Vector3.zero;});
+        map=ObserveMap(nav,w);var platform=(Json.Record)((List<object>)map["platforms"])[0];id=(string)platform["id"];
+        Check(nav.StartGrounded(w.Chef,1,id)==null,"native-owned platform has a registered destination");
+        Vector3 original=MapPosition(platform); shift=5;floor.transform.position=new Vector3(shift,0,0);
+        floor.testBounds=new Bounds(new Vector3(shift,-.05f,0),new Vector3(4,.1f,4));w.Chef.transform.position=new Vector3(shift,0,0);
+        for(int i=0;i<300 && nav.Action.State=="navigating";i++)
+        {Time.realtimeSinceStartup+=.02f;Time.frameCount++;nav.Tick(w.Chef);w.Chef.transform.position+=w.LastInput*.06f;}
+        Check(nav.Action.Reason=="arrived" && Vector3.Distance(w.Chef.transform.position,original+Vector3.right*shift)<.21f,"arrival follows selected support-local point after platform changes sides");
+        Check(nav.StartGrounded(w.Chef,1,id)==null,"same platform binding remains usable"); nav.Stop("stopped");
+        Check(nav.Action.State=="idle" && w.LastInput.sqrMagnitude==0,"Stop cancels movement and neutralizes input");
+        floor.enabled=false;Check(nav.StartGrounded(w.Chef,1,id)=="destination_binding_stale","vanished support cannot be started");Camera.main=null;
+    }
     private static void Main()
     {
         WalkingStallRecovery(); StallAvoidanceGeometry(); DoorwayChanges(); StationConnectorReuse(); FocusedPlanning(); SearchContinuity(); ShallowCeilingContacts(); EquivalentVerticalStarts(); ConveyorSearchContinuity(); CertifiedStart(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedFloorCorner(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); DirectedConveyors(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
-        WorkerStartingStateChanges(); LoosePickupBodies(); StationaryThrowStances();
+        WorkerStartingStateChanges(); LoosePickupBodies(); StationaryThrowStances(); GroundedMovement();
         Console.WriteLine("PASS: " + checks + " navigator integration checks (analytical geometry; not PhysX)");
     }
 }

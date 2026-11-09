@@ -30,6 +30,7 @@ namespace SousChef.Plugin.Actions
             }
             return Json.Object("version", CapabilityRegistry.Version, "observedAt", Time.realtimeSinceStartup,
                 "routeCoverage", "unknown", "players", players, "targets", targets,
+                "movement", navigation.GroundedMap(actor),
                 "displayOptions", catalog["displayOptions"], "assemblyOrders", AssemblyOrders.Describe(),
                 "observationErrors", inventory.Errors);
         }

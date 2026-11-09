@@ -34,8 +34,9 @@ namespace SousChef.Plugin.Control
             if (receiptOperation == "navigate_to")
             {
                 reason = navigation.Action.Reason;
-                state = navigation.Action.State == "navigating" ? "running" :
+                state = navigation.Action.State == "navigating" ? (navigation.MovementWaiting != null ? "waiting" : "running") :
                     reason == "arrived" || reason == "positioned_no_action" ? "succeeded" : reason == "stopped" ? "cancelled" : "failed";
+                if (navigation.MovementWaiting != null) reason = navigation.MovementWaiting;
                 evidence = navigation.Describe();
             }
             else
@@ -134,6 +135,7 @@ namespace SousChef.Plugin.Control
             server.Pump(Handle);
             if (reason == null) { navigation.Tick(target); interactions.Tick(); logistics.Tick(); tasks.Tick(); }
             else if (observationAllowed) navigation.WarmCatalogue(target);
+            if (observationAllowed) navigation.WarmGroundedMap(target);
             // The browser may be in front while the catalogue is observed.
             // Advance read-only previews under the observation gates; never
             // advance input-owning actions without the normal input gates.
@@ -156,7 +158,7 @@ namespace SousChef.Plugin.Control
             var inputConfig = PlayerInputLookup.GetInputConfig();
             var entry = inputConfig == null ? null : inputConfig.GetInputConfigEntry(PlayerInputLookup.Player.Two);
             if (target != found || config != entry || (scheme != null && (found == null || found.ControlScheme != scheme)))
-                { Revoke("player_assignment_changed"); ChangeEpoch(); }
+                { Revoke("player_assignment_changed"); navigation.Reset("player_assignment_changed"); semanticCatalog.Reset(); ChangeEpoch(); }
             target = found; config = entry;
         }
 
@@ -275,7 +277,7 @@ namespace SousChef.Plugin.Control
                     if (command.Operation == "navigate_to")
                     {
                         if (!NativeSimulator.StartPortalPoint(navigation, target, client, command.Destination, out error))
-                            error = navigation.Start(target, client, command.Destination);
+                            error = navigation.StartGrounded(target, client, command.Destination);
                     }
                     else if (command.Operation == "task") error = tasks.Start(target, client, command);
                     else error = requestedLogistics ? logistics.Start(target, client, command) : interactions.Start(target, client, command);

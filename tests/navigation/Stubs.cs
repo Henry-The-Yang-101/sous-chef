@@ -53,6 +53,7 @@ namespace UnityEngine
         public bool CompareTag(string value) { return gameObject.CompareTag(value); }
     }
     public class MonoBehaviour : Component { public bool enabled = true; public bool isActiveAndEnabled { get { return enabled && gameObject.activeInHierarchy; } } }
+    public class Camera : MonoBehaviour { public static Camera main; }
     public class Transform : Component
     {
         public Vector3 position, lossyScale = Vector3.one;
@@ -133,7 +134,7 @@ namespace UnityEngine
     public class MeshCollider : Collider { public Mesh sharedMesh; public bool convex; }
     public class Mesh : Object { public bool isReadable; public Vector3[] vertices = new Vector3[0]; public int[] triangles = new int[0]; public int vertexCount { get { return vertices.Length; } } }
     public struct RaycastHit { public Collider collider; public Vector3 point, normal; public float distance; }
-    public struct LayerMask { public int value; public static implicit operator LayerMask(int i) { return new LayerMask { value=i }; } }
+    public struct LayerMask { public int value; public static int NameToLayer(string name) { return name == "Ground" ? 9 : 0; } public static implicit operator LayerMask(int i) { return new LayerMask { value=i }; } }
     public enum QueryTriggerInteraction { Collide, Ignore }
     public static class Physics
     {
@@ -181,6 +182,7 @@ namespace UnityEngine
     }
     public static class Time { public static int frameCount; public static float realtimeSinceStartup, deltaTime=1f/60, unscaledDeltaTime=1f/60, fixedDeltaTime=.02f; }
 }
+public interface IParentable { UnityEngine.Transform GetAttachPoint(UnityEngine.GameObject actor); }
 
 #pragma warning disable CS0414 // Reflection fields must match the installed game.
 public class GroundCast : UnityEngine.MonoBehaviour {
