@@ -225,7 +225,7 @@ class Compiler:
         self.cache[stage] = (digest, response['answers'])
         return response['answers']
 
-    def select(self, stage, field, answers, options, message, *, critical=False, allow=()):
+    def select(self, stage, field, answers, options, message, *, critical=False, allow=(), clarification_options=None):
         if (stage, field) in self.overrides:
             selected = self.overrides[(stage, field)]
             if selected not in options:
@@ -236,7 +236,7 @@ class Compiler:
         threshold = (self.settings.critical_probability if critical or selected == 'until_cancelled' else
                      self.settings.completion_probability if selected == 'done' else self.settings.choice_probability)
         if answer['probabilities'][selected] < threshold or (selected in SPECIAL and selected not in allow):
-            self.clarify(stage, field, message, options)
+            self.clarify(stage, field, message, options if clarification_options is None else clarification_options)
         return selected
 
     def clarify(self, stage, field, message, options=None):
@@ -641,21 +641,27 @@ class Compiler:
             ingredient = keyed[selected]
             states = schema(registry()['$defs']['preparation'])['enum']
             applicability = ingredient.get('preparations', {})
-            raw_default = (applicability.get('chopped') == 'not_applicable'
-                           and {value for value in states if applicability.get(value) == 'applicable'} == {'raw'})
-            preparations = {value: f'{value.capitalize()} {ingredient.get("label", ingredient["id"])}.' for value in states}
+            label = labels[selected]
+            preparations = {value: f'{value.capitalize()} {label}.' for value in states}
+            confirmed_preparations = {value: text for value, text in preparations.items() if applicability.get(value) == 'applicable'}
+            raw_default = applicability.get('chopped') == 'not_applicable' and confirmed_preparations.keys() == {'raw'}
             preparations.update(unspecified='No preparation state is stated for this entry.', ambiguous='Preparation scope is ambiguous; do not copy an adjective from another ingredient.')
             quantities, numbers = self.counts(1, 10)
             field_stage = stage + '.fields'
             scope = f'For preparation task occurrence {index}, item occurrence {item_index}, ingredient {ingredient["id"]}: '
             answers = await self.batch(field_stage, {'preparation': scoped_choice(scope + 'What preparation state is requested? Resolve the actual request, not the easiest available state. '
-                'Applicability unknown is missing compatibility evidence, not an unsupported preparation; local validation checks known incompatibilities.', preparations)},
+                'Report an explicitly requested state even if the catalog rules it out. Never substitute another state. '
+                'Unknown applicability means the catalog has not established compatibility.', preparations)},
                 action=action, next_occurrence=index, next_item=item_index, ingredient=ingredient, items=items)
             preparation = self.select(field_stage, 'preparation', answers, preparations,
-                                      f'How should {ingredient.get("label", ingredient["id"])} be prepared?',
-                                      allow=('unspecified',) if raw_default else ())
+                                      f'How should {label} be prepared?' if confirmed_preparations else
+                                      f'Restate how you want {label} prepared.',
+                                      allow=('unspecified',) if raw_default else (),
+                                      clarification_options=confirmed_preparations)
             if preparation == 'unspecified':
                 preparation = 'raw'
+            if applicability.get(preparation) == 'not_applicable':
+                raise Unsupported(f'{preparations[preparation].rstrip(".")} is unsupported in this kitchen.')
             # Quantity depends on the selected preparation when one ingredient
             # appears in multiple states. Sibling questions cannot see answers.
             quantity_stage = stage + '.quantity'
@@ -668,8 +674,6 @@ class Compiler:
             quantity = numbers.get(quantity_key, (None,''))[0]
             if type(quantity) is not int or not 1 <= quantity <= 10:
                 raise Unsupported('Each item quantity must be an integer from one to ten; no work was accepted.')
-            if applicability.get(preparation) == 'not_applicable':
-                raise Unsupported('That preparation is unsupported for this ingredient; no substitute was selected.')
             items.append({'ingredient': ingredient['id'], 'preparation': preparation, 'quantity': quantity})
         candidates = self.argument_candidates(action, 'player_id', schema(registry()['$defs']['player']))
         if not candidates:

@@ -157,9 +157,16 @@ class CompilerTests(unittest.IsolatedAsyncioTestCase):
         items = (await c.compile())['plan']['tasks'][0]['arguments']['items']
         self.assertEqual(items, [{'ingredient': 'seaweed', 'preparation': 'raw', 'quantity': 1}])
 
-        c, _ = compiler('Bring me one chopped seaweed', [{}] + steps + [{'preparation': 'chopped'}, {}], ctx)
-        with self.assertRaises(Unsupported):
+        c, _ = compiler('Bring me one chopped seaweed', [{}] + steps + [{'preparation': 'chopped'}], ctx)
+        with self.assertRaisesRegex(Unsupported, 'Chopped Seaweed'):
             await c.compile()
+
+        c, _ = compiler('Bring me the seaweed like before', [{}] + steps + [{'preparation': 'ambiguous'}], ctx)
+        with self.assertRaises(Clarification) as caught:
+            await c.compile()
+        self.assertEqual(caught.exception.options, {'raw': 'Raw Seaweed.'})
+        with self.assertRaises(DecisionError):
+            c.resolve(caught.exception, 'chopped')
 
     async def test_clarification_preserves_draft_and_cached_decisions(self):
         c, s = compiler('Give me two chopped carrots and one onion, then wash', [

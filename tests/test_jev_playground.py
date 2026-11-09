@@ -90,7 +90,10 @@ class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
                     blocked = await scripted_replay(recorded)
                     self.assertEqual(blocked, case['outcome'])
                     continue
-                self.assertEqual(outcome, case['outcome'])
+                expected = case['outcome']
+                if case['name'] == 'release_holdout_preparation_missing':
+                    expected = dict(expected, options={'raw': 'Raw Cucumber.', 'chopped': 'Chopped Cucumber.'})
+                self.assertEqual(outcome, expected)
                 self.assertEqual(score_outcome(case['expected'], outcome), case['score'])
                 self.assertNotIn(case['score'], ('incomplete', 'incorrect_completion', 'unexpected_rejection'))
 
@@ -165,11 +168,18 @@ class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
                     fixture.service.submit({'id': 'original', 'text': case['original_utterance']})
                     fixture.wait_for({case['initial_status']})
                     recorded = PREVIOUS_TRIALS[case['trial_ids'][0]]
+                    name = case['name'].removeprefix('dialogue_release_')
+                    reply = copy.deepcopy(recorded['response'])
+                    if name == 'preparation':
+                        # The removed, invalid states had no probability mass.
+                        probabilities = reply['answers']['answer']['probabilities']
+                        for invalid in ('cooked', 'mixed', 'empty'):
+                            self.assertEqual(probabilities.pop(invalid), 0)
                     requests = []
                     async def observed(request):
                         requests.append(copy.deepcopy(request))
                         if len(requests) == 1:
-                            return recorded['response']
+                            return reply
                         raise DecisionError('End of recorded dialogue probe')
                     fixture.t.script = observed
                     fixture.service.submit({'id': 'reply', 'text': case['text']})
@@ -177,11 +187,10 @@ class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
                     # Historical dialogue choices are mocks for the revised prompts.
                     # Subsequent compiler requests are not answered.
                     self.assertEqual(len(requests), len(case['observed_service']['requests']))
-                    validate_response(requests[0], recorded['response'])
+                    validate_response(requests[0], reply)
                     self.assertEqual(fixture.bridge.scheduler.snapshot()['pending'], [])
                     self.assertEqual(fixture.bridge.calls, [])
                     self.assertEqual(len(fixture.service.inbox), case['observed_service']['inbox_count'])
-                    name = case['name'].removeprefix('dialogue_release_')
                     if name == 'correct':
                         self.assertEqual(requests[1]['state']['utterance']['text'],
                                          case['original_utterance'] + '\nUser correction: ' + case['text'])
