@@ -42,6 +42,28 @@ def world():
     return result
 
 
+def assembly_world():
+    result = world()
+    semantic = result['capabilities']['semantic_catalog']
+    semantic['displayOptions']['items'] = [{'id': 'd2', 'objectInstanceId': 21, 'plate': True}] + [
+        {'id': f'd{i}', 'objectInstanceId': 20 + i} for i in range(3, 7)]
+    orders = [
+        ('untimed', 'Salad', 4, False),
+        ('later', 'Prawn_Sushi', 70, True),
+        ('next', 'Fish_Sushi', 20, True),
+        ('tied', 'Cucumber_Sushi', 20, True),
+    ]
+    semantic['assemblyOrders'] = [dict(id=ident, recipe=recipe, recipeId=i, remainingSeconds=seconds, expires=expires,
+        allocation={'bases': ['d2'], 'components': [f'd{i+3}'], 'equipment': []})
+        for i, (ident, recipe, seconds, expires) in enumerate(orders)]
+    semantic['pendingOrders'] = [{k: v for k, v in order.items() if k != 'allocation'} for order in semantic['assemblyOrders']]
+    return result
+
+
+def assembly_steps(ticket='order_1'):
+    return [{'simple_coverage': 0}, {'next_task': 'assemble_dish'}, {'order': ticket}, {}, {'next_task': 'done'}, {}]
+
+
 def response(request, selections=None):
     selections = selections or {}
     answers = {}
@@ -229,9 +251,46 @@ class CompilerTests(unittest.IsolatedAsyncioTestCase):
             {'ingredient': 'ingredient_carrot'}, {'preparation': 'empty'}, {'quantity': 'count_1'}])
         with self.assertRaises(Unsupported): await c.compile()
 
-    async def test_assembly_and_unimplemented_work_have_no_partial_result(self):
-        c, _ = compiler('Wash then make a pizza', [{'simple_coverage': 0}, {'next_task': 'wash_dishes'}, {}, {'next_task': 'assemble_dish'}])
-        with self.assertRaisesRegex(Unsupported, 'allocation'): await c.compile()
+    async def test_assembly_sends_sorted_pending_orders_immediately_after_task_selection(self):
+        ctx = build_context(assembly_world(), {'revision': 0})
+        for text, choice_key, expected in [('Make the next order', 'order_1', 'next'),
+                                           ('Make the prawn sushi', 'order_3', 'later')]:
+            with self.subTest(text=text):
+                c, s = compiler(text, assembly_steps(choice_key), ctx)
+                outcome = await c.compile()
+                order_request = s.requests[2]
+                self.assertEqual(list(order_request['questions']), ['order'])
+                self.assertEqual(order_request['state']['compiler']['action'], 'assemble_dish')
+                orders = order_request['state']['compiler']['pending_orders']
+                self.assertEqual([order['ticket_id'] for order in orders], ['next', 'tied', 'later', 'untimed'])
+                self.assertEqual([order['remaining_seconds'] for order in orders], [20, 20, 70, None])
+                self.assertIn('currently sorted in order of soonest to latest expiry', order_request['questions']['order']['instructions'])
+                self.assertNotIn('allocation', json.dumps(order_request['state']))
+                for earlier in s.requests[:2]:
+                    self.assertNotIn('pending_orders', earlier['state']['compiler'])
+                self.assertEqual(s.requests[-1]['state']['compiler']['pending_orders'], orders)
+                self.assertEqual(outcome['plan']['queue_edit'], 'append')
+                recipe = next(order for order in ctx['semantic']['assemblyOrders'] if order['id'] == expected)
+                self.assertEqual(outcome['plan']['tasks'], [spec('assemble_dish', arguments={'order_id': expected, **recipe['allocation']})])
+                self.assertIn(recipe['recipe'].replace('_', ' '), outcome['message'])
+
+    async def test_unavailable_next_assembly_order_never_substitutes_or_accepts_partial_work(self):
+        for unsupported_recipe in (True, False):
+            native = assembly_world()
+            semantic = native['capabilities']['semantic_catalog']
+            if unsupported_recipe:
+                semantic['assemblyOrders'] = [order for order in semantic['assemblyOrders'] if order['id'] != 'next']
+            else:
+                next(order for order in semantic['assemblyOrders'] if order['id'] == 'next')['allocation'] = None
+            ctx = build_context(native, {'revision': 0})
+            c, s = compiler('Wash then make the next order', [{'simple_coverage': 0}, {'next_task': 'wash_dishes'}, {},
+                {'next_task': 'assemble_dish'}, {'order': 'order_1'}], ctx)
+            with self.assertRaisesRegex(Unsupported, 'supported scope' if unsupported_recipe else 'prepared components'):
+                await c.compile()
+            self.assertEqual(s.requests[-1]['state']['compiler']['pending_orders'][0]['ticket_id'], 'next')
+            self.assertEqual(list(s.requests[-1]['questions']), ['order'])
+
+    async def test_unimplemented_work_has_no_partial_result(self):
         c, _ = compiler('Wash while monitoring for thirty seconds', [{'concurrent_duties': 1}])
         with self.assertRaises(Unsupported): await c.compile()
 
@@ -593,6 +652,33 @@ class ServiceTests(unittest.TestCase):
         InterpreterService._exact_bindings(before,after,raw)
         after['targets'][0]['objectInstanceId'] += 1
         with self.assertRaises(DecisionError): InterpreterService._exact_bindings(before,after,raw)
+
+    def test_voice_assembly_preview_rechecks_exact_ticket_and_resources(self):
+        for stale in ('ticket', 'component', None):
+            with self.subTest(stale=stale):
+                self.bridge.world = assembly_world()
+                self.t.script.steps = assembly_steps()
+                self.service.submit({'id': f'assembly-{stale}', 'text': 'Make the next order'})
+                state = self.wait_for({'preview'})
+                args = state['result']['plan']['tasks'][0]['arguments']
+                self.assertEqual(args['order_id'], 'next')
+                self.assertEqual(self.bridge.scheduler.snapshot()['pending'], [])
+                semantic = self.bridge.world['capabilities']['semantic_catalog']
+                order = next(order for order in semantic['assemblyOrders'] if order['id'] == 'next')
+                if stale == 'ticket':
+                    semantic['assemblyOrders'].remove(order)
+                elif stale == 'component':
+                    order['allocation']['components'] = ['d3']
+                else:
+                    order['remainingSeconds'] -= 3
+                    self.control('accept', id=state['pending']['id'])
+                    self.assertEqual(self.bridge.scheduler.snapshot()['pending'][0]['spec']['arguments'], args)
+                    continue
+                with self.assertRaisesRegex(DecisionError, 'no longer available|resources changed'):
+                    self.control('accept', id=state['pending']['id'])
+                self.assertEqual(self.bridge.scheduler.snapshot()['pending'], [])
+                self.assertEqual(self.service.snapshot()['status'], 'expired')
+                self.assertIsNone(self.service.snapshot()['pending'])
 
     def test_late_response_after_mute_never_accepts(self):
         self.t.after_send=asyncio.Event();self.control('mode',mode='automatic')

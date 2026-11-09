@@ -1,6 +1,5 @@
 # Jev interpreter (milestones 4–5)
 
-Implemented 6 November 2026. Provider calls from Python have **not** been run.
 The adapter follows the [System One API](https://docs.typesafe.ai/api/system-one)
 and uses only Choice and Noul, pinned to `jev-1.14.0`.
 
@@ -18,6 +17,8 @@ proposed plan, or explicitly switch Acceptance to **Automatic**. A key alone
 never starts microphone capture or sends a request. No SDK installation is needed.
 The `.env` file is ignored by Git; the key is absent from browser state and logs.
 `TYPESAFE_API_KEY` is also accepted. Environment values override the file.
+Voice assembly needs the current plugin. Run `python3 scripts/install.py` and
+restart the game and harness after updating the repository.
 
 ## Behavior and boundaries
 
@@ -68,9 +69,12 @@ The `.env` file is ignored by Git; the key is absent from browser state and logs
 - Queue revision, command generation, kitchen/session/chef, capability hash and
   exact target identities are rechecked. Moving an object does not itself change
   its binding. Native start validation still owns physical feasibility.
-- Exact assembly allocation generation remains unsupported: use the existing
-  manual assembly controls. Grounded movement uses observed station, platform and
-  floor bindings; see [milestone 5](grounded-movement.md). Concurrent
+- After selecting dish assembly, Jev gets the pending orders sorted from
+  soonest to latest expiry and chooses an exact ticket. The plugin allocates
+  compatible observed resources locally. Missing components or an expired
+  ticket stop the plan. See [dish assembly](dish-assembly.md).
+- Grounded movement uses observed station, platform and floor bindings. See
+  [milestone 5](grounded-movement.md). Concurrent
   high-level responsibilities and event/timed work are not approximated as FIFO.
   Existing exact-target native action contracts can be selected when grounded.
 
@@ -141,6 +145,11 @@ choices for control-flow regressions. Exact playground replay rejects responses
 from older prompts. These checks
 do not establish live Python API connectivity, native execution or microphone
 accuracy.
+
+Live Jev requests in an isolated native game tested “Make the next order” and
+“Make the fish sushi order” with finalized transcript fixtures. Both reached
+preview and then completed through the task queue. Independent plate checks
+matched the selected tickets, including the cooked rice in the second recipe.
 
 `scripts/jev_playground.py` exports exact production requests and replays copied
 playground responses without any network code. Its kitchen is explicitly synthetic.

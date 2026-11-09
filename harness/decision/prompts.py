@@ -23,7 +23,12 @@ INGREDIENT_COMMON_NAMES = (
 
 QUEUE_ORDER_DEFAULT = (
     'Choose append for new work unless the player asks for a different position or a change to existing work. '
+    'In "make the next order", next identifies a kitchen ticket. It does not request insert_next. '
     'General timing language without a specific placement uses the default. Preserve explicit ordering and conditions. ')
+
+ORDER_EXPIRY_SORT = (
+    'The pending orders are currently sorted in order of soonest to latest expiry. '
+    'Orders without an expiry come last. Ties preserve the kitchen order. ')
 
 APPENDED_WORK_SCOPE = (
     'The queue operation has been selected. Compare only the work requested with compiler.proposed_meaning. '
@@ -111,8 +116,8 @@ TASK_BOUNDARIES = {
         'One repetition is a reachable-fire sweep, not one flame.',
     'toss_burnt_food': 'Requested result: dispose of ruined food and return any surviving empty utensil. '
         'Returning the utensil is included, not an additional requested assignment.',
-    'assemble_dish': 'Requested result: assemble an exact ticket from explicitly allocated resources. '
-        'Natural-language automatic resource allocation is unsupported; do not substitute serving or ingredient preparation.',
+    'assemble_dish': 'Requested result: assemble one pending kitchen ticket, such as "make the next order" or "make the fish sushi". '
+        'The exact ticket is resolved separately. The kitchen allocates resources locally. Serving and ingredient preparation are separate tasks.',
 }
 
 

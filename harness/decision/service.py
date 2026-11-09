@@ -343,14 +343,26 @@ class InterpreterService:
                              c.get('objectInstanceId') if c.get('binding') == 'station'
                              else (c.get('supportId'), c.get('supportLocalPosition'))) for c in entries}
         old_movement, new_movement = movement(before), movement(after)
+        old_orders, new_orders = ({order['id']: order for order in semantic.get('assemblyOrders', [])}
+                                  for semantic in (before, after))
         for task in plan['tasks']:
+            arguments = task['arguments']
             if task['action'] == 'navigate_to' and before.get('movement'):
-                reference = task['arguments']['destination_id']
+                reference = arguments['destination_id']
                 if reference not in old_movement or old_movement[reference] != new_movement.get(reference):
                     raise DecisionError('The movement destination changed or belongs to another kitchen; submit again')
+            if task['action'] == 'assemble_dish':
+                ident = arguments['order_id']
+                original, current = old_orders.get(ident), new_orders.get(ident)
+                if not original or not current or current.get('recipeId') != original.get('recipeId'):
+                    raise DecisionError('The selected order is no longer available. Submit the command again.')
+                allocation = current.get('allocation') or {}
+                if any(ident not in allocation.get(group, ()) or ident not in old or old[ident] != new.get(ident)
+                       for group in ('bases', 'components', 'equipment') for ident in arguments.get(group, ())):
+                    raise DecisionError('The allocated assembly resources changed. Submit the command again.')
             # Ingredient and player semantics may be late bound; exact native
             # destination IDs must retain their observed object identity.
-            for value in task['arguments'].values():
+            for value in arguments.values():
                 if isinstance(value, str) and value in old and (value not in new or new[value] != old[value]):
                     raise DecisionError('An exact target changed; submit the command again')
 
@@ -392,7 +404,14 @@ class InterpreterService:
             elif operation == 'accept' and pending['kind'] == 'preview':
                 if self.status == 'interpreting_followup':
                     raise DecisionError('Wait for the follow-up command to be resolved')
-                self._accept(pending['active'], pending['outcome'])
+                try:
+                    self._accept(pending['active'], pending['outcome'])
+                except DecisionError as error:
+                    self.pending = self.active = None
+                    self.status, self.result = 'expired', {'message': str(error)}
+                    self.revision += 1
+                    self._advance()
+                    raise
             else:
                 raise DecisionError('Unsupported interpreter control')
 

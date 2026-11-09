@@ -4,7 +4,8 @@
 intent and allocation. The deterministic executor chooses among those resources,
 uses ordinary P2 inputs, and reports success only when the selected plate's
 composition and native plating step match the original recipe. Serving is a
-separate task. There is no hosted Jev call or automatic order selection.
+separate task. The voice compiler can select the ticket with Jev before
+submitting the same exact native task.
 
 ## Caller contract
 
@@ -58,8 +59,22 @@ task REQUEST assemble_dish 1 SELECTOR_ORDER BASE_COUNT BASE_IDS... COMPONENT_COU
 ```
 
 `SELECTOR_ORDER` uses the existing `s` + unpadded base64url selector encoding.
-The Tasks panel exposes the same ticket and allocation fields. No resource is
-selected implicitly. Native eligibility is rechecked on submission.
+The manual Tasks panel exposes the same ticket and allocation fields. Native
+eligibility is rechecked on submission.
+
+## Voice commands
+
+Try “make the next order” or name the recipe, such as “make the fish sushi.”
+After selecting assembly, Jev receives the pending kitchen tickets sorted from
+soonest to latest expiry. Ties preserve kitchen order and untimed tickets come
+last. “Next order” selects the first ticket, and the normal queue default is
+append.
+
+The plugin proposes exact resources from observed plates, prepared components,
+and equipment. The voice compiler binds that proposal to the selected ticket.
+It checks the ticket and allocation again before acceptance. A selected ticket
+that expires or lacks an allocation needs a new command after the kitchen
+changes. The executor still checks reachability and native interactions.
 
 ## Scheduler and proofs
 

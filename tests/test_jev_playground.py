@@ -9,9 +9,10 @@ import json
 from pathlib import Path
 import unittest
 
-from clients.capabilities import REGISTRY_HASH
+from clients.capabilities import REGISTRY_HASH, contract
 from harness.decision.compiler import Compiler, Clarification, build_context
 from harness.decision.config import Settings
+from harness.decision.prompts import task_description
 from harness.decision.protocol import DecisionError, validate_request, validate_response
 from scripts.jev_evaluate import audit_case, score_outcome, semantic_result
 from scripts.jev_playground import next_request
@@ -79,6 +80,10 @@ class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
                 # These are scripted decisions, not fresh model observations.
                 recorded = session(case)
                 outcome = await scripted_replay(recorded)
+                expected = case['outcome']
+                if 'assemble_dish' in expected.get('options', {}):
+                    expected = dict(expected, options={**expected['options'],
+                        'assemble_dish': task_description(contract('assemble_dish'))})
                 if case['name'] in ('release_holdout_sequential', 'nativerelease_holdout_sequential'):
                     # The recording's tentative "done" omitted serving. A
                     # focused completeness check must keep the draft on hold.
@@ -88,9 +93,8 @@ class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
                     recorded['responses'].append({'request': request,
                                                   'response': support.response(request, {'missing_task': 1})})
                     blocked = await scripted_replay(recorded)
-                    self.assertEqual(blocked, case['outcome'])
+                    self.assertEqual(blocked, expected)
                     continue
-                expected = case['outcome']
                 if case['name'] == 'release_holdout_preparation_missing':
                     expected = dict(expected, options={'raw': 'Raw Cucumber.', 'chopped': 'Chopped Cucumber.'})
                 self.assertEqual(outcome, expected)
