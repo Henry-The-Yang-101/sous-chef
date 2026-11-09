@@ -5,6 +5,7 @@ Dirty stacks/fire/burnt setup uses documented native initial-condition fixtures.
 Measured execution uses only the production ActionClient and logical inputs.
 """
 import argparse
+from contextlib import closing
 import hashlib
 import json
 import math
@@ -13,11 +14,13 @@ import sys
 import time
 
 import native_simulator as sim
-from throw_audit import carrier_items, snapshot, fields, write
+from scheduler_audit import accept, pump, task
+from throw_audit import carrier_items, snapshot, fields, item_holders, write
 
 sys.path.insert(0, str(sim.ROOT))
 from clients.actions import ActionClient
 from clients.control import ControlError
+from harness.server import HarnessBridge
 
 
 class Audit:
@@ -236,6 +239,98 @@ class Audit:
         assert all(fields(o, 'ServerWashingStation').get('m_plateCount', 0) == 0 for o in after['objects'])
         assert not any(o['unityInstanceId'] in (dirty['stackInstanceId'], other['stackInstanceId']) for o in after['objects'])
         return {'originalDirtyStacksRemoved': 2, 'dirtyPlatesWashed': 3}
+
+    def wash_blocked(self):
+        results = {}
+        root = self.directory
+        scenarios = {'basin': ('basin',), 'drying': ('drying',), 'basin-and-drying': ('basin', 'drying'),
+                     'interrupted': ('drying',)}
+        for name, parts in scenarios.items():
+            self.directory = root / name
+            self.directory.mkdir(exist_ok=True)
+            try:
+                results[name] = self.wash_blocked_parts(parts, interrupt=name == 'interrupted')
+            finally:
+                if self.client:
+                    self.client.close(); self.client = None
+        return {'scenarios': results}
+
+    def wash_blocked_parts(self, parts, interrupt=False):
+        catalog = self.load('s_sushi_1_4')
+        sink_id = next(t['objectInstanceId'] for t in catalog['targets'] if t['kind'] == 'washing_station')
+        supply = next(t['objectInstanceId'] for t in catalog['targets'] if t['kind'] == 'ingredient_supply')
+
+        def by_instance(state, instance):
+            return next(o for o in state['objects'] if o['unityInstanceId'] == instance)
+
+        def occupant(state, surface):
+            ref = fields(surface, 'ServerAttachStation')['m_item']
+            return next(o for o in state['objects'] if o['id'] == ref['objectId']) if ref else None
+
+        initial = self.snap('initial')
+        rack_ref = fields(by_instance(initial, sink_id), 'ServerWashingStation')['m_dryingAttachStation']
+        rack_id = next(o['unityInstanceId'] for o in initial['objects'] if o['id'] == rack_ref['objectId'])
+        surfaces = {'basin': sink_id, 'drying': rack_id}
+        def block_surfaces():
+            return {part: self.fixture(f'ingredient {supply} {surfaces[part]}')['itemInstanceId'] for part in parts}
+
+        blockers = {} if interrupt else block_surfaces()
+        late_dishes = len(parts) > 1
+        dirty = None if late_dishes else self.fixture('dirty 2')
+        before = self.snap('before')
+        for part, blocker in blockers.items():
+            assert occupant(before, by_instance(before, surfaces[part]))['unityInstanceId'] == blocker
+
+        def parked(state):
+            counters = {}
+            for part, blocker in blockers.items():
+                holder, = item_holders(state, by_instance(state, blocker))
+                assert holder['component'] == 'ServerAttachStation' and holder['instanceId'] not in surfaces.values(), holder
+                counters[part] = holder['instanceId']
+            return counters
+
+        def working(state):
+            action = state['control'].get('action') or {}
+            return ((action.get('details') or {}).get('child') or {}).get('phase') == 'working'
+
+        with closing(HarnessBridge(self.args.port_base + 1)) as bridge:
+            pump(bridge, lambda s: s['fresh'] and s['catalog'].get('complete'))
+            accept(bridge, [task('wash_dishes')])
+            running = pump(bridge, lambda s: s['queue']['active'] and s['queue']['active']['requestId'])
+            request = running['queue']['active']['requestId']
+            if late_dishes:
+                cleared = pump(bridge, lambda s: (s['control'].get('action') or {}).get('phase') == 'waiting_for_wash_access'
+                               and s['control']['action']['details']['completedSteps'] > 1, timeout=35)
+                assert cleared['control']['action']['details']['completedRepetitions'] == 0
+                parked(self.snap('cleared-before-dishes'))
+                dirty = self.fixture('dirty 2')
+            state = pump(bridge, working, timeout=35)
+            assert state['control']['action']['requestId'] == request
+            if interrupt:
+                blockers = block_surfaces()
+                pump(bridge, lambda s: (s['control'].get('action') or {}).get('phase') == 'pick_up', timeout=10)
+                state = pump(bridge, working, timeout=20)
+                assert state['control']['action']['requestId'] == request
+            at_work = self.snap('working')
+            counters = parked(at_work)
+            assert fields(by_instance(at_work, sink_id), 'ServerWashingStation')['m_plateCount'] == 2
+            assert all(occupant(at_work, by_instance(at_work, surface)) is None for surface in surfaces.values())
+            done = pump(bridge, lambda s: bool(s['queue']['outcomes']), timeout=20)['queue']
+            write(self.directory / 'queue.json', done)
+            outcome, = done['outcomes']
+            assert outcome['state'] == 'succeeded' and outcome['requestId'] == request, outcome
+            receipt = self.client.receipt(request)
+            write(self.directory / 'receipt.json', receipt)
+            assert receipt['state'] == 'succeeded' and receipt['evidence']['completedRepetitions'] == 1
+
+        after = self.snap('after')
+        assert parked(after) == counters and not carrier_items(after)
+        assert fields(by_instance(after, sink_id), 'ServerWashingStation')['m_plateCount'] == 0
+        assert not any(o['unityInstanceId'] == dirty['stackInstanceId'] for o in after['objects'])
+        clean = occupant(after, by_instance(after, rack_id))
+        assert len(fields(clean, 'ServerStack')['m_stackItems']) == 2
+        return {'requestId': request, 'blockers': blockers, 'parkedAt': counters, 'cleanPlates': 2,
+                'clearedBeforeDishesArrived': late_dishes, 'resumedAfterBlockage': interrupt}
 
     def water_gun(self):
         catalog = self.load('s_resort_1_3')
@@ -497,7 +592,7 @@ def main():
     parser.add_argument('--runtime', type=Path, required=True)
     parser.add_argument('--port-base', type=int, required=True)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--case', action='append', choices=('camp_backpacks', 'backpack', 'lost_handoff', 'water_gun', 'prepare', 'take_ready', 'repeated_heat', 'repeated_prepare', 'fire', 'burnt', 'wash', 'repetitions', 'monitor', 'fryer', 'mixer', 'utensil', 'dirty_delivery'))
+    parser.add_argument('--case', action='append', choices=('camp_backpacks', 'backpack', 'lost_handoff', 'water_gun', 'prepare', 'take_ready', 'repeated_heat', 'repeated_prepare', 'fire', 'burnt', 'wash', 'wash_blocked', 'repetitions', 'monitor', 'fryer', 'mixer', 'utensil', 'dirty_delivery'))
     args = parser.parse_args(); args.output.mkdir(parents=True, exist_ok=True)
     sim.wait_ready(args.runtime)
     runtime_dll = args.runtime / 'BepInEx/plugins/SousChef.Bridge.dll'
