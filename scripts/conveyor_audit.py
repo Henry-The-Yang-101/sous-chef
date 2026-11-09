@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Verify native conveyor traversal through ordinary navigation requests.
 
-Requires a running isolated native simulator. No staging, raw input, geometry
-edits, belt-speed changes or action retries are used.
+Requires a running isolated native simulator. The mine fixture moves P1 out of
+the spawn aisle before navigation. No inputs, geometry edits, belt-speed changes
+or action retries are used during measured traversal.
 """
 import argparse
 import json
@@ -65,6 +66,11 @@ def conveyor_motion(trace):
             'longestUpstreamHeadingSeconds': longest_opposing}
 
 
+def open_mine_aisle(runtime):
+    sim.command(runtime, 'stage-player 1 7 0 5.9 0')
+    return json.loads((runtime / 'staging.json').read_text())
+
+
 def audit(runtime, output, repeat, rates):
     status = sim.read_status(runtime)
     if not status.get('running') or sim.control_port(runtime) == 24703:
@@ -83,7 +89,8 @@ def audit(runtime, output, repeat, rates):
         for fps in rates:
             directory = output / f'{level}-{fps}'
             result = sim.navigate(SimpleNamespace(runtime=runtime, target=target, then=[returning],
-                repeat=repeat, fps=fps, trace_dir=directory, timeout=60, min_teleports=0, arrival='arrived'))
+                repeat=repeat, fps=fps, trace_dir=directory, timeout=60, min_teleports=0, arrival='arrived'),
+                setup=open_mine_aisle if level == 's_mine_4_3' else None)
             for attempt in result['results']:
                 motion = conveyor_motion(directory / f"attempt-{attempt['attempt']}.ndjson")
                 attempt['conveyors'] = motion

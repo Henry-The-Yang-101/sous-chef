@@ -16,7 +16,7 @@ namespace SousChef.Plugin
             public ILogicalValue OldX, OldY;
             public NetworkLogicalValue X, Y;
             public Vector3 Direction;
-            public float Armed, Started = -1, Duration;
+            public float Armed, Started = -1, Duration, Delay;
             public readonly List<object> Samples = new List<object>();
         }
         private TeammateWalk teammateWalk;
@@ -28,13 +28,17 @@ namespace SousChef.Plugin
             if (teammateWalk != null || !KitchenGate.Inspect().InRound)
                 throw new InvalidOperationException("Expected a kitchen with no active teammate walk");
             string[] values = arguments.Split(' ');
-            if (values.Length != 3) throw new ArgumentException("walk-teammate requires X Z DURATION_MS");
+            if (values.Length < 3 || values.Length > 4)
+                throw new ArgumentException("walk-teammate requires INPUT_X INPUT_Y DURATION_MS [DELAY_MS]");
             var direction = new Vector3(Single.Parse(values[0], CultureInfo.InvariantCulture), 0,
                 Single.Parse(values[1], CultureInfo.InvariantCulture));
             int ms = Int32.Parse(values[2], CultureInfo.InvariantCulture);
-            if (!(direction.sqrMagnitude <= 1.001f) || ms < 50 || ms > 5000)
-                throw new ArgumentException("Use a unit direction or zero and 50–5000 ms");
-            var walk = new TeammateWalk { Armed = Time.realtimeSinceStartup, Direction = direction, Duration = ms / 1000f };
+            int delay = values.Length == 4 ? Int32.Parse(values[3], CultureInfo.InvariantCulture) : 0;
+            if (!(direction.sqrMagnitude <= 1.001f) || ms < 50 || ms > 5000 || delay < 0 || delay > 5000)
+                throw new ArgumentException("Use a unit direction or zero, 50–5000 ms duration and 0–5000 ms delay");
+            var walk = new TeammateWalk {
+                Armed = Time.realtimeSinceStartup, Direction = direction, Duration = ms / 1000f, Delay = delay / 1000f
+            };
             foreach (var player in UnityEngine.Object.FindObjectsOfType<PlayerControls>())
             {
                 if (player.PlayerIDProvider == null) continue;
@@ -61,17 +65,21 @@ namespace SousChef.Plugin
             {
                 if (now - walk.Armed > 10f) { FinishTeammateWalk("navigation_did_not_move"); return; }
                 if (walk.Chef.Motion.GetVelocityXZ().sqrMagnitude <= .01f) return;
+                walk.Started = now;
+            }
+            if (walk.Scheme == null && now - walk.Started >= walk.Delay)
+            {
                 walk.Scheme = walk.Human.ControlScheme;
+                if (walk.Scheme == null) { FinishTeammateWalk("input_unavailable"); return; }
                 walk.OldX = walk.Scheme.m_moveX; walk.OldY = walk.Scheme.m_moveY;
                 walk.X = new NetworkLogicalValue(walk.OldX, (PlayerInputLookup.LogicalValueID)0);
                 walk.Y = new NetworkLogicalValue(walk.OldY, (PlayerInputLookup.LogicalValueID)0);
                 walk.X.SetValue(walk.Direction.x); walk.Y.SetValue(walk.Direction.z);
                 walk.Scheme.m_moveX = walk.X; walk.Scheme.m_moveY = walk.Y;
-                walk.Started = now;
             }
             walk.Samples.Add(Json.Object("seconds", now - walk.Started,
                 "p1", Values.Vector(walk.Human.transform.position), "p2", Values.Vector(walk.Chef.transform.position)));
-            if (now - walk.Started >= walk.Duration) FinishTeammateWalk("completed");
+            if (now - walk.Started >= walk.Delay + walk.Duration) FinishTeammateWalk("completed");
         }
 
         private void FinishTeammateWalk(string result)

@@ -226,7 +226,7 @@ def control_port(runtime):
         return 24703
 
 
-def navigate(args):
+def navigate(args, setup=None):
     # Import the same client used by the harness; do not steer or retry for it.
     sys.path.insert(0, str(ROOT))
     from clients.actions import ActionClient
@@ -241,6 +241,8 @@ def navigate(args):
         command(args.runtime, 'reset')
         initial = wait_ready(args.runtime, generation, args.timeout)
         result = {'attempt': attempt, 'initial': initial, 'success': False}
+        if setup is not None:
+            result['initialFixture'] = setup(args.runtime)
         with (trace_dir / f'attempt-{attempt}.ndjson').open('w') as trace, ActionClient(control_port(args.runtime)) as client:
             started_action = False
             try:

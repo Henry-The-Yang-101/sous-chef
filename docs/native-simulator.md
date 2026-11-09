@@ -13,6 +13,7 @@ The [conveyor investigation](conveyor-navigation.md) records directional segment
 checks in all four world directions, repeated native mine/sushi traversal, the
 drifting-arrival regression, and remaining contact failures, including at 20 FPS.
 Run `scripts/conveyor_audit.py` against an isolated runtime to repeat those checks.
+The mine replay stages P1 outside the spawn aisle so the check isolates belt traversal.
 
 The [raft regression audit](raft-handoff-regressions.md) covers repeated food
 preparation, floor-wide handoffs, native chopping latency, moving support and
@@ -294,6 +295,18 @@ It changes no input bindings, catch settings, throw forces, ownership or clocks.
 from P2's current foot pose and writes the production planner's decision,
 diagnostics and plan to `throw-probe.json`. It does not search alternate stances
 or release cargo. Both commands require the opt-in headless runtime below.
+
+The player yielding audit stages the two chefs before each walk, then sends
+one ordinary P2 navigation request. The simulator-only mailbox fixture
+`walk-teammate INPUT_X INPUT_Y DURATION_MS [DELAY_MS]` supplies P1's logical axes
+after P2 first moves and restores the original bindings after the timed input.
+The mine case uses native spawn positions and delays P1's input so P2 has to
+wait for the aisle to clear. The audit records native separation, P1
+displacement, navigation phases and arrival.
+
+```sh
+python3 scripts/player_yield_audit.py --runtime .local/yield-native --output .local/yield-results --fps 60 20
+```
 
 `application-focus off` simulates an unfocused Unity application for the
 production chef focus gate. The scheduler audit uses it to verify background
