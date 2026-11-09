@@ -14,7 +14,7 @@ namespace SousChef.Plugin.Actions
             public bool Rescue, Storage;
         }
         private static AssembledDefinitionNode StageContents(AssemblySchedule.Stage stage)
-        { return stage.Processing && stage.Mixing ? RecipeProof.MixingInputs(stage.Vessel) : RecipeProof.Composition(stage.Vessel); }
+        { return AssemblyResources.ContentsFor(stage, stage.Vessel); }
         private bool StageFits(AssemblySchedule.Stage stage)
         {
             if (stage.Vessel == null || TaskNative.Burnt(stage.Vessel)) return false;
@@ -29,14 +29,7 @@ namespace SousChef.Plugin.Actions
                 (!stage.Processing || TaskNative.Ready(stage.Vessel, stage.Mixing)); }
         private bool VesselFor(AssemblySchedule.Stage stage, GameObject item)
         {
-            if (item == null || item.GetComponent<ServerIngredientContainer>() == null || TaskNative.ProcessingHandler(item, stage.Mixing) == null) return false;
-            var cooked = stage.Goal as CookedCompositeAssembledNode;
-            if (cooked != null)
-            {
-                var handler = item.GetComponent<CookingHandler>();
-                var step = handler == null ? null : ActionObservations.Read<CookingStepData>(handler, "m_cookingType");
-                if (step == null || cooked.m_cookingStep == null || step.m_uID != cooked.m_cookingStep.m_uID) return false;
-            }
+            if (!AssemblyResources.VesselFor(stage, item)) return false;
             foreach (var other in assembly.Stages)
                 if (other != stage && System.Object.ReferenceEquals(other.Vessel, item) &&
                     !(other.Parent == stage && StageComplete(other))) return false;
@@ -78,17 +71,13 @@ namespace SousChef.Plugin.Actions
         {
             var available = new List<AssembledDefinitionNode>();
             foreach (var item in assembly.Components)
-                if (item != except && AssemblyReady(item)) available.Add(RecipeProof.Composition(item));
+                if (item != except && AssemblyResources.Ready(item)) available.Add(RecipeProof.Composition(item));
             foreach (var item in assembly.Equipment)
-                if (item != except && AssemblyReady(item)) available.Add(RecipeProof.Composition(item));
+                if (item != except && AssemblyResources.Ready(item)) available.Add(RecipeProof.Composition(item));
             return available;
         }
         private bool ProcessingStationFor(AssemblySchedule.Stage stage, GameObject station)
-        {
-            return station != null && assembly.Equipment.Contains(station) && TaskNative.Equipment(station) &&
-                (stage.Mixing ? TaskNative.Component<ServerMixingStation>(station) != null || TaskNative.Component<MixingStation>(station) != null :
-                    TaskNative.Component<ServerMixingStation>(station) == null && TaskNative.Component<MixingStation>(station) == null);
-        }
+        { return assembly.Equipment.Contains(station) && AssemblyResources.StationFor(stage, station); }
         private float AssemblyApproachCost(GameObject target, GameObject cargo, bool assignedBatch = false)
         {
             float cost = ApproachCost(target);

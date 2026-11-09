@@ -27,13 +27,7 @@ namespace SousChef.Plugin.Actions
                     GameObject item = null;
                     if (group == 2) item = navigation.Resolve(id);
                     else foreach (var entry in inventory.Items)
-                        if (entry.ItemId == id && !entry.Supply)
-                        {
-                            item = entry.Item;
-                            var stack = item.GetComponent<ServerStack>();
-                            if (stack != null && item.GetComponent<CleanPlateStack>() != null) item = stack.InspectTopOfStack();
-                            break;
-                        }
+                        if (entry.ItemId == id && !entry.Supply) { item = LogisticsChecks.Payload(entry); break; }
                     if (item == null || !seen.Add(item)) return "assembly_resource_unavailable";
                     objects.Add(item);
                 }
@@ -56,11 +50,7 @@ namespace SousChef.Plugin.Actions
             return null;
         }
         private bool AssemblyBaseValid(GameObject item)
-        {
-            var plate = item == null ? null : item.GetComponent<ServerPlate>();
-            return plate != null && !plate.IsReserved() && plate.GetPlatingStep() == assembly.Order.Recipe.m_platingStep &&
-                RecipeProof.Subset(RecipeProof.Composition(item), assembly.Order.Goal);
-        }
+        { return AssemblyResources.PlateFits(assembly.Order, item); }
         private bool AssemblyObtainable(LogisticsItem entry, string operation, bool probeUnknown)
         {
             return Obtainable(entry, operation) || probeUnknown && !(bool)inventory.Catalog["complete"] &&
@@ -94,7 +84,7 @@ namespace SousChef.Plugin.Actions
             var candidates = new List<GameObject>(assembly.Bases); candidates.AddRange(assembly.Components);
             foreach (var item in candidates)
             {
-                if (item == null || item.GetComponent<PreparationContainer>() == null || !AssemblyReady(item) ||
+                if (item == null || item.GetComponent<PreparationContainer>() == null || !AssemblyResources.Ready(item) ||
                     !RecipeProof.Subset(RecipeProof.Composition(item), assembly.Order.Goal)) continue;
                 var entry = AssemblyEntry(item);
                 if (entry == null || !AssemblyObtainable(entry, "move_item", true)) continue;
@@ -108,21 +98,9 @@ namespace SousChef.Plugin.Actions
             assembly.Plating = new AssemblySchedule.Stage { Goal = assembly.Order.Goal, Inputs = assembly.Order.Goal, Vessel = assembly.Base };
             assembly.Stages.Add(assembly.Plating);
         }
-        private bool AssemblyReady(GameObject item)
-        {
-            if (item == null || TaskNative.Burnt(item)) return false;
-            // Raw single ingredients that already have their native definition
-            // are usable. Workable (unchopped) stock never substitutes for them.
-            if (item.GetComponent<WorkableItem>() != null) return false;
-            if (TaskNative.ProcessingHandler(item, false) == null && TaskNative.ProcessingHandler(item, true) == null) return true;
-            var composition = RecipeProof.Composition(item);
-            if (composition is CookedCompositeAssembledNode) return TaskNative.Ready(item, false);
-            if (composition is MixedCompositeAssembledNode) return TaskNative.Ready(item, true);
-            return false;
-        }
         private bool AssemblyTransfer(GameObject source, GameObject recipient, AssembledDefinitionNode goal, bool mixingInputs = false)
         {
-            if (!AssemblyReady(source) || recipient == null || !RecipeProof.Advances(mixingInputs ? RecipeProof.MixingInputs(recipient) : RecipeProof.Composition(recipient), RecipeProof.Composition(source), goal)) return false;
+            if (!AssemblyResources.Ready(source) || recipient == null || !RecipeProof.Advances(mixingInputs ? RecipeProof.MixingInputs(recipient) : RecipeProof.Composition(recipient), RecipeProof.Composition(source), goal)) return false;
             var container = recipient.GetComponent<ServerIngredientContainer>();
             var transfer = GameObjectUtils.RequestInterface<IContainerTransferBehaviour>(source);
             if (container == null || transfer == null || !transfer.CanTransferToContainer(container)) return false;

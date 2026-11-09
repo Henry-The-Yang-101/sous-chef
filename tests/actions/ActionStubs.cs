@@ -115,6 +115,7 @@ namespace OrderController
 }
 public class ServerOrderControllerBase
 {
+    public bool m_enableOrderExpiration = true;
     public readonly List<AssembledDefinitionNode> Recipes = new List<AssembledDefinitionNode>();
     public PlatingStepData PlatingStep;
     public readonly Dictionary<string, float> Remaining = new Dictionary<string, float>(), Lifetimes = new Dictionary<string, float>();

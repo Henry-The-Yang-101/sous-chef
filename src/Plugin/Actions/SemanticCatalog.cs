@@ -21,17 +21,30 @@ namespace SousChef.Plugin.Actions
             inventory.Refresh(actor, catalog); // Empty route observations mean unknown, never unreachable.
             HarnessOptions.Decorate(catalog, navigation, inventory);
             var targets = new List<object>();
-            foreach (GameObject target in navigation.Targets())
+            var kitchenTargets = navigation.Targets();
+            foreach (GameObject target in kitchenTargets)
             {
                 var identity = (Json.Record)navigation.TargetIdentity(target);
                 try { HarnessOptions.Target(identity, target); }
                 catch (Exception) { identity["observationError"] = "target_observation_unavailable"; }
                 targets.Add(identity);
             }
+            var pendingOrders = new List<object>();
+            var assemblyOrders = new List<object>();
+            AssemblyResources resources = null;
+            foreach (var order in AssemblyOrders.Observe(includeUnsupported: true))
+            {
+                pendingOrders.Add(AssemblyOrders.DescribeTicket(order));
+                if (order.Goal == null) continue;
+                if (resources == null) resources = new AssemblyResources(inventory, kitchenTargets);
+                var recipe = AssemblyOrders.DescribeRecipe(order);
+                recipe["allocation"] = resources.Allocate(order);
+                assemblyOrders.Add(recipe);
+            }
             return Json.Object("version", CapabilityRegistry.Version, "observedAt", Time.realtimeSinceStartup,
                 "routeCoverage", "unknown", "players", players, "targets", targets,
                 "movement", navigation.GroundedMap(actor),
-                "displayOptions", catalog["displayOptions"], "assemblyOrders", AssemblyOrders.Describe(),
+                "displayOptions", catalog["displayOptions"], "pendingOrders", pendingOrders, "assemblyOrders", assemblyOrders,
                 "observationErrors", inventory.Errors);
         }
 

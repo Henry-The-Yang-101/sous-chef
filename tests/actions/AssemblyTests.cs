@@ -339,8 +339,49 @@ internal static partial class Program
         Check(DriveAssembly(w)==1 && w.Tasks.Run.State=="succeeded","assembly revalidates restored cargo and finishes after native transit");
     }
 
+    private static void AssemblyResourceProposals()
+    {
+        var w = new World();
+        var partial = AssemblyPlate(w, w.Delivery(), Leaf("fish"));
+        var empty = AssemblyPlate(w, w.Delivery());
+        var fish = AssemblyFood(w, w.Target, "fish");
+        var raw = AssemblyFood(w, w.Delivery(), "fish");
+        raw.Add(new WorkableItem());
+        AssemblyFood(w, w.Delivery(), "prawn");
+        var request = AssemblyJob(w, new[] { empty }, new[] { fish }, Leaf("fish"), Leaf("fish"));
+        var controller = AssemblyOrders.Observe()[0].Controller;
+        controller.m_activeOrders.Add(new OrderController.ServerOrderData {
+            ID = new OrderController.OrderID { m_id = 8 }, Remaining = 20,
+            RecipeListEntry = new RecipeList.Entry { m_order = new OrderDefinitionNode {
+                name = "optional recipe", Node = new CompositeAssembledNode { m_composition = new[] { Leaf("fish"), Leaf("rice") }, m_optional = new[] { Leaf("prawn") } }
+            }}
+        });
+
+        var observer = new SemanticCatalog(w.Navigation);
+        var catalog = (Json.Record)observer.Capture(w.Chef, new object[0]);
+        var tickets = ((List<object>)catalog["pendingOrders"]).Cast<Json.Record>().ToArray();
+        var orders = ((List<object>)catalog["assemblyOrders"]).Cast<Json.Record>().ToArray();
+        Check(tickets.Length == 2 && (string)tickets[1]["recipe"] == "optional recipe" && (bool)tickets[1]["expires"],
+            "pending tickets include earlier orders whose recipes cannot be assembled");
+        Check(orders.Length == 1 && (string)orders[0]["id"] == request.Assembly.Order,
+            "explicit assembly still only exposes supported recipes");
+        var allocation = (Json.Record)orders[0]["allocation"];
+        var bases = (List<string>)allocation["bases"];
+        var components = (List<string>)allocation["components"];
+        Check(bases.SequenceEqual(new[] { w.Navigation.RegisterItem(partial) }) && components.SequenceEqual(new[] { w.Navigation.RegisterItem(fish) }),
+            "allocation uses an exact partial base, respects quantities and excludes wrong or unchopped food");
+        Check(((List<string>)allocation["equipment"]).Count == 0, "prepared-only assembly needs no processing equipment");
+        request.Assembly.Bases.Clear();
+        request.Assembly.Bases.AddRange(bases);
+        request.Assembly.Components.Clear();
+        request.Assembly.Components.AddRange(components);
+        StartAssembly(w, request);
+        Check(DriveAssembly(w) == 1 && w.Tasks.Run.State == "succeeded", "the proposed allocation executes through the existing exact assembly task");
+    }
+
     private static void AssemblyProofs()
     {
+        AssemblyResourceProposals();
         {
             var w=new World();var plateCounter=w.Delivery();var plate=AssemblyPlate(w,plateCounter);
             var fish=AssemblyFood(w,w.Target,"fish");var riceCounter=w.Delivery();var rice=AssemblyFood(w,riceCounter,"rice");
