@@ -201,17 +201,70 @@ class SchedulerTests(unittest.TestCase):
         with self.assertRaises(QueueConflict): self.s.accept(plan(1, command='late'), context_of(self.native.state()))
         self.assertEqual(self.native.calls[-1][0], 'cancel')
 
-    def test_epoch_assignment_and_external_stop_invalidate(self):
-        for field, changed in [('kitchenEpoch', 'new'), ('chefInstanceId', 9), ('dispatchGeneration', 9)]:
-            native = Native(); scheduler = Scheduler(native)
+    def test_round_or_chef_change_discards_stale_work_but_runs_fresh_work(self):
+        for field, changed in [('kitchenEpoch', 'new'), ('chefInstanceId', 9)]:
+            with self.subTest(field=field):
+                native = Native()
+                scheduler = Scheduler(native)
+                try:
+                    old_context = context_of(native.state())
+                    scheduler.accept(plan(command='old'), old_context)
+                    native.world['control'][field] = changed
+                    scheduler.tick()
+                    snapshot = scheduler.snapshot()
+                    self.assertEqual(snapshot['pending'], [])
+                    self.assertEqual(snapshot['outcomes'][-1]['state'], 'cancelled')
+                    self.assertEqual(native.calls, [])
+                    fresh = plan(snapshot['revision'], command='fresh')
+                    with self.assertRaises(QueueConflict):
+                        scheduler.accept(fresh, old_context)
+                    scheduler.accept(fresh, context_of(native.state()))
+                    scheduler.tick()
+                    self.assertEqual(scheduler.snapshot()['active']['commandId'], 'fresh')
+                finally:
+                    scheduler.close()
+
+    def test_explicit_pause_survives_kitchen_change(self):
+        self.accept()
+        self.edit('pause_pending')
+        self.native.world['control']['kitchenEpoch'] = 'new'
+        self.s.tick()
+        self.accept()
+        self.s.tick()
+        self.assertTrue(self.s.snapshot()['paused'])
+        self.assertEqual(self.native.calls, [])
+        self.edit('resume_pending')
+        self.s.tick()
+        self.assertEqual(self.s.snapshot()['active']['state'], 'running')
+
+    def test_external_stop_in_same_kitchen_still_holds_dispatch(self):
+        self.accept()
+        self.native.world['control']['dispatchGeneration'] += 1
+        self.s.tick()
+        self.assertEqual(self.s.snapshot()['pending'], [])
+        self.assertTrue(self.s.snapshot()['paused'])
+        self.accept()
+        self.s.tick()
+        self.assertEqual(self.native.calls, [])
+
+    def test_restart_clears_legacy_kitchen_change_hold_on_fresh_work(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'queue.sqlite3'
+            first = Scheduler(self.native, path)
             try:
-                scheduler.accept(plan(), context_of(native.state()))
-                native.world['control'][field] = changed
-                scheduler.tick()
-                self.assertEqual(scheduler.snapshot()['pending'], [])
-                self.assertTrue(scheduler.snapshot()['paused'])
-                self.assertEqual(native.calls, [])
-            finally: scheduler.close()
+                first.accept(plan(), context_of(self.native.state()))
+                legacy = dict(first.snapshot(), paused=True,
+                              reason='Kitchen or Player 2 changed; old work invalidated')
+                first.store.save(legacy)
+            finally:
+                first.close()
+            resumed = Scheduler(self.native, path)
+            try:
+                self.assertEqual(resumed.snapshot()['revision'], legacy['revision'] + 1)
+                resumed.tick()
+                self.assertEqual(resumed.snapshot()['active']['state'], 'running')
+            finally:
+                resumed.close()
 
     def test_suspension_and_native_busy_wait_without_focus(self):
         self.accept()

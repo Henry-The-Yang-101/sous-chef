@@ -44,6 +44,9 @@ def task_spec(task):
 
 class Scheduler:
     CAPACITY = 10
+    USER_PAUSE = 'Dispatch paused by user'
+    KITCHEN_CHANGED = 'Kitchen or Player 2 changed; old work invalidated'
+    KITCHEN_CHANGED_DURING_CANCEL = 'Kitchen changed during cancellation'
     RETRYABLE = {'task_not_available', 'action_in_progress', 'already_claimed', 'game_unfocused',
                  'paused', 'input_suppressed', 'player2_not_ready'}
 
@@ -58,6 +61,11 @@ class Scheduler:
         self.data.setdefault('commandGeneration', 0)
         if self.data['version'] != 1:
             raise RuntimeError('Unsupported queue journal version')
+        # Older journals held even fresh work after changing kitchens.
+        if (self.data['paused'] and self.data['reason'] in (self.KITCHEN_CHANGED, self.KITCHEN_CHANGED_DURING_CANCEL)
+                and not self.data['active'] and not self.data['barrier']):
+            self.data.update(paused=False, reason=None, revision=self.data['revision'] + 1)
+            self.store.save(self.data)
         if self.data['active'] and self.data['active']['requestId']:
             self.data['active']['state'] = 'reconciling'
             self.data['active']['reason'] = 'Checking native receipt after harness restart'
@@ -212,7 +220,7 @@ class Scheduler:
                 value['pending'] = [by_id[i] for i in ids]
                 self._validate_order(value['active'], value['pending'], value['outcomes'])
             elif op == 'pause_pending':
-                value['paused'], value['reason'] = True, 'Dispatch paused by user'
+                value['paused'], value['reason'] = True, self.USER_PAUSE
             elif op == 'resume_pending':
                 world = self.world()
                 self._current(world, value['context'])
@@ -273,7 +281,14 @@ class Scheduler:
     def _invalidate(self, value, current, reason):
         for entry in ([value['active']] if value['active'] else []) + value['pending']:
             self._outcome(value, entry, 'cancelled', reason)
-        value.update(active=None, pending=[], barrier=None, context=current, paused=True, reason=reason)
+        if same_kitchen(value['context'], current):
+            # A Stop in the current kitchen still holds further dispatch.
+            paused, pause_reason = True, reason
+        else:
+            # The old kitchen's work and task-specific holds are gone together.
+            paused = value['paused'] and value['reason'] == self.USER_PAUSE
+            pause_reason = self.USER_PAUSE if paused else None
+        value.update(active=None, pending=[], barrier=None, context=current, paused=paused, reason=pause_reason)
         value['revision'] += 1
         value['commandGeneration'] += 1
 
@@ -301,13 +316,13 @@ class Scheduler:
                 self._save(value)
                 return
             if value['context'] and not same_kitchen(value['context'], current):
-                self._invalidate(value, current, 'Kitchen or Player 2 changed; old work invalidated')
+                self._invalidate(value, current, self.KITCHEN_CHANGED)
                 self._save(value)
                 return
             if value['barrier']:
                 barrier = value['barrier']
                 if barrier['context'] and not same_kitchen(barrier['context'], current):
-                    self._invalidate(value, current, 'Kitchen changed during cancellation')
+                    self._invalidate(value, current, self.KITCHEN_CHANGED_DURING_CANCEL)
                     self._save(value)
                     return
                 if barrier['context'] is None:
