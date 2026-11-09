@@ -7,6 +7,15 @@ INTERPRETATION_POLICY = (
     'alternative phrasings with the same executable meaning are not ambiguity. '
     'If a clear request has no supported match, choose unsupported when offered; never force the closest task. ')
 
+OBJECT_REFERENCE = (
+    'Match object references by meaning in the current kitchen. A player may use a short name, synonym, '
+    'generic term or description for the same object even when its catalog label uses different words. '
+    'Preserve stated details such as species, type and location. A different object with a similar name or use is not a match. ')
+
+OBJECT_CHOICE = OBJECT_REFERENCE + (
+    'Choose the listed candidate when it is the only clear match. If materially different candidates still fit, '
+    'choose ambiguous. If no candidate fits the intended object, choose unsupported. ')
+
 PROGRESS_CONTEXT = (
     'already_interpreted and items are parts of this utterance already captured in a draft, including their full counts. '
     'They are not execution history. done means no further requested entries remain to parse, not that the chef finished. '
@@ -19,7 +28,9 @@ EXAMPLES = {
     'discovery': '"Fetch dirty plates and wash them" is washing; "bring me dirty plates so I can wash them" is handoff. "Bring me cooked rice" prepares a portion; "serve the completed plate" serves an order.',
     'progress': 'For "wash then put out fires", a draft containing washing still needs fire extinguishing; a draft containing both chooses done even before execution.',
     'queue_edit': '"Do this next" inserts after the active job; "stop the active job and do this" replaces the active job. Neither deletes pending jobs.',
-    'ingredient': 'For "two raw onions and one chopped onion", the raw entry represents both raw onions; the chopped entry is still required.',
+    'ingredient': 'If SushiFish is the only fish, "fish" matches SushiFish. If both SushiFish and Cod are plausible, "fish" is ambiguous. '
+        '"Salmon" is unsupported when only SushiFish and Cod are listed. For "two raw onions and one chopped onion", '
+        'the raw entry represents both raw onions; the chopped entry is still required.',
     'quantity': '"Three raw carrots for player four" gives quantity three; "three, actually two raw carrots" gives quantity two.',
     'coverage': 'Request "wash then put out fires": a plan with both in that order is equivalent; only washing or the reversed order is different.',
     'relationship': 'After unfinished "bring two raw onions", "actually three" corrects it; "then wash dishes" adds separate work.',

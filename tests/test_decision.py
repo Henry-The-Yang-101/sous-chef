@@ -102,6 +102,34 @@ class CompilerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([request['state']['compiler']['resolved_preparation'] for request in quantities], ['raw', 'chopped'])
         self.assertTrue(all(set(request['questions']) == {'quantity'} for request in quantities))
 
+    async def test_tentative_ingredient_reference_requires_both_grounding_checks(self):
+        kitchen = world()
+        kitchen['capabilities']['semantic_catalog']['displayOptions']['preparationOptions'] = [
+            {'id': 'native_12', 'label': 'Meat'}, {'id': 'native_34', 'label': 'SushiFish'},
+        ]
+        ctx = build_context(kitchen, {'revision': 0})
+        start = [{'next_task': 'prepare_near_player'}, {'ingredient': 'ingredient_meat'},
+                 {'preparation': 'chopped'}, {'quantity': 'count_1'},
+                 {'ingredient': ('ingredient_sushifish', .70)}]
+        end = [{'preparation': 'chopped'}, {'quantity': 'count_1'},
+               {'ingredient': ('done', .80)}, {'list_complete': .96},
+               {}, {}, {'next_task': 'done'}, {}]
+        text = 'Bring me one chopped meat and one chopped fish'
+        for checks in ({'same_ingredient': .92, 'unique_match': .60},
+                       {'same_ingredient': .60, 'unique_match': .92}):
+            c, _ = compiler(text, [{}] + start + [checks], ctx)
+            with self.assertRaisesRegex(Clarification, 'Which ingredient'):
+                await c.compile()
+        c, script = compiler(text, [{}] + start + [{'same_ingredient': .92, 'unique_match': .91}] + end, ctx)
+        result = await c.compile()
+        self.assertEqual(result['plan']['tasks'][0]['arguments'], {'player_id': 1, 'items': [
+            {'ingredient': 'native_12', 'preparation': 'chopped', 'quantity': 1},
+            {'ingredient': 'native_34', 'preparation': 'chopped', 'quantity': 1},
+        ]})
+        verification = script.requests[-1]['state']['compiler']
+        self.assertIn('1 chopped Sushi Fish', verification['proposed_meaning'])
+        self.assertIn('native_34', str(verification['proposed']))
+
     async def test_clarification_preserves_draft_and_cached_decisions(self):
         c, s = compiler('Give me two chopped carrots and one onion, then wash', [
             {'simple_coverage': 0}, {'next_task': 'prepare_near_player'},
