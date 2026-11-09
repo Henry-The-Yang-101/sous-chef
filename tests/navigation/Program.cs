@@ -664,6 +664,26 @@ internal static class Program
         Check(!physics.Neighbours(edge).Any(next => next.Cell.Equals(bank)),
             "moving the pilot floor invalidates the cached connection");
     }
+    private static void CapturedConveyorLip()
+    {
+        var w = new World();
+        var shape = w.Chef.GetComponent<CapsuleCollider>(); shape.radius = .4f; shape.height = 2; shape.center = Vector3.up;
+        var boxes = RecordedBox.Install("sushi-conveyor-lip.json");
+        w.Chef.GroundCollider = boxes[0];
+        Vector3 floor = new Vector3(18, 0, -2.4f), belt = new Vector3(18, .01f, -3.6f);
+        w.Chef.transform.position = floor;
+        var physics = w.Ready();
+        Check(!physics.Segment(floor, belt), "an ordinary raised floor edge keeps the existing centre support rule");
+        boxes[1].gameObject.Add(new Travelator { Velocity = new Vector3(2.5f, 0, 0) });
+        Time.realtimeSinceStartup += .21f;
+        physics.Refresh(w.Chef);
+        Check(physics.Segment(floor, belt) && physics.Segment(belt, floor),
+            "a raised native conveyor connects sideways to the supporting floor");
+        boxes[0].Ground = false;
+        Vector3 point; Collider support;
+        Check(!physics.Stand(new Vector3(18, .005f, -2.933f), out point, out support),
+            "a conveyor lip without a centre floor remains unsupported");
+    }
     private static void CapturedStairContact()
     {
         var w = new World();
@@ -1494,7 +1514,7 @@ internal static class Program
     }
     private static void Main()
     {
-        WalkingStallRecovery(); StallAvoidanceGeometry(); DoorwayChanges(); StationConnectorReuse(); FocusedPlanning(); SearchContinuity(); ShallowCeilingContacts(); EquivalentVerticalStarts(); ConveyorSearchContinuity(); CertifiedStart(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedFloorCorner(); CapturedPlatformDock(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); DirectedConveyors(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
+        WalkingStallRecovery(); StallAvoidanceGeometry(); DoorwayChanges(); StationConnectorReuse(); FocusedPlanning(); SearchContinuity(); ShallowCeilingContacts(); EquivalentVerticalStarts(); ConveyorSearchContinuity(); CertifiedStart(); IdlePlanningCadence(); NativeArrivalBraking(); NativeFlatMeshSeam(); Portals(); CapturedStairCorner(); CapturedFloorCorner(); CapturedPlatformDock(); CapturedConveyorLip(); CapturedStairContact(); GroundSettling(); ShallowLandingContact(); SupportedAirborneWalking(); StepsAndRamps(); InteriorFlow(); DirectedConveyors(); MovingBoundary(); EmptyHandsBin(); ArrivalMotion(); ApproachFallback(); SlowFrames();
         WorkerStartingStateChanges(); LoosePickupBodies(); StationaryThrowStances(); GroundedMovement();
         Console.WriteLine("PASS: " + checks + " navigator integration checks (analytical geometry; not PhysX)");
     }

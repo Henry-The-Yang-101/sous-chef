@@ -445,7 +445,10 @@ namespace SousChef.Plugin.Navigation
             // still support the centre; native Steppable contact is kept above.
             RaycastHit plane = FloorBelow(point, nativeRadius + .01f);
             if (Overflow || plane.collider != null && (Dangerous(plane.collider) || plane.normal.y < .52992f)) return false;
-            if (plane.collider != null && (plane.normal.y < .99f || Mathf.Abs(plane.point.y - box.bounds.max.y) < .0025f)) return true;
+            // Native belts can sit one contact offset above a continuous floor.
+            // Require that floor directly below the centre, even at a belt lip.
+            float tolerance = MovingSurface(support) is Travelator ? .0101f : .0025f;
+            if (plane.collider != null && (plane.normal.y < .99f || Mathf.Abs(plane.point.y - box.bounds.max.y) < tolerance)) return true;
             if (outsideX && outsideZ) return false;
 
             // A piloted floor can dock with a small horizontal gap and a small
