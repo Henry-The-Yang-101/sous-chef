@@ -16,6 +16,16 @@ OBJECT_CHOICE = OBJECT_REFERENCE + (
     'Choose the listed candidate when it is the only clear match. If materially different candidates still fit, '
     'choose ambiguous. If no candidate fits the intended object, choose unsupported. ')
 
+QUEUE_ORDER_DEFAULT = (
+    'Choose append for new work unless the player asks for a different position or a change to existing work. '
+    'General timing language without a specific placement uses the default. Preserve explicit ordering and conditions. ')
+
+APPENDED_WORK_SCOPE = (
+    'The queue operation has been selected. Compare only the work requested with compiler.proposed_meaning. '
+    'Check the tasks, ingredients, preparation, recipients, amounts, repetition and order of tasks within this request. '
+    'General timing or placement language refers to the queue decision and adds no work. '
+    'Check any specific time, duration or external prerequisite as a condition on the work itself. ')
+
 PROGRESS_CONTEXT = (
     'already_interpreted and items are parts of this utterance already captured in a draft, including their full counts. '
     'They are not execution history. done means no further requested entries remain to parse, not that the chef finished. '
@@ -60,9 +70,10 @@ EXECUTION_CONSTRAINTS = {
         'Return YES only for explicit concurrent responsibilities. Ordinary lists or sequential tasks are NO. '
         'One task whose normal procedure contains several actions is not concurrent responsibilities. Respect negations and corrections.'},
     'external_deadline': {'type': 'noul', 'instructions':
-        'Does the utterance impose a time limit or an external event that determines when work must stop? '
-        'Return YES for a specified duration or an external stopping event. '
-        'Return NO for a finite repetition count, natural task completion, until the user cancels, or starting a task after previous work finishes. '
+        'Does the utterance require a specific time, duration, or external event for starting or stopping the work? '
+        'Return YES for a named delay, time, duration, or external trigger. '
+        'Return NO for general timing preferences, a finite repetition count, natural task completion, until the user cancels, '
+        'or starting a task after previous queued work finishes. '
         'Ignore any negated condition; apply corrections.'},
     'persistent_area': {'type': 'noul', 'instructions':
         'Does the utterance impose an ongoing requirement to stay in an area while doing other work? '

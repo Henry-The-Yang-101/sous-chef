@@ -225,7 +225,7 @@ class CompilerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([x['name'] for x in request['state']['capabilities']], ['wash_dishes'])
         self.assertEqual(request['state']['capabilities'][0]['repetition']['unit'], 'washing_batch')
         self.assertNotIn('Omitted scheduling', request['questions']['repeat']['instructions'])
-        self.assertEqual(script.requests[-1]['state']['scheduler']['pending'][0]['id'], 'queued')
+        self.assertIn('Take ready food off heat', script.requests[-1]['state']['accepted_work']['pending'][0])
 
     def test_interpretation_notes_are_tied_to_registered_task_contracts(self):
         from harness.decision.prompts import TASK_BOUNDARIES, task_description
@@ -505,6 +505,19 @@ class ServiceTests(unittest.TestCase):
         state = self.wait_for({'clarification'})
         self.assertIn('Unlimited', state['result']['message'])
         self.assertEqual(len(self.bridge.scheduler.snapshot()['pending']), 1)
+
+    def test_automatic_append_decision_queues_verified_work_without_placement_review(self):
+        scheduler = self.bridge.scheduler
+        scheduler.accept(plan(tasks=[spec('take_ready')], command='existing'), context_of(self.bridge.state()))
+        self.control('mode', mode='automatic')
+        self.t.script.steps = [{'simple': 'wash_dishes_once', 'queue_edit': ('append', .55)}, {}]
+        self.service.submit({'id': 'new', 'text': 'Wash dishes'})
+        state = self.wait_for({'accepted'})
+        self.assertIsNone(state['pending'])
+        self.assertEqual([task['commandId'] for task in scheduler.snapshot()['pending']], ['existing', 'new'])
+        verification = self.t.script.requests[-1]['state']['compiler']
+        self.assertNotIn('queue_edit', verification['proposed'])
+        self.assertNotIn('Queue effect', verification['proposed_meaning'])
 
     def test_preview_expiration(self):
         self.service.submit({'id':'test','text':'Wash'}); self.wait_for({'preview'})

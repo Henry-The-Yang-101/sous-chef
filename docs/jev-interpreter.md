@@ -21,8 +21,10 @@ The `.env` file is ignored by Git; the key is absent from browser state and logs
 
 ## Behavior and boundaries
 
-- Ordinary work appends. Queue-only edits, scoped replacement, independent Stop,
-  repetitions and a single unlimited tail use the existing scheduler.
+- Ordinary work appends. Once Jev selects append, the final check verifies the
+  requested work and any conditions on it. In Automatic mode a verified plan
+  goes straight to the end of the queue. Queue-only edits, scoped replacement,
+  independent Stop, repetitions and a single unlimited tail use the scheduler.
 - Complete simple plans use a candidate Choice with a companion coverage Noul.
   Other commands discover task occurrences until explicit `done`; preparation
   discovers item occurrences in the same way. Repeated families/ingredients stay
