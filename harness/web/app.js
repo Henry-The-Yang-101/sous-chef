@@ -854,8 +854,12 @@ function renderVoice() {
   // Mute remains independent of any pending model, capture or game request.
   el('voice-mute').disabled = !token || (voice?.muted && voice?.muteAcknowledged && !voicePending);
   el('voice-talk').disabled = !known || voice.muted || voice.status !== 'listening' || voice.settings.mode !== 'push_to_talk' || (!!voice.pttActive && !voiceTurn);
-  el('voice-talk').textContent = voiceTurn ? 'Listening… release to submit' : 'Hold to talk';
+  el('voice-talk').textContent = voiceTurn ? 'Listening… release to submit' : voice?.pttActive ? 'Listening…' : 'Hold to talk';
   el('voice-talk').setAttribute('aria-pressed', String(!!voiceTurn));
+  const gameKey = state?.gamePushToTalkKey;
+  el('voice-game-key').hidden = typeof gameKey !== 'string';
+  el('voice-game-key').textContent = gameKey ? `In-game push to talk: ${gameKey}`
+    : 'Set a push-to-talk key in the game’s Controls menu.';
   for (const input of el('voice-settings').elements) input.disabled = !known || !voice.muted || !voice.muteAcknowledged || !!voicePending;
   el('voice-clear').disabled = !known;
   el('voice-transcript').textContent = voice?.drafts?.map(d => d.text).filter(Boolean).join(' / ') || voice?.commands?.at(-1)?.text || '';

@@ -21,6 +21,7 @@ namespace SousChef.Plugin
         private float nextGameplay, gameplayInterval;
         private SceneCapture capture;
         private Player2Control control;
+        private PushToTalk pushToTalk;
         private WorkerHost worker;
         private readonly string session = Guid.NewGuid().ToString("N");
         private long sequence, fixedTicks;
@@ -61,7 +62,9 @@ namespace SousChef.Plugin
                 }
                 int controlPort = Config.Bind("Control", "Port", 24703, "Loopback port for direct control of existing local Player 2.").Value;
                 if (controlPort < 1024 || controlPort > 65535 || controlPort == port || gameplayPort < 1024 || gameplayPort > 65535 || gameplayPort == port || gameplayPort == controlPort) throw new ArgumentException("Invalid control port");
-                control = new Player2Control(controlPort, session);
+                try { pushToTalk = new PushToTalk(Config, session, LogWorkerError); }
+                catch (Exception e) { Logger.LogWarning("Push to talk unavailable: " + e); }
+                control = new Player2Control(controlPort, session, pushToTalk == null ? (int?)null : pushToTalk.Port);
                 Application.runInBackground = true;
                 harnessCapture = new SceneCapture(session, ":view");
                 harnessServer = new StreamServer(0, Json.Object("type", "hello", "protocolVersion", 1,
@@ -88,6 +91,7 @@ namespace SousChef.Plugin
         private void FixedUpdate() { fixedTicks++; }
         private void Update()
         {
+            if (pushToTalk != null) pushToTalk.Tick();
             if (control != null)
             {
                 try { control.Tick(); }
@@ -96,6 +100,14 @@ namespace SousChef.Plugin
             // Unity logging is also kept off worker threads.
             string error = System.Threading.Interlocked.Exchange(ref lastError, null);
             if (error != null) Logger.LogWarning(error);
+        }
+        private void OnApplicationFocus(bool focused)
+        {
+            if (!focused && pushToTalk != null) pushToTalk.FocusLost();
+        }
+        private void OnApplicationPause(bool paused)
+        {
+            if (paused && pushToTalk != null) pushToTalk.FocusLost();
         }
         private void LogWorkerError(string error) { System.Threading.Interlocked.Exchange(ref lastError, error); }
 
@@ -196,6 +208,7 @@ namespace SousChef.Plugin
         private void CloseBridge()
         {
             if (control != null) { control.Dispose(); control = null; }
+            if (pushToTalk != null) { pushToTalk.Dispose(); pushToTalk = null; }
             if (harnessServer != null) { harnessServer.Dispose(); harnessServer = null; }
             if (gameplayServer != null) { gameplayServer.Dispose(); gameplayServer = null; }
             if (server != null) { server.Dispose(); server = null; }

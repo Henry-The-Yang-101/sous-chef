@@ -91,7 +91,7 @@ namespace SousChef.Plugin.Control
         private int lastExpiryFrame = -1, lastWalkFrame;
         private double Now { get { return clock.Elapsed.TotalSeconds; } }
 
-        public Player2Control(int port, string session)
+        public Player2Control(int port, string session, int? voicePort)
         {
             navigation = new NavigationActions(Walk, NeutralNavigation);
             interactions = new InteractionActions(navigation, Buttons, FinishInteraction);
@@ -100,7 +100,7 @@ namespace SousChef.Plugin.Control
             throwOptions = new ThrowOptions(navigation);
             semanticCatalog = new SemanticCatalog(navigation);
             server = new ControlServer(port, Json.Object("type", "hello", "controlProtocolVersion", 1,
-                "sessionId", session, "bridgeVersion", BridgePlugin.Version, "player", 2, "mode", "direct_logical_input", "maxHoldMs", 1000, "actions", ActionRun.AllNames, "capabilities", CapabilityRegistry.Describe(), "receiptProtocolVersion", 1),
+                "sessionId", session, "bridgeVersion", BridgePlugin.Version, "player", 2, "mode", "direct_logical_input", "maxHoldMs", 1000, "actions", ActionRun.AllNames, "capabilities", CapabilityRegistry.Describe(), "receiptProtocolVersion", 1, "voicePort", voicePort),
                 delegate(int client) { lease.Disconnect(client); });
             try
             {

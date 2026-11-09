@@ -152,7 +152,7 @@ class VoiceService:
                 self._send('begin', turn_id=identity)
             elif operation in ('finalize', 'cancel', 'heartbeat'):
                 if (self.ptt_owner != viewer or self.ptt_id != request.get('turnId') or self.gate.muted):
-                    raise ValueError('This push-to-talk turn is no longer owned by this browser')
+                    raise ValueError('This push-to-talk turn is no longer active for this input')
                 if operation == 'heartbeat':
                     self.ptt_heartbeat = time.monotonic()
                 elif operation == 'cancel':
@@ -304,7 +304,7 @@ class VoiceService:
                         process.kill()
                     # Acknowledgment follows process exit, never just a timeout.
                 if self.ptt_heartbeat and now - self.ptt_heartbeat > 3:
-                    self.invalidate()  # Lost release/browser: discard, never submit.
+                    self.invalidate()  # Lost input source: discard the unfinished turn.
                     self.error = 'Push-to-talk connection lost; unfinished audio discarded'
                 if self.finalizing and now - min(self.finalizing.values()) > self.FINALIZE_SECONDS:
                     self._failure('Speech finalization timed out; command discarded')

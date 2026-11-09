@@ -31,6 +31,7 @@ namespace SousChef.Core
         private readonly List<TcpClient> clients = new List<TcpClient>();
         private readonly AutoResetEvent pendingSignal = new AutoResetEvent(false);
         private readonly Action<string> report;
+        private readonly Func<object, byte[]> encode;
         private readonly byte[] hello;
         private readonly TcpListener listener;
         private Thread encoderThread, acceptThread;
@@ -43,9 +44,11 @@ namespace SousChef.Core
         public int Port { get { return ((IPEndPoint)listener.LocalEndpoint).Port; } }
         public bool HasClients { get { lock (sync) return clients.Count > 0; } }
 
-        public StreamServer(int port, object greeting, Action<string> log)
+        public StreamServer(int port, object greeting, Action<string> log, Func<object, byte[]> encode = null)
         {
-            report = log; hello = Line(greeting);
+            report = log;
+            this.encode = encode ?? WorkerHost.EncodeLine;
+            hello = this.encode(greeting);
             listener = new TcpListener(IPAddress.Loopback, port);
         }
 
@@ -86,12 +89,12 @@ namespace SousChef.Core
                         byte[] bytes;
                         if (!assetCache.TryGetValue(asset.Key, out bytes))
                         {
-                            bytes = Line(asset.Value); assetCache.Add(asset.Key, bytes);
+                            bytes = encode(asset.Value); assetCache.Add(asset.Key, bytes);
                         }
                         assets.Add(asset.Key, bytes);
                     }
                     var encoded = new Encoded { Sequence = packet.Sequence, Epoch = packet.Epoch,
-                        Frame = Line(packet.Frame), Assets = assets };
+                        Frame = encode(packet.Frame), Assets = assets };
                     assetCache = assets;
                     lock (sync)
                     {
@@ -155,7 +158,7 @@ namespace SousChef.Core
                         if (sent.Add(asset.Key)) stream.Write(asset.Value, 0, asset.Value.Length);
                     if (last >= 0 && frame.Sequence > last + 1)
                     {
-                        byte[] gap = Line(Json.Object("type", "gap", "afterSequence", last,
+                        byte[] gap = encode(Json.Object("type", "gap", "afterSequence", last,
                             "beforeSequence", frame.Sequence, "reason", "latest-state backpressure"));
                         stream.Write(gap, 0, gap.Length);
                     }
@@ -192,7 +195,6 @@ namespace SousChef.Core
             // Client threads are background threads and sockets are closed above.
         }
 
-        private static byte[] Line(object value) { return WorkerHost.EncodeLine(value); }
         private static Thread Background(ThreadStart action, string name)
         {
             var thread = new Thread(action) { IsBackground = true, Name = name }; thread.Start(); return thread;

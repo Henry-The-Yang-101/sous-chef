@@ -21,6 +21,7 @@ from harness.contents import ContentsObserver
 from harness.scheduler import Scheduler, QueueConflict, context_of
 from harness.sharing import PhoneShare, lan_addresses
 from harness.voice import VoiceService
+from harness.voice.game_input import GamePushToTalk
 from harness.decision.service import InterpreterService
 
 
@@ -67,12 +68,15 @@ class HarnessBridge:
                       'lastCommand': None}
         self.scheduler = Scheduler(self, journal_path)
         self.voice = VoiceService()
+        self.voice_endpoint = None
+        self.game_voice = GamePushToTalk(self.voice, self._voice_endpoint)
         self.interpreter = InterpreterService(self, self.voice.gate, decision_settings, decision_transport)
         self.voice.on_command = self.interpreter.submit
         if self.interpreter.configured:
             self.voice.settings['inspection'] = 'jev'
 
     def start(self):
+        self.game_voice.start()
         self.thread = threading.Thread(target=self._run, name='bridge-observer', daemon=True)
         self.thread.start()
 
@@ -93,6 +97,10 @@ class HarnessBridge:
             self.client = self.factory()
         return self.client
 
+    def _voice_endpoint(self):
+        with self.state_lock:
+            return self.voice_endpoint
+
     def _publish(self, catalog, control, hello=None):
         with self.state_lock:
             hello = hello or self.client.hello
@@ -100,6 +108,9 @@ class HarnessBridge:
             if self.value['sessionId'] == hello['sessionId'] and prior.get('dispatchGeneration', -1) > control.get('dispatchGeneration', -1):
                 return  # A pre-Stop response must not roll back the native fence.
             self.observed = self.clock()
+            voice_port = hello.get('voicePort')
+            self.voice_endpoint = ((hello['sessionId'], voice_port)
+                                   if type(voice_port) is int and 1 <= voice_port <= 65535 else None)
             self.value.update(connected=True, sessionId=hello['sessionId'],
                               bridgeVersion=hello.get('bridgeVersion'),
                               supportedActions=hello.get('actions'),
@@ -120,6 +131,7 @@ class HarnessBridge:
         with self.state_lock:
             self.observed = None
             self.owner = None
+            self.voice_endpoint = None
             self.value.update(connected=False, sessionId=None, bridgeVersion=None,
                               supportedActions=None, nativeCapabilities=None, catalog={}, control={}, error=str(error))
 
@@ -152,6 +164,7 @@ class HarnessBridge:
         result['queue'] = self.scheduler.snapshot()
         result['queue']['nativeContext'] = context_of(result)
         result['voice'] = self.voice.snapshot()
+        result['gamePushToTalkKey'] = self.game_voice.key
         result['interpreter'] = self.interpreter.snapshot()
         return result
 
@@ -367,6 +380,7 @@ class HarnessBridge:
 
     def close(self):
         self.halt.set()
+        self.game_voice.close()
         self.voice.close()
         self.interpreter.close()
         if self.thread:

@@ -360,6 +360,15 @@ muted, preserves the accepted queue on mute, and discards unfinished speech on
 Stop. See the service document for microphone settings, protocol and privacy
 bounds; real microphone-to-game acceptance remains unverified.
 
+With the plugin loaded, open **Controls** in the main menu or pause menu and
+choose **[Sous Chef] Push to Talk** on a keyboard layout. Press the key you want
+to use, or Backspace to clear it. The harness displays the same binding beside
+**Hold to talk**. Enable the microphone in the harness, then hold the bound key
+while the game is focused and release it to submit. Leaving the game window
+mid-hold discards the unfinished turn. The binding saves immediately in the
+plugin config, and a normal launch without Sous Chef shows only the game's
+own controls.
+
 The [milestone 4 Jev interpreter](jev-interpreter.md) accepts finalized speech or
 typed commands after explicit enabling. Add `JEV_API_KEY` to the repository's
 `.env` and restart the harness. It starts in Preview, supports bounded
