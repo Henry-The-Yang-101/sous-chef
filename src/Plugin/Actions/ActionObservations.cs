@@ -119,9 +119,11 @@ namespace SousChef.Plugin.Actions
         {
             var sink = target.GetComponent<ServerWashingStation>();
             if (sink == null) return -1;
-            var drying = Read<ServerAttachStation>(sink, "m_dryingAttachStation");
+            var drying = DryingStation(sink);
             return drying == null ? -1 : StackCount(drying.InspectItem());
         }
+        public static ServerAttachStation DryingStation(ServerWashingStation sink)
+        { return Read<ServerAttachStation>(sink, "m_dryingAttachStation"); }
         public static bool? ToggleState(GameObject target)
         {
             var toggle = target.GetComponent<ClientTriggerToggleOnAnimator>();

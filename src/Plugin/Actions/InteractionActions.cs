@@ -65,7 +65,8 @@ namespace SousChef.Plugin.Actions
             (recoveryReason == "destination_unavailable" || recoveryReason == "destination_unreachable"); } }
         public bool TransferUnavailable { get { return RouteUnavailable || recovery.Active &&
             recoveryReason == "placement_unavailable" && recovery.Elapsed > .5f; } }
-        public bool CanRetry { get { return !pressed && !throwReleased && Run.State != "cancelled"; } }
+        public bool CanRetry { get { return !throwReleased && Run.State != "cancelled" &&
+            (!pressed || (command.Operation == "work_at" && Run.Reason == "task_precondition_changed")); } }
         public bool NavigationStalled { get { return Run.Phase == "recovering_navigation" &&
             (recoveryReason == "no_progress" || recoveryReason == "alignment_failed" || recoveryReason == "navigation_timeout") ||
             Obstruction != null && recovery.Elapsed > .5f; } }
@@ -816,6 +817,9 @@ namespace SousChef.Plugin.Actions
                     "dirtyPlatesAfter", ActionObservations.DirtyCount(target), "cleanPlatesBefore", initialClean, "cleanPlatesAfter", ActionObservations.CleanCount(target));
                 Finish("succeeded", "condition_met"); return;
             }
+            // Continuous work can stop and resume from observed native progress.
+            if (pressed && authorizePress != null && !authorizePress())
+            { Finish("blocked", "task_precondition_changed"); return; }
             if (ActionObservations.Held(chef) != null) { Finish("blocked", "hands_full"); return; }
             if (command.Condition == "work_complete" && (workable == null || ActionObservations.Receiver(target) != workable.gameObject)) { Finish("blocked", "work_item_changed"); return; }
             if (!ActionObservations.CanUse(chef, target)) { WaitFor("interaction_unavailable"); return; }

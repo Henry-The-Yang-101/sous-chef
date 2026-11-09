@@ -212,15 +212,17 @@ namespace SousChef.Plugin.Actions
             if (burners && best != preferred && !botSearchComplete) return null;
             return best;
         }
-        private IEnumerable<TaskStep> Park(GameObject item, GameObject preferred = null, bool burners = false)
+        private IEnumerable<TaskStep> Park(GameObject item, GameObject preferred = null, bool burners = false, GameObject reserved = null)
         {
             var excluded = new HashSet<GameObject>(); float rejectedAt = 0;
+            if (reserved != null) excluded.Add(reserved);
             while (true)
             {
                 GameObject destination = null;
                 yield return Until("waiting_for_safe_counter", delegate {
                     destination = Parking(item, preferred, burners, excluded, probeUnknown: assembly != null && AssemblyHeatDue());
-                    if (destination == null && Time.realtimeSinceStartup - rejectedAt > 5) excluded.Clear();
+                    if (destination == null && Time.realtimeSinceStartup - rejectedAt > 5)
+                        excluded.RemoveWhere(target => target != reserved);
                     return destination != null;
                 });
                 TaskStep placement = Do("place_at", destination); placement.ReplanOnBlock = true;

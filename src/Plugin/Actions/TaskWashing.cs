@@ -38,15 +38,46 @@ namespace SousChef.Plugin.Actions
             if (humanOnly && !botSearchComplete) return null;
             return chosen;
         }
-        private bool WashingAvailable()
+        private bool HasDirtyDishes(GameObject sink)
         {
-            GameObject held = ActionObservations.Held(chef);
-            GameObject sink = Sink();
-            if (sink != null) return TaskNative.Dirty(held) || DirtySources().Count > 0 || ActionObservations.DirtyCount(sink) > 0;
-            LogisticsItem gun = SprayTool<ServerWaterGunSpray>();
-            return gun != null && WashableBatch(gun.Item).Count != 0;
+            return ActionObservations.DirtyCount(sink) > 0 || TaskNative.Dirty(ActionObservations.Held(chef)) ||
+                DirtySources().Count > 0;
         }
-        private IEnumerable<TaskStep> CollectDirtyBatch(bool allowEmpty = false)
+        private static GameObject SinkObstruction(GameObject sink, GameObject drying)
+        {
+            if (ActionObservations.Occupant(sink) != null) return sink;
+            GameObject item = ActionObservations.Occupant(drying);
+            // The drying rack's clean stack is the native output for washing.
+            return item != null && TaskNative.Component<CleanPlateStack>(item) == null ? drying : null;
+        }
+        private IEnumerable<TaskStep> ClearSink(GameObject sink, GameObject drying)
+        {
+            while (true)
+            {
+                GameObject surface = SinkObstruction(sink, drying);
+                if (surface == null) yield break;
+                GameObject item = ActionObservations.Occupant(surface);
+                TaskStep pickup = Do("pick_up", surface);
+                pickup.ReplanOnBlock = true;
+                pickup.FreeHands = cargo => Park(cargo, reserved: drying);
+                pickup.BeforePress = () => System.Object.ReferenceEquals(ActionObservations.Occupant(surface), item);
+                pickup.AbandonBeforePress = () => !pickup.BeforePress();
+                yield return pickup;
+                if (pickup.Succeeded && System.Object.ReferenceEquals(ActionObservations.Held(chef), item))
+                    foreach (TaskStep park in Park(item, reserved: drying)) yield return park;
+            }
+        }
+        private TaskStep UseClearSink(string operation, GameObject sink, GameObject drying, string condition = null)
+        {
+            TaskStep action = Do(operation, sink, condition);
+            Func<bool> ready = action.Ready;
+            action.BeforePress = () => SinkObstruction(sink, drying) == null;
+            action.Ready = () => action.BeforePress() && ready();
+            action.ReplanOnBlock = true;
+            action.AbandonBeforePress = () => !action.BeforePress();
+            return action;
+        }
+        private IEnumerable<TaskStep> CollectDirtyBatch(bool allowEmpty = false, GameObject reserved = null)
         {
             // Freeze currently obtainable stacks. Native placement combines the
             // entire carried stack into the next, then pickup takes the aggregate.
@@ -64,9 +95,11 @@ namespace SousChef.Plugin.Actions
                             (source.Item == source.Source || System.Object.ReferenceEquals(ActionObservations.Occupant(source.Source), source.Item));
                     });
                     GameObject held = ActionObservations.Held(chef);
-                    if (held != null && !TaskNative.Dirty(held)) foreach (TaskStep park in Park(held)) yield return park;
+                    if (held != null && !TaskNative.Dirty(held))
+                        foreach (TaskStep park in Park(held, reserved: reserved)) yield return park;
                     if (ActionObservations.Held(chef) != null) yield return Do("place_at", source.Source);
                     TaskStep pickup = Do("pick_up", source.Source);
+                    pickup.FreeHands = cargo => Park(cargo, reserved: reserved);
                     pickup.ReplanForHeld = TaskNative.Dirty; yield return pickup;
                     if (pickup.Succeeded) break;
                 }
@@ -101,17 +134,22 @@ namespace SousChef.Plugin.Actions
         {
             while (MoreRequested)
             {
-                yield return Until("waiting_for_wash_access", WashingAvailable);
                 foreach (TaskStep step in WashBatch()) yield return step;
                 completed++;
             }
         }
         private IEnumerable<TaskStep> WashBatch()
         {
-            GameObject sink = null;
+            GameObject sink = null, drying = null;
             LogisticsItem gun = null; List<GameObject> batch = null;
             yield return Until("waiting_for_wash_access", delegate {
-                sink = Sink(); if (sink != null) return true;
+                sink = Sink();
+                if (sink != null)
+                {
+                    var rack = ActionObservations.DryingStation(sink.GetComponent<ServerWashingStation>());
+                    drying = rack == null ? null : rack.gameObject;
+                    return SinkObstruction(sink, drying) != null || HasDirtyDishes(sink);
+                }
                 gun = SprayTool<ServerWaterGunSpray>();
                 return gun != null && (batch = WashableBatch(gun.Item)).Count != 0;
             });
@@ -120,15 +158,42 @@ namespace SousChef.Plugin.Actions
                 foreach (TaskStep wash in WashWithGun(gun, batch)) yield return wash;
                 yield break;
             }
-            foreach (TaskStep step in CollectDirtyBatch(ActionObservations.DirtyCount(sink) > 0)) yield return step;
-            GameObject held = ActionObservations.Held(chef);
-            if (held != null && !TaskNative.Dirty(held)) foreach (TaskStep park in Park(held)) yield return park;
-            if (ActionObservations.Held(chef) != null) yield return Do("place_at", sink);
-            if (ActionObservations.DirtyCount(sink) > 0)
+            bool collected = false;
+            while (true)
             {
-                TaskStep work = Do("work_at", sink, "sink_empty");
-                work.FreeHands = cargo => TaskNative.Dirty(cargo) ? new[] { Do("place_at", sink) } : Park(cargo);
-                yield return work;
+                // If a blocker arrived on the way back with dishes, clearing it
+                // parks the carried batch on a counter. Collect it again.
+                if (SinkObstruction(sink, drying) != null && TaskNative.Dirty(ActionObservations.Held(chef)))
+                    collected = false;
+                foreach (TaskStep step in ClearSink(sink, drying)) yield return step;
+                if (!collected)
+                {
+                    if (!HasDirtyDishes(sink))
+                    {
+                        yield return Until("waiting_for_wash_access", () => SinkObstruction(sink, drying) != null || HasDirtyDishes(sink));
+                        continue;
+                    }
+                    foreach (TaskStep step in CollectDirtyBatch(ActionObservations.DirtyCount(sink) > 0, drying)) yield return step;
+                    collected = true;
+                }
+                GameObject held = ActionObservations.Held(chef);
+                if (held != null && !TaskNative.Dirty(held))
+                    foreach (TaskStep park in Park(held, reserved: drying)) yield return park;
+                if (ActionObservations.Held(chef) != null)
+                {
+                    TaskStep placement = UseClearSink("place_at", sink, drying);
+                    yield return placement;
+                    if (!placement.Succeeded) continue;
+                }
+                if (ActionObservations.DirtyCount(sink) > 0)
+                {
+                    TaskStep work = UseClearSink("work_at", sink, drying, "sink_empty");
+                    work.FreeHands = cargo => Park(cargo, reserved: drying);
+                    work.ReplanForHeld = TaskNative.Dirty;
+                    yield return work;
+                    if (!work.Succeeded) continue;
+                }
+                yield break;
             }
         }
     }

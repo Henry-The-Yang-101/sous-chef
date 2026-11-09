@@ -153,10 +153,16 @@ internal static partial class Program
         {
             var catalog=(Json.Record)w.Navigation.Available(w.Chef);w.Tasks.Decorate(catalog,w.Chef);
             var names=((List<object>)catalog["taskOptions"]).Cast<Json.Record>().Select(row=>(string)row["name"]).ToList();
-            Check(!names.Contains("wash_dishes"),"washing is withheld without a bot route to the human's sink");offered=names.Contains("deliver_dirty_dishes");
+            offered=names.Contains("deliver_dirty_dishes");
             Time.realtimeSinceStartup+=.1f;Time.frameCount++;
         }
         Check(offered,"human-only sink delivery uses the same navigator with an independent human origin");
+        Check(w.Tasks.Start(w.Chef,1,new ControlCommand {Operation="task",Task=new TaskRequest {Action="wash_dishes"}})==null,
+            "washing can be queued while the only sink is unreachable by P2");
+        for(int i=0;i<10;i++)w.Tick(.25f);
+        Check(w.Tasks.Run.Running && w.Tasks.Run.Phase=="waiting_for_wash_access" && !w.Skills.Run.Running,
+            "washing waits without issuing a child action when P2 has no sink route");
+        w.Tasks.Cancel("test_end");
     }
     private static void NativeUtensilDefinitions()
     {

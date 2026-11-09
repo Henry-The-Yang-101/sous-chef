@@ -228,6 +228,9 @@ are excluded.
 With an accessible sink, `wash_dishes` snapshots the currently obtainable dirty
 stacks, merges them using native placement/pickup, carries them to the sink, and washes
 until the sink empties. New dirty stacks are handled by the next repetition.
+P2 clears unrelated objects from the basin and drying rack onto compatible empty
+counters, even if dirty dishes have yet to arrive. The rack's clean-plate stack
+stays in place to receive the washed plates.
 An already-held dirty stack can join the batch; unrelated cargo is parked before
 collecting dishes or using the sink. With no reachable sink, P2 can pick up a
 water gun, approach a checked spray position for each washable stack in the
