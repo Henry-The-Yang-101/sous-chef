@@ -2,6 +2,7 @@
 import asyncio
 from collections import deque
 import copy
+import hashlib
 import json
 import threading
 import time
@@ -30,12 +31,11 @@ class InterpreterService:
         self.transport = transport or HttpTransport(self.settings.api_key)
         self.client = DecisionClient(self.transport, gate, self.settings)
         self.mode = 'preview'
-        self.inbox, self.seen, self.recent = deque(), {}, deque(maxlen=4)
+        self.inbox, self.seen = deque(), {}
         self.active = self.pending = self.result = self.future = None
         self.revision = 0
         self.status = 'idle'
         self.retain_until = time.monotonic() + 600
-        self.last_context = None
         self.loop = asyncio.new_event_loop()
         self.worker = threading.Thread(target=self._work, name='jev-interpreter', daemon=True)
         self.closed = False
@@ -51,7 +51,6 @@ class InterpreterService:
         self.revision += 1
         self.inbox.clear()
         self.pending = self.active = self.result = None
-        self.recent.clear()
         self.status = 'idle'
 
     def _schedule(self, coroutine):
@@ -76,7 +75,7 @@ class InterpreterService:
             # Speech generations are authoritative, even if a helper result arrives late.
             if command.get('speech_generation', self.gate.generation) != self.gate.generation:
                 raise DecisionError('Speech command expired')
-            fingerprint = json.dumps(command, sort_keys=True)
+            fingerprint = hashlib.sha256(json.dumps(command, sort_keys=True).encode()).digest()
             prior = self.seen.get(command['id'])
             if prior:
                 if prior[0] != fingerprint: raise DecisionError('Command ID was reused for different text')
@@ -106,12 +105,7 @@ class InterpreterService:
             world, queue = self.bridge.observation(), self.bridge.scheduler.snapshot()
             native = context_of(world)
             if not native: raise DecisionError('Waiting for a fresh kitchen and Player 2')
-            if self.last_context != native:
-                self.recent.clear()
-                self.last_context = native
             context = build_context(world, queue)
-            context['recent_turns'] = [dict(turn, outcomes=[{'state': t['state'], 'reason': t.get('reason')}
-                for t in queue.get('outcomes', []) if t['commandId'] == turn['command_id']]) for turn in self.recent]
             generation = self.gate.generation
             budget = dict(deadline=time.monotonic() + self.settings.compile_seconds,
                           requests=0, input_tokens=0, output_tokens=0, last_ms=None)
@@ -322,7 +316,6 @@ class InterpreterService:
             validate_plan(raw, capabilities=world['capabilities'])
             self._exact_bindings(active['compiler'].context['semantic'], world['capabilities']['semantic_catalog'], raw)
             receipt = self.bridge.scheduler.accept(raw, active['context'])
-            self.recent.append({'command_id': active['id'], 'utterance': active['compiler'].command['text'], 'accepted': raw['tasks']})
         else:
             edit = outcome['edit']
             if edit['operation'] == 'stop_all':
@@ -408,7 +401,6 @@ class InterpreterService:
             now = time.monotonic()
             if now >= self.retain_until and not self.active:
                 self.result = None
-                self.recent.clear()
             self.seen = {k:v for k,v in self.seen.items() if now-v[1] < 600}
             pending = self.pending
             if pending:

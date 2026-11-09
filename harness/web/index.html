@@ -53,7 +53,7 @@
         <p>Mute before changing settings. Automatic mode uses microphone energy, so game sound may delay a boundary or start a turn. Push to talk is the default. Commands exceeding the duration limit are discarded in full.</p>
       </details>
       <details><summary>Local transcript inspection</summary><pre id="voice-inspection-data">No commands yet.</pre></details>
-      <p>Only finalized turns appear here. The last 20 turns expire after 10 minutes; mute, Stop, and Clear discard them. No audio is recorded. Stop also cancels unfinished voice commands.</p>
+      <p>Only the latest finalized turn is kept in memory. It expires after 10 minutes. Mute, Stop, and Clear discard it. No audio is recorded. Stop also cancels unfinished voice commands.</p>
       <div class="interpreter" aria-labelledby="interpreter-title">
         <h3 id="interpreter-title">Command interpreter</h3>
         <p id="interpreter-status" role="status" aria-live="polite"></p>

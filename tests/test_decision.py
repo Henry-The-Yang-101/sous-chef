@@ -551,6 +551,21 @@ class ServiceTests(unittest.TestCase):
         self.assertNotIn('queue_edit', verification['proposed'])
         self.assertNotIn('Queue effect', verification['proposed_meaning'])
 
+    def test_new_command_sends_current_utterance_without_accepted_transcript(self):
+        self.control('mode', mode='automatic')
+        self.service.submit({'id': 'first', 'text': 'Wash dishes, please'})
+        self.wait_for({'accepted'})
+        self.t.script.requests.clear()
+        self.t.script.steps = [{'simple': 'take_ready_once'}, {}]
+        self.service.submit({'id': 'second', 'text': 'Take ready food off the heat'})
+        self.wait_for({'accepted'})
+        self.assertTrue(self.t.script.requests)
+        for request in self.t.script.requests:
+            self.assertEqual(request['state']['utterance'], {'text': 'Take ready food off the heat'})
+            self.assertNotIn('Wash dishes, please', json.dumps(request))
+            self.assertNotIn('dialogue', request['state'])
+        self.assertIn('Wash dirty dishes', self.t.script.requests[-1]['state']['accepted_work']['pending'][0])
+
     def test_preview_expiration(self):
         self.service.submit({'id':'test','text':'Wash'}); self.wait_for({'preview'})
         self.service.pending['expires'] = time.monotonic()-1

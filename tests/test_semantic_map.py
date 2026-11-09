@@ -7,7 +7,7 @@ from harness.semantic_map import sample_floor, spatial_context, candidate_descri
 from harness.decision.compiler import Compiler, Clarification, build_context
 from harness.decision.service import InterpreterService
 from harness.decision.protocol import DecisionError, validate_response
-from test_decision import world, Script
+from test_decision import world, response, Script
 
 
 def scene():
@@ -101,6 +101,11 @@ class SamplingTests(unittest.TestCase):
 
 
 class MovementCompilerTests(unittest.IsolatedAsyncioTestCase):
+    def assert_current_request_matches_recording(self, current, recorded):
+        recorded = copy.deepcopy(recorded)
+        self.assertEqual(recorded['state'].pop('dialogue'), {'recent_turns': []})
+        self.assertEqual(current, recorded)
+
     async def test_historical_labeled_requests_remain_archived(self):
         evidence=json.loads((Path(__file__).resolve().parents[1]/'docs/grounded-movement-language.json').read_text())
         for trial in evidence['trials']:
@@ -113,8 +118,8 @@ class MovementCompilerTests(unittest.IsolatedAsyncioTestCase):
             variant='holdout' if case['name'].startswith('holdout_') else 'final'
             trial=next(r for r in evidence['trials'] if r['case']==case['name'] and r['variant']==variant)
             current=await request(case)
-            self.assertEqual(current,trial['request'])
-            validate_response(current,trial['response'])
+            self.assert_current_request_matches_recording(current, trial['request'])
+            validate_response(trial['request'], trial['response'])
             self.assertNotIn('"location":',json.dumps(current))
             approved={k for k,a in trial['response']['answers'].items() if a['noul']>=.85}
             self.assertLessEqual(approved,set(case['acceptable']))
@@ -131,8 +136,8 @@ class MovementCompilerTests(unittest.IsolatedAsyncioTestCase):
                 history.append(next(r for r in evidence['trials'] if r['variant']=='equivalence_final2'))
             async def ask(value):
                 observed=history.pop(0)
-                self.assertEqual(value,observed['request'])
-                return validate_response(value,observed['response'])
+                self.assert_current_request_matches_recording(value, observed['request'])
+                return validate_response(observed['request'], observed['response'])
             c=Compiler({'id':'replay','text':case['text']},build_context(case['world'],
                        {'revision':0,'active':None,'pending':[]}),ask)
             if name=='floor':
@@ -154,6 +159,26 @@ class MovementCompilerTests(unittest.IsolatedAsyncioTestCase):
         candidates=script.requests[4]['state']['compiler']['candidates']
         self.assertEqual(candidates[0]['screen'],{'x':0,'y':1})
         self.assertIn('movement',script.requests[-1]['state']['world'])
+
+    async def test_dense_station_map_splits_checks_without_skipping_stations(self):
+        data = scene()
+        data['stations'] = [
+            dict(id=f'd{100+i}', binding='station', kind='workstation',
+                 label=f'Chopping board and preparation counter on the main kitchen floor {i}',
+                 position=[i % 8, 0, i // 8], objectInstanceId=i,
+                 routeStatus='unknown', standing='not_applicable', motion='observed_stationary')
+            for i in range(56)
+        ]
+        batches = []
+        async def ask(request):
+            if 'binding' in request['questions']:
+                return response(request, {'binding': 'station'})
+            batches.append(list(request['questions']))
+            return response(request, {key: float(key == 'd155') for key in request['questions']})
+        c = Compiler({'id': 'test', 'text': 'Go to the chopping board'}, context(data), ask)
+        self.assertEqual(await c.movement(1), {'destination_id': 'd155'})
+        self.assertLess(len(batches[0]), 18)
+        self.assertEqual([key for batch in batches for key in batch], [s['id'] for s in data['stations']])
 
     async def test_equivalent_positions_use_approval_not_divided_choice_probability(self):
         script=Script([{'binding':'floor'},dict.fromkeys([p['id'] for p in sample_floor(scene()['points'],scene()['walkingEdges'])[0]],0)])

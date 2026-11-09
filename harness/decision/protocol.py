@@ -14,6 +14,15 @@ def probability(value):
     return value
 
 
+def context_fits(state, questions):
+    # UTF-8 bytes are a conservative upper bound, not a claimed Jev tokenizer.
+    # Leave large margins below the 32k per-question and 64k total token limits.
+    size = lambda value: len(json.dumps(value, ensure_ascii=False, allow_nan=False).encode())
+    state_size = size(state)
+    return (size({'model': MODEL, 'state': state, 'questions': questions}) <= 48000
+            and all(state_size + size(question) <= 24000 for question in questions.values()))
+
+
 def validate_request(request):
     if set(request) != {'model', 'state', 'questions'} or request['model'] != MODEL:
         raise DecisionError('Unsupported Jev request envelope')
@@ -31,11 +40,7 @@ def validate_request(request):
                 raise DecisionError('Invalid Choice criteria')
         elif question.get('type') != 'noul':
             raise DecisionError('Only Choice and Noul are enabled')
-    # UTF-8 bytes are a conservative upper bound, not a claimed Jev tokenizer.
-    # Leave large margins below the 32k per-question and 64k total token limits.
-    size = lambda value: len(json.dumps(value, ensure_ascii=False, allow_nan=False).encode())
-    state_size = size(request['state'])
-    if size(request) > 48000 or any(state_size + size(q) > 24000 for q in questions.values()):
+    if not context_fits(request['state'], questions):
         raise DecisionError('Decision context is too large; narrow or split this command')
     return request
 

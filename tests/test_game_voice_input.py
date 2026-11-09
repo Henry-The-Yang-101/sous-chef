@@ -85,3 +85,25 @@ class GameVoiceInputTests(unittest.TestCase):
         self.wait_for(lambda: self.source.key == 'F9' and self.source.active is None)
         self.assertTrue(self.voice.snapshot()['muted'])
         self.assertEqual([call.args[0] for call in self.send.call_args_list], ['begin', 'arm', 'begin'])
+
+    def test_local_inspection_only_keeps_the_latest_finalized_turn(self):
+        self.voice.command({'operation': 'arm_text', 'generation': self.voice.gate.generation}, 'browser')
+        generation = self.voice.gate.generation
+        self.voice.settings['inspection'] = 'fake'
+        for index, utterance in enumerate(('Wash dishes', 'Bring me rice')):
+            def emit(kind, sequence, **fields):
+                self.voice._event(dict(protocol_version=1, speech_generation=generation,
+                                       type=kind, event_sequence=index * 4 + sequence,
+                                       turn_id=f'turn-{index}', **fields))
+            start, end = index * 1000, (index + 1) * 1000
+            emit('turn_started', 1, start_ms=start)
+            emit('transcript_update', 2, audio_range_ms=[start, end], text=utterance,
+                 is_final=True, finalized_before_ms=end)
+            emit('turn_boundary', 3, cutoff_ms=end)
+            emit('finalize_completed', 4, cutoff_ms=end, results_drained=True,
+                 finalized_before_ms=end, last_result_sequence=index * 4 + 2)
+        state = self.voice.snapshot()
+        self.assertEqual([c['text'] for c in state['commands']], ['Bring me rice'])
+        self.assertEqual(state['fakeResult']['commandId'], state['commands'][0]['id'])
+        self.voice.command({'operation': 'mute'}, 'browser')
+        self.assertEqual(self.voice.snapshot()['commands'], [])

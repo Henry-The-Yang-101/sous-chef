@@ -133,8 +133,9 @@ gate. Re-arming starts fresh; there is no audio or command replay. Stop and voic
 operations do not hold the game I/O or scheduler lock and do not foreground the
 game.
 
-Inspection retains at most 20 turns in memory for ten minutes. Mute, Stop and
-Clear discard history; it is never journaled. No raw audio is written to disk.
+Inspection retains the latest finalized turn in memory for up to ten minutes.
+Mute, Stop and Clear discard it. Transcripts are never journaled and no raw
+audio is written to disk.
 Authorized phone views can read the same transcript state through the existing
 harness sharing connection. This is separate from model dispatch; the implementation
 has no Jev SDK, remote model transport, audio upload or verbose transcript logging.

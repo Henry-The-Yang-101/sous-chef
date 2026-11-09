@@ -14,7 +14,7 @@ from clients.capabilities import REGISTRY_HASH, REGISTRY_VERSION, contract, regi
 from harness.plans import validate_plan
 from harness.semantic_map import spatial_context, candidate_description
 from .config import MODEL, SCHEMA, Settings
-from .protocol import DecisionError, validate_request, validate_response
+from .protocol import DecisionError, context_fits, validate_request, validate_response
 from .prompts import (APPENDED_WORK_SCOPE, EXECUTION_CONSTRAINTS, INGREDIENT_COMMON_NAMES, INTENT_ROUTE, INTERPRETATION_POLICY, OBJECT_CHOICE, OBJECT_REFERENCE,
                       PROGRESS_CONTEXT, QUEUE_ORDER_DEFAULT, TASK_BOUNDARIES, examples, task_description)
 
@@ -147,7 +147,7 @@ class Compiler:
     def __init__(self, command, context, ask, settings=None):
         self.command, self.context, self.ask = copy.deepcopy(command), copy.deepcopy(context), ask
         self.settings = settings or Settings()
-        self.cache, self.overrides, self.requests = {}, {}, []
+        self.cache, self.overrides = {}, {}
         self.tasks, self.clarified = [], []
         self.movement_choices = {}
         self.contracts = {c['name']: c for c in context['contracts']}
@@ -166,7 +166,6 @@ class Compiler:
             contracts = [self.contracts[name] for name in dict.fromkeys(t['action'] for t in self.tasks)]
         state = {'schema_version': SCHEMA,
                 'utterance': {k: copy.deepcopy(self.command[k]) for k in ('text', 'segments', 'uncertain_spans') if k in self.command},
-                'dialogue': {'recent_turns': self.context.get('recent_turns', [])},
                 'scheduler': self.context['scheduler'],
                 'capabilities': [dict(name=c['name'], description=c['description'],
                     **({'label': c['label']} if compiler.get('action') or compiler.get('verification') else {}),
@@ -176,8 +175,6 @@ class Compiler:
                     if not compiler.get('discovery') else [],
                 'compiler': dict(already_interpreted=[{'occurrence': i+1, 'meaning': self.describe([task]),
                     'task':copy.deepcopy(task)} for i,task in enumerate(self.tasks)], **compiler)}
-        if state['dialogue']['recent_turns']:
-            state['dialogue']['meaning'] = 'Accepted plans record intent; only outcomes report execution results. History is reference context, not new work.'
         if compiler.get('discovery') or compiler.get('action'):
             state['compiler']['progress_semantics'] = PROGRESS_CONTEXT
         # Task families describe intent. Ingredient/recipient availability and
@@ -225,7 +222,6 @@ class Compiler:
         if cached and cached[0] == digest:
             return cached[1]
         response = validate_response(request, await self.ask(request))
-        self.requests.append(copy.deepcopy(request))
         self.cache[stage] = (digest, response['answers'])
         return response['answers']
 
@@ -496,11 +492,9 @@ class Compiler:
             if override is not None:
                 approved = [c for c in candidates if c['id'] == override]
                 if approved: break
-            # Keep each independent question below the request-size bound. The
-            # common overview supplies the reference frame and the other stations.
-            for offset in range(0, len(candidates), 18):
-                group = candidates[offset:offset+18]
-                questions = {c['id']: scoped_noul(
+            # The overview and candidates vary in size by kitchen. Split the
+            # independent checks without dropping any destination.
+            questions = {c['id']: scoped_noul(
                     f'For movement occurrence {index}, evaluate ONLY candidate {c["id"]}: '
                     + json.dumps({k:c[k] for k in ('id','binding','kind','screen','height','supportId') if k in c}, separators=(',',':')) + '. '
                     'Does this candidate satisfy ALL destination constraints in the utterance? '
@@ -509,10 +503,21 @@ class Compiler:
                     'Apply movement.coordinate_meaning to the numerical coordinates. Compare all stated spatial constraints together. '
                     'A clearly matching relative location is sufficient; do not require an exact edge coordinate or an explicitly named region. '
                     'Match the destination identity and its CURRENT position, regardless of which way it is moving. A blocked or unknown route is handled by native waiting and does not make that identity uncertain; assess reachability only if the utterance explicitly requires it. '
-                    'Do not substitute a nearby station or a reachable point on the wrong side.') for c in group}
-                result = await self.batch(f'task.{index}.movement.candidates.{refinement}.{offset}', questions,
-                    action='navigate_to', next_occurrence=index, movement=overview, candidates=group)
+                    'Do not substitute a nearby station or a reachable point on the wrong side.') for c in candidates}
+            fields = dict(action='navigate_to', next_occurrence=index, movement=overview)
+            offset = 0
+            while offset < len(candidates):
+                count = min(18, len(candidates) - offset)
+                while True:
+                    group = candidates[offset:offset+count]
+                    batch = {c['id']: questions[c['id']] for c in group}
+                    if count == 1 or context_fits(self.state(**fields, candidates=group), batch):
+                        break
+                    count //= 2
+                result = await self.batch(f'task.{index}.movement.candidates.{refinement}.{offset}',
+                                          batch, **fields, candidates=group)
                 approved.extend(c for c in group if result[c['id']]['noul'] >= self.settings.choice_probability)
+                offset += count
             if approved or binding != 'floor': break
         options = {c['id']: candidate_description(c) for c in candidates}
         if not approved:

@@ -96,8 +96,9 @@ and 48 attempts per compilation. Retry-After is respected; it is never shortened
 to fit the deadline. Auth/schema failures are not retried. There are no SDK retries,
 redirects, images, extended-context headers, or automatic provider calls on startup.
 Clarifications expire after 90 seconds, previews after 60. User thinking time is
-separate from model time; resumed work retains the total request count. Recent
-command context is bounded and expires after ten idle minutes or mute/Stop.
+separate from model time. Resumed work retains the total request count. Each new
+command starts with its own utterance and the current kitchen and queue. Replies
+and corrections can still refer to the single unfinished command they address.
 
 UI diagnostics report request attempts, last latency and actual input/output token
 usage. No raw audio is sent or recorded by this interpreter. Finalized text and

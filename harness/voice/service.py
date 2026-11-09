@@ -53,7 +53,7 @@ class VoiceService:
         self.meter = None
         self.input_device = None
         self.devices, self.locales = [], []
-        self.history = deque(maxlen=20)
+        self.history = deque(maxlen=1)
         self.fake = FakeTransport()
         self.fake_result = None
         self.on_command = None
@@ -76,6 +76,7 @@ class VoiceService:
         generation = self.gate.invalidate(muted)
         self.assembler.reset(generation)
         self.finalizing.clear()
+        self.history.clear()
         self.fake_result = None
         self.meter = None
         self.input_device = None
@@ -114,7 +115,6 @@ class VoiceService:
             self.revision += 1
             if operation == 'mute':
                 self._reset(True)
-                self.history.clear()
                 running = self.process and self.process.poll() is None
                 self.status = 'muting' if running else 'muted'
                 self.capture_stopped = not running
@@ -173,7 +173,6 @@ class VoiceService:
             self.revision += 1
             muted = self.gate.muted
             self._reset()
-            self.history.clear()
             if self.process and self.process.poll() is None:
                 self._send('mute' if muted else 'reset', settings=self.settings)
                 self.status = 'muting' if muted else 'preparing'
@@ -281,6 +280,7 @@ class VoiceService:
                                      if command.get('last_speech_ms') is not None else None}
                 command.update(retainedAt=time.monotonic(), committedAt=time.time())
                 self.history.append(command)
+                self.fake_result = None
                 if not command.get('empty') and self.settings['inspection'] == 'fake':
                     generation = self.gate.generation
                     future = self.gate.dispatch(generation, self.fake, command)
