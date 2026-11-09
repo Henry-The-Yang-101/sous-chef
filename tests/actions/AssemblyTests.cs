@@ -200,7 +200,7 @@ internal static partial class Program
             AssembledDefinitionNode[] parts={Leaf("flour"),Leaf("egg")};
             if(mixing)
             {
-                handler=vessel.Add(new ServerMixingHandler());vessel.Add(new MixingHandler {m_mixingType=step});vessel.Add(new MixableContainer());
+                handler=vessel.Add(new ServerMixingHandler());vessel.Add(new MixingHandler {m_mixingType=new Definition {name="bowl"}});vessel.Add(new MixableContainer());
                 mixer=w.Delivery();mixer.name="mixer";mixer.Add(new ServerMixingStation());mixer.Add(new Pickup());mixer.transform.position=new Vector3(0,0,3);
                 vesselCounter.GetComponent<ServerAttachStation>().Item=null;mixer.GetComponent<ServerAttachStation>().Item=vessel;
                 parts=new AssembledDefinitionNode[]{new MixedCompositeAssembledNode {m_composition=parts,m_progress=MixedCompositeOrderNode.MixingProgress.Mixed}};
@@ -209,6 +209,22 @@ internal static partial class Program
             var request=AssemblyJob(w,new[]{plate},new[]{first,second},goal);
             request.Assembly.Equipment.Add(w.Navigation.RegisterItem(vessel));request.Assembly.Equipment.Add(w.IdOf(oven));
             if(mixer!=null)request.Assembly.Equipment.Add(w.IdOf(mixer));
+            if (mixing)
+            {
+                var contents = vessel.GetComponent<ServerIngredientContainer>().Contents;
+                contents.Add(Leaf("flour"));
+                var holder = w.Target.GetComponent<ServerAttachStation>();
+                holder.Item = null;
+                first.activeInHierarchy = false;
+                var catalog = (Json.Record)new SemanticCatalog(w.Navigation).Capture(w.Chef, new object[0]);
+                var order = (Json.Record)((List<object>)catalog["assemblyOrders"]).Single();
+                var allocation = (Json.Record)order["allocation"];
+                Check(new HashSet<string>((List<string>)allocation["equipment"]).SetEquals(request.Assembly.Equipment),
+                    "allocation reserves the mixer and oven for the same partially filled vessel");
+                contents.Clear();
+                first.activeInHierarchy = true;
+                holder.Item = first;
+            }
             StartAssembly(w,request);bool sawMix=false,sawCook=false;
             var human=new GameObject("human temporarily holding allocated plate");human.Add(new PlayerControls());
             var humanCarrier=human.Add(new ServerPlayerAttachmentCarrier {Item=plate});plateCounter.GetComponent<ServerAttachStation>().Item=null;

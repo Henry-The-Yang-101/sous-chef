@@ -51,35 +51,34 @@ namespace SousChef.Plugin.Actions
             var components = new List<string>();
             var equipment = new List<string>();
             var stockParts = new List<AssembledDefinitionNode>();
-            var processors = new HashSet<AssemblySchedule.Stage>();
-            var usedStations = new HashSet<GameObject>();
+            var vesselStages = new HashSet<AssemblySchedule.Stage>();
+            var processing = recipe.Stages.FindAll(stage => stage.Processing);
             foreach (var source in stock)
             {
                 if (source.Plate) continue;
                 bool useful = source.Transferable && !RecipeProof.Empty(source.Composition) && Ready(source.Item, source.Composition) &&
                     recipe.Stages.Any(stage => RecipeProof.Subset(source.Composition, stage.Inputs));
-                bool vessel = false;
-                if (source.PreparationBase || source.Utensil)
-                    foreach (var stage in recipe.Stages)
-                    {
-                        if (!stage.Processing || !VesselFor(stage, source.Item) ||
-                            !useful && !RecipeProof.Subset(ContentsFor(stage, source.Item), stage.Inputs)) continue;
-                        vessel = true;
-                        foreach (var station in stations)
-                        {
-                            if (!StationFor(stage, station)) continue;
-                            processors.Add(stage);
-                            usedStations.Add(station);
-                        }
-                    }
-                if (vessel && source.Utensil) equipment.Add(source.Id);
+                var compatible = source.PreparationBase || source.Utensil ? processing.FindAll(stage => VesselFor(stage, source.Item)) : null;
+                bool vessel = compatible != null && compatible.Any(stage => useful || RecipeProof.Subset(ContentsFor(stage, source.Item), stage.Inputs));
+                // An allocated vessel can continue into a parent stage or be
+                // reused after the executor transfers its first batch.
+                if (vessel) vesselStages.UnionWith(compatible);
+                if (vessel && !source.PreparationBase) equipment.Add(source.Id);
                 else if (useful || vessel) components.Add(source.Id);
                 else continue;
                 stockParts.AddRange(RecipeProof.Parts(source.Composition));
             }
+            var processors = new HashSet<AssemblySchedule.Stage>();
             foreach (var station in stations)
-                if (usedStations.Contains(station)) equipment.Add(inventory.Id(station));
+            {
+                var supported = processing.FindAll(stage => vesselStages.Contains(stage) && StationFor(stage, station));
+                if (supported.Count == 0) continue;
+                processors.UnionWith(supported);
+                equipment.Add(inventory.Id(station));
+            }
 
+            // Count exact ingredient identities once per observed object. This
+            // checks stock and processing prerequisites before offering a base.
             var demand = new Dictionary<int, int>();
             CountIngredients(order.Goal, demand);
             var bases = new List<string>();
