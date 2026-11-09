@@ -23,8 +23,8 @@ with ControlClient() as player2:
     # Context exit releases ownership and restores the original P2 bindings.
 ```
 
-The game must be focused, in an active unpaused local round, and accepting
-input for the target chef. Axes use the game's logical MovementX/MovementY
+Raw input requires a focused game in an active, unpaused local round that
+accepts input for the target chef. Axes use the game's logical MovementX/MovementY
 convention, not an absolute world destination. Each is in [-1,1]; diagonals
 are normalized to unit length. The native movement configuration can invert axes: in the tested kitchen,
 positive Y moved toward decreasing world Z. Use observed positions to calibrate
@@ -66,15 +66,15 @@ Native physics momentum or a dash already started can continue after input stops
 The bridge does not rewind or cancel those native actions.
 
 These timeouts and disconnect rules apply to raw manual input. Accepted
-autonomous actions instead retain ownership through client release/disconnect;
-focus loss, pause and temporary input suppression suspend them until the game
-accepts input again. Use `stop()` to cancel, including from another connection.
+autonomous actions retain ownership through client release or disconnect.
+Pause and temporary input suppression suspend them until the game accepts input
+again. Since bridge 0.8.10, they can run while the game window is unfocused.
+Use `stop()` to cancel, including from another connection.
 Reassignment, round exit and plugin shutdown still clear the old request.
 
-The game retains its normal control gating. This includes focus and suppressed
-chef control; special modes that transfer input to a piloting/cannon control
-scheme are not promised by this first control adapter. A rejected command does
-not cause the client to reacquire automatically.
+Native chef control suppression also applies to autonomous input. This
+includes special modes that transfer input to a piloting or cannon control
+scheme. Clients acquire raw input ownership through an explicit claim.
 
 ## Wire protocol
 

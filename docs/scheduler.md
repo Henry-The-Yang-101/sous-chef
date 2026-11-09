@@ -44,14 +44,16 @@ it. Only a proven start rejection can create a fresh attempt, with a new ID.
 There is no accepted-task timeout or automatic restart of partially executed work.
 Unlimited work is allowed only at the tail of the entire resulting queue.
 
-Pause affects future dispatch. Native pause/focus loss preserves an active task.
+Pause dispatch holds future tasks. A native pause suspends and preserves the
+active task. On bridge 0.8.10 or later, game focus does not affect dispatch or
+execution.
 Round/chef/session changes invalidate the old queue. External native Stop also
 invalidates it. Replacement is validated before cancellation and held behind a
 native cancellation barrier. Stop journals invalidation before using a separate
 priority connection; late sends carry the old native fence and cannot acquire
 input. Immediate manual actions pause pending dispatch and use the same fence.
-Automatic queue dispatch does not foreground the game. Only explicit Run now
-may request focus. The future voice compiler can call the same acceptance API.
+Automatic queue dispatch leaves window focus alone. Run now can foreground
+older bridges that still report `game_unfocused`.
 
 The UI supports single tasks and atomic plans of up to five steps, Add to queue,
 Run now, remove/reorder, clear pending, pause/resume, Skip, and independent Stop.

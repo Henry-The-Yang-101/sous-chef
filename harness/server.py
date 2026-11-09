@@ -310,8 +310,10 @@ class HarnessBridge:
             result = self.scheduler.accept(plan, context)
         except ValueError as error:
             raise HarnessError(str(error)) from error
-        if focus:
-            # Only an explicit manual Run now click may foreground the game.
+        with self.state_lock:
+            needs_focus = focus and self.value['control'].get('reason') == 'game_unfocused'
+        if needs_focus:
+            # Older bridges still require focus to execute an explicit Run now.
             try:
                 self.focus()
             except HarnessError:

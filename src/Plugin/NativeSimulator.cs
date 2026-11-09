@@ -27,11 +27,11 @@ namespace SousChef.Plugin
         private int dlc = -1;
         private Harmony patches;
         private static ServerDynamicFlowController advanceFlow;
-        private static bool unfocusedFixture;
+        internal static bool BlockInputFocus { get; private set; }
+        internal static bool SimulateUnfocused { get; private set; }
         private static GameObject fixtureStanceAim;
         private static Vector3 fixtureStancePoint;
         private bool interruptingTarget;
-        internal static bool InputFocused { get { return Application.isFocused && !unfocusedFixture; } }
         private const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
         private static object Call(object obj, string method, params object[] args) { return obj.GetType().GetMethod(method, Flags).Invoke(obj, args); }
         private void Awake()
@@ -41,13 +41,11 @@ namespace SousChef.Plugin
             Directory.CreateDirectory(Path.Combine(directory, "saves"));
             AudioListener.volume = 0f;
             AudioListener.pause = true;
-            Application.runInBackground = true;
             int fps;
             if (!Int32.TryParse(Environment.GetEnvironmentVariable("SOUS_CHEF_NATIVE_FPS"), out fps)) fps = 60;
             SetFrameRate(fps);
             patches = new Harmony("dev.souschef.native-simulator");
             patches.Patch(typeof(SteamSaveManager).GetMethod("GetSaveDirectory", Flags), new HarmonyMethod(typeof(NativeSimulator).GetMethod("SaveDirectory", Flags)));
-            patches.Patch(typeof(PlayerControls).GetMethod("CanButtonBePressed"), new HarmonyMethod(typeof(NativeSimulator).GetMethod("InputAllowed", Flags)));
             var phaseWrapper = new HarmonyMethod(typeof(NativeSimulator).GetMethod("PhaseRoutine", Flags));
             patches.Patch(typeof(ServerDynamicFlowController).GetMethod("BuildPhaseRoutine", Flags), postfix: phaseWrapper);
             patches.Patch(typeof(ServerBossFlowController).GetMethod("BuildPhaseRoutine", Flags), postfix: phaseWrapper);
@@ -73,12 +71,6 @@ namespace SousChef.Plugin
                 }
             }
             finally { var disposable = native as IDisposable; if (disposable != null) disposable.Dispose(); }
-        }
-        private static bool InputAllowed(PlayerControls __instance, ref bool __result)
-        {
-            __result = !unfocusedFixture && __instance.GetDirectlyUnderPlayerControl() && !T17DialogBoxManager.HasAnyOpenDialogs() &&
-                (T17InGameFlow.Instance == null || T17InGameFlow.Instance.m_Rootmenu.GetCurrentOpenMenu() == null);
-            return false;
         }
         private void Update()
         {
@@ -116,8 +108,8 @@ namespace SousChef.Plugin
                         else if (value == "launch-cannon") LaunchLoadedCannon();
                         else if (value == "aim-cannon-down") AimLoadedCannon();
                         else if (value == "advance-phase") AdvancePhase();
-                        else if (value == "input-focus off") unfocusedFixture = true;
-                        else if (value == "input-focus on") unfocusedFixture = false;
+                        else if (value == "input-focus off" || value == "input-focus on") BlockInputFocus = value.EndsWith("off");
+                        else if (value == "application-focus off" || value == "application-focus on") SimulateUnfocused = value.EndsWith("off");
                         else if (value == "pause on" || value == "pause off")
                         {
                             var timeManager = UnityEngine.Object.FindObjectOfType<TimeManager>();
@@ -178,7 +170,8 @@ namespace SousChef.Plugin
                     "clientUsers", ClientUserSystem.m_Users.Count, "realtime", Time.realtimeSinceStartup,
                     "pid", System.Diagnostics.Process.GetCurrentProcess().Id, "sessionId", BridgeSession, "lastCommand", lastCommand, "commandError", commandError,
                     "targetFrameRate", Application.targetFrameRate,
-                    "applicationFocused", Application.isFocused, "unfocusedInputFixture", unfocusedFixture,
+                    "applicationFocused", Application.isFocused, "unfocusedInputFixture", BlockInputFocus,
+                    "simulatedUnfocused", SimulateUnfocused,
                     "unityVersion", Application.unityVersion, "gameAssemblySha256", GameAssemblyHash, "audioPaused", AudioListener.pause, "audioVolume", AudioListener.volume,
                     "graphicsDevice", SystemInfo.graphicsDeviceType.ToString(), "frame", Time.frameCount, "physicsAutoSimulation", Physics.autoSimulation, "fixedDeltaTime", Time.fixedDeltaTime));
             }

@@ -76,7 +76,8 @@ Assembly bases such as burger buns use their native `PreparationContainer`
 ingredient definition, even when they have no ordinary ingredient component or
 chopping output. Filled buns are distinct from empty supplies.
 Parent and child phases remain visible through pickup and delivery. Stop cancels
-the entire job. Focus loss suspends it until the game is focused again.
+the entire job. Jobs can start and continue while the game is unfocused on
+bridge 0.8.10 or later.
 
 If Run job is disabled, the message below the form explains whether the
 bridge needs an update, the game is paused, another action is running, or the
@@ -136,8 +137,7 @@ from the connected plugin, independently of its currently available actions.
 Open **Open on your phone** on the Mac's localhost page and scan its QR code with
 your phone's camera. Normal startup creates a Cloudflare HTTPS internet link, so
 your phone can use Wi-Fi or cellular. The phone shows the same live list,
-distances, status, action selectors and Stop control, so Overcooked! 2 can stay
-focused on the Mac.
+distances, status, action selectors and Stop control.
 
 The internet link requires
 [`cloudflared`](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/)
@@ -229,12 +229,12 @@ positions and unfinished planning rather than silently implying a distance cutof
 Accepted jobs belong to the game until completion or Stop. Closing/reloading a
 tab, browser timer throttling, Ctrl+C in the harness, and socket disconnects do
 not cancel them. Reconnection observes the original request without replaying
-the command; any authenticated tab can Stop it. While the game is unfocused,
-paused or temporarily suppressing P2 input, the job is suspended with neutral
-input and resumes when the game accepts input again. Native cooking, physics
-and the round clock still run while unfocused. Reassignment, round exit and
-plugin shutdown clear work tied to the old chef/kitchen. Raw manual input
-still releases on socket loss. Network delays and Unity updates bound Stop
+the command. Any authenticated tab can Stop it. A game pause or temporary
+suppression of P2 input suspends the job with neutral input until the game
+accepts input again. Window focus alone does not suspend autonomous jobs.
+Reassignment, round exit and plugin shutdown clear work tied to the old
+chef/kitchen. Raw manual input releases on focus or socket loss.
+Network delays and Unity updates bound Stop
 latency; native momentum is not forcibly erased.
 
 The HTTP server validates the exact configured Host/Origin and requires a
@@ -314,8 +314,8 @@ Until Stop, except assembly, which binds one exact ticket and allocation.
 Unlimited work must be last in the entire queue. Preparation supports multiple
 ingredient/utensil rows, states, quantities and a receiving player. A task can be
 accepted while P2 is busy or suspended; actual dispatch revalidates native
-conditions and never starts while input is suspended. Add does not focus the
-game. Explicit Run now may focus it.
+conditions and waits while input is suspended. On bridge 0.8.10 or later, both
+Add and Run now work while the game stays in the background.
 
 **Pause dispatch** holds future tasks while the active task continues. Resume,
 clear pending, remove/reorder and Skip have distinct effects. Waiting is not

@@ -12,7 +12,7 @@ namespace SousChef.Plugin
     [BepInPlugin("dev.souschef.observer", "Sous Chef Observer", BridgePlugin.Version)]
     public sealed class BridgePlugin : BaseUnityPlugin
     {
-        internal const string Version = "0.8.9";
+        internal const string Version = "0.8.10";
         private StreamServer server, gameplayServer, harnessServer;
         private SceneCapture harnessCapture;
         private long harnessSequence;
@@ -62,6 +62,7 @@ namespace SousChef.Plugin
                 int controlPort = Config.Bind("Control", "Port", 24703, "Loopback port for direct control of existing local Player 2.").Value;
                 if (controlPort < 1024 || controlPort > 65535 || controlPort == port || gameplayPort < 1024 || gameplayPort > 65535 || gameplayPort == port || gameplayPort == controlPort) throw new ArgumentException("Invalid control port");
                 control = new Player2Control(controlPort, session);
+                Application.runInBackground = true;
                 harnessCapture = new SceneCapture(session, ":view");
                 harnessServer = new StreamServer(0, Json.Object("type", "hello", "protocolVersion", 1,
                     "sessionId", session, "stream", "harness", "captureHz", hz), LogWorkerError);

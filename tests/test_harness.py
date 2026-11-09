@@ -158,6 +158,15 @@ class HarnessTests(unittest.TestCase):
         self.queue(spec('deliver_completed_dishes', 2))
         self.assertEqual(self.native.calls[-1], ('task', 'deliver_completed_dishes', 2, {}))
 
+    def test_run_now_does_not_focus_game_when_autonomous_control_is_available(self):
+        self.native.enable_queue()
+        self.bridge.poll()
+        self.bridge.focus = mock.Mock()
+        result = self.bridge.accept_plan(plan(tasks=[spec('wash_dishes')], edit='replace_active'),
+                                         context_of(self.bridge.state()), focus=True)
+        self.assertEqual(result['queue']['pending'][0]['spec']['action'], 'wash_dishes')
+        self.bridge.focus.assert_not_called()
+
     def test_assembly_forwards_explicit_ticket_and_resource_allocation(self):
         allocation = {'order_id': 'flow:One:7', 'bases': ['d1', 'd2'],
                       'components': ['d3'], 'equipment': ['d4', 'd5']}

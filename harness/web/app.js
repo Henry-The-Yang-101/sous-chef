@@ -50,7 +50,7 @@ const reasons = {
   player2_absent_or_ambiguous: 'Add Player 2 with Split Controller.',
   player2_not_ready: 'Player 2 is not ready yet.',
   paused: 'Unpause the round to run actions.',
-  input_suppressed: 'The game is blocking input. Return focus to the unpaused kitchen.',
+  input_suppressed: 'The game is temporarily blocking Player 2 input.',
   game_unfocused: 'Choose a destination to bring the game forward and navigate.',
   planning_budget_exceeded: 'The planner reached its time limit. Waiting for a complete live route search.',
   planning_in_progress: 'Checking the rest of the kitchen. Confirmed reachable destinations appear as they are verified.',
@@ -472,7 +472,7 @@ function showPhoneLink() {
   el('phone-status').textContent = !link
     ? shareStatus || 'No phone link available. Connect your Mac to a network.'
     : link.label === 'Internet'
-      ? 'Scan to connect through the internet. Keep this harness running and the game focused on your Mac.'
+      ? 'Scan to connect through the internet. Keep this harness and the game running on your Mac.'
       : `${shareStatus ? shareStatus + ' ' : ''}For this Wi-Fi link, keep your phone on the same Wi-Fi as your Mac.`;
   if (!link) return;
   qrObjectUrl = URL.createObjectURL(new Blob([link.qrSvg], {type: 'image/svg+xml'}));

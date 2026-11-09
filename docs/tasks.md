@@ -38,9 +38,9 @@ The existing interaction/logistics recovery window is also indefinite; time spen
 recovering suspends finite watchdogs. Button outcome verification remains bounded.
 New tasks and their child actions have no overall deadline.
 Suspension preserves the active task/action's request, cargo and ownership.
-Returning to the focused, unpaused kitchen revalidates navigation and resumes
-with action watchdogs adjusted for the time away. The kitchen itself continues
-running while unfocused, so native cooking and moving objects can change.
+When the kitchen accepts input again, the bridge revalidates navigation and
+resumes with action watchdogs adjusted for the suspension. Bridge 0.8.10 and
+later continue autonomous work while the game window is unfocused.
 Stop still cancels while suspended; raw manual input leases are not retained.
 
 The localhost Tasks panel uses `/api/task`, with the current `sessionId` and

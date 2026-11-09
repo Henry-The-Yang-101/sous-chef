@@ -70,7 +70,9 @@ def audit(args):
             choices = state['catalog']['semanticCatalog']['displayOptions']['preparationOptions']
             ingredient = next(i['id'] for i in choices if not i['utensil'] and i.get('preparations', {}).get('raw') == 'applicable')
             prep = task('prepare_near_player', {'player_id': 1, 'items': [{'ingredient': ingredient, 'preparation': 'raw', 'quantity': 1}]})
-            accept(bridge, [prep, prep])
+            chopped = next(i['id'] for i in choices if i['label'] == 'SushiFish')
+            chop = task('prepare_near_player', {'player_id': 1, 'items': [{'ingredient': chopped, 'preparation': 'chopped', 'quantity': 1}]})
+            accept(bridge, [prep, chop])
             state = pump(bridge, lambda s: s['queue']['active'] and s['queue']['active']['state'] == 'reconciling')
             first = state['queue']['active']
             report['scenarios']['lost_ack'] = {'taskId': first['id'], 'requestId': first['requestId'], 'state': first['state']}
@@ -78,19 +80,31 @@ def audit(args):
             bridge = HarnessBridge(args.port, journal_path=path, focus=lambda: (_ for _ in ()).throw(AssertionError('Unexpected autofocus')))
             state = pump(bridge, lambda s: s['queue']['active'] and s['queue']['active']['state'] != 'reconciling')
             assert state['queue']['active']['requestId'] == first['requestId']
+            sim.command(args.runtime, 'application-focus off')
+            bridge.poll()
+            bridge.scheduler.tick()
+            state = bridge.state()
+            assert state['control']['available'] and state['queue']['active']['state'] in ('running', 'waiting')
+            assert state['queue']['active']['requestId'] == first['requestId']
             sim.command(args.runtime, 'pause on')
             state = pump(bridge, lambda s: s['queue']['active']['state'] == 'suspended', 10)
             assert len(state['queue']['pending']) == 1
-            sim.command(args.runtime, 'input-focus off')
             sim.command(args.runtime, 'pause off')
-            state = pump(bridge, lambda s: s['control']['reason'] == 'game_unfocused', 10)
+            state = pump(bridge, lambda s: s['control']['available'] and s['queue']['active']
+                         and s['queue']['active']['state'] != 'suspended', 10)
             assert state['queue']['active']['requestId'] == first['requestId']
-            sim.command(args.runtime, 'input-focus on')
             state = pump(bridge, lambda s: len(s['queue']['outcomes']) == 2 and not s['queue']['active'])
             assert all(t['state'] == 'succeeded' for t in state['queue']['outcomes'])
+            status = sim.command(args.runtime, 'application-focus off')
+            assert status['simulatedUnfocused'] and all(not p['inputAllowed'] for p in status['players']), status
             report['scenarios']['restart_pause_sequence'] = state['queue']['outcomes']
             ctx = first['context']
             with ActionClient(args.port) as client:
+                try:
+                    client.claim()
+                except ControlError as error:
+                    assert 'game_unfocused' in str(error)
+                else: raise AssertionError('Manual input claim accepted while unfocused')
                 duplicate = client.execute(first['requestId'], ctx['epoch'], ctx['fence'], prep['action'], prep['arguments'])
                 assert duplicate['state'] == 'succeeded'
                 try:
@@ -99,6 +113,7 @@ def audit(args):
                     assert 'request_id_conflict' in str(error)
                 else: raise AssertionError('Conflicting payload accepted')
                 report['scenarios']['deduplication'] = duplicate
+            sim.command(args.runtime, 'application-focus on')
             # Run now is a fenced cancellation barrier, then a new dispatch.
             bridge.poll()
             accept(bridge, [task('monitor_equipment', count=None)])
@@ -131,6 +146,7 @@ def audit(args):
             assert state['queue']['paused'] and state['queue']['outcomes'][-1]['state'] == 'cancelled'
             report['scenarios']['round_reset'] = state['queue']['reason']
         finally:
+            sim.command(args.runtime, 'application-focus on')
             bridge.stop()
             bridge.close()
     report['passed'] = True

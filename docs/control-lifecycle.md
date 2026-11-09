@@ -1,4 +1,20 @@
-# Job focus and connection lifecycle — 2026-11-05
+# Job focus and connection lifecycle
+
+Bridge **0.8.10** starts and continues autonomous Player 2 actions while the
+game window is unfocused. The bridge keeps Unity updating in the background and
+bypasses the native focus check for the selected chef during autonomous
+validation and execution. Native menus, dialogs, pause, respawn and
+direct-control suppression still gate execution. Raw manual input requires the
+game to be focused and releases on focus loss.
+
+The scheduler audit exercises this in the windowless native game. The first
+preparation task keeps running through simulated focus loss. A game pause
+suspends it, and unpausing resumes the same request. The next queued task
+chops and delivers food while focus is still off. A raw manual claim is
+rejected in that state. The simulator's `application-focus off` fixture
+exercises the production focus gate without switching macOS windows.
+
+## Original lifecycle behavior (0.8.7)
 
 Bridge **0.8.7** suspends accepted autonomous work when the game loses focus,
 pauses, or temporarily suppresses P2 input, including respawn. Logical input is
@@ -21,7 +37,7 @@ The harness displays the suspension reason beside the active job and keeps Stop
 available. It no longer ties execution to a tab's lifetime or five-second
 heartbeat window. Cancellation does not park or discard held food.
 
-## Verification
+### Verification
 
 `python3 scripts/check.py` passed against the installed game assemblies:
 2,863 core/assembly assertions, 335 navigation checks, 784 action checks, and
@@ -59,7 +75,7 @@ Private evidence is under `.local/focus-lifecycle-audit-final/`, including
 screenshots. The audit's own simulator and harness were stopped afterward.
 The already-running interactive game and other runtimes were not replaced.
 
-## Reproduction
+### Reproduction
 
 ```sh
 python3 scripts/native_simulator.py --runtime .local/focus-lifecycle-native-final \

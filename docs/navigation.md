@@ -407,10 +407,9 @@ at a different object. `destinationId` remains null when idle. While navigating,
 `phase` distinguishes `walking`, `aligning`, `settling_ground`, `following_support`, `entering_portal`,
 `waiting_portal`, `waiting_portal_geometry`, `waiting_portal_route` and `teleporting`; all are interrupted by Stop.
 
-Read-only catalogues can be queried while the game is unfocused, provided the
-other native round, pause, menu and player gates pass. Movement still requires
-game focus and reports `game_unfocused` otherwise. The browser harness focuses
-the game only after the user clicks Navigate, then revalidates the exact target.
+Read-only catalogues and autonomous movement work while the game is unfocused
+on bridge 0.8.10 or later, subject to the native round, pause, menu and player
+gates. The harness revalidates the exact target before dispatch.
 Sequences remain internal to the direct-input lease. An autonomous action renews
 its own bounded input commands under durable ownership; the decision maker does
 not issue keepalive inputs. Closing/releasing its owning connection leaves the

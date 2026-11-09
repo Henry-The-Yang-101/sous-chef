@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Reflection.Emit;
+using HarmonyLib;
 using SousChef.Core;
 using SousChef.Plugin.Navigation;
 using SousChef.Plugin.Actions;
@@ -62,6 +65,9 @@ namespace SousChef.Plugin.Control
         private long navigationSequence;
         private readonly ControlLease lease = new ControlLease();
         private readonly ControlServer server;
+        private readonly Harmony focusPatch = new Harmony("dev.souschef.autonomous-input");
+        private static Player2Control focusOwner;
+        private static PlayerControls focusProbe;
         private readonly Stopwatch clock = Stopwatch.StartNew();
         private PlayerControls target;
         private Component flow;
@@ -96,7 +102,54 @@ namespace SousChef.Plugin.Control
             server = new ControlServer(port, Json.Object("type", "hello", "controlProtocolVersion", 1,
                 "sessionId", session, "bridgeVersion", BridgePlugin.Version, "player", 2, "mode", "direct_logical_input", "maxHoldMs", 1000, "actions", ActionRun.AllNames, "capabilities", CapabilityRegistry.Describe(), "receiptProtocolVersion", 1),
                 delegate(int client) { lease.Disconnect(client); });
-            server.Start();
+            try
+            {
+                focusPatch.Patch(AccessTools.Method(typeof(PlayerControls), nameof(PlayerControls.CanButtonBePressed)),
+                    transpiler: new HarmonyMethod(typeof(Player2Control), nameof(PatchFocusCheck)));
+                focusOwner = this;
+                server.Start();
+            }
+            catch { Dispose(); throw; }
+        }
+
+        private static bool InputFocused
+        {
+            get { return !NativeSimulator.BlockInputFocus && !NativeSimulator.SimulateUnfocused && Application.isFocused; }
+        }
+
+        // Replace just the native focus test. Menus, dialogs and direct-control
+        // suppression still run in the original CanButtonBePressed method.
+        private static IEnumerable<CodeInstruction> PatchFocusCheck(IEnumerable<CodeInstruction> instructions)
+        {
+            var focused = AccessTools.PropertyGetter(typeof(Application), nameof(Application.isFocused));
+            var allowsInput = AccessTools.Method(typeof(Player2Control), nameof(FocusAllowsInput));
+            foreach (var instruction in instructions)
+            {
+                if (instruction.opcode == OpCodes.Call && Equals(instruction.operand, focused))
+                {
+                    instruction.opcode = OpCodes.Ldarg_0;
+                    instruction.operand = null;
+                    yield return instruction;
+                    yield return new CodeInstruction(OpCodes.Call, allowsInput);
+                }
+                else yield return instruction;
+            }
+        }
+
+        private static bool FocusAllowsInput(PlayerControls chef)
+        {
+            if (ReferenceEquals(chef, focusProbe)) return true;
+            return InputFocused || (!NativeSimulator.BlockInputFocus && focusOwner != null &&
+                ReferenceEquals(chef, focusOwner.target) && focusOwner.Autonomous && focusOwner.HasLiveBindings());
+        }
+
+        private bool CanAutomate()
+        {
+            // This probe is synchronous on Unity's thread. Outside the probe,
+            // only the chef currently bound to an autonomous job can bypass focus.
+            focusProbe = target;
+            try { return target.CanButtonBePressed(); }
+            finally { focusProbe = null; }
         }
 
         public void Tick()
@@ -105,6 +158,7 @@ namespace SousChef.Plugin.Control
             KitchenGate gate = KitchenGate.Inspect();
             if (flow != gate.Flow) { Revoke("round_changed"); logistics.Reset("round_changed"); tasks.Reset("round_changed"); throwOptions.Reset(); semanticCatalog.Reset(); navigation.Reset("round_changed"); flow = gate.Flow; ChangeEpoch(); nextScan = 0; }
             if (Now >= nextScan) { Discover(); nextScan = Now + 0.25; }
+            if (scheme != null && !Autonomous && !InputFocused) Revoke("game_unfocused");
             string reason = Check(gate);
             bool preservingSuspension = PreservingSuspension(reason);
             if (preservingSuspension)
@@ -121,8 +175,6 @@ namespace SousChef.Plugin.Control
             bool observationAllowed = reason == null || (reason == "game_unfocused" && Check(gate, true) == null);
             if (reason != null && !preservingSuspension)
             {
-                // Manual input still releases on focus loss. Autonomous work is
-                // suspended above, retaining its request and read-only catalogue.
                 if (!observationAllowed) navigation.Invalidate(reason);
                 Revoke(reason);
             }
@@ -172,34 +224,26 @@ namespace SousChef.Plugin.Control
             if ((!target.enabled && !navigation.NativeTeleportInProgress(target)) || !target.gameObject.activeInHierarchy || target.ControlScheme == null ||
                 target.ControlScheme.Player != PlayerInputLookup.Player.Two) return "player2_not_ready";
             if (target.m_bRespawning) return "input_suppressed";
-            if (!target.CanButtonBePressed())
-            {
-                // A browser may inspect reachability while the game is unfocused.
-                // Replicate the remaining native button gates; never permit motion
-                // or ignore dialogs/menus merely because this is an observation.
-                if (!observation || NativeSimulator.InputFocused || !target.GetDirectlyUnderPlayerControl() ||
-                    T17DialogBoxManager.HasAnyOpenDialogs() || (T17InGameFlow.Instance != null &&
-                    T17InGameFlow.Instance.m_Rootmenu.GetCurrentOpenMenu() != null))
-                    return NativeSimulator.InputFocused ? "input_suppressed" : "game_unfocused";
-            }
+            if (!observation && NativeSimulator.BlockInputFocus) return "game_unfocused";
+            if (!CanAutomate()) return "input_suppressed";
             if (scheme != null && !OwnsBindings()) return "bindings_changed";
             return null;
         }
 
         // Recheck native gates at the actual read, including between Update and
         // FixedUpdate. Timeout/disconnect neutralizes values without a Unity call.
-        private bool CanRead()
+        private bool HasLiveBindings()
         {
             var serverFlow = flow as ServerFlowControllerBase;
-            return !disposed && target != null && target.enabled && target.gameObject.activeInHierarchy &&
-                target.ControlScheme == scheme && target.PlayerIDProvider != null &&
+            return !disposed && target != null && target.enabled && target.gameObject.activeInHierarchy && scheme != null &&
+                OwnsBindings() && target.PlayerIDProvider != null &&
                 target.PlayerIDProvider.GetID() == PlayerInputLookup.Player.Two &&
                 serverFlow != null && serverFlow.InRound && !TimeManager.IsPaused(TimeManager.PauseLayer.Main) &&
-                !target.m_bRespawning && target.CanButtonBePressed();
+                !target.m_bRespawning;
         }
         private ControlInput Input()
         {
-            bool allowed = CanRead(); double now = Now;
+            bool allowed = HasLiveBindings() && target.CanButtonBePressed(); double now = Now;
             ControlInput value = allowed ? lease.Read(now) : new ControlInput();
             if (traceInput && navigation.Action.State == "navigating" && lastWalk.sqrMagnitude > .001f &&
                 value.X == 0 && value.Y == 0 && Time.frameCount != lastExpiryFrame)
@@ -290,6 +334,7 @@ namespace SousChef.Plugin.Control
             {
                 Discover(); unavailable = Check(KitchenGate.Inspect());
                 if (unavailable != null) error = unavailable;
+                else if (!InputFocused) error = "game_unfocused";
                 else if (!lease.Claim(client, Now)) error = "already_claimed";
                 else { Restore(); Install(); }
             }
@@ -298,6 +343,7 @@ namespace SousChef.Plugin.Control
                 unavailable = Check(KitchenGate.Inspect());
                 if (navigation.Action.State == "navigating" || interactions.Run.Running || logistics.Run.Running || tasks.Run.Running) error = "action_in_progress";
                 else if (unavailable != null) { Revoke(unavailable); error = unavailable; }
+                else if (!InputFocused) { error = "game_unfocused"; Revoke(error); }
                 else error = lease.Set(client, command, Now);
             }
             else if (command.Operation == "release")
@@ -461,7 +507,13 @@ namespace SousChef.Plugin.Control
             scheme = null;
         }
         private void Revoke(string reason) { suspendedAt = -1; tasks.Cancel(reason); logistics.Cancel(reason); interactions.Cancel(reason); if (navigation.Action.State == "navigating") navigation.Stop(reason); lease.Revoke(reason); Restore(); }
-        public void Dispose() { disposed = true; Revoke("shutdown"); tasks.Reset("shutdown"); navigation.Dispose(); server.Dispose(); }
+        public void Dispose()
+        {
+            disposed = true;
+            if (focusOwner == this) focusOwner = null;
+            focusPatch.UnpatchSelf();
+            Revoke("shutdown"); tasks.Reset("shutdown"); navigation.Dispose(); server.Dispose();
+        }
 
         private sealed class Axis : ILogicalValue
         {
@@ -484,6 +536,9 @@ namespace SousChef.Plugin.Control
                 Update(false);
             }
             public override bool IsDown() { return read(); }
+            // IsDown reads only the gated bridge lease. Allow the native edge
+            // tracker to process those synthetic presses even in the background.
+            protected override bool CanProcessInput() { return true; }
             public override void GetLogicTreeData(out AcyclicGraph<ILogicalElement, LogicalLinkInfo> graph, out AcyclicGraph<ILogicalElement, LogicalLinkInfo>.Node head)
             { original.GetLogicTreeData(out graph, out head); }
         }

@@ -295,12 +295,13 @@ from P2's current foot pose and writes the production planner's decision,
 diagnostics and plan to `throw-probe.json`. It does not search alternate stances
 or release cargo. Both commands require the opt-in headless runtime below.
 
-`input-focus off` models the browser taking focus by closing the native input
-gate and the bridge's focus observation; `input-focus on` restores normal
-simulator input. This fixture does not change physics or acquire a control lease.
-The [harness throw cases](../tests/actions/native-throw-harness.json) require
-previews to finish while unfocused, direct throw commands to be rejected with
-cargo and chef pose retained, and delivery to succeed after focus is restored.
+`application-focus off` simulates an unfocused Unity application for the
+production chef focus gate. The scheduler audit uses it to verify background
+autonomy. `application-focus on` restores the actual focus value.
+`input-focus off` forces the legacy `game_unfocused` suspension until
+`input-focus on`. The [harness throw cases](../tests/actions/native-throw-harness.json)
+use this gate to check that read-only previews still run while execution is
+blocked and that the throw succeeds after input is restored.
 
 The [throw height cases](../tests/actions/native-throw-heights.json) exercise
 raised targets, downward deliveries, stair relocation and player catch heights.

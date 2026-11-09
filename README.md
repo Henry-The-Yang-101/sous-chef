@@ -4,7 +4,7 @@ A local observation and Player 2 control bridge for couch co-op in the native ma
 Overcooked! 2. The target is two separate local players, each controlling their
 own chef simultaneously. Online multiplayer is outside the supported scope.
 
-Bridge **0.8.9** adds [fenced execution receipts and the durable local task queue](docs/scheduler.md). The previous 0.8.8 release added a compact observation stream for the harness map, FPS and station contents. It [preserves accepted jobs across focus loss and harness disconnects](docs/control-lifecycle.md). Unfocusing suspends P2 until the game accepts input again; Stop cancels the job. It includes the [held-item task recovery](docs/held-item-regressions.md), [raft handoff and board scheduling fixes](docs/raft-handoff-regressions.md), and earlier [preparation fixes](docs/preparation-regressions.md).
+Bridge **0.8.10** lets [the task queue and autonomous Player 2 jobs run while the game is in the background](docs/control-lifecycle.md). Bridge **0.8.9** added [fenced execution receipts and the durable local task queue](docs/scheduler.md). The 0.8.8 release added a compact observation stream for the harness map, FPS and station contents. It includes the [held-item task recovery](docs/held-item-regressions.md), [raft handoff and board scheduling fixes](docs/raft-handoff-regressions.md), and earlier [preparation fixes](docs/preparation-regressions.md).
 
 Bridge 0.5 adds [first-layer interaction actions](docs/actions.md): pickup,
 placement, ingredient addition, work, activation, disposal, typed waits, and
@@ -23,7 +23,7 @@ Run `python3 -m harness.server` for a [live clickable action harness](docs/harne
 at [localhost:8765](http://127.0.0.1:8765). It shows dispenser food names and
 walking/direct distances, with a Cloudflare HTTPS QR link for phone access when
 `cloudflared` is installed (in PATH or `.tools/cloudflared`). Use `--no-tunnel`
-for same-Wi-Fi access. The game can stay focused on your Mac.
+for same-Wi-Fi access.
 It captures active kitchens, including paused rounds. Outside a round it sends
 status messages without a map, so consumers cannot mistake the level selector
 for a kitchen.
