@@ -8,7 +8,7 @@ namespace SousChef.Plugin.Actions
     internal sealed partial class TaskActions
     {
         partial void RegisterPreparation()
-        { Register("prepare_near_player", PreparationAvailable, PrepareNearPlayer); }
+        { RegisterForRequest("prepare_near_player", PreparationAvailable, PrepareNearPlayer); }
         // Resolve aliases against the native spawn trees once per selector
         // observation, not once per candidate (raw and chopped may share a name).
         private HashSet<string> PreparationIdentities(string selector, bool processed)
@@ -71,13 +71,12 @@ namespace SousChef.Plugin.Actions
             }
             return best;
         }
-        private bool PreparationAvailable()
+        private bool PreparationAvailable(TaskRequest desired)
         {
-            if (Human() == null) return false;
-            foreach (LogisticsItem item in inventory.Items)
-                if ((item.IngredientId != null || item.CleanPlate || item.UtensilType != null) &&
-                    Obtainable(item, item.CleanPlate ? "get_plate" : "move_item")) return true;
-            return false;
+            // Source and route availability are handled by the running plan.
+            // A conveyor spawn or a route may become usable after dispatch.
+            if (desired != null) return Human(desired.Player) != null;
+            return Human(1) != null || Human(3) != null || Human(4) != null;
         }
         private bool HeldPreparation(GameObject held, PreparationRequest desired)
         {

@@ -23,7 +23,7 @@ namespace SousChef.Plugin.Actions
     internal sealed class TaskDefinition
     {
         public string Name;
-        public Func<bool> Available;
+        public Func<TaskRequest, bool> Available;
         public Func<IEnumerable<TaskStep>> Plan;
     }
     // One durable request and lease. Iterators advance only after observed child
@@ -58,6 +58,8 @@ namespace SousChef.Plugin.Actions
         partial void RegisterDishDelivery();
         partial void RegisterAssembly();
         private void Register(string name, Func<bool> available, Func<IEnumerable<TaskStep>> steps)
+        { RegisterForRequest(name, _ => available(), steps); }
+        private void RegisterForRequest(string name, Func<TaskRequest, bool> available, Func<IEnumerable<TaskStep>> steps)
         { definitions.Add(name, new TaskDefinition { Name = name, Available = available, Plan = steps }); }
         public object Describe()
         {
@@ -81,7 +83,7 @@ namespace SousChef.Plugin.Actions
             }
             // Exact bindings must fail specifically even when no tickets remain;
             // generic availability cannot turn an expired allocation into a wait.
-            if (!definition.Available()) return "task_not_available";
+            if (!definition.Available(request)) return "task_not_available";
             pendingDeliveries.Clear(); nextDeliveryCheck = 0;
             preparation = null; completed = completedSteps = 0; childStarted = false; waitingReason = null; observationError = null; handoffEvidence = null; step = null; plan = definition.Plan().GetEnumerator(); retryAt = 0;
             command.Indefinite = true; Run.Start(owner, command, Time.realtimeSinceStartup); input(0); return null;
@@ -268,7 +270,7 @@ namespace SousChef.Plugin.Actions
             {
                 try
                 {
-                    bool eligible = pair.Value.Available();
+                    bool eligible = pair.Value.Available(null);
                     if (eligible) choices.Add(Json.Object("name", pair.Key));
                     applicability[pair.Key] = Json.Object("state", eligible ? "applicable" : "unknown",
                         "reason", eligible ? "native_start_preconditions_observed" : "native_start_preconditions_not_met");
