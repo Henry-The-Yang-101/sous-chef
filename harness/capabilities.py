@@ -56,6 +56,11 @@ def assess_arguments(name, arguments, semantic):
         checks.append({'state': state, 'reason': reason, 'path': path})
     if not semantic or semantic.get('error'):
         add('unknown', 'semantic_observation_unavailable', 'arguments')
+    elif name == 'navigate_to' and semantic.get('movement'):
+        movement = semantic['movement']
+        candidates = movement.get('points', []) + movement.get('platforms', []) + movement.get('stations', [])
+        found = next((c for c in candidates if c['id'] == args['destination_id']), None)
+        add('applicable' if found else 'not_applicable', 'registered_movement_binding' if found else 'movement_binding_stale', 'destination_id')
     elif name == 'prepare_near_player':
         players = {p.get('playerId') for p in semantic.get('players', [])}
         add('applicable' if args['player_id'] in players else 'unknown', 'recipient_observation', 'player_id')

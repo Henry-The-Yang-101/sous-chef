@@ -96,13 +96,17 @@ class KitchenPicker {
     points.push(...Array.from(this.targets.values()).map(d => [d.position[0], d.position[2]]),
       ...(map.players || []).map(p => [p.position[0], p.position[2]]));
     if (!points.length) points.push([-1, -1], [1, 1]);
-    const xs = points.map(p => p[0]), zs = points.map(p => p[1]);
+    const orientation = map.orientation;
+    const oriented = p => orientation?.known
+      ? [p[0] * orientation.right[0] + p[1] * orientation.right[2], p[0] * orientation.up[0] + p[1] * orientation.up[2]] : p;
+    const facingPoints = points.map(oriented);
+    const xs = facingPoints.map(p => p[0]), zs = facingPoints.map(p => p[1]);
     const minX = Math.min(...xs) - .9, maxX = Math.max(...xs) + .9;
     const minZ = Math.min(...zs) - .9, maxZ = Math.max(...zs) + .9;
     const scale = Math.min(1000 / (maxX - minX), 600 / (maxZ - minZ));
     const centerX = (maxX + minX) / 2, centerZ = (maxZ + minZ) / 2;
-    const project = p => [500 + (p[0] - centerX) * scale, 300 - (p[1] - centerZ) * scale];
-    const geometrySignature = JSON.stringify([shapes, minX, maxX, minZ, maxZ]);
+    const project = point => { const p = oriented(point); return [500 + (p[0] - centerX) * scale, 300 - (p[1] - centerZ) * scale]; };
+    const geometrySignature = JSON.stringify([shapes, minX, maxX, minZ, maxZ, orientation]);
     if (geometrySignature !== this.geometrySignature) {
       this.geometrySignature = geometrySignature;
       const paths = [...shapes].sort((a, b) => ({ground: 0, counter: 1, wall: 2}[a.kind] - ({ground: 0, counter: 1, wall: 2}[b.kind])) || a.height - b.height).map(shape => {

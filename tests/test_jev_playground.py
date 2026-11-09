@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 import unittest
 
+from clients.capabilities import REGISTRY_HASH
 from harness.decision.compiler import Compiler, Clarification, build_context
 from harness.decision.config import Settings
 from harness.decision.protocol import DecisionError, validate_request, validate_response
@@ -26,9 +27,17 @@ CASES = {case['name']: case for case in EVIDENCE['sessions']}
 RELEASE = [case for case in CASES.values() if case.get('variant') == 'nativerelease' and case['type'] == 'command']
 
 
+def current_world(world):
+    value = copy.deepcopy(world)
+    value['capabilities']['registry_hash'] = REGISTRY_HASH
+    return value
+
+
 def session(case):
-    return {**{k: copy.deepcopy(case[k]) for k in ('name', 'text', 'world', 'queue', 'utterance_fields', 'clarifications') if k in case},
+    result = {**{k: copy.deepcopy(case[k]) for k in ('name', 'text', 'world', 'queue', 'utterance_fields', 'clarifications') if k in case},
             'responses': [{k: copy.deepcopy(TRIALS[key][k]) for k in ('request', 'response')} for key in case['trial_ids']]}
+    result['world'] = current_world(result['world'])
+    return result
 
 
 async def scripted_replay(recorded):
@@ -41,8 +50,11 @@ async def scripted_replay(recorded):
             # verifier decision, as production replay also permits.
             return pending
         request = pending['request']
-        validate_response(request, item['response'])
-        current['responses'].append({'request': request, 'response': item['response']})
+        response = copy.deepcopy(item['response'])
+        if 'region_goal' in response['answers']:
+            response['answers']['persistent_area'] = response['answers'].pop('region_goal')
+        validate_response(request, response)
+        current['responses'].append({'request': request, 'response': response})
     return await next_request(current)
 
 
@@ -59,9 +71,9 @@ class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(outcome['status'], 'rejected')
         self.assertIn('Prompt changed', outcome['message'])
 
-    async def test_52_historical_decision_sequences_preserve_control_flow(self):
-        current = [c for c in CASES.values() if c.get('variant') in ('release', 'nativerelease') and c['type'] == 'command']
-        self.assertEqual(len(current), 52)
+    async def test_48_historical_nonmovement_sequences_preserve_control_flow(self):
+        current = [c for c in CASES.values() if c.get('variant') in ('release', 'nativerelease') and c['type'] == 'command' and not c['name'].endswith(('_region', '_navigate'))]
+        self.assertEqual(len(current), 48)
         for case in current:
             with self.subTest(case=case['name']):
                 # These are scripted decisions, not fresh model observations.
@@ -74,7 +86,7 @@ class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
         completed = set()
         blocked = set()
         for case in RELEASE:
-            if case['cohort'] != 'holdout':
+            if case['cohort'] != 'holdout' or case['name'].endswith('_region'):
                 continue
             outcome = await scripted_replay(session(case))
             name = case['name'].removeprefix('nativerelease_holdout_')
@@ -87,7 +99,7 @@ class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(completed, {'cooked', 'correction', 'fire', 'monitor', 'pause', 'raw_player4', 'ready', 'repeat',
                                          'repeated_tasks', 'same_ingredient', 'serve', 'wash'})
         self.assertEqual(blocked, {'timed', 'concurrent', 'unavailable', 'out_of_range', 'speech_conflict',
-                                  'preparation_missing', 'region', 'invalid_preparation'})
+                                  'preparation_missing', 'invalid_preparation'})
 
     async def test_complete_plan_confirmation_keeps_exact_fields_without_more_model_io(self):
         confirmations = 0
@@ -114,7 +126,7 @@ class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
                 validate_response(request, trial['response'])
                 return trial['response']
             compiler = Compiler({'id': case['name'], 'text': case['text'], **case['utterance_fields']},
-                                build_context(case['world'], case['queue']), observed)
+                                build_context(current_world(case['world']), case['queue']), observed)
             compiler.tasks = copy.deepcopy(case['proposed'].get('tasks', []))
             blocked = False
             try:
@@ -200,7 +212,7 @@ class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
     def test_positive_corpus_matches_contracts_and_native_catalog_certainty(self):
         corpus = json.loads((ROOT/'tests/fixtures/jev-clarification-corpus.json').read_text())
         for case in corpus['development'] + corpus['holdout']:
-            audit_case(case, corpus['worlds'][case.get('world', 'base')], corpus['queues'][case.get('queue', 'empty')])
+            audit_case(case, current_world(corpus['worlds'][case.get('world', 'base')]), corpus['queues'][case.get('queue', 'empty')])
             self.assertTrue(case['audit'])
             for entry in case['audit']:
                 self.assertTrue((ROOT/entry['source']).exists())

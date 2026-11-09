@@ -253,7 +253,7 @@ function renderMap(catalog, visible, destinations, busy, live) {
   const all = new Map([...destinations, ...(displayOptions(visible).deliveryDestinations || []), ...choices].map(d => [d.id, d]));
   const map = state?.kitchenMap;
   const mapLive = live && map && performance.now() - receivedAt + (map.ageMs || 0) <= 1500;
-  mapPicker.render(mapLive ? map : null, Array.from(all.values()), choices, selected?.id, live);
+  mapPicker.render(mapLive ? {...map, orientation: state?.catalog?.semanticCatalog?.movement?.orientation} : null, Array.from(all.values()), choices, selected?.id, live);
   el('map-action-controls').hidden = mode !== 'action';
   setJobOptions(el('map-action'), selected ? actionChoices(selected) : []);
   if (selected && !el('map-action').value) el('map-action').selectedIndex = 1;
@@ -291,7 +291,7 @@ function render() {
   el('connection').textContent = live ? 'Bridge connected' : state?.connected ? 'State stale' : 'Bridge disconnected';
   el('light').className = 'light ' + (live ? 'live' : 'offline');
   el('freshness').textContent = live ? `Updated ${Math.max(0, Math.round((state.ageMs || 0) + performance.now() - receivedAt))} ms ago` : 'Waiting for a fresh sample';
-  el('action').textContent = acting ? `${receipt.operation === 'task' ? taskLabels()[receipt.details?.taskAction] || 'Task' : actionNames[receipt.operation] || receipt.operation} · ${phaseNames[receipt.phase] || receipt.phase.replaceAll('_', ' ')}` : moving ? `${nav.phase === 'aligning' ? 'Aligning with' : 'Walking to'} ${active ? nameOf(active) : nav.destinationId}` : live ? 'Player 2 is idle' : 'Waiting for the bridge';
+  el('action').textContent = acting ? `${receipt.operation === 'task' ? taskLabels()[receipt.details?.taskAction] || 'Task' : actionNames[receipt.operation] || receipt.operation} · ${phaseNames[receipt.phase] || receipt.phase.replaceAll('_', ' ')}` : moving ? `${nav.phase === 'waiting_route' ? 'Waiting to reach' : nav.phase === 'aligning' ? 'Aligning with' : 'Walking to'} ${active ? nameOf(active) : nav.destinationId}` : live ? 'Player 2 is idle' : 'Waiting for the bridge';
   el('target').textContent = receipt.operation === 'task'
     ? `${receipt.details?.completedRepetitions || 0} repetitions completed${receipt.details?.infinite ? ' · until stopped' : ` of ${receipt.details?.repetitions || 1}`}`
     : active
@@ -302,7 +302,7 @@ function render() {
   el('result').textContent = busy && control.suspended
     ? control.reason === 'game_unfocused' ? 'Suspended while the game is unfocused. Return to the game to resume, or press Stop to cancel.'
       : 'Suspended while the game blocks input. The same job resumes when input is available. Stop cancels it.'
-    : useReceipt ? `${receipt.state}: ${explain(receipt.reason) || 'Checking the requested outcome.'}` : moving ? 'The plugin is navigating and checking final alignment. Stop interrupts it.'
+    : useReceipt ? `${receipt.state}: ${explain(receipt.reason) || 'Checking the requested outcome.'}` : moving ? (nav.phase === 'waiting_route' ? 'Waiting for a checked route to the selected destination. Stop cancels the wait.' : 'Walking to the selected destination and verifying arrival. Stop interrupts it.')
     : live ? explain(nav.reason) + (nav.reason === 'arrived' && possible ? ` Available at arrival: ${possible}.` : '') : '';
   const error = lastError || (!live && state?.error) || '';
   el('error').hidden = !error;
@@ -777,10 +777,10 @@ function renderInterpreter() {
     const repeat = task.repeat.mode === 'until_cancelled' ? 'until cancelled' : `${task.repeat.count} ×`;
     const items = task.arguments.items?.map(item => `${item.quantity} ${item.preparation} ${item.ingredient}`).join(', ');
     const semantic = state.capabilities?.semantic_catalog || state.catalog?.semanticCatalog || {};
-    const targets = [...(semantic.targets || []), ...(semantic.players || []), ...(semantic.displayOptions?.items || [])];
+    const targets = [...(outcome.movement || []), ...(semantic.targets || []), ...(semantic.players || []), ...(semantic.displayOptions?.items || []), ...(semantic.movement?.stations || []), ...(semantic.movement?.platforms || []), ...(semantic.movement?.points || [])];
     const argumentsText = Object.entries(task.arguments).map(([field, value]) => {
       const target = targets.find(target => target.id === value);
-      const label = target ? `${target.label || value} (${value})` : typeof value === 'object' ? JSON.stringify(value) : String(value).replaceAll('_', ' ');
+      const label = target ? `${target.label || (target.binding === 'floor' ? 'Floor position' : value)}${target.screen ? ` · ${target.screen.up < 1/3 ? 'bottom' : target.screen.up > 2/3 ? 'top' : 'middle'} ${target.screen.right < 1/3 ? 'left' : target.screen.right > 2/3 ? 'right' : 'centre'}` : ''} (${value})` : typeof value === 'object' ? JSON.stringify(value) : String(value).replaceAll('_', ' ');
       return `${field.replaceAll('_', ' ')}: ${label}`;
     }).join('; ');
     const detail = items ? `${items} for Player ${task.arguments.player_id}` : argumentsText;

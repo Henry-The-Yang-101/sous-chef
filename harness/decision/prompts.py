@@ -53,10 +53,11 @@ EXECUTION_CONSTRAINTS = {
         'Return YES for a specified duration or an external stopping event. '
         'Return NO for a finite repetition count, natural task completion, until the user cancels, or starting a task after previous work finishes. '
         'Ignore any negated condition; apply corrections.'},
-    'region_goal': {'type': 'noul', 'instructions':
-        'Does the utterance request movement to a kitchen AREA or relative region rather than a named object or exact target? '
-        'Return YES for region destinations. Movement to a specific station, item or player is NO; no movement request is also NO. '
-        'Judge the requested destination, not physical reachability. Respect negations and corrections.'}}
+    'persistent_area': {'type': 'noul', 'instructions':
+        'Does the utterance impose an ongoing requirement to stay in an area while doing other work? '
+        'Return YES for persistent area constraints such as staying on the bottom while washing. '
+        'Return NO for walking to a floor area, platform or station and arriving idle, or walking there then doing a task. '
+        'Ordinary directional movement is supported through grounded destinations. Respect negations and corrections.'}}
 
 # Interpretation notes refine existing contracts; they neither enable a task nor
 # replace registry limits, candidate generation or native feasibility checks.

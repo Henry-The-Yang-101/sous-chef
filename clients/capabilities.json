@@ -443,7 +443,7 @@
       "category": "navigation",
       "version": 1,
       "label": "Navigate",
-      "description": "Navigate using the existing native executor.",
+      "description": "Walk to a registered station/object, physical platform or floor position, without interacting. Directional destinations use observed camera-oriented spatial context.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -464,16 +464,19 @@
         "default": 1
       },
       "candidate_sources": [
-        "destinations"
+        "semanticCatalog.movement.stations",
+        "semanticCatalog.movement.platforms",
+        "semanticCatalog.movement.points"
       ],
       "start_preconditions": [
-        "Fresh exact target/source and native compatibility, cargo, route and input gates; one P2 owner."
+        "Fresh registered destination in the current kitchen and one P2 owner. Blocked or unknown routes wait with neutral input until a native checked route exists."
       ],
-      "completion_evidence": "Native checked route arrival and stable facing; may report positioned_no_action.",
-      "cancellation": "Stop neutralizes input; an already released throw or committed transfer cannot be undone.",
+      "completion_evidence": "Stable arrival at the exact station approach or registered support-local point, on the correct support and height layer. No work, pickup, placement or cargo manipulation.",
+      "cancellation": "Stop neutralizes input and cancels waiting or walking; suspension preserves the binding.",
       "checkpoint_resume": false,
       "limitations": [
-        "Target options and conditions must be checked live; a possible operation is not start permission."
+        "A finite repositioning only; persistent area assignments are unsupported.",
+        "No invented coordinates or predicted future crossings. Incomplete coverage remains unknown."
       ],
       "wire_arguments": [
         "destination_id"

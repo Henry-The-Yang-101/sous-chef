@@ -205,7 +205,7 @@ class InterpreterService:
                        'ambiguous': 'Cannot tell whether this revises the original or adds independent work.'}
             request = {'model': MODEL, 'state': {'unfinished_command': active['compiler'].command['text'],
                                                'new_utterance': incoming['text'],
-                                               **({'unfinished_interpretation': Compiler.describe(active['compiler'].tasks)}
+                                               **({'unfinished_interpretation': active['compiler'].describe(active['compiler'].tasks)}
                                                   if active['compiler'].tasks else {})},
                        'questions': {'relationship': choice('Classify how the new utterance relates to the unfinished command. '
                            'No work from the unfinished command has been accepted yet. Do not treat an explicit correction as appended work.' + examples('relationship'), options)}}
@@ -343,7 +343,17 @@ class InterpreterService:
         def targets(semantic):
             return {t['id']: t.get('objectInstanceId') for t in semantic.get('targets', []) + semantic.get('displayOptions', {}).get('items', []) if 'id' in t}
         old, new = targets(before), targets(after)
+        def movement(semantic):
+            value = semantic.get('movement') or {}
+            entries = value.get('points', []) + value.get('platforms', []) + value.get('stations', [])
+            return {c['id']: (value.get('epoch'), c.get('binding'), c.get('objectInstanceId'),
+                             c.get('supportId'), c.get('supportLocalPosition')) for c in entries}
+        old_movement, new_movement = movement(before), movement(after)
         for task in plan['tasks']:
+            if task['action'] == 'navigate_to' and before.get('movement'):
+                reference = task['arguments']['destination_id']
+                if reference not in old_movement or old_movement[reference] != new_movement.get(reference):
+                    raise DecisionError('The movement destination changed or belongs to another kitchen; submit again')
             # Ingredient and player semantics may be late bound; exact native
             # destination IDs must retain their observed object identity.
             for value in task['arguments'].values():

@@ -30,6 +30,9 @@ def world():
             {'id': 'onion', 'label': 'Onion', 'preparations': {'raw': 'applicable', 'chopped': 'applicable'}},
             {'id': 'rice', 'label': 'Rice', 'preparations': {'raw': 'applicable', 'cooked': 'applicable'}},
         ]}}
+    result['capabilities']['semantic_catalog']['movement'] = {
+        'epoch': 'kitchen', 'stations': [{'id': 'd1', 'objectInstanceId': 20, 'label': 'Sink',
+        'binding': 'station', 'position': [0,0,0]}], 'points': [], 'platforms': []}
     return result
 
 
@@ -38,7 +41,7 @@ def response(request, selections=None):
     answers = {}
     for key, question in request['questions'].items():
         if question['type'] == 'noul':
-            default = 0.0 if key in ('concurrent_duties', 'external_deadline', 'region_goal') else 1.0
+            default = 0.0 if key in ('concurrent_duties', 'external_deadline', 'persistent_area') else 1.0
             answers[key] = {'type': 'noul', 'noul': selections.get(key, default)}
         else:
             default = {'route': 'task_plan', 'queue_edit': 'append', 'simple': 'staged',
@@ -172,7 +175,7 @@ class CompilerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(s.requests[1]['state']['scheduler']['pending'][0]['id'], 'queued')
 
     async def test_constraint_vetoes_do_not_replace_whole_plan_verification(self):
-        for field in ('concurrent_duties', 'external_deadline', 'region_goal'):
+        for field in ('concurrent_duties', 'external_deadline', 'persistent_area'):
             with self.subTest(field=field):
                 c, script = compiler('A request with an unsupported constraint', [{field: .85}])
                 with self.assertRaises(Unsupported): await c.compile()
@@ -235,7 +238,7 @@ class CompilerTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_native_verification_includes_the_selected_target_meaning(self):
         c, script = compiler('Go stand at the sink', [{'simple_coverage': 0}, {'next_task': 'native_action'},
-            {'action': 'navigate_to'}, {'destination_id': 'value_0'}, {}, {'next_task': 'done'}, {}])
+            {'action': 'navigate_to'}, {'binding': 'station'}, {'d1': 1}, {}, {'next_task': 'done'}, {}])
         result = await c.compile()
         self.assertEqual(result['plan']['after_plan'], 'pause_pending')
         self.assertEqual(script.requests[-1]['state']['world']['targets'][0]['label'], 'Sink')
