@@ -81,6 +81,7 @@ namespace SousChef.Plugin
                 if (aimingCannon != null && Time.realtimeSinceStartup >= aimUntil)
                 { aimingCannon.AssignPlayer(savedCannonControls); aimingCannon = null; }
                 if (error == null) Bootstrap();
+                TickTeammateWalk();
                 if (!introReady && loadedGeneration == generation && generation > 0)
                 {
                     introReady = KitchenGate.Inspect().InRound;
@@ -118,6 +119,7 @@ namespace SousChef.Plugin
                         }
                         else if (value.StartsWith("stage-portal ", StringComparison.Ordinal)) StagePortal(Int32.Parse(value.Substring(13)));
                         else if (value.StartsWith("stage-player ", StringComparison.Ordinal)) StagePlayer(value.Substring(13));
+                        else if (value.StartsWith("walk-teammate ", StringComparison.Ordinal)) WalkTeammate(value.Substring(14));
                         else if (value.StartsWith("probe-throw ", StringComparison.Ordinal)) ProbeThrow(Int32.Parse(value.Substring(12)));
                         else if (value.StartsWith("probe-walk ", StringComparison.Ordinal)) ProbeWalk(value.Substring(11));
                         else if (value.StartsWith("interrupt-target ", StringComparison.Ordinal)) InterruptTarget(value.Substring(17));
@@ -449,6 +451,7 @@ namespace SousChef.Plugin
                 if (variant != null && variant.SceneName == level) { match = variant; break; }
             }
             if (match == null) throw new ArgumentException("Unknown two-player kitchen: " + level);
+            FinishTeammateWalk("level_changed");
             advanceFlow = null;
             requested = level; generation++; phase = "loading"; introReady = false; nextIntroSkip = Time.realtimeSinceStartup + 1f;
             session.LevelSettings = new GameSession.GameLevelSettings { SceneDirectoryVarientEntry = match };
@@ -486,6 +489,7 @@ namespace SousChef.Plugin
         }
         private void OnDestroy()
         {
+            FinishTeammateWalk("stopped");
             if (aimingCannon != null) aimingCannon.AssignPlayer(savedCannonControls);
             SceneManager.sceneLoaded -= OnSceneLoaded;
             advanceFlow = null;
