@@ -760,17 +760,27 @@ function renderInterpreter() {
   const current = state?.interpreter;
   const armed = !!current?.configured && state?.voice && !state.voice.muted && !!token;
   const resolvingReply = ['interpreting_reply', 'interpreting_followup'].includes(current?.status);
+  const waiting = current?.pending;
+  const question = waiting?.kind === 'clarification' ? waiting : null;
   el('interpreter-status').textContent = !current?.configured
     ? current?.configurationError || 'Jev is not configured. Add JEV_API_KEY to .env and restart the harness.'
-    : `${current.mode === 'preview' ? 'Preview · acceptance requires your click' : 'Automatic · validated plans enter the queue'} · ${current.status.replaceAll('_', ' ')}${current.inbox ? ` · ${current.inbox} waiting` : ''}`;
+    : question ? '' : `${current.mode === 'preview' ? 'Preview · acceptance requires your click' : 'Automatic · validated plans enter the queue'} · ${current.status.replaceAll('_', ' ')}${current.inbox ? ` · ${current.inbox} waiting` : ''}`;
   el('interpreter-enable').disabled = !current?.configured || !state?.voice?.muteAcknowledged || interpreterBusy;
   el('interpreter-mode').disabled = !current || interpreterBusy || !!current.pending || ['interpreting', 'interpreting_reply'].includes(current.status);
   if (current) el('interpreter-mode').value = current.mode;
   el('interpreter-submit').disabled = !armed || interpreterBusy || current?.status === 'interpreting_reply' || current?.inbox >= 3;
   el('interpreter-text').disabled = !armed;
+  el('interpreter-label').textContent = question ? 'Type a reply' : 'Type a command';
+  el('interpreter-submit').textContent = question ? 'Send reply' : 'Send command';
+  el('interpreter-text').placeholder = question ? '' : 'Bring me cooked rice';
   const outcome = current?.result;
   const edit = outcome?.plan?.queue_edit || outcome?.edit?.operation;
-  el('interpreter-message').textContent = outcome?.message || (edit ? `Queue change: ${edit.replaceAll('_', ' ')}` : '');
+  let message = outcome?.message || (edit ? `Queue change: ${edit.replaceAll('_', ' ')}` : '');
+  if (question) message = '';
+  else if (current?.status === 'expired' && message === 'Interpretation expired') {
+    message = 'This command expired before it was queued. Say it again or type it below.';
+  }
+  el('interpreter-message').textContent = message;
   const tasks = outcome?.plan?.tasks || [];
   el('interpreter-plan').replaceChildren(...tasks.map(task => {
     const li = document.createElement('li');
@@ -788,15 +798,27 @@ function renderInterpreter() {
     return li;
   }));
   if (tasks.length) el('interpreter-message').textContent = `Queue change: ${edit.replaceAll('_', ' ')}${outcome.plan.after_plan === 'pause_pending' ? ' · pause retained work afterwards' : ''}`;
-  const waiting = current?.pending;
-  el('interpreter-question').textContent = waiting?.kind === 'clarification' ? `${waiting.question} (${waiting.remainingSeconds}s remaining)` : '';
-  const signature = JSON.stringify([waiting?.id, waiting?.options, armed, interpreterBusy, resolvingReply]);
+  el('interpreter-clarification').hidden = !question;
+  const questionHeading = el('interpreter-question');
+  const questionText = question?.question || '';
+  if (questionHeading.textContent !== questionText) questionHeading.textContent = questionText;
+  el('interpreter-clarification-note').textContent = question
+    ? `Command on hold · ${question.remainingSeconds}s to reply` : '';
+  const shortLabels = new Map([
+    ['prepare_near_player', 'Bring ingredients or utensils'],
+    ['native_action', 'Move or interact with something'],
+    ['done', 'Nothing else'],
+  ]);
+  const answers = Object.entries(question?.options || {}).map(([key, description]) => {
+    return [key, shortLabels.get(key) || capability(key)?.label || description];
+  });
+  const signature = JSON.stringify([question?.id, answers, armed, interpreterBusy, resolvingReply]);
   if (signature !== interpreterAnswers) {
     interpreterAnswers = signature;
-    el('interpreter-answers').replaceChildren(...Object.entries(waiting?.options || {}).map(([key, label]) => {
+    el('interpreter-answers').replaceChildren(...answers.map(([key, label]) => {
       const button = document.createElement('button'); button.type = 'button'; button.textContent = label;
       button.disabled = !armed || interpreterBusy || resolvingReply;
-      button.addEventListener('click', () => interpreterControl('answer', {id: waiting.id, key}));
+      button.addEventListener('click', () => interpreterControl('answer', {id: question.id, key}));
       return button;
     }));
   }

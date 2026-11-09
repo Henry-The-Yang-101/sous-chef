@@ -60,15 +60,18 @@
           <button id="interpreter-enable" type="button">Enable typed Jev commands</button>
           <label>Acceptance <select id="interpreter-mode"><option value="preview">Preview · review each plan</option><option value="automatic">Automatic · accept validated plans</option></select></label>
         </div>
-        <form id="interpreter-form">
-          <label for="interpreter-text">Command or clarification reply</label>
-          <textarea id="interpreter-text" rows="2" maxlength="4000" placeholder="Bring me two chopped carrots, then wash dishes" required></textarea>
-          <button id="interpreter-submit" type="submit">Interpret</button>
-        </form>
         <p id="interpreter-message" role="status"></p>
         <ol id="interpreter-plan"></ol>
-        <p id="interpreter-question"></p>
-        <div id="interpreter-answers" class="queue-buttons"></div>
+        <div id="interpreter-clarification" hidden>
+          <h4 id="interpreter-question" aria-live="polite"></h4>
+          <p id="interpreter-clarification-note"></p>
+          <div id="interpreter-answers" class="queue-buttons" role="group" aria-labelledby="interpreter-question"></div>
+        </div>
+        <form id="interpreter-form">
+          <label id="interpreter-label" for="interpreter-text">Type a command</label>
+          <textarea id="interpreter-text" rows="2" maxlength="4000" placeholder="Bring me cooked rice" required></textarea>
+          <button id="interpreter-submit" type="submit">Send command</button>
+        </form>
         <div class="queue-buttons">
           <button id="interpreter-accept" type="button" hidden>Accept this preview</button>
           <button id="interpreter-discard" type="button" hidden>Discard unfinished command</button>

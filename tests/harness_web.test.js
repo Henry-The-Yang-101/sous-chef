@@ -63,6 +63,43 @@ test('interpreter preview exposes exact native arguments and blocks accept durin
   assert.equal(el('interpreter-accept').disabled, true);
 });
 
+test('task clarification shows short choices and keeps their original answer keys', () => {
+  const {context: c, el} = fixture();
+  const question = 'What should happen next in this command?';
+  const answers = [];
+  Object.assign(c, {
+    token: 'fixture', interpreterBusy: false, interpreterFailure: '', interpreterAnswers: '',
+    document: {createElement: () => ({addEventListener: (event, click) => answers.push(click)})},
+    interpreterControl: (operation, fields) => assert.deepEqual(
+      [operation, fields.id, fields.key], ['answer', 'clarification', 'prepare_near_player']),
+  });
+  Object.assign(c.state, {voice: {muted: false}, interpreter: {
+    configured: true, mode: 'automatic', status: 'clarification', result: {message: question},
+    pending: {id: 'clarification', kind: 'clarification', question, remainingSeconds: 82, options: {
+      prepare_near_player: 'Prepare and give to player. Detailed model instructions.',
+      take_ready: 'Take ready food off heat. Detailed model instructions.',
+      done: 'All requested occurrences have already been represented.',
+    }},
+  }});
+  vm.runInContext(source.slice(source.indexOf('function renderInterpreter()'), source.indexOf('async function interpreterControl(')), c);
+  c.renderInterpreter();
+  assert.equal(el('interpreter-clarification').hidden, false);
+  assert.equal(el('interpreter-question').textContent, question);
+  assert.equal(el('interpreter-message').textContent, '');
+  assert.equal(el('interpreter-submit').textContent, 'Send reply');
+  const buttons = el('interpreter-answers').options;
+  assert.deepEqual(buttons.map(b => b.textContent), ['Bring ingredients or utensils', 'Take ready food off heat', 'Nothing else']);
+  c.state.interpreter.pending.remainingSeconds--;
+  c.renderInterpreter();
+  assert.equal(el('interpreter-answers').options, buttons);
+  answers[0]();
+  Object.assign(c.state.interpreter, {status: 'expired', pending: null, result: {message: 'Interpretation expired'}});
+  c.renderInterpreter();
+  assert.equal(el('interpreter-clarification').hidden, true);
+  assert.match(el('interpreter-message').textContent, /expired before it was queued/);
+  assert.equal(el('interpreter-submit').textContent, 'Send command');
+});
+
 test('assembly keeps allocation explicit, preserves choices and rejects overlaps', () => {
   const {context: c, el} = fixture();
   const catalog = {taskOptions: [{name: 'assemble_dish'}], assemblyOrders: [{id: 'flow:One:7', recipe: 'Sushi_Fish'}]};

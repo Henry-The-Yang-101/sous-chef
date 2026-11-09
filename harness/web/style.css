@@ -145,5 +145,10 @@ pre { font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; backgroun
 #voice-inspection-data { max-height: 300px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 .interpreter { border-top: 1px solid var(--border, #48505c); margin-top: 20px; padding-top: 12px; }
 #interpreter-text { display: block; width: 100%; box-sizing: border-box; margin: 8px 0; font: inherit; }
+#interpreter-status:empty, #interpreter-message:empty, #interpreter-plan:empty, #interpreter-answers:empty { display: none; }
+#interpreter-clarification { margin: 16px 0; }
+#interpreter-question { margin: 0; }
+#interpreter-clarification-note { margin: 6px 0; }
+#interpreter-answers button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: left; }
 #interpreter-plan, #interpreter-question, #interpreter-message { overflow-wrap: anywhere; }
 #interpreter-error { color: var(--danger, #ffb4a2); }
