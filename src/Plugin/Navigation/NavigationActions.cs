@@ -37,6 +37,8 @@ namespace SousChef.Plugin.Navigation
         private long searchGeneration;
         private bool searchReused;
         private List<Vector3> route;
+        private struct RouteAnchor { public Transform Support; public Vector3 Local; }
+        private readonly List<RouteAnchor> routeAnchors = new List<RouteAnchor>();
         private Destination target;
         private Destination recoveryTarget;
         private object lastDestination;
@@ -293,7 +295,7 @@ namespace SousChef.Plugin.Navigation
             fullCatalogueRequested = false;
             movementReference = movementWaiting = null;
             lastPredictedBrakeDistance = Single.MaxValue;
-            Action.Stop(reason); portalReplanUntil = 0; waitingPortalRoute = false; activePortal = null; portalSteps.Clear(); settlingSince = -1; target = null; route = null; facingSince = -1; arrival.Reset(); haveMotion = motionSampleValid = false;
+            Action.Stop(reason); portalReplanUntil = 0; waitingPortalRoute = false; activePortal = null; portalSteps.Clear(); settlingSince = -1; target = null; route = null; routeAnchors.Clear(); facingSince = -1; arrival.Reset(); haveMotion = motionSampleValid = false;
         }
         public void CancelRecoveryPlanning() { recoveryTarget = null; }
         public void Invalidate(string reason)
@@ -387,7 +389,7 @@ namespace SousChef.Plugin.Navigation
             // a target/geometry outage. Portal kitchens cannot reuse a frontier;
             // a small idle slice can starve the same distant goal indefinitely.
             Destination requested = null;
-            if (recovering)
+            if (recovering || !available.ContainsKey(destination))
                 foreach (Destination known in identities.Values)
                     if (known.Id == destination && known.Object != null && known.Object.activeInHierarchy) { requested = known; break; }
             // A stalled pickup/placement already identifies its next station.
@@ -460,18 +462,40 @@ namespace SousChef.Plugin.Navigation
         }
         private void SetRoute(Destination chosen)
         {
-            route = new List<Vector3>(); portalSteps.Clear();
+            route = new List<Vector3>(); routeAnchors.Clear(); portalSteps.Clear();
             foreach (WalkCell cell in chosen.DirectRoute ? new List<WalkCell>() : search.Route(chosen.Goal))
             {
                 if (cell.Portal != 0)
                 {
                     PortalLink portal = physics.Portal(cell.Portal);
                     portalSteps[route.Count] = portal; route.Add(portal.Entry);
+                    routeAnchors.Add(default(RouteAnchor));
                 }
-                route.Add(physics.Point(cell));
+                Vector3 point = physics.Point(cell);
+                Collider ground = physics.Support(cell);
+                route.Add(point);
+                routeAnchors.Add(Anchor(ground == null ? null : ground.transform, point));
             }
-            if (route.Count == 0 || Vector3.Distance(route[route.Count - 1], chosen.Approach) > .001f) route.Add(chosen.Approach);
+            if (route.Count == 0 || Vector3.Distance(route[route.Count - 1], chosen.Approach) > .001f)
+            {
+                route.Add(chosen.Approach);
+                routeAnchors.Add(default(RouteAnchor));
+            }
+            Transform endpoint = chosen.IsPoint ? (chosen.PointAnchor ?? chosen.PointSupport.transform) : chosen.Object.transform;
+            routeAnchors[route.Count - 1] = Anchor(endpoint, chosen.Approach);
             waypoint = 0;
+        }
+        private static RouteAnchor Anchor(Transform support, Vector3 point)
+        { return support == null ? default(RouteAnchor) : new RouteAnchor { Support = support, Local = support.InverseTransformPoint(point) }; }
+        private void UpdateRouteAnchors()
+        {
+            if (route == null || portalSteps.Count != 0) return;
+            for (int i = waypoint; i < route.Count; i++)
+            {
+                RouteAnchor anchor = routeAnchors[i];
+                if (anchor.Support != null) route[i] = anchor.Support.TransformPoint(anchor.Local);
+            }
+            target.Approach = route[route.Count - 1];
         }
         public void WarmCatalogue(PlayerControls player)
         {
@@ -511,9 +535,11 @@ namespace SousChef.Plugin.Navigation
             }
             if (error != null) { Invalidate(error); return; }
             if (settlingSince >= 0) { settlingSince = -1; lastPlan = -1; }
-            // Any observed geometry change prompts a full reachability recheck in this
-            // same tick, before emitting another input. Also poll dynamic affordances.
-            if (physics.Changed || Time.realtimeSinceStartup - lastPlan >= .1f || TargetMoved())
+            // Carry the path with its floor and recheck the working stance and
+            // next command live. Moving supports don't need a full search on
+            // every animation frame. An invalid next connector replans below.
+            if (physics.Changed) UpdateRouteAnchors();
+            if ((physics.Changed && physics.HasPortals) || Time.realtimeSinceStartup - lastPlan >= .1f || TargetMoved())
             {
                 Refresh(player, true, true, movementReference != null);
                 if (!ApplyPlan()) return;

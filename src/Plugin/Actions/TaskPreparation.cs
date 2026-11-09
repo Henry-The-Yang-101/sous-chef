@@ -47,7 +47,8 @@ namespace SousChef.Plugin.Actions
             bool utensil = desired.Preparation == "empty", processed = !utensil && desired.Preparation != "raw";
             string utensilType = utensil ? LogisticsInventory.CanonicalUtensil(selector) : null;
             bool plate = utensilType == "plate";
-            LogisticsItem best = null; float score = Single.MaxValue; int bestWork = Int32.MaxValue;
+            LogisticsItem best = null, unsearchedSupply = null; float score = Single.MaxValue, closestSupply = Single.MaxValue;
+            int bestWork = Int32.MaxValue;
             bool bestPlaced = false, bestHeld = false; float bestProgress = -1;
             var ids = utensil ? null : PreparationIdentities(selector, processed);
             GameObject cargo = ActionObservations.Held(chef);
@@ -56,7 +57,20 @@ namespace SousChef.Plugin.Actions
                 if (!entry.Supply && (deliveredItems.Contains(entry.Item) || preparation != null && preparation.Reserved(entry.Item))) continue;
                 bool match = utensil ? plate ? entry.CleanPlate : entry.Empty && entry.UtensilType == utensilType :
                     ids.Count == 0 ? LogisticsInventory.IngredientMatches(entry, selector) : ids.Contains(entry.IngredientId);
-                if (!match || !Obtainable(entry, plate ? "get_plate" : "move_item")) continue;
+                if (!match) continue;
+                if (!Obtainable(entry, plate ? "get_plate" : "move_item"))
+                {
+                    // A broad search can run out of time while the kitchen is
+                    // moving. Let the pickup's focused planner check an exact
+                    // requested dispenser if no certified source is available.
+                    if (entry.Supply && !entry.InUse && UnsearchedRoute(entry.Source))
+                    {
+                        float distance = Vector3.Distance(chef.transform.position, entry.Source.transform.position);
+                        if (distance < closestSupply && LogisticsChecks.CanCollectEmpty(chef, entry.Source))
+                        { closestSupply = distance; unsearchedSupply = entry; }
+                    }
+                    continue;
+                }
                 if (!utensil && TaskNative.Equipment(entry.Holder ?? entry.Source)) continue;
                 // For equivalent preparation stages, prefer certified sources.
                 float candidate = (entry.Distance != Single.MaxValue ? entry.Distance : ApproachCost(entry.Source)) + (entry.Supply ? 10000 : 0);
@@ -69,8 +83,10 @@ namespace SousChef.Plugin.Actions
                     (placed && !bestPlaced || placed == bestPlaced && (held && !bestHeld || held == bestHeld && candidate < score))))
                 { best = entry; score = candidate; bestWork = work; bestProgress = progress; bestPlaced = placed; bestHeld = held; }
             }
-            return best;
+            return best ?? unsearchedSupply;
         }
+        private bool UnsearchedRoute(GameObject target)
+        { return target != null && (string)inventory.Catalog["reason"] == "planning_in_progress"; }
         private bool PreparationAvailable(TaskRequest desired)
         {
             // Source and route availability are handled by the running plan.
@@ -165,6 +181,8 @@ namespace SousChef.Plugin.Actions
                 string operation;
                 if (LogisticsChecks.Delivery(chef, "fetch_ingredient", item, candidate.Source, out operation) != null) continue;
                 float distance = ApproachCost(candidate.Source);
+                if (distance == Single.MaxValue && UnsearchedRoute(candidate.Source))
+                    distance = 40000 + Vector3.Distance(chef.transform.position, candidate.Source.transform.position);
                 if (distance < cost) { cost = distance; best = candidate.Source; }
             }
             return best;

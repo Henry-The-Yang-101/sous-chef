@@ -231,7 +231,12 @@ namespace SousChef.Plugin.Actions
                 // Only a new catch invalidates this scheduling decision.
                 pickup.ReplanForHeld = held => !System.Object.ReferenceEquals(held, initialCargo) && UsefulCatch(held);
                 yield return pickup;
-                if (!pickup.Succeeded) { foreach (var step in Clear(pickup.Obstruction)) yield return step; yield break; }
+                if (!pickup.Succeeded)
+                {
+                    if (source.Supply && source.Distance == Single.MaxValue) lane.RetryAt = Time.realtimeSinceStartup + 1;
+                    foreach (var step in Clear(pickup.Obstruction)) yield return step;
+                    yield break;
+                }
                 item = ActionObservations.Held(chef);
             }
             while (NeedsWork(order, item))

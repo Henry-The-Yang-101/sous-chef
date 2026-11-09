@@ -540,6 +540,7 @@ namespace SousChef.Plugin.Navigation
             return result;
         }
         public Vector3 Point(WalkCell cell) { return cell.Portal == 0 ? Sample(cell).Point : portals[cell.Portal].Exit; }
+        public Collider Support(WalkCell cell) { return cell.Portal == 0 ? Sample(cell).Ground : null; }
         public IEnumerable<WalkEdge> Starts()
         {
             var result = new List<WalkEdge>(); Vector3 start = Position;
