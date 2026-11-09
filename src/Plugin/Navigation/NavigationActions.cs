@@ -45,6 +45,7 @@ namespace SousChef.Plugin.Navigation
         private int nextId, waypoint, warmTicks;
         private PlayerControls chef;
         private float lastPlan = -1, started, facingSince = -1;
+        private float lastPredictedBrakeDistance = Single.MaxValue;
         private Vector3 motionPosition, motionLocalPosition, motionParentPosition, targetVelocity, parentVelocity;
         private Transform motionParent;
         private float motionTime, observedRelativeSpeed;
@@ -291,6 +292,7 @@ namespace SousChef.Plugin.Navigation
             if (target != null && target.Object != null) lastDestination = Identity(target);
             fullCatalogueRequested = false;
             movementReference = movementWaiting = null;
+            lastPredictedBrakeDistance = Single.MaxValue;
             Action.Stop(reason); portalReplanUntil = 0; waitingPortalRoute = false; activePortal = null; portalSteps.Clear(); settlingSince = -1; target = null; route = null; facingSince = -1; arrival.Reset(); haveMotion = motionSampleValid = false;
         }
         public void CancelRecoveryPlanning() { recoveryTarget = null; }
@@ -666,7 +668,11 @@ namespace SousChef.Plugin.Navigation
         private bool BrakeForArrival(Vector3 position, int commandMilliseconds)
         {
             Vector3 delta = target.Approach - position;
-            if (delta.magnitude > .6f) return false;
+            float distance = delta.magnitude;
+            if (distance > .6f) { lastPredictedBrakeDistance = Single.MaxValue; return false; }
+            // Neutral input can cancel the predicted step before PhysX integrates
+            // it. Let checked walking advance before braking on the same forecast.
+            if (Mathf.Abs(distance - lastPredictedBrakeDistance) < .05f) return false;
             Vector3 velocity = chef.Motion.GetVelocityXZ();
             if (chef.WindReceiver != null) velocity += chef.WindReceiver.GetVelocity();
             if (chef.SurfaceMovable != null) velocity += chef.SurfaceMovable.GetVelocity();
@@ -675,8 +681,10 @@ namespace SousChef.Plugin.Navigation
             // The preceding native motion can still integrate before neutral
             // takes effect. Brake on its predicted arrival, but only actual pose,
             // speed and selection can satisfy Align's completion checks.
-            return Vector3.Dot(delta, velocity) > 0 &&
-                (delta - velocity * window).magnitude <= ArrivalCheck.PositionTolerance;
+            if (Vector3.Dot(delta, velocity) <= 0 ||
+                (delta - velocity * window).magnitude > ArrivalCheck.PositionTolerance) return false;
+            lastPredictedBrakeDistance = distance;
+            return true;
         }
         private bool TargetMoved()
         {

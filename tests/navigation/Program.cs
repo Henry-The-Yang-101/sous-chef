@@ -1058,6 +1058,9 @@ internal static class Program
         Check(w.LastInput.sqrMagnitude==0 && navigation.Action.State=="navigating", "neutral starts before delayed native motion overshoots the final stance");
         var receipt=(Json.Record)((Json.Record)navigation.Describe())["arrival"];
         Check(!(bool)receipt["positioned"],"predicted arrival cannot substitute for actual position and settling");
+        w.Chef.transform.position += new Vector3(0,0,.01f);
+        Time.realtimeSinceStartup+=.05f; navigation.Tick(w.Chef);
+        Check(w.LastInput.z > .9f, "a forecast that did not move the body into range cannot repeatedly brake the checked approach");
         w.Chef.transform.position=new Vector3(0,0,-1.15f); w.Chef.Motion.Velocity=Vector3.zero;
         for(int i=0;i<5;i++) {Time.realtimeSinceStartup+=.05f; navigation.Tick(w.Chef);}
         Check(navigation.Action.Reason=="arrived","braking still finishes only after actual native settling");
