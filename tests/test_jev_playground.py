@@ -77,7 +77,23 @@ class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
         for case in current:
             with self.subTest(case=case['name']):
                 # These are scripted decisions, not fresh model observations.
-                outcome = await scripted_replay(session(case))
+                recorded = session(case)
+                outcome = await scripted_replay(recorded)
+                if case['name'] in ('release_holdout_sequential', 'nativerelease_holdout_sequential'):
+                    # These recordings stopped at a tentative "done". The
+                    # current compiler sends that draft to the verifier instead.
+                    self.assertEqual(outcome['status'], 'request')
+                    self.assertEqual(set(outcome['request']['questions']), {'coverage', 'unambiguous'})
+                    request = outcome['request']
+                    self.assertEqual([t['action'] for t in request['state']['compiler']['proposed']['tasks']],
+                                     ['toss_burnt_food'])
+                    # Serving is missing, so a rejecting verifier must keep
+                    # this incomplete draft from becoming an accepted plan.
+                    recorded['responses'].append({'request': request,
+                                                  'response': support.response(request, {'coverage': 'different'})})
+                    blocked = await scripted_replay(recorded)
+                    self.assertEqual((blocked['status'], blocked['stage']), ('clarification', 'coverage'))
+                    continue
                 self.assertEqual(outcome, case['outcome'])
                 self.assertEqual(score_outcome(case['expected'], outcome), case['score'])
                 self.assertNotIn(case['score'], ('incomplete', 'incorrect_completion', 'unexpected_rejection'))

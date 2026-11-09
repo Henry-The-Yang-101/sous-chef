@@ -112,7 +112,7 @@ class CompilerTests(unittest.IsolatedAsyncioTestCase):
                  {'preparation': 'chopped'}, {'quantity': 'count_1'},
                  {'ingredient': ('ingredient_sushifish', .70)}]
         end = [{'preparation': 'chopped'}, {'quantity': 'count_1'},
-               {'ingredient': ('done', .80)}, {'list_complete': .96},
+               {'ingredient': ('done', .80)},
                {}, {}, {'next_task': 'done'}, {}]
         text = 'Bring me one chopped meat and one chopped fish'
         for checks in ({'same_ingredient': .92, 'unique_match': .60},
@@ -129,6 +129,20 @@ class CompilerTests(unittest.IsolatedAsyncioTestCase):
         verification = script.requests[-1]['state']['compiler']
         self.assertIn('1 chopped Sushi Fish', verification['proposed_meaning'])
         self.assertIn('native_34', str(verification['proposed']))
+
+    async def test_tentative_list_and_task_end_still_require_complete_plan(self):
+        steps = [{'next_task': 'prepare_near_player'}, {'ingredient': 'ingredient_rice'},
+                 {'preparation': 'cooked'}, {'quantity': 'count_3'},
+                 {'ingredient': ('done', .65)}, {}, {}, {'next_task': ('done', .65)}]
+        complete, _ = compiler('Bring me three cooked rice', [{}] + steps + [{}])
+        items = (await complete.compile())['plan']['tasks'][0]['arguments']['items']
+        self.assertEqual(items, [{'ingredient': 'rice', 'preparation': 'cooked', 'quantity': 3}])
+
+        incomplete, _ = compiler('Bring me three cooked rice and chopped carrot',
+                                 [{}] + steps + [{'coverage': 'different'}])
+        with self.assertRaises(Clarification) as caught:
+            await incomplete.compile()
+        self.assertEqual(caught.exception.stage, 'coverage')
 
     async def test_clarification_preserves_draft_and_cached_decisions(self):
         c, s = compiler('Give me two chopped carrots and one onion, then wash', [

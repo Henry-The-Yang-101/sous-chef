@@ -368,6 +368,10 @@ class Compiler:
                 'Choose the requested task family even when its arguments may be unavailable. '
                 'Argument questions check catalog fit later; unsupported here means no task family matches. '
                 'Do not repeat a task just because its family is still listed.' + examples('discovery') + examples('progress'), options)}, next_occurrence=index, discovery=True)
+            # A proposed end after real work can go to full-plan verification,
+            # which independently checks for omitted tasks and constraints.
+            if self.tasks and answer['next_task']['choice'] == 'done' and (stage, 'next_task') not in self.overrides:
+                return
             action = self.select(stage, 'next_task', answer, options, 'What should happen next in this command?', allow=('unsupported',))
             if action == 'done':
                 if not self.tasks: self.clarify(stage, 'next_task', 'Please name the work you want done.')
@@ -584,12 +588,12 @@ class Compiler:
                 'If all requested entries are already in compiler.items, select done.' + examples('ingredient'), options)}, action=action, next_occurrence=index, next_item=item_index, items=items)
             answer = answers['ingredient']
             candidate = answer['choice']
-            confirmed = False
-            threshold = (self.settings.completion_probability if candidate == 'done'
-                         else self.settings.choice_probability)
-            needs_check = ((stage, 'ingredient') not in self.overrides
-                           and answer['probabilities'][candidate] < threshold)
-            if needs_check and candidate in keyed:
+            overridden = (stage, 'ingredient') in self.overrides
+            # Ending the list only builds a draft. The independent whole-plan
+            # check still has to confirm every ingredient and quantity.
+            confirmed = candidate == 'done' and bool(items) and not overridden
+            if (candidate in keyed and not overridden
+                    and answer['probabilities'][candidate] < self.settings.choice_probability):
                 # A broad menu can dilute a real match. Check the specific
                 # candidate and catalog uniqueness independently before using it.
                 label = labels[candidate]
@@ -610,16 +614,6 @@ class Compiler:
                     represented_ingredients=represented,
                     candidate_ingredient=label, catalog_ingredients=list(labels.values()))
                 confirmed = all(check['noul'] >= self.settings.choice_probability for check in checks.values())
-            elif needs_check and candidate == 'done' and items:
-                check = await self.batch(stage + '.complete', {'list_complete': scoped_noul(
-                    'Does compiler.represented_ingredients already contain every requested item for this preparation task, '
-                    'with all quantities and preparation states? A listed quantity already accounts for that many portions. '
-                    'Use the meaning of catalog names in this kitchen. Ignore later tasks and instructions about repeating or stopping this task. '
-                    'Return NO if any requested item is missing or unclear. '
-                    + INGREDIENT_COMMON_NAMES)},
-                    action=action, next_occurrence=index, next_item=item_index,
-                    represented_ingredients=represented)
-                confirmed = check['list_complete']['noul'] >= self.settings.completion_probability
             selected = candidate if confirmed else self.select(
                 stage, 'ingredient', answers, options, 'Which ingredient should this item use?', allow=('unsupported',))
             if selected == 'done':
