@@ -16,6 +16,11 @@ OBJECT_CHOICE = OBJECT_REFERENCE + (
     'Choose the listed candidate when it is the only clear match. If materially different candidates still fit, '
     'choose ambiguous. If no candidate fits the intended object, choose unsupported. ')
 
+INGREDIENT_COMMON_NAMES = (
+    'Use ordinary food names in the context of the game catalog. For example, "shrimp" and "prawns" '
+    'can both refer to Sushi Prawn when it is the only matching ingredient. '
+    'Keep distinctions between separately listed foods and any specific variety the player names. ')
+
 QUEUE_ORDER_DEFAULT = (
     'Choose append for new work unless the player asks for a different position or a change to existing work. '
     'General timing language without a specific placement uses the default. Preserve explicit ordering and conditions. ')
