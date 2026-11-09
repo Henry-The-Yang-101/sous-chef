@@ -16,10 +16,11 @@ class Settings:
     retries: int = 2
     clarification_seconds: float = 90
     preview_seconds: float = 60
-    choice_probability: float = .85
-    critical_probability: float = .97
-    completion_probability: float = .85
-    coverage_probability: float = .85
+    choice_probability: float = .60
+    critical_probability: float = .80
+    constraint_probability: float = .80
+    completion_probability: float = .60
+    coverage_probability: float = .60
 
 
 def load_settings(path=None, environ=None):

@@ -20,6 +20,12 @@ from harness.voice.gate import DispatchGate
 from test_scheduler import Native, plan, spec
 
 
+# The archived playground responses only cover branches visited at these gates.
+PLAYGROUND_SETTINGS = Settings(choice_probability=.85, critical_probability=.97,
+                               constraint_probability=.85, completion_probability=.85,
+                               coverage_probability=.85)
+
+
 def world():
     result = Native().state()
     result['capabilities']['semantic_catalog'] = {
@@ -76,7 +82,8 @@ def compiler(text, steps, context=None):
 
 class CompilerTests(unittest.IsolatedAsyncioTestCase):
     async def test_simple_candidate_covers_whole_command(self):
-        c, s = compiler('Wash dishes', [{'simple': 'wash_dishes_once'}, {}])
+        c, s = compiler('Wash dishes', [{'simple': ('wash_dishes_once', .80), 'simple_coverage': .60},
+                                        {'coverage': .60, 'unambiguous': .60}])
         result = await c.compile()
         self.assertEqual(result['plan']['tasks'], [spec()])
         self.assertEqual(len(s.requests), 2)
@@ -93,8 +100,8 @@ class CompilerTests(unittest.IsolatedAsyncioTestCase):
         c, script = compiler('Give me one raw carrot and two, actually three chopped carrots', [
             {'simple_coverage': 0}, {'next_task': 'prepare_near_player'},
             {'ingredient': 'ingredient_carrot'}, {'preparation': 'raw'}, {'quantity': 'count_1'},
-            {'ingredient': 'ingredient_carrot'}, {'preparation': 'chopped'}, {'quantity': 'count_3'},
-            {'ingredient': 'done'}, {}, {}, {'next_task': 'done'}, {}])
+            {'ingredient': 'ingredient_carrot'}, {'preparation': ('chopped', .60)}, {'quantity': 'count_3'},
+            {'ingredient': 'done'}, {}, {}, {'next_task': ('done', .60)}, {}])
         items = (await c.compile())['plan']['tasks'][0]['arguments']['items']
         self.assertEqual(items, [{'ingredient': 'carrot', 'preparation': 'raw', 'quantity': 1},
                                  {'ingredient': 'carrot', 'preparation': 'chopped', 'quantity': 3}])
@@ -110,17 +117,17 @@ class CompilerTests(unittest.IsolatedAsyncioTestCase):
         ctx = build_context(kitchen, {'revision': 0})
         start = [{'next_task': 'prepare_near_player'}, {'ingredient': 'ingredient_meat'},
                  {'preparation': 'chopped'}, {'quantity': 'count_1'},
-                 {'ingredient': ('ingredient_sushifish', .70)}]
+                 {'ingredient': ('ingredient_sushifish', .59)}]
         end = [{'preparation': 'chopped'}, {'quantity': 'count_1'},
                {'ingredient': ('done', .80)},
                {}, {}, {'next_task': 'done'}, {}]
         text = 'Bring me one chopped meat and one chopped fish'
-        for checks in ({'same_ingredient': .92, 'unique_match': .60},
-                       {'same_ingredient': .60, 'unique_match': .92}):
+        for checks in ({'same_ingredient': .60, 'unique_match': .59},
+                       {'same_ingredient': .59, 'unique_match': .60}):
             c, _ = compiler(text, [{}] + start + [checks], ctx)
             with self.assertRaisesRegex(Clarification, 'Which ingredient'):
                 await c.compile()
-        c, script = compiler(text, [{}] + start + [{'same_ingredient': .92, 'unique_match': .91}] + end, ctx)
+        c, script = compiler(text, [{}] + start + [{'same_ingredient': .60, 'unique_match': .60}] + end, ctx)
         result = await c.compile()
         self.assertEqual(result['plan']['tasks'][0]['arguments'], {'player_id': 1, 'items': [
             {'ingredient': 'native_12', 'preparation': 'chopped', 'quantity': 1},
@@ -133,7 +140,7 @@ class CompilerTests(unittest.IsolatedAsyncioTestCase):
     async def test_tentative_list_and_task_end_still_require_complete_plan(self):
         steps = [{'next_task': 'prepare_near_player'}, {'ingredient': 'ingredient_rice'},
                  {'preparation': 'cooked'}, {'quantity': 'count_3'},
-                 {'ingredient': ('done', .65)}, {}, {}, {'next_task': ('done', .65)}, {'missing_task': .23}]
+                 {'ingredient': ('done', .59)}, {}, {}, {'next_task': ('done', .59)}, {'missing_task': .23}]
         complete, _ = compiler('Bring me three cooked rice', [{}] + steps + [{}])
         items = (await complete.compile())['plan']['tasks'][0]['arguments']['items']
         self.assertEqual(items, [{'ingredient': 'rice', 'preparation': 'cooked', 'quantity': 3}])
@@ -205,7 +212,7 @@ class CompilerTests(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaises(Clarification): await c.compile()
 
     async def test_low_confidence_done_and_failed_coverage_never_truncate(self):
-        for final in ({'next_task': ('done', .84)}, {'next_task': 'done'}):
+        for final in ({'next_task': ('done', .59)}, {'next_task': 'done'}):
             c, _ = compiler('Wash and more work', [{'simple_coverage': 0}, {'next_task': 'wash_dishes'}, {}, final,
                                                    {'missing_task': 1, 'coverage': 'different'}])
             with self.assertRaises(Clarification): await c.compile()
@@ -244,11 +251,11 @@ class CompilerTests(unittest.IsolatedAsyncioTestCase):
     async def test_constraint_vetoes_do_not_replace_whole_plan_verification(self):
         for field in ('concurrent_duties', 'external_deadline', 'persistent_area'):
             with self.subTest(field=field):
-                c, script = compiler('A request with an unsupported constraint', [{field: .85}])
+                c, script = compiler('A request with an unsupported constraint', [{field: .80}])
                 with self.assertRaises(Unsupported): await c.compile()
                 self.assertEqual(len(script.requests), 1)
         c, script = compiler('Wash dishes for a minute', [
-            {'simple': 'wash_dishes_once', 'external_deadline': .8}, {'coverage': 'different'}])
+            {'simple': 'wash_dishes_once', 'external_deadline': .79}, {'coverage': 'different'}])
         with self.assertRaises(Clarification): await c.compile()
         self.assertEqual(len(script.requests), 2)
 
@@ -297,7 +304,7 @@ class CompilerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(c.context['semantic']['displayOptions']['preparationOptions'][0]['preparations']['cooked'], 'unknown')
 
     async def test_repeat_default_excludes_explicit_ongoing_work(self):
-        c, s = compiler('Keep washing', [{'repeat': 'until_cancelled'}])
+        c, s = compiler('Keep washing', [{'repeat': ('until_cancelled', .80)}])
         self.assertIsNone(await c.repeat('wash_dishes', 1))
         criteria = s.requests[0]['questions']['repeat']['criteria']
         self.assertIn('neither a repetition count nor ongoing-work wording', criteria['count_1'])
@@ -315,14 +322,14 @@ class CompilerTests(unittest.IsolatedAsyncioTestCase):
             {'id': 'first', 'spec': spec(), 'state': 'pending'},
             {'id': 'second', 'spec': spec('take_ready'), 'state': 'pending'}]})
         c, _ = compiler('Remove the second pending task', [{'route': 'queue_only', 'queue_edit': 'remove_pending'},
-            {'target': 'pending_2'}, {'coverage': .6}], ctx)
+            {'target': 'pending_2'}, {'coverage': .59}], ctx)
         with self.assertRaises(Clarification) as caught: await c.compile()
         self.assertIn('Remove pending task 2: Take ready food off heat', caught.exception.options['confirm_plan'])
         c.resolve(caught.exception, 'confirm_plan')
         self.assertEqual((await c.compile())['edit']['task_id'], 'second')
 
     async def test_replacement_requires_explicit_scope(self):
-        c, _ = compiler('Do washing instead', [{'simple': 'wash_dishes_once', 'queue_edit': 'replace_all', 'deletion': .1}])
+        c, _ = compiler('Do washing instead', [{'simple': 'wash_dishes_once', 'queue_edit': 'replace_all', 'deletion': .79}])
         with self.assertRaisesRegex(Clarification, 'Confirm'): await c.compile()
 
     async def test_negated_and_unrelated_commands_do_nothing(self):
@@ -331,7 +338,7 @@ class CompilerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(s.requests), 1)
 
     async def test_full_plan_confirmation_is_exact_and_does_not_repeat_model_io(self):
-        c, s = compiler('Wash dishes', [{'simple':'wash_dishes_once'}, {'coverage':.6}])
+        c, s = compiler('Wash dishes', [{'simple':'wash_dishes_once'}, {'coverage':.59}])
         with self.assertRaises(Clarification) as caught: await c.compile()
         self.assertEqual(list(caught.exception.options), ['confirm_plan'])
         c.resolve(caught.exception, 'confirm_plan')
@@ -482,10 +489,10 @@ class Bridge(Native):
 
 
 class ServiceTests(unittest.TestCase):
-    def setUp(self):
+    def setUp(self, settings=None):
         self.bridge = Bridge(); self.gate = DispatchGate()
         self.t = Transport([{'simple': 'wash_dishes_once'}, {}])
-        self.service = InterpreterService(self.bridge, self.gate, transport=self.t)
+        self.service = InterpreterService(self.bridge, self.gate, settings=settings, transport=self.t)
         self.gate.invalidate(False)
         self.addCleanup(self.bridge.scheduler.close)
         self.addCleanup(self.service.close)
@@ -607,7 +614,7 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(self.t.sent,0)
 
     def test_clarification_button_resumes_only_current_draft(self):
-        self.t.script.steps=[{'simple':'wash_dishes_once'},{'coverage':.6}]
+        self.t.script.steps=[{'simple':'wash_dishes_once'},{'coverage':.59}]
         self.service.submit({'id':'clarify','text':'Wash'})
         state=self.wait_for({'clarification'})
         self.assertEqual(self.bridge.scheduler.snapshot()['pending'],[])
@@ -618,7 +625,7 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(len(self.bridge.scheduler.snapshot()['pending']),1)
 
     def test_spoken_reply_can_cancel_an_unfinished_command(self):
-        self.t.script.steps=[{'simple':'wash_dishes_once'},{'coverage':.6},{'route':'cancel','answer':'ambiguous'}]
+        self.t.script.steps=[{'simple':'wash_dishes_once'},{'coverage':.59},{'route':'cancel','answer':'ambiguous'}]
         self.service.submit({'id':'one','text':'Wash'})
         self.wait_for({'clarification'})
         self.service.submit({'id':'reply','text':'Cancel this unfinished command'})

@@ -41,7 +41,7 @@ class NextRequest(Exception):
     def __init__(self, request): self.request = request
 
 
-async def next_request(session):
+async def next_request(session, *, settings=None):
     queue = session.get('queue', {'revision': 0, 'active': None, 'pending': []})
     context = build_context(session.get('world', synthetic_world()), queue)
     history = iter(session['responses'])
@@ -51,7 +51,7 @@ async def next_request(session):
         # Replays must use the exact current request, including tuned instructions.
         if item['request'] != request: raise ValueError('Prompt changed; start a new evaluation session')
         return validate_response(request, item['response'])
-    c = Compiler({'id':session['name'], 'text':session['text'], **session.get('utterance_fields', {})}, context, ask)
+    c = Compiler({'id':session['name'], 'text':session['text'], **session.get('utterance_fields', {})}, context, ask, settings)
     for item in session.get('clarifications', []):
         c.overrides[(item['stage'], item['field'])] = item['key']
         c.clarified.append({'question':item['question'], 'answer':item['answer']})

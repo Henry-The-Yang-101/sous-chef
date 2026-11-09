@@ -304,7 +304,7 @@ class Compiler:
         # These are early vetoes, never permission to execute. Uncertain or
         # missed constraints must still survive field resolution, local contract
         # validation and the independent full-plan semantic comparison.
-        if any(answers[field]['noul'] >= self.settings.choice_probability for field in EXECUTION_CONSTRAINTS):
+        if any(answers[field]['noul'] >= self.settings.constraint_probability for field in EXECUTION_CONSTRAINTS):
             raise Unsupported('This command needs functionality outside the current task contracts. Try one sequential, untimed assignment.')
         if (route == 'task_plan' and answers['queue_edit']['choice'] == 'append'
                 and ('route', 'queue_edit') not in self.overrides):

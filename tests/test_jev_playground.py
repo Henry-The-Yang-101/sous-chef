@@ -44,7 +44,7 @@ async def scripted_replay(recorded):
     """Rebuild current requests and inject historical choices as explicit mocks."""
     current = {**copy.deepcopy(recorded), 'responses': []}
     for item in recorded['responses']:
-        pending = await next_request(current)
+        pending = await next_request(current, settings=support.PLAYGROUND_SETTINGS)
         if pending['status'] != 'request':
             # Exact user confirmation can finish without consuming the old
             # verifier decision, as production replay also permits.
@@ -55,7 +55,7 @@ async def scripted_replay(recorded):
             response['answers']['persistent_area'] = response['answers'].pop('region_goal')
         validate_response(request, response)
         current['responses'].append({'request': request, 'response': response})
-    return await next_request(current)
+    return await next_request(current, settings=support.PLAYGROUND_SETTINGS)
 
 
 class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
@@ -132,29 +132,30 @@ class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(confirmations, 1)
 
     async def test_verifier_gates_block_16_historical_negative_decisions(self):
-        wrong, accepted_controls = 0, 0
-        for case in CASES.values():
-            if case['type'] != 'final_verifier':
-                continue
-            trial = TRIALS[case['trial_ids'][0]]
-            async def observed(request):
-                validate_response(request, trial['response'])
-                return trial['response']
-            compiler = Compiler({'id': case['name'], 'text': case['text'], **case['utterance_fields']},
-                                build_context(current_world(case['world']), case['queue']), observed)
-            compiler.tasks = copy.deepcopy(case['proposed'].get('tasks', []))
-            blocked = False
-            try:
-                await compiler.coverage(case['proposed'])
-            except Clarification:
-                blocked = True
-            if not case['expected_match']:
-                self.assertTrue(blocked, case['name'])
-                wrong += 1
-            elif not blocked:
-                accepted_controls += 1
-        self.assertEqual(wrong, 16)
-        self.assertEqual(accepted_controls, 4)  # Three correct controls still ask.
+        for settings, expected_controls in ((support.PLAYGROUND_SETTINGS, 4), (Settings(), 7)):
+            with self.subTest(coverage_probability=settings.coverage_probability):
+                wrong, accepted_controls = 0, 0
+                for case in CASES.values():
+                    if case['type'] != 'final_verifier':
+                        continue
+                    trial = TRIALS[case['trial_ids'][0]]
+                    async def observed(request):
+                        return validate_response(request, trial['response'])
+                    compiler = Compiler({'id': case['name'], 'text': case['text'], **case['utterance_fields']},
+                                        build_context(current_world(case['world']), case['queue']), observed, settings)
+                    compiler.tasks = copy.deepcopy(case['proposed'].get('tasks', []))
+                    blocked = False
+                    try:
+                        await compiler.coverage(case['proposed'])
+                    except Clarification:
+                        blocked = True
+                    if not case['expected_match']:
+                        self.assertTrue(blocked, case['name'])
+                        wrong += 1
+                    elif not blocked:
+                        accepted_controls += 1
+                self.assertEqual(wrong, 16)
+                self.assertEqual(accepted_controls, expected_controls)
 
     def test_historical_dialogue_choices_exercise_service_control_flow(self):
         for case in PREVIOUS['sessions']:
@@ -162,7 +163,7 @@ class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
                 continue
             with self.subTest(case=case['name']):
                 fixture = support.ServiceTests()
-                fixture.setUp()
+                fixture.setUp(settings=support.PLAYGROUND_SETTINGS)
                 try:
                     fixture.t.script.steps = copy.deepcopy(case['initial_steps'])
                     fixture.service.submit({'id': 'original', 'text': case['original_utterance']})

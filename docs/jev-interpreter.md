@@ -74,16 +74,18 @@ The `.env` file is ignored by Git; the key is absent from browser state and logs
   high-level responsibilities and event/timed work are not approximated as FIFO.
   Existing exact-target native action contracts can be selected when grounded.
 
-The provisional gates after playground tuning are .85 for ordinary choices,
-`done` and coverage, and .97 for unlimited work, complete simple-plan selection,
-destructive edits and explicit spoken clarification answers. Destructive edits
-also require separate deletion/interruption evidence or a direct scoped answer.
+The default gates are .60 for ordinary choices, `done` and coverage, and .80
+for unlimited work, complete simple-plan selection, destructive edits, explicit
+spoken clarification answers and early rejection of unsupported constraints.
+Destructive edits also require separate deletion/interruption evidence or a
+direct scoped answer.
 These are policy thresholds, not calibrated probabilities of correctness.
-The [previous-prompt paired playground evaluation](jev-playground-round4.md), repeated with
-native catalog certainty corrected, completed 12/18 supported requests without
-clarification, versus 7/18 previously. Both explicitly rejected 4/6 unsupported
-requests and unnecessarily clarified two; both correctly clarified two ambiguous
-requests. No wrong complete result passed. Some gains remain borderline across runs.
+The paired playground evaluation used the earlier gates. With native catalog
+certainty corrected, it completed 12/18 supported requests without clarification,
+versus 7/18 previously. Both runs explicitly rejected 4/6 unsupported requests
+and unnecessarily clarified two. Both correctly clarified two ambiguous requests.
+No wrong complete result passed. Some gains remain borderline across runs.
+[Paired playground evaluation](jev-playground-round4.md)
 Clarifications remain frequent, including correct
 drafts. Preview remains the recommended mode; automatic acceptance is an explicit
 experimental opt-in.

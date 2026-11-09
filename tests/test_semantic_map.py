@@ -7,7 +7,7 @@ from harness.semantic_map import sample_floor, spatial_context, candidate_descri
 from harness.decision.compiler import Compiler, Clarification, build_context
 from harness.decision.service import InterpreterService
 from harness.decision.protocol import DecisionError, validate_response
-from test_decision import world, response, Script
+from test_decision import PLAYGROUND_SETTINGS, world, response, Script
 
 
 def scene():
@@ -125,7 +125,7 @@ class MovementCompilerTests(unittest.IsolatedAsyncioTestCase):
             self.assertLessEqual(approved,set(case['acceptable']))
             self.assertEqual(bool(approved),bool(case['acceptable']))
 
-    async def test_real_movement_gates_preserve_floor_clarification(self):
+    async def test_recorded_movement_gates_preserve_floor_clarification(self):
         from scripts.jev_coordinates_playground import fixtures
         evidence=json.loads((Path(__file__).resolve().parents[1]/'docs/jev-coordinates-playground.json').read_text())
         for name in ('interior','moving_raft','floor'):
@@ -139,7 +139,7 @@ class MovementCompilerTests(unittest.IsolatedAsyncioTestCase):
                 self.assert_current_request_matches_recording(value, observed['request'])
                 return validate_response(observed['request'], observed['response'])
             c=Compiler({'id':'replay','text':case['text']},build_context(case['world'],
-                       {'revision':0,'active':None,'pending':[]}),ask)
+                       {'revision':0,'active':None,'pending':[]}),ask,PLAYGROUND_SETTINGS)
             if name=='floor':
                 with self.assertRaises(Clarification) as raised:await c.movement(1)
                 self.assertTrue(raised.exception.stage.endswith('.equivalence'))
