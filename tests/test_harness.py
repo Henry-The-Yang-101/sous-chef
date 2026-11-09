@@ -596,10 +596,10 @@ class SharingTests(unittest.TestCase):
         sharing.process = process
 
         def logs():
-            yield 'INF Your quick Tunnel: https://connected.trycloudflare.com\n'
+            yield '2026-11-09T07:00:00Z INF Your quick Tunnel: https://connected.trycloudflare.com\n'
             self.assertTrue(sharing.describe()['internetPending'])
             self.assertEqual([link['label'] for link in sharing.links], ['Same Wi-Fi'])
-            yield 'INF Registered tunnel connection connIndex=0\n'
+            yield '2026-11-09T07:00:00Z INF Registered tunnel connection connIndex=0\n'
             self.assertTrue(sharing.describe()['internetPending'])
             self.assertEqual([link['label'] for link in sharing.links], ['Same Wi-Fi'])
             with mock.patch.object(sharing, '_verify_tunnel') as verify:
@@ -610,22 +610,44 @@ class SharingTests(unittest.TestCase):
             self.assertTrue(sharing.valid_origin('connected.trycloudflare.com', None))
 
         process.stdout.__iter__.side_effect = logs
-        sharing._read_tunnel()
-        self.assertTrue(sharing.describe()['internetPending'])
+        process.wait.return_value = 1
+        sharing._read_tunnel(process)
+        self.assertFalse(sharing.describe()['internetPending'])
         self.assertEqual([link['label'] for link in sharing.links], ['Same Wi-Fi'])
         self.assertFalse(sharing.valid_origin('connected.trycloudflare.com', None))
         self.assertIn('stopped', sharing.status)
         process.stdout.close.assert_called_once()
 
-    def test_tunnel_failure_before_connection_waits_for_recovery(self):
-        sharing = PhoneShare(8765, 'token')
+    def test_provisioning_rate_limit_shows_wifi_and_delays_retry(self):
+        sharing = PhoneShare(8765, 'token', ['192.168.1.23'])
         sharing.internet_pending = True
-        sharing.process = mock.MagicMock()
-        sharing.process.stdout.__iter__.return_value = iter(['ERR Could not connect\n'])
-        sharing._read_tunnel()
-        self.assertTrue(sharing.describe()['internetPending'])
-        self.assertEqual(sharing.links, [])
-        self.assertIn('stopped', sharing.status)
+        process = sharing.process = mock.MagicMock()
+        process.wait.return_value = process.poll.return_value = 1
+        process.stdout.__iter__.return_value = iter(['quick tunnel provisioning failed with status 429\n'])
+        # The process can exit before the reader has consumed its final line.
+        self.assertFalse(sharing._check_tunnel())
+        with mock.patch('builtins.print') as log:
+            sharing._read_tunnel(process)
+        self.assertIn('provisioning failed with status 429', log.call_args.args[0])
+        self.assertTrue(sharing._check_tunnel())
+        self.assertFalse(sharing.describe()['internetPending'])
+        self.assertEqual([link['label'] for link in sharing.links], ['Same Wi-Fi'])
+        with mock.patch.object(sharing.halt, 'wait', return_value=True) as wait, \
+                mock.patch.object(sharing, '_launch_tunnel') as launch, mock.patch('builtins.print'):
+            sharing._retry_tunnel(sharing.tunnel_exit)
+        wait.assert_called_once_with(sharing.RATE_LIMIT_RETRY_DELAY)
+        launch.assert_not_called()
+        self.assertIn('HTTP 429', sharing.status)
+
+    def test_failed_relaunches_back_off_until_a_tunnel_starts(self):
+        sharing = PhoneShare(8765, 'token')
+        with mock.patch.object(sharing.halt, 'wait', return_value=False) as wait, \
+                mock.patch.object(sharing, '_launch_tunnel', side_effect=[OSError('offline'), None]) as launch, \
+                mock.patch('builtins.print'):
+            sharing._retry_tunnel('cloudflared stopped')
+        self.assertEqual(wait.call_args_list, [mock.call(sharing.HEALTH_INTERVAL),
+                                               mock.call(sharing.HEALTH_INTERVAL * 2)])
+        self.assertEqual(launch.call_count, 2)
 
     def connected_tunnel(self):
         sharing = PhoneShare(8765, 'token', ['192.168.1.23'])
@@ -641,7 +663,7 @@ class SharingTests(unittest.TestCase):
         with mock.patch.object(sharing, '_verify_tunnel', side_effect=OSError('NXDOMAIN')), \
                 mock.patch('builtins.print'):
             self.assertFalse(sharing._check_tunnel())
-            self.assertTrue(sharing.describe()['internetPending'])
+            self.assertFalse(sharing.describe()['internetPending'])
             self.assertEqual([link['label'] for link in sharing.links], ['Same Wi-Fi'])
             self.assertFalse(sharing.valid_origin('connected.trycloudflare.com', None))
             self.assertFalse(sharing._check_tunnel())
@@ -650,12 +672,14 @@ class SharingTests(unittest.TestCase):
 
     def test_transient_failure_recovers_same_link_and_resets_failure_count(self):
         sharing = self.connected_tunnel()
+        sharing.retry_delay = sharing.MAX_RETRY_DELAY
         with mock.patch.object(sharing, '_verify_tunnel', side_effect=[OSError('offline'), None]), \
                 mock.patch('builtins.print'):
             sharing._check_tunnel()
             self.assertFalse(sharing._check_tunnel())
         self.assertEqual(sharing.links[0]['url'], sharing.tunnel_url + '/#access=token')
         self.assertEqual(sharing.tunnel_failures, 0)
+        self.assertEqual(sharing.retry_delay, sharing.HEALTH_INTERVAL)
         self.assertFalse(sharing.internet_pending)
 
     def test_unverified_candidate_requires_token_and_does_not_publish_qr(self):

@@ -150,16 +150,20 @@ python3 -m harness.server
 The harness starts a temporary Cloudflare Quick Tunnel, checks local DNS and
 authenticated HTTPS access to this exact harness session, then selects its QR
 link automatically. It rechecks every 15 seconds, hides a failed link, and replaces
-the tunnel after three failed checks. Unverified startup links get 90 seconds
-for connection and DNS propagation before replacement. Keep the Mac awake;
+the tunnel after three failed reachability checks. Unverified startup links get
+90 seconds for connection and DNS propagation before replacement. If
+`cloudflared` exits, the harness shows the failure and offers the same-Wi-Fi QR
+while it retries. When Cloudflare refuses to create a Quick Tunnel with HTTP 429,
+the first retry waits at least two minutes. Consecutive failures increase the
+delay up to 15 minutes. Keep the Mac awake;
 sleep or a network interruption can disconnect the tunnel and invalidate its
 temporary hostname. After a replacement, scan the current QR on the Mac again.
 The tunnel stops when the harness exits. An explicit choice in the connection
 selector is preserved while that link remains available. The tunnel
-requires no router port forwarding or Cloudflare account. If `cloudflared` cannot
-start, the page explains the failure and offers same-Wi-Fi access; `--tunnel`
-requires Cloudflare and exits on startup failure instead. If you already have a
-forwarded URL, use
+requires no router port forwarding or Cloudflare account. If the harness cannot
+launch the `cloudflared` binary, the page explains the failure and offers
+same-Wi-Fi access; with `--tunnel`, the harness exits on that launch error. If you
+already have a forwarded URL, use
 `--public-url https://your-forwarded-host.example` instead; this registers the
 exact origin and encodes it without starting another tunnel.
 

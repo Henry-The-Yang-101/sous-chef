@@ -58,6 +58,8 @@ class PhoneShare:
     HEALTH_INTERVAL = 15
     FAILURE_LIMIT = 3
     STARTUP_TIMEOUT = 90
+    RATE_LIMIT_RETRY_DELAY = 120
+    MAX_RETRY_DELAY = 900
 
     def __init__(self, port, token, addresses=(), public_url=None):
         self.token = token
@@ -78,6 +80,8 @@ class PhoneShare:
         self.tunnel_started = 0
         self.tunnel_failures = 0
         self.tunnel_verified = False
+        self.tunnel_exit = None
+        self.retry_delay = self.HEALTH_INTERVAL
         self.command = None
         for address in addresses:
             self._add(f'http://{address}:{port}', 'Same Wi-Fi')
@@ -124,21 +128,22 @@ class PhoneShare:
         if executable is None:
             raise RuntimeError('Install cloudflared first (brew install cloudflared)')
         self.command = [executable, 'tunnel', '--no-autoupdate', '--url', f'http://127.0.0.1:{port}']
-        self._launch_tunnel()
+        self._launch_tunnel(initial=True)
         self.monitor = threading.Thread(target=self._monitor_tunnel, name='phone-health', daemon=True)
         self.monitor.start()
 
-    def _launch_tunnel(self):
+    def _launch_tunnel(self, *, initial=False):
         self.process = subprocess.Popen(
             self.command,
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors='replace')
         with self.lock:
             self.tunnel_url = None
             self.tunnel_started = time.monotonic()
             self.tunnel_failures = 0
             self.tunnel_verified = False
+            self.tunnel_exit = None
             self.status = 'Starting the Cloudflare internet link…'
-            self.internet_pending = True
+            self.internet_pending = initial
         self.reader = threading.Thread(target=self._read_tunnel, args=(self.process,), name='phone-tunnel', daemon=True)
         self.reader.start()
 
@@ -148,13 +153,19 @@ class PhoneShare:
             self.origins.pop(host, None)
             self.links[:] = [link for link in self.links if urlsplit(link['url']).netloc != host]
 
-    def _read_tunnel(self, process=None):
-        process = process or self.process
+    def _read_tunnel(self, process):
         public_url = None
+        provisioning_status = None
+        exit_code = None
         try:
             for line in process.stdout:
-                if ' ERR ' in line or ' WRN ' in line:
+                # CLI errors can be plain text instead of timestamped ERR logs.
+                level = re.match(r'^\S+ (DBG|INF|WRN|ERR|FTL) ', line)
+                if line.strip() and (not level or level[1] in {'WRN', 'ERR', 'FTL'}):
                     print(f'[cloudflared] {line.rstrip()}', file=sys.stderr, flush=True)
+                status = re.search(r'quick tunnel provisioning failed with status (\d{3})\b', line, re.I)
+                if status:
+                    provisioning_status = int(status[1])
                 match = re.search(r'https://[a-z0-9-]+\.trycloudflare\.com\b', line)
                 if match:
                     public_url = match[0]
@@ -164,14 +175,23 @@ class PhoneShare:
                             self.tunnel_url = public_url
                             self.status = 'Checking the Cloudflare internet link…'
                     self.health_changed.set()
-            process.wait()
+            exit_code = process.wait()
         finally:
+            process.stdout.close()
             with self.lock:
                 if process is self.process:
                     self._hide_tunnel()
-                    self.internet_pending = not self.halt.is_set()
-                    self.status = 'Cloudflare internet link stopped. Reconnecting…'
-            process.stdout.close()
+                    self.internet_pending = False
+                    if not self.halt.is_set():
+                        if provisioning_status == 429:
+                            self.retry_delay = max(self.retry_delay, self.RATE_LIMIT_RETRY_DELAY)
+                            reason = 'Cloudflare rate limited Quick Tunnel creation (HTTP 429)'
+                        elif provisioning_status is not None:
+                            reason = f'Cloudflare could not create a Quick Tunnel (HTTP {provisioning_status})'
+                        else:
+                            reason = f'Cloudflare internet link stopped (cloudflared exit code {exit_code})'
+                        self.tunnel_exit = reason
+                        self.status = reason
             self.health_changed.set()
 
     def _verify_tunnel(self, origin):
@@ -185,12 +205,16 @@ class PhoneShare:
 
     def _check_tunnel(self):
         """Hide failed links immediately; return whether a replacement is needed."""
-        process, origin = self.process, self.tunnel_url
-        if self.halt.is_set():
+        with self.lock:
+            if self.halt.is_set():
+                return False
+            process, origin = self.process, self.tunnel_url
+            if self.tunnel_exit is not None:
+                return True
+        # Let the reader drain the final diagnostic before deciding how to retry.
+        if process.poll() is not None:
             return False
         try:
-            if process.poll() is not None:
-                raise OSError('cloudflared exited')
             if origin is None:
                 if time.monotonic() - self.tunnel_started < self.STARTUP_TIMEOUT:
                     return False
@@ -198,27 +222,30 @@ class PhoneShare:
             # Host validation must accept the candidate during the private probe,
             # before its QR link is published. Public API reads still need the token.
             with self.lock:
+                if self.halt.is_set() or self.tunnel_exit is not None:
+                    return self.tunnel_exit is not None
                 self.origins[urlsplit(origin).netloc] = origin
             self._verify_tunnel(origin)
         except (OSError, ValueError, HTTPException) as error:
             with self.lock:
+                if self.halt.is_set() or self.tunnel_exit is not None:
+                    return self.tunnel_exit is not None
                 self._hide_tunnel()
                 self.tunnel_failures += 1
-                self.internet_pending = not self.halt.is_set()
                 self.status = ('Cloudflare internet link unavailable. Reconnecting; scan the new QR when ready.'
                                if self.tunnel_verified else 'Waiting for the Cloudflare internet link to become reachable…')
             print(f'[phone sharing] {origin or "Tunnel startup"}: {error}', file=sys.stderr, flush=True)
             # New hostnames can be negatively cached during DNS propagation.
             # Give that first probe the full startup allowance before rotating it.
             return (self.tunnel_failures >= self.FAILURE_LIMIT
-                    and (self.tunnel_verified or process.poll() is not None
-                         or time.monotonic() - self.tunnel_started >= self.STARTUP_TIMEOUT))
+                    and (self.tunnel_verified or time.monotonic() - self.tunnel_started >= self.STARTUP_TIMEOUT))
         with self.lock:
             if (not self.halt.is_set() and process is self.process
                     and process.poll() is None and origin == self.tunnel_url):
                 self._add(origin, 'Internet')
                 self.tunnel_failures = 0
                 self.tunnel_verified = True
+                self.retry_delay = self.HEALTH_INTERVAL
                 self.internet_pending = False
                 self.status = 'Cloudflare internet link ready. Keep your Mac awake and this harness running.'
         return False
@@ -233,21 +260,42 @@ class PhoneShare:
                 if self.halt.is_set():
                     break
                 self._stop_tunnel()
+            self._retry_tunnel(self.tunnel_exit)
+
+    def _retry_tunnel(self, reason):
+        while not self.halt.is_set():
+            if reason:
+                delay = self.retry_delay
+                self.retry_delay = min(delay * 2, self.MAX_RETRY_DELAY)
+                status = f'{reason}. Retrying in {delay} seconds.'
+                with self.lock:
+                    self.status = status
+                    self.internet_pending = False
+                print(f'[phone sharing] {status}', file=sys.stderr, flush=True)
+                if self.halt.wait(delay):
+                    return
+            with self.lifecycle_lock:
+                if self.halt.is_set():
+                    return
                 try:
                     self._launch_tunnel()
                 except OSError as error:
-                    print(f'[phone sharing] Could not restart cloudflared: {error}', file=sys.stderr, flush=True)
-                    # Retry on the regular interval, including when spawn failed.
-                    self.health_changed.clear()
+                    reason = f'Could not restart cloudflared: {error}'
+                else:
+                    return
 
     def _stop_tunnel(self):
-        if self.process is not None and self.process.poll() is None:
-            self.process.terminate()
+        with self.lock:
+            process, self.process = self.process, None
+            self._hide_tunnel()
+            self.internet_pending = False
+        if process is not None and process.poll() is None:
+            process.terminate()
             try:
-                self.process.wait(timeout=3)
+                process.wait(timeout=3)
             except subprocess.TimeoutExpired:
-                self.process.kill()
-                self.process.wait(timeout=2)
+                process.kill()
+                process.wait(timeout=2)
         if self.reader:
             self.reader.join(timeout=2)
 
