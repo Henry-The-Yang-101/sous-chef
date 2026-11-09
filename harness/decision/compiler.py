@@ -469,11 +469,14 @@ class Compiler:
             for offset in range(0, len(candidates), 18):
                 group = candidates[offset:offset+18]
                 questions = {c['id']: scoped_noul(
-                    f'For movement occurrence {index}, does candidate {c["id"]} satisfy ALL destination constraints in the utterance? '
-                    'Return YES for any acceptable standing position; the user need not specify an exact tile. '
+                    f'For movement occurrence {index}, evaluate ONLY candidate {c["id"]}: '
+                    + json.dumps({k:c[k] for k in ('id','binding','kind','screen','height','supportId') if k in c}, separators=(',',':')) + '. '
+                    'Does this candidate satisfy ALL destination constraints in the utterance? '
+                    'For a station, judge which object to approach. For a platform (including a raft), judge which physical support to board. For floor movement, any position satisfying the requested area is acceptable. The user need not specify an exact standing tile. '
                     'Return NO for a wrong side, station, support, layer, unresolved reference or unknown orientation needed for a directional phrase. '
-                    'Use camera-oriented screen coordinates: up=0 is bottom, right=0 is left. '
-                    'Judge intended destination, not whether a route is open. Blocked/unknown routes can wait. '
+                    'Apply movement.coordinate_meaning to the numerical coordinates. Compare all stated spatial constraints together. '
+                    'A clearly matching relative location is sufficient; do not require an exact edge coordinate or an explicitly named region. '
+                    'Match the destination identity and its CURRENT position, regardless of which way it is moving. A blocked or unknown route is handled by native waiting and does not make that identity uncertain; assess reachability only if the utterance explicitly requires it. '
                     'Do not substitute a nearby station or a reachable point on the wrong side.') for c in group}
                 result = await self.batch(f'task.{index}.movement.candidates.{refinement}.{offset}', questions,
                     action='navigate_to', next_occurrence=index, movement=overview, candidates=group)
@@ -488,10 +491,14 @@ class Compiler:
             approved = [c for c in candidates if c['id'] == self.overrides[(stage,'destination')]]
         elif len(approved) > 1:
             result = await self.batch(stage, {'interchangeable': scoped_noul(
-                f'For movement occurrence {index}, are ALL approved destinations interchangeable under the actual utterance? '
-                'YES means choosing any preserves every requested side, support, station identity, layer and relative reference. '
-                'Several floor positions within one requested area may be interchangeable. '
-                'NO means they represent materially different plausible meanings; do not choose by travel cost.')},
+                f'For movement occurrence {index}, may local navigation choose ANY of these approved destinations without asking the user which one? '
+                'Each listed candidate has separately passed the destination-fit check. Judge whether the utterance distinguishes them, not whether their coordinates are identical. '
+                'For an area request, leaving the exact tile unspecified deliberately allows local choice within that area. '
+                'If all approved floor candidates occupy the requested area on the same support and height layer, answer YES unless the utterance states another distinction between them. '
+                'Return YES when each satisfies the requested destination and their differences concern details the user left open. '
+                'For example, "go to the right side" allows different positions on that side, even with different vertical screen coordinates, travel distances or nearby stations. '
+                'Return NO when choosing would resolve a genuinely unspecified reference or change a requested station identity, support, layer, side or relative relation. '
+                'For example, "go to that board" with two unresolved board identities requires clarification. Do not impose an exact tile or other constraint absent from the utterance.')},
                 action='navigate_to', next_occurrence=index, movement=overview, approved=approved)
             if result['interchangeable']['noul'] < self.settings.critical_probability:
                 self.clarify(stage, 'destination', 'These destinations have different possible meanings. Which one?',

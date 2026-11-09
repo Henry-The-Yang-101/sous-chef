@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 import unittest
 
-from harness.semantic_map import sample_floor, spatial_context
+from harness.semantic_map import sample_floor, spatial_context, candidate_description
 from harness.decision.compiler import Compiler, Clarification, build_context
 from harness.decision.service import InterpreterService
 from harness.decision.protocol import DecisionError, validate_response
@@ -63,14 +63,16 @@ class SamplingTests(unittest.TestCase):
     def test_camera_rotation_player_reference_and_station_copies(self):
         data=scene();value=spatial_context({'movement':data,'players':[{'playerId':1,'position':[0,0,4]}]})
         a=next(p for p in value['candidates'] if p['id']=='d1')
-        self.assertEqual(a['screen'],{'right':0,'up':0})
-        self.assertEqual(a['location'],'bottom left')
+        self.assertEqual(a['screen'],{'x':0,'y':1})
+        self.assertNotIn('location',a)
+        self.assertIn('(x=0, y=1)',candidate_description(a))
+        self.assertNotIn('bottom left',candidate_description(a))
         self.assertNotIn('position',a)
         self.assertNotIn('right',value['orientation'])
         self.assertEqual({p['playerId'] for p in value['players']},{1,2})
         data['orientation'].update(right=[-1,0,0],up=[0,0,-1])
         rotated=spatial_context({'movement':data})
-        self.assertEqual(next(p for p in rotated['candidates'] if p['id']=='d1')['screen'],{'right':1,'up':1})
+        self.assertEqual(next(p for p in rotated['candidates'] if p['id']=='d1')['screen'],{'x':1,'y':0})
         data['orientation']['known']=False
         self.assertNotIn('screen',spatial_context({'movement':data})['candidates'][0])
 
@@ -79,7 +81,7 @@ class SamplingTests(unittest.TestCase):
         data['orientation'].update(right=[-1,0,0],up=[0,0,-1])
         point=next(p for p in spatial_context({'movement':data})['candidates'] if p['id']=='d1')
         self.assertEqual(point['motion'],'observed_moving')
-        self.assertEqual(point['screen_velocity'],{'right':-2,'up':3})
+        self.assertEqual(point['screen_velocity'],{'x':-2,'y':-3})
         self.assertNotIn('velocity',point)
 
     def test_identity_revalidation_allows_motion_but_rejects_rebinding_and_epoch(self):
@@ -99,16 +101,46 @@ class SamplingTests(unittest.TestCase):
 
 
 class MovementCompilerTests(unittest.IsolatedAsyncioTestCase):
-    async def test_recorded_board_requests_match_current_production_context(self):
+    async def test_historical_labeled_requests_remain_archived(self):
         evidence=json.loads((Path(__file__).resolve().parents[1]/'docs/grounded-movement-language.json').read_text())
         for trial in evidence['trials']:
-            data=scene()
-            if trial['name']=='final-rotated-request':data['orientation'].update(right=[-1,0,0],up=[0,0,-1])
-            script=Script([{'binding':'station'},{k:a['noul'] for k,a in trial['response']['answers'].items()}])
-            c=Compiler({'id':'replay','text':trial['request']['state']['utterance']['text']},context(data),script)
-            self.assertEqual(await c.movement(1),{'destination_id':trial['expectedDestination']})
-            self.assertEqual(script.requests[1],trial['request'])
-            validate_response(script.requests[1],trial['response'])
+            validate_response(trial['request'],trial['response'])
+
+    async def test_numerical_playground_requests_match_production(self):
+        from scripts.jev_coordinates_playground import fixtures, request
+        evidence=json.loads((Path(__file__).resolve().parents[1]/'docs/jev-coordinates-playground.json').read_text())
+        for case in fixtures():
+            variant='holdout' if case['name'].startswith('holdout_') else 'final'
+            trial=next(r for r in evidence['trials'] if r['case']==case['name'] and r['variant']==variant)
+            current=await request(case)
+            self.assertEqual(current,trial['request'])
+            validate_response(current,trial['response'])
+            self.assertNotIn('"location":',json.dumps(current))
+            approved={k for k,a in trial['response']['answers'].items() if a['noul']>=.85}
+            self.assertLessEqual(approved,set(case['acceptable']))
+            self.assertEqual(bool(approved),bool(case['acceptable']))
+
+    async def test_real_movement_gates_preserve_floor_clarification(self):
+        from scripts.jev_coordinates_playground import fixtures
+        evidence=json.loads((Path(__file__).resolve().parents[1]/'docs/jev-coordinates-playground.json').read_text())
+        for name in ('interior','moving_raft','floor'):
+            case=next(c for c in fixtures() if c['name']==name)
+            history=[next(r for r in evidence['trials'] if r['case']==name and r['variant']==variant)
+                     for variant in ('stages','final')]
+            if name=='floor':
+                history.append(next(r for r in evidence['trials'] if r['variant']=='equivalence_final2'))
+            async def ask(value):
+                observed=history.pop(0)
+                self.assertEqual(value,observed['request'])
+                return validate_response(value,observed['response'])
+            c=Compiler({'id':'replay','text':case['text']},build_context(case['world'],
+                       {'revision':0,'active':None,'pending':[]}),ask)
+            if name=='floor':
+                with self.assertRaises(Clarification) as raised:await c.movement(1)
+                self.assertTrue(raised.exception.stage.endswith('.equivalence'))
+            else:
+                self.assertIn((await c.movement(1))['destination_id'],case['acceptable'])
+            self.assertEqual(history,[])
 
     async def test_bottom_left_board_has_spatial_context_and_exact_identity(self):
         script=Script([{'simple_coverage':0},{'next_task':'native_action'},{'action':'navigate_to'},
@@ -117,9 +149,10 @@ class MovementCompilerTests(unittest.IsolatedAsyncioTestCase):
         result=await c.compile()
         self.assertEqual(result['plan']['tasks'][0]['arguments'],{'destination_id':'d1'})
         self.assertEqual(result['plan']['after_plan'],'pause_pending')
-        self.assertIn('bottom left',result['message'])
+        self.assertIn('(x=0, y=1)',result['message'])
+        self.assertNotIn('bottom left',result['message'])
         candidates=script.requests[4]['state']['compiler']['candidates']
-        self.assertEqual(candidates[0]['screen'],{'right':0,'up':0})
+        self.assertEqual(candidates[0]['screen'],{'x':0,'y':1})
         self.assertIn('movement',script.requests[-1]['state']['world'])
 
     async def test_equivalent_positions_use_approval_not_divided_choice_probability(self):

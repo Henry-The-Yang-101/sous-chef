@@ -780,7 +780,7 @@ function renderInterpreter() {
     const targets = [...(outcome.movement || []), ...(semantic.targets || []), ...(semantic.players || []), ...(semantic.displayOptions?.items || []), ...(semantic.movement?.stations || []), ...(semantic.movement?.platforms || []), ...(semantic.movement?.points || [])];
     const argumentsText = Object.entries(task.arguments).map(([field, value]) => {
       const target = targets.find(target => target.id === value);
-      const label = target ? `${target.label || (target.binding === 'floor' ? 'Floor position' : value)}${target.screen ? ` · ${target.screen.up < 1/3 ? 'bottom' : target.screen.up > 2/3 ? 'top' : 'middle'} ${target.screen.right < 1/3 ? 'left' : target.screen.right > 2/3 ? 'right' : 'centre'}` : ''} (${value})` : typeof value === 'object' ? JSON.stringify(value) : String(value).replaceAll('_', ' ');
+      const label = target ? `${target.label || (target.binding === 'floor' ? 'Floor position' : value)}${target.screen ? ` · (x=${target.screen.x}, y=${target.screen.y})` : ''}${target.height != null ? ` · height=${target.height}` : ''} (${value})` : typeof value === 'object' ? JSON.stringify(value) : String(value).replaceAll('_', ' ');
       return `${field.replaceAll('_', ' ')}: ${label}`;
     }).join('; ');
     const detail = items ? `${items} for Player ${task.arguments.player_id}` : argumentsText;

@@ -29,8 +29,10 @@ Platform summaries include occupants, attached stations and observed transform
 motion. Stations also report their own motion, including rotating counters.
 Motion is observation, never a predicted opening time or crossing permission.
 
-The model sees screen-relative `right` and `up`, a concise location description,
-height, support identity, nearby stations and players. Bounds come from verified
+The model sees numerical screen-relative `x` and `y`, height, support identity,
+nearby stations and players. x increases rightward; y increases downward. Generated
+location labels were removed in the [numerical-coordinate revision](jev-coordinates-playground.md).
+Bounds come from verified
 playable standing geometry, excluding scenery. Raw world/local coordinates and
 camera vectors stay local; the harness map uses the same camera projection.
 Unknown orientation stays explicit. Height remains separate from screen position.
@@ -101,7 +103,7 @@ on every map update.
 
 ## Verification
 
-The committed [language observations](grounded-movement-language.json) contain
+The original [language observations](grounded-movement-language.json) contain
 exact production candidate requests and observed `jev-1.14.0` Playground answers.
 For two boards, bottom-left suitability was .99 versus .02. After rotating the
 camera 180 degrees, the correct other board scored .92 versus .04. Each final
@@ -109,7 +111,9 @@ request used 1,724 input and 38 output tokens, with about 31–32 ms reported mo
 evaluation time. These two synthetic examples are calibration evidence, not a
 general accuracy estimate or a full-plan test. An earlier rotated context caused
 safe clarification; removing competing raw coordinates resolved that example.
-No Python provider API/SDK call was made.
+No Python provider API/SDK call was made. These original requests included generated
+location labels. The [current numerical-only evaluation](jev-coordinates-playground.md)
+supersedes that prompt and records the remaining floor-equivalence clarification.
 
 The [native audit](grounded-movement-native.json) records isolated headless Unity
 2017.4.8f1 / PhysX runs from normal spawn, through fenced execution receipts:

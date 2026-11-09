@@ -116,6 +116,12 @@ of claiming that old responses were produced by the new prompts.
 
 ## Verification
 
+The [numerical-coordinate evaluation](jev-coordinates-playground.md) tests the
+milestone-5 spatial candidate prompts in the Playground. Generated location labels
+are removed; screen positions use x rightward and y downward. The final candidate
+stage improves selection, while a bottom-area request still clarifies at its .97
+equivalence gate. This is separate from full-plan or live API validation.
+
 `python3 -m unittest discover -s tests -p 'test_*.py'`
 
 `node --test tests/harness_web.test.js`

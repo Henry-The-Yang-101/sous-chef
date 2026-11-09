@@ -7,6 +7,19 @@ import copy
 import math
 
 
+COORDINATE_MEANING = (
+    'All positions use the current camera view, already projected into standard screen coordinates. screen.x increases from LEFT (0) to RIGHT (1). screen.y increases from TOP (0) to BOTTOM (1). '
+    'Corners: top-left=(0,0), top-right=(1,0), bottom-left=(0,1), bottom-right=(1,1); centre=(0.5,0.5). '
+    'Compare candidates of the requested kind using both coordinates. '
+    'Directional descriptions are relative; a bottom-left station need not touch the exact corner. '
+    'For a floor area, several suitable sampled points are acceptable, not ambiguity. height is elevation: an upper deck has greater height regardless of screen.y. '
+    'Player 1 is the speaker (me); Player 2 is the commanded chef. '
+    'Use the named player or object as origin for relative directions. '
+    'Coordinates describe this snapshot; moving targets keep their IDs. '
+    'Route status affects execution, not intended destination. '
+    'Clarify only if the location meaning remains unresolved, not because no semantic region name or exact tile was specified.')
+
+
 def _position(value):
     p = value.get('position')
     return p if isinstance(p, list) and len(p) == 3 and all(type(x) in (int, float) and math.isfinite(x) for x in p) else None
@@ -74,8 +87,8 @@ def spatial_context(semantic, *, budget=18):
         p = _position(item)
         if p and bounds:
             xy = project(p)
-            result['screen'] = {key: round((xy[i]-bounds[0][i])/max(.01, bounds[1][i]-bounds[0][i]), 3) for i, key in enumerate(('right', 'up'))}
-            result['location'] = location_description(result['screen'])
+            normalized = [(xy[i]-bounds[0][i])/max(.01, bounds[1][i]-bounds[0][i]) for i in range(2)]
+            result['screen'] = {'x': round(normalized[0], 3), 'y': round(1-normalized[1], 3)}
         if p:
             result['height'] = round(p[1], 3)
             stations = sorted((s for s in native.get('stations', []) if _position(s)), key=lambda s: (_distance(item, s), s['id']))
@@ -87,7 +100,8 @@ def spatial_context(semantic, *, budget=18):
             result.pop(key, None)
         velocity = result.pop('velocity', None)
         if velocity and oriented:
-            result['screen_velocity'] = dict(zip(('right', 'up'), project(velocity)))
+            vx, vy = project(velocity)
+            result['screen_velocity'] = {'x': vx, 'y': -vy}
         return result
     stations = native.get('stations', [])
     candidates = [describe(p) for p in stations + native.get('platforms', []) + floor]
@@ -101,7 +115,7 @@ def spatial_context(semantic, *, budget=18):
         supports.setdefault(support['id'], {}).update(value)
     return {'epoch': native.get('epoch'), 'observed_at': native.get('observedAt'),
             'orientation': {k:v for k,v in orientation.items() if k not in ('right','up')},
-            'coordinate_meaning': 'screen.right increases left to right; screen.up increases bottom to top; normalized to observed playable standing geometry. Height is separate. Unknown orientation cannot resolve directional language.',
+            'coordinate_meaning': COORDINATE_MEANING,
             'binding_meaning': 'station follows that exact object; platform and floor references retain their support-local point. Right/left platform labels refer to THIS snapshot, even after platforms exchange sides. Arrival performs no interaction.',
             'coverage': {'native': copy.deepcopy(native.get('coverage', {})), 'menu': coverage},
             'players': players, 'supports': list(supports.values()), 'candidates': candidates,
@@ -112,11 +126,7 @@ def candidate_description(item):
     label = item.get('label') or ('Floor position' if item.get('binding') == 'floor' else 'Platform')
     screen = item.get('screen')
     if screen:
-        label += ' · ' + location_description(screen)
+        label += f' · (x={screen["x"]:g}, y={screen["y"]:g})'
+    if 'height' in item:
+        label += f' · height={item["height"]:g}'
     return label + f' ({item["id"]})'
-
-
-def location_description(screen):
-    vertical = 'bottom' if screen['up'] < 1/3 else 'top' if screen['up'] > 2/3 else 'middle'
-    horizontal = 'left' if screen['right'] < 1/3 else 'right' if screen['right'] > 2/3 else 'centre'
-    return f'{vertical} {horizontal}'
