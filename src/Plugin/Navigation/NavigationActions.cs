@@ -17,7 +17,7 @@ namespace SousChef.Plugin.Navigation
             public WalkCell Goal;
             public Vector3 Approach, LocalApproach;
             public float Distance;
-            public bool IsPoint, StrictPointArrival, MovementOnly;
+            public bool IsPoint, StrictPointArrival, MovementOnly, DirectRoute;
             public Transform PointAnchor;
             public Collider PointSupport;
         }
@@ -55,7 +55,7 @@ namespace SousChef.Plugin.Navigation
         private int nodeCount, candidateCount, startCount;
         private string observationError;
         private bool planning, focusedPlan, fullCatalogueRequested;
-        private StationMatch searchFocus;
+        private DestinationMatch searchFocus;
         private const double PlanningBudgetMilliseconds = 12;
         private const double RecoveryBudgetMilliseconds = 25;
         private const double IncrementalBudgetMilliseconds = 3;
@@ -459,7 +459,7 @@ namespace SousChef.Plugin.Navigation
         private void SetRoute(Destination chosen)
         {
             route = new List<Vector3>(); portalSteps.Clear();
-            foreach (WalkCell cell in search.Route(chosen.Goal))
+            foreach (WalkCell cell in chosen.DirectRoute ? new List<WalkCell>() : search.Route(chosen.Goal))
             {
                 if (cell.Portal != 0)
                 {
@@ -490,7 +490,7 @@ namespace SousChef.Plugin.Navigation
                 WarmCatalogue(player);
                 return;
             }
-            if (movementReference != null && movementWaiting != null && Time.realtimeSinceStartup - lastPlan < .25f) { neutral(); return; }
+            if (movementReference != null && movementWaiting != null && Time.realtimeSinceStartup - lastPlan < .25f) { move(Vector3.zero,50); return; }
             if (player != chef || target == null || target.Object == null ||
                 (!target.IsPoint && !Eligible(target.Object, player, out target.Kind, true))) { Stop("destination_unavailable"); return; }
             int commandMilliseconds = WalkingCommand.Milliseconds(Time.unscaledDeltaTime);
@@ -533,7 +533,7 @@ namespace SousChef.Plugin.Navigation
                 // Replan from the actual pose before declaring the target blocked.
                 Refresh(player, true, true, movementReference != null);
                 if (!ApplyPlan()) return;
-                if (!TryWalkingGoal(position, out goal)) { Stop("route_blocked"); return; }
+                if (!TryWalkingGoal(position, out goal)) { if (!WaitForGroundedRoute("route_blocked")) Stop("route_blocked"); return; }
             }
             PortalLink nextPortal;
             if (!exiting && portalSteps.TryGetValue(waypoint, out nextPortal))
@@ -555,10 +555,10 @@ namespace SousChef.Plugin.Navigation
             if (surface != null && surface.Slippiness > .05f)
             {
                 Vector3 projected = position + (velocity + drift) * Mathf.Lerp(.04f, .3f, surface.Slippiness);
-                if (!physics.Segment(position, projected)) { Stop("unsafe_sliding_momentum"); return; }
+                if (!physics.Segment(position, projected)) { if (!WaitForGroundedRoute("unsafe_sliding_momentum")) Stop("unsafe_sliding_momentum"); return; }
                 direction -= velocity * Mathf.Lerp(.02f, .22f, surface.Slippiness);
             }
-            if (!WalkingSteering.Direction(direction.x, direction.z, drift.x, drift.z, speed, out x, out z)) { Stop("flow_prevents_walking"); return; }
+            if (!WalkingSteering.Direction(direction.x, direction.z, drift.x, drift.z, speed, out x, out z)) { if (!WaitForGroundedRoute("flow_prevents_walking")) Stop("flow_prevents_walking"); return; }
             Vector3 input = new Vector3(x, 0, z);
             Trace("steer", goal, input);
             float stepTime = Mathf.Max(commandMilliseconds / 1000f, Time.deltaTime);
@@ -589,7 +589,7 @@ namespace SousChef.Plugin.Navigation
                         if (!physics.Segment(position, position + movement * horizon)) continue;
                         input = alternative; found = true; Trace("steer_adjusted", goal, input); break;
                     }
-                    if (!found) { Stop("next_step_unsafe"); return; }
+                    if (!found) { if (!WaitForGroundedRoute("next_step_unsafe")) Stop("next_step_unsafe"); return; }
                 }
             }
             // Native input can be read before this component's next Update.
@@ -746,7 +746,7 @@ namespace SousChef.Plugin.Navigation
             var surface = chef.PhysicsSurface == null ? null : chef.PhysicsSurface.Properties;
             float retainedMotion = surface == null ? 0 : Mathf.Clamp01(surface.Slippiness);
             float horizon = Mathf.Max(commandMilliseconds / 1000f, Time.deltaTime);
-            if (!physics.Segment(position, position + (velocity * retainedMotion + drift) * horizon)) { Stop("unsafe_alignment_stance"); return; }
+            if (!physics.Segment(position, position + (velocity * retainedMotion + drift) * horizon)) { if (!WaitForGroundedRoute("unsafe_alignment_stance")) Stop("unsafe_alignment_stance"); return; }
             // The game's axis helper normalizes every nonzero input to full speed.
             // Use its native turn helper at the normal turn rate with neutral walking
             // input, instead of walking into the counter just to change heading.
@@ -892,15 +892,26 @@ namespace SousChef.Plugin.Navigation
                     if (!supported || Vector3.Distance(checkedPoint, target.Approach) > .04f ||
                         (target.MovementOnly && SupportOwner(support, player.gameObject, out platform) != target.PointAnchor)) { unavailable = "unsafe_release_stance"; return; }
                 }
+                if (target != null && target.IsPoint)
+                {
+                    target.DirectRoute = physics.Segment(physics.Position,target.Approach);
+                    if (target.DirectRoute)
+                    {
+                        target.Distance=Vector3.Distance(physics.Position,target.Approach); available[target.Id]=target;
+                        focusedPlan=true; incrementalSearch=fastWarm=searchReused=false; observationError=null;
+                        candidateCount=1;
+                        unavailable=null; return;
+                    }
+                }
                 observationError = null;
                 // A read-only catalogue poll must not replace an unfinished
                 // owned recovery search with a different broad frontier.
                 Destination station = requested ?? target ?? recoveryTarget;
-                focusedPlan = station != null && !station.IsPoint && (requested != null || recoveryTarget != null || !fullCatalogueRequested);
+                focusedPlan = station != null && (station.IsPoint || requested != null || recoveryTarget != null || !fullCatalogueRequested);
                 var candidates = target != null && target.IsPoint ? new List<Destination> { target } : Discover(player, focusedPlan ? station : null);
                 candidateCount = candidates.Count;
-                StationMatch focused = focusedPlan && candidates.Count == 1 ? new StationMatch(this, station) : null;
-                StationMatch nextFocus = physics.HasPortals ? null : focused;
+                DestinationMatch focused = focusedPlan && candidates.Count == 1 ? new DestinationMatch(this, station) : null;
+                DestinationMatch nextFocus = physics.HasPortals ? null : focused;
                 bool hadIncremental = incrementalSearch;
                 bool sameFocus = nextFocus == null ? searchFocus == null : nextFocus.SameRegion(searchFocus);
                 searchReused = incremental && incrementalSearch && search != null && sameFocus && physics.CanContinueSearch();
@@ -970,22 +981,7 @@ namespace SousChef.Plugin.Navigation
                 IndexReachableCells();
                 foreach (Destination d in candidates)
                 {
-                    if (d.IsPoint)
-                    {
-                        float pointBest = Single.MaxValue; WalkCell pointGoal = new WalkCell();
-                        foreach (WalkCell cell in search.Settled)
-                        {
-                            Vector3 point = physics.Point(cell); float connector = Vector3.Distance(point, d.Approach);
-                            if (connector > WalkPhysics.Spacing * 2) continue;
-                            float cost = search.Distances[cell] + connector;
-                            int surfaceHistory = cell.SurfaceHistory;
-                            if (cost < pointBest && physics.Segment(point, d.Approach, ref surfaceHistory)) { pointBest = cost; pointGoal = cell; }
-                        }
-                        if (pointBest < Single.MaxValue)
-                        { d.Goal = pointGoal; d.Distance = pointBest; available[d.Id] = d; }
-                        continue;
-                    }
-                    var match = focused ?? new StationMatch(this, d);
+                    var match = focused ?? new DestinationMatch(this, d);
                     match.VisitIndexed();
                     match.Publish();
 

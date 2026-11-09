@@ -94,6 +94,8 @@ namespace UnityEngine
         public static float Dot(Vector3 a, Vector3 b) { return a.x*b.x+a.y*b.y+a.z*b.z; }
         public static float Distance(Vector3 a, Vector3 b) { return (a-b).magnitude; }
         public static Vector3 Lerp(Vector3 a, Vector3 b, float t) { return a+(b-a)*t; }
+        public static Vector3 Min(Vector3 a,Vector3 b) { return new Vector3(Math.Min(a.x,b.x),Math.Min(a.y,b.y),Math.Min(a.z,b.z)); }
+        public static Vector3 Max(Vector3 a,Vector3 b) { return new Vector3(Math.Max(a.x,b.x),Math.Max(a.y,b.y),Math.Max(a.z,b.z)); }
         public override bool Equals(object obj) { return obj is Vector3 v && x==v.x && y==v.y && z==v.z; }
         public override int GetHashCode() { return HashCode.Combine(x,y,z); }
     }
@@ -132,7 +134,7 @@ namespace UnityEngine
     public class TerrainCollider : Collider { }
     public class Rigidbody : Component { public bool useGravity=true;public float drag;public int constraints; }
     public class MeshCollider : Collider { public Mesh sharedMesh; public bool convex; }
-    public class Mesh : Object { public bool isReadable; public Vector3[] vertices = new Vector3[0]; public int[] triangles = new int[0]; public int vertexCount { get { return vertices.Length; } } }
+    public class Mesh : Object { public Bounds bounds; public bool isReadable; public Vector3[] vertices = new Vector3[0]; public int[] triangles = new int[0]; public int vertexCount { get { return vertices.Length; } } }
     public struct RaycastHit { public Collider collider; public Vector3 point, normal; public float distance; }
     public struct LayerMask { public int value; public static int NameToLayer(string name) { return name == "Ground" ? 9 : 0; } public static implicit operator LayerMask(int i) { return new LayerMask { value=i }; } }
     public enum QueryTriggerInteraction { Collide, Ignore }

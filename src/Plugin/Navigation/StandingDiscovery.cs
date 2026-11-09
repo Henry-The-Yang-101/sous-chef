@@ -15,8 +15,21 @@ namespace SousChef.Plugin.Navigation
         public void DiscoveryBounds(Collider c, out Vector3 low, out Vector3 high)
         {
             var box = c as BoxCollider;
+            var mesh = c as MeshCollider;
             if (box != null) { low=box.center-box.size*.5f; high=box.center+box.size*.5f; }
-            else { low=c.transform.InverseTransformPoint(c.bounds.min); high=c.transform.InverseTransformPoint(c.bounds.max); }
+            else if (mesh != null && mesh.sharedMesh != null) { low=mesh.sharedMesh.bounds.min; high=mesh.sharedMesh.bounds.max; }
+            else
+            {
+                low=new Vector3(float.PositiveInfinity,float.PositiveInfinity,float.PositiveInfinity);
+                high=-low;
+                Bounds bounds=c.bounds;
+                for(int x=0;x<2;x++) for(int y=0;y<2;y++) for(int z=0;z<2;z++)
+                {
+                    Vector3 p=c.transform.InverseTransformPoint(new Vector3(x==0?bounds.min.x:bounds.max.x,
+                        y==0?bounds.min.y:bounds.max.y,z==0?bounds.min.z:bounds.max.z));
+                    low=Vector3.Min(low,p); high=Vector3.Max(high,p);
+                }
+            }
         }
         public bool DiscoveryStand(Collider c, Vector3 localSeed, out Vector3 point, out Collider ground)
         {

@@ -85,6 +85,9 @@ def spatial_context(semantic, *, budget=18):
         # in rotated kitchens. Exact transforms stay in the native registry.
         for key in ('position', 'supportLocalPosition', 'objectInstanceId'):
             result.pop(key, None)
+        velocity = result.pop('velocity', None)
+        if velocity and oriented:
+            result['screen_velocity'] = dict(zip(('right', 'up'), project(velocity)))
         return result
     stations = native.get('stations', [])
     candidates = [describe(p) for p in stations + native.get('platforms', []) + floor]
@@ -95,9 +98,6 @@ def spatial_context(semantic, *, budget=18):
         supports.setdefault(p['supportId'], {'id': p['supportId'], 'point_count': 0})['point_count'] += 1
     for support in native.get('supports', []):
         value = describe(support)
-        velocity = value.pop('velocity', None)
-        if velocity and oriented:
-            value['screen_velocity'] = dict(zip(('right', 'up'), project(velocity)))
         supports.setdefault(support['id'], {}).update(value)
     return {'epoch': native.get('epoch'), 'observed_at': native.get('observedAt'),
             'orientation': {k:v for k,v in orientation.items() if k not in ('right','up')},

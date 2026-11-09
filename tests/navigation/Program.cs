@@ -1402,7 +1402,8 @@ internal static class Program
         var floor=w.AddFloor((x,z)=>Math.Abs(x)<3 && Math.Abs(z)<3 && (!closed || Math.Abs(x)>.5f) ? 0 : (float?)null);
         floor.testBounds=new Bounds(new Vector3(0,-.05f,0),new Vector3(6,.1f,6));
         w.Chef.transform.position=new Vector3(-2,0,0);
-        var nav=new NavigationActions((v,ms)=>{w.LastInput=v;},()=>{w.LastInput=Vector3.zero;});
+        int releases=0;
+        var nav=new NavigationActions((v,ms)=>{w.LastInput=v;},()=>{w.LastInput=Vector3.zero;releases++;});
         var camera=new GameObject("game camera").Add(new Camera());
         camera.transform.Basis=new[]{Vector3.right,new Vector3(0,.7f,.7f),new Vector3(0,-.7f,.7f)}; Camera.main=camera;
         var map=ObserveMap(nav,w); var points=((List<object>)map["points"]).Cast<Json.Record>().ToList();
@@ -1413,6 +1414,7 @@ internal static class Program
         Check(nav.StartGrounded(w.Chef,1,id)==null,"blocked destination identity is accepted");
         for(int i=0;i<12;i++){Time.realtimeSinceStartup+=.1f;Time.frameCount++;nav.Tick(w.Chef);}
         Check(nav.Action.State=="navigating" && nav.MovementWaiting!=null && w.LastInput.sqrMagnitude==0,"closed passage waits neutrally, never succeeds or retargets");
+        Check(releases==0,"waiting emits neutral input without releasing native navigation ownership");
         nav.ResumeAfterPause(3); Check(nav.Action.Destination==id,"suspension retains destination binding");
         closed=false;
         for(int i=0;i<300 && nav.Action.State=="navigating";i++)
@@ -1423,6 +1425,22 @@ internal static class Program
         Check(nav.Action.Reason=="arrived" && Vector3.Distance(w.Chef.transform.position,MapPosition(chosen))<.21f,"opened passage permits checked movement and strict point arrival without a facing object");
         Check(w.LastInput.sqrMagnitude==0,"arrival releases movement");
         nav.Reset("round_changed"); Check(nav.StartGrounded(w.Chef,1,id)=="destination_binding_stale","round reset invalidates floor references");
+
+        // Change the partition direction on the same physical floor. Sampling
+        // observes actual holes/obstructions, never a named left/right region.
+        floor.Elevation=(x,z)=>Math.Abs(x)<3 && Math.Abs(z)<3 && Math.Abs(z)>.5f ? 0 : (float?)null;
+        w.Chef.transform.position=new Vector3(0,0,-2);
+        map=ObserveMap(nav,w); points=((List<object>)map["points"]).Cast<Json.Record>().ToList();
+        Check(points.Any(p=>MapPosition(p).z>1) && points.Any(p=>MapPosition(p).z< -1),"rotated barrier retains both top and bottom destinations");
+        Check(points.All(p=>Math.Abs(MapPosition(p).z)>.5f),"standing discovery excludes the barrier gap itself");
+        nav.Reset("round_changed");
+        floor.Elevation=(x,z)=>Math.Abs(x)<3 && Math.Abs(z)<3 && (Math.Abs(x)>1 || Math.Abs(z)>1) ? 0 : (float?)null;
+        map=ObserveMap(nav,w); points=((List<object>)map["points"]).Cast<Json.Record>().ToList();
+        Check(points.Count>0 && points.All(p=>Math.Abs(MapPosition(p).x)>1 || Math.Abs(MapPosition(p).z)>1),"irregular ring floor never creates a destination in its hole");
+        var upper=w.AddFloor((x,z)=>Math.Abs(x)<2 && Math.Abs(z)<2 ? 4 : (float?)null);
+        upper.testBounds=new Bounds(new Vector3(0,3.95f,0),new Vector3(4,.1f,4));
+        nav.Reset("round_changed");map=ObserveMap(nav,w);points=((List<object>)map["points"]).Cast<Json.Record>().ToList();
+        Check(points.Any(p=>MapPosition(p).y>3) && points.Any(p=>MapPosition(p).y<1),"overlapping upper and lower decks remain distinct observed standing positions");
 
         w=new World();float shift=0;
         floor=w.AddFloor((x,z)=>Math.Abs(x-shift)<2 && Math.Abs(z)<2 ? 0 : (float?)null);

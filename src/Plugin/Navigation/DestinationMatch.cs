@@ -6,9 +6,9 @@ namespace SousChef.Plugin.Navigation
 {
     internal sealed partial class NavigationActions
     {
-        // The catalogue visits indexed cells around each station. A focused walk
+        // The catalogue visits indexed cells around each station or point. A focused walk
         // feeds the same matcher cells in Dijkstra settlement order instead.
-        private sealed class StationMatch
+        private sealed class DestinationMatch
         {
             private struct Region
             {
@@ -31,11 +31,20 @@ namespace SousChef.Plugin.Navigation
             private Choice best = new Choice { Cost = float.PositiveInfinity };
             private Choice preferred = new Choice { Cost = float.PositiveInfinity };
 
-            public StationMatch(NavigationActions nav, Destination destination)
+            public DestinationMatch(NavigationActions nav, Destination destination)
             {
                 this.nav = nav;
                 this.destination = destination;
-                retained = destination.Object.transform.TransformPoint(destination.LocalApproach);
+                retained = destination.IsPoint ? destination.Approach : destination.Object.transform.TransformPoint(destination.LocalApproach);
+                if (destination.IsPoint)
+                {
+                    float reach=WalkPhysics.Spacing*2;
+                    regions.Add(new Region { Left=Mathf.FloorToInt((retained.x-reach)/WalkPhysics.Spacing),
+                        Right=Mathf.CeilToInt((retained.x+reach)/WalkPhysics.Spacing),
+                        Bottom=Mathf.FloorToInt((retained.z-reach)/WalkPhysics.Spacing),
+                        Top=Mathf.CeilToInt((retained.z+reach)/WalkPhysics.Spacing) });
+                    return;
+                }
                 foreach (Collider collider in destination.Colliders)
                 {
                     Bounds bounds = collider.bounds;
@@ -70,9 +79,10 @@ namespace SousChef.Plugin.Navigation
                 }
                 return regions.Count == 0 ? 0 : best;
             }
-            public bool SameRegion(StationMatch other)
+            public bool SameRegion(DestinationMatch other)
             {
-                if (other == null || destination != other.destination || regions.Count != other.regions.Count) return false;
+                if (other == null || destination != other.destination || regions.Count != other.regions.Count ||
+                    (destination.IsPoint && Vector3.Distance(retained,other.retained)>.001f)) return false;
                 for (int i = 0; i < regions.Count; i++)
                 {
                     var a = regions[i]; var b = other.regions[i];
@@ -104,6 +114,14 @@ namespace SousChef.Plugin.Navigation
             private void Consider(WalkCell cell, float distance, Collider collider)
             {
                 if (distance >= CertificationCost) return;
+                if (destination.IsPoint)
+                {
+                    Vector3 point=nav.physics.Point(cell); float connector=Vector3.Distance(point,retained);
+                    int history=cell.SurfaceHistory;
+                    if (connector<=WalkPhysics.Spacing*2 && distance+connector<best.Cost && nav.physics.Segment(point,retained,ref history))
+                        best=new Choice { Cost=distance+connector, Stance=retained, Cell=cell };
+                    return;
+                }
                 Vector3 stance;
                 if (!nav.physics.CellApproach(cell, collider, out stance)) return;
                 if (destination.Pack != null)
@@ -127,6 +145,11 @@ namespace SousChef.Plugin.Navigation
                 else if (preferRetained && !nav.search.Complete && nav.RemainingRouteClear()) return;
 
                 if (chosen.Cost == float.PositiveInfinity || chosen.Cost > nav.search.MinimumPendingDistance) return;
+                if (destination.IsPoint)
+                {
+                    destination.Goal=chosen.Cell; destination.Distance=chosen.Cost; destination.DirectRoute=false;
+                    nav.available[destination.Id]=destination; return;
+                }
                 Vector3 local = destination.Object.transform.InverseTransformPoint(chosen.Stance);
                 if (nav.target == destination && destination.Object.transform.TransformVector(local - destination.LocalApproach).magnitude >= .04f)
                 {

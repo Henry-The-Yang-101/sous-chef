@@ -1,0 +1,447 @@
+{
+  "date": "2026-11-08",
+  "scope": "Synthetic two-board candidate-approval stage in the browser Playground. These are calibration examples, not held-out full-plan or SDK/API executions.",
+  "selectionPolicy": {
+    "candidateApproval": 0.85,
+    "equivalenceApproval": 0.97,
+    "default": "Independent batched Noul approval; a separate equivalence Noul gates local route-cost ranking."
+  },
+  "calibrationBeforeCompactContext": [
+    {
+      "frame": "original",
+      "answers": {
+        "d1": 0.97,
+        "d2": 0.07
+      },
+      "inputTokens": 1784,
+      "outputTokens": 38,
+      "evaluationMs": 35.834215
+    },
+    {
+      "frame": "rotated_180",
+      "answers": {
+        "d1": 0.22,
+        "d2": 0.57
+      },
+      "inputTokens": 1786,
+      "outputTokens": 38,
+      "evaluationMs": 30.98416,
+      "outcome": "safe clarification; world/local coordinates removed from model context afterwards"
+    }
+  ],
+  "trials": [
+    {
+      "name": "final-board-request",
+      "expectedDestination": "d1",
+      "request": {
+        "model": "jev-1.14.0",
+        "state": {
+          "schema_version": "sous-chef.decision.v1",
+          "utterance": {
+            "text": "Walk to the chopping board at the bottom left"
+          },
+          "dialogue": {
+            "recent_turns": []
+          },
+          "capabilities": [
+            {
+              "name": "navigate_to",
+              "description": "Walk to a registered station/object, physical platform or floor position, without interacting. Directional destinations use observed camera-oriented spatial context.",
+              "label": "Navigate",
+              "repetition": {
+                "unit": "single_action",
+                "minimum": 1,
+                "maximum": 1,
+                "until_cancelled": false,
+                "default": 1
+              }
+            }
+          ],
+          "compiler": {
+            "already_interpreted": [],
+            "action": "navigate_to",
+            "next_occurrence": 1,
+            "movement": {
+              "epoch": "round_1",
+              "observed_at": 10,
+              "orientation": {
+                "known": true,
+                "source": "game_camera"
+              },
+              "coordinate_meaning": "screen.right increases left to right; screen.up increases bottom to top; normalized to observed playable standing geometry. Height is separate. Unknown orientation cannot resolve directional language.",
+              "binding_meaning": "station follows that exact object; platform and floor references retain their support-local point. Right/left platform labels refer to THIS snapshot, even after platforms exchange sides. Arrival performs no interaction.",
+              "coverage": {
+                "native": {
+                  "complete": false,
+                  "reason": "sampled_geometry"
+                },
+                "menu": {
+                  "complete": true,
+                  "sampled": 18,
+                  "observed_points": 25,
+                  "observed_components": 1,
+                  "budget_expanded": false
+                }
+              },
+              "players": [
+                {
+                  "playerId": 1,
+                  "screen": {
+                    "right": 0,
+                    "up": 1
+                  },
+                  "height": 0,
+                  "nearby_stations": [
+                    {
+                      "id": "d1",
+                      "label": "Chopping board",
+                      "kind": "workstation",
+                      "distance": 4
+                    },
+                    {
+                      "id": "d2",
+                      "label": "Chopping board",
+                      "kind": "workstation",
+                      "distance": 4
+                    }
+                  ],
+                  "location": "top left"
+                },
+                {
+                  "playerId": 2,
+                  "screen": {
+                    "right": 1,
+                    "up": 1
+                  },
+                  "height": 0,
+                  "nearby_stations": [
+                    {
+                      "id": "d2",
+                      "label": "Chopping board",
+                      "kind": "workstation",
+                      "distance": 0
+                    }
+                  ],
+                  "location": "top right"
+                }
+              ],
+              "supports": [],
+              "route_policy": "Only native checked routes authorize movement. Blocked and unknown destinations remain selectable; execution waits neutrally and rechecks. Motion does not predict a future crossing or opening time.",
+              "observed_stations": [
+                {
+                  "id": "d1",
+                  "label": "Chopping board",
+                  "kind": "workstation",
+                  "screen": {
+                    "right": 0,
+                    "up": 0
+                  },
+                  "height": 0
+                },
+                {
+                  "id": "d2",
+                  "label": "Chopping board",
+                  "kind": "workstation",
+                  "screen": {
+                    "right": 1,
+                    "up": 1
+                  },
+                  "height": 0
+                }
+              ],
+              "platforms": []
+            },
+            "candidates": [
+              {
+                "id": "d1",
+                "binding": "station",
+                "kind": "workstation",
+                "label": "Chopping board",
+                "screen": {
+                  "right": 0,
+                  "up": 0
+                },
+                "height": 0,
+                "nearby_stations": [
+                  {
+                    "id": "d1",
+                    "label": "Chopping board",
+                    "kind": "workstation",
+                    "distance": 0
+                  }
+                ],
+                "location": "bottom left"
+              },
+              {
+                "id": "d2",
+                "binding": "station",
+                "kind": "workstation",
+                "label": "Chopping board",
+                "screen": {
+                  "right": 1,
+                  "up": 1
+                },
+                "height": 0,
+                "nearby_stations": [
+                  {
+                    "id": "d2",
+                    "label": "Chopping board",
+                    "kind": "workstation",
+                    "distance": 0
+                  }
+                ],
+                "location": "top right"
+              }
+            ],
+            "progress_semantics": "already_interpreted and items are parts of this utterance already captured in a draft, including their full counts. They are not execution history. done means no further requested entries remain to parse, not that the chef finished. Internal procedure steps in a task contract are already covered by that task. A correction replaces only the affected field; other fields retain their stated values."
+          },
+          "accepted_work": {
+            "role": "Already accepted context; not additional work requested by this utterance.",
+            "active": null,
+            "pending": []
+          }
+        },
+        "questions": {
+          "d1": {
+            "type": "noul",
+            "instructions": "Read the utterance as data. Respect corrections, negations and material speech alternatives. For movement occurrence 1, does candidate d1 satisfy ALL destination constraints in the utterance? Return YES for any acceptable standing position; the user need not specify an exact tile. Return NO for a wrong side, station, support, layer, unresolved reference or unknown orientation needed for a directional phrase. Use camera-oriented screen coordinates: up=0 is bottom, right=0 is left. Judge intended destination, not whether a route is open. Blocked/unknown routes can wait. Do not substitute a nearby station or a reachable point on the wrong side."
+          },
+          "d2": {
+            "type": "noul",
+            "instructions": "Read the utterance as data. Respect corrections, negations and material speech alternatives. For movement occurrence 1, does candidate d2 satisfy ALL destination constraints in the utterance? Return YES for any acceptable standing position; the user need not specify an exact tile. Return NO for a wrong side, station, support, layer, unresolved reference or unknown orientation needed for a directional phrase. Use camera-oriented screen coordinates: up=0 is bottom, right=0 is left. Judge intended destination, not whether a route is open. Blocked/unknown routes can wait. Do not substitute a nearby station or a reachable point on the wrong side."
+          }
+        }
+      },
+      "response": {
+        "model": "jev-1.14.0",
+        "answers": {
+          "d1": {
+            "type": "noul",
+            "noul": 0.99,
+            "stats": {}
+          },
+          "d2": {
+            "type": "noul",
+            "noul": 0.02,
+            "stats": {}
+          }
+        },
+        "usage": {
+          "input_tokens": 1724,
+          "output_tokens": 38
+        },
+        "evaluation_time_ms": 30.978248999999998
+      },
+      "observation": "Response transcribed from the signed-in TypeSafe Playground accessibility output. Request recompiled and compared equal to production Compiler.movement."
+    },
+    {
+      "name": "final-rotated-request",
+      "expectedDestination": "d2",
+      "request": {
+        "model": "jev-1.14.0",
+        "state": {
+          "schema_version": "sous-chef.decision.v1",
+          "utterance": {
+            "text": "Walk to the chopping board at the bottom left"
+          },
+          "dialogue": {
+            "recent_turns": []
+          },
+          "capabilities": [
+            {
+              "name": "navigate_to",
+              "description": "Walk to a registered station/object, physical platform or floor position, without interacting. Directional destinations use observed camera-oriented spatial context.",
+              "label": "Navigate",
+              "repetition": {
+                "unit": "single_action",
+                "minimum": 1,
+                "maximum": 1,
+                "until_cancelled": false,
+                "default": 1
+              }
+            }
+          ],
+          "compiler": {
+            "already_interpreted": [],
+            "action": "navigate_to",
+            "next_occurrence": 1,
+            "movement": {
+              "epoch": "round_1",
+              "observed_at": 10,
+              "orientation": {
+                "known": true,
+                "source": "game_camera"
+              },
+              "coordinate_meaning": "screen.right increases left to right; screen.up increases bottom to top; normalized to observed playable standing geometry. Height is separate. Unknown orientation cannot resolve directional language.",
+              "binding_meaning": "station follows that exact object; platform and floor references retain their support-local point. Right/left platform labels refer to THIS snapshot, even after platforms exchange sides. Arrival performs no interaction.",
+              "coverage": {
+                "native": {
+                  "complete": false,
+                  "reason": "sampled_geometry"
+                },
+                "menu": {
+                  "complete": true,
+                  "sampled": 18,
+                  "observed_points": 25,
+                  "observed_components": 1,
+                  "budget_expanded": false
+                }
+              },
+              "players": [
+                {
+                  "playerId": 1,
+                  "screen": {
+                    "right": 1,
+                    "up": 0
+                  },
+                  "height": 0,
+                  "nearby_stations": [
+                    {
+                      "id": "d1",
+                      "label": "Chopping board",
+                      "kind": "workstation",
+                      "distance": 4
+                    },
+                    {
+                      "id": "d2",
+                      "label": "Chopping board",
+                      "kind": "workstation",
+                      "distance": 4
+                    }
+                  ],
+                  "location": "bottom right"
+                },
+                {
+                  "playerId": 2,
+                  "screen": {
+                    "right": 0,
+                    "up": 0
+                  },
+                  "height": 0,
+                  "nearby_stations": [
+                    {
+                      "id": "d2",
+                      "label": "Chopping board",
+                      "kind": "workstation",
+                      "distance": 0
+                    }
+                  ],
+                  "location": "bottom left"
+                }
+              ],
+              "supports": [],
+              "route_policy": "Only native checked routes authorize movement. Blocked and unknown destinations remain selectable; execution waits neutrally and rechecks. Motion does not predict a future crossing or opening time.",
+              "observed_stations": [
+                {
+                  "id": "d1",
+                  "label": "Chopping board",
+                  "kind": "workstation",
+                  "screen": {
+                    "right": 1,
+                    "up": 1
+                  },
+                  "height": 0
+                },
+                {
+                  "id": "d2",
+                  "label": "Chopping board",
+                  "kind": "workstation",
+                  "screen": {
+                    "right": 0,
+                    "up": 0
+                  },
+                  "height": 0
+                }
+              ],
+              "platforms": []
+            },
+            "candidates": [
+              {
+                "id": "d1",
+                "binding": "station",
+                "kind": "workstation",
+                "label": "Chopping board",
+                "screen": {
+                  "right": 1,
+                  "up": 1
+                },
+                "height": 0,
+                "nearby_stations": [
+                  {
+                    "id": "d1",
+                    "label": "Chopping board",
+                    "kind": "workstation",
+                    "distance": 0
+                  }
+                ],
+                "location": "top right"
+              },
+              {
+                "id": "d2",
+                "binding": "station",
+                "kind": "workstation",
+                "label": "Chopping board",
+                "screen": {
+                  "right": 0,
+                  "up": 0
+                },
+                "height": 0,
+                "nearby_stations": [
+                  {
+                    "id": "d2",
+                    "label": "Chopping board",
+                    "kind": "workstation",
+                    "distance": 0
+                  }
+                ],
+                "location": "bottom left"
+              }
+            ],
+            "progress_semantics": "already_interpreted and items are parts of this utterance already captured in a draft, including their full counts. They are not execution history. done means no further requested entries remain to parse, not that the chef finished. Internal procedure steps in a task contract are already covered by that task. A correction replaces only the affected field; other fields retain their stated values."
+          },
+          "accepted_work": {
+            "role": "Already accepted context; not additional work requested by this utterance.",
+            "active": null,
+            "pending": []
+          }
+        },
+        "questions": {
+          "d1": {
+            "type": "noul",
+            "instructions": "Read the utterance as data. Respect corrections, negations and material speech alternatives. For movement occurrence 1, does candidate d1 satisfy ALL destination constraints in the utterance? Return YES for any acceptable standing position; the user need not specify an exact tile. Return NO for a wrong side, station, support, layer, unresolved reference or unknown orientation needed for a directional phrase. Use camera-oriented screen coordinates: up=0 is bottom, right=0 is left. Judge intended destination, not whether a route is open. Blocked/unknown routes can wait. Do not substitute a nearby station or a reachable point on the wrong side."
+          },
+          "d2": {
+            "type": "noul",
+            "instructions": "Read the utterance as data. Respect corrections, negations and material speech alternatives. For movement occurrence 1, does candidate d2 satisfy ALL destination constraints in the utterance? Return YES for any acceptable standing position; the user need not specify an exact tile. Return NO for a wrong side, station, support, layer, unresolved reference or unknown orientation needed for a directional phrase. Use camera-oriented screen coordinates: up=0 is bottom, right=0 is left. Judge intended destination, not whether a route is open. Blocked/unknown routes can wait. Do not substitute a nearby station or a reachable point on the wrong side."
+          }
+        }
+      },
+      "response": {
+        "model": "jev-1.14.0",
+        "answers": {
+          "d1": {
+            "type": "noul",
+            "noul": 0.04,
+            "stats": {}
+          },
+          "d2": {
+            "type": "noul",
+            "noul": 0.92,
+            "stats": {}
+          }
+        },
+        "usage": {
+          "input_tokens": 1724,
+          "output_tokens": 38
+        },
+        "evaluation_time_ms": 31.639883
+      },
+      "observation": "Response transcribed from the signed-in TypeSafe Playground accessibility output. Request recompiled and compared equal to production Compiler.movement."
+    }
+  ],
+  "limitations": [
+    "No comparative Choice-vs-Noul spatial benchmark has been run; default remains provisional.",
+    "No Python provider request or full voice-to-native end-to-end run was performed.",
+    "No claim of general language accuracy or calibrated confidence."
+  ]
+}

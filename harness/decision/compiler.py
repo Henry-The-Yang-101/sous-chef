@@ -445,7 +445,7 @@ class Compiler:
                     'unsupported': 'The requested destination is not represented by these binding types.'}
         stage = f'task.{index}.movement.binding'
         overview = {k:v for k,v in scene.items() if k != 'candidates'}
-        overview['observed_stations'] = [{k:c[k] for k in ('id','label','kind','screen','height') if k in c} for c in scene['candidates'] if c['binding']=='station']
+        overview['observed_stations'] = [{k:c[k] for k in ('id','label','kind','screen','height','motion','screen_velocity') if k in c} for c in scene['candidates'] if c['binding']=='station']
         overview['platforms'] = [c for c in scene['candidates'] if c['binding']=='platform']
         answers = await self.batch(stage, {'binding': scoped_choice(
             f'For movement occurrence {index}, which destination binding expresses the requested meaning in this snapshot? '

@@ -24,11 +24,17 @@ namespace SousChef.Plugin.Navigation
         private readonly Dictionary<string, string> standingKeys = new Dictionary<string, string>();
         private readonly List<StandingReference> scanPoints = new List<StandingReference>();
         private readonly List<object> mapEdges = new List<object>();
+        private readonly Dictionary<long,List<StandingReference>> edgeBuckets = new Dictionary<long,List<StandingReference>>();
+        private readonly List<StandingReference> edgeNeighbours = new List<StandingReference>();
+        private int neighbourIndex;
         private readonly List<Collider> scanGrounds = new List<Collider>();
         private readonly Dictionary<string, StandingReference> platformPoints = new Dictionary<string, StandingReference>();
+        private sealed class MotionObservation { public Vector3 Position; public Matrix4x4 Matrix; public float Time; }
+        private readonly Dictionary<string, MotionObservation> observedMotion = new Dictionary<string, MotionObservation>();
         private string mapEpoch = Guid.NewGuid().ToString("N"), mapError = "not_observed";
         private float mapUntil, mapRefresh = -1, scanCompleted = -1;
         private int groundIndex, seedX, seedZ, probeIndex, edgeIndex, scanGeneration;
+        private int mapFrame=-1;
         private bool seeding, mapLimited;
         private double mapMilliseconds;
         private const int MaxStanding = 4096, MaxSeedsPerGround = 4096;
@@ -39,8 +45,10 @@ namespace SousChef.Plugin.Navigation
         private void ResetGroundedMap()
         {
             mapEpoch = Guid.NewGuid().ToString("N"); mapPhysics.Reset();
-            standing.Clear(); standingKeys.Clear(); scanPoints.Clear(); scanGrounds.Clear(); platformPoints.Clear(); mapEdges.Clear();
+            standing.Clear(); standingKeys.Clear(); scanPoints.Clear(); scanGrounds.Clear(); platformPoints.Clear(); observedMotion.Clear(); mapEdges.Clear();
+            edgeBuckets.Clear(); edgeNeighbours.Clear(); neighbourIndex=0;
             mapUntil = 0; mapRefresh = scanCompleted = -1; seeding = false; mapError = "not_observed";
+            mapFrame=-1;
         }
 
         // DynamicLandscapeParenting uses this exact native ownership interface.
@@ -65,7 +73,8 @@ namespace SousChef.Plugin.Navigation
 
         public void WarmGroundedMap(PlayerControls player)
         {
-            if (player == null || Time.realtimeSinceStartup > mapUntil) return;
+            if (player == null || Time.realtimeSinceStartup > mapUntil || mapFrame==Time.frameCount) return;
+            mapFrame=Time.frameCount;
             var watch = Stopwatch.StartNew();
             try
             {
@@ -92,6 +101,7 @@ namespace SousChef.Plugin.Navigation
                         {
                             seeding = false; scanPoints.Clear(); scanPoints.AddRange(standing.Values);
                             scanPoints.Sort((a,b) => String.CompareOrdinal(a.Id,b.Id)); probeIndex = edgeIndex = 0;
+                            edgeBuckets.Clear(); edgeNeighbours.Clear(); neighbourIndex=0;
                             continue;
                         }
                         Collider c = scanGrounds[groundIndex];
@@ -120,26 +130,57 @@ namespace SousChef.Plugin.Navigation
                     {
                         StandingReference p = scanPoints[probeIndex++];
                         p.Valid = ValidateStanding(p, mapPhysics); p.Observed = Time.realtimeSinceStartup;
+                        if (p.Valid)
+                        {
+                            long key=EdgeBucket(p.Position); List<StandingReference> bucket;
+                            if(!edgeBuckets.TryGetValue(key,out bucket)) { bucket=new List<StandingReference>(); edgeBuckets[key]=bucket; }
+                            bucket.Add(p);
+                        }
                     }
                     else if (edgeIndex < scanPoints.Count)
                     {
-                        StandingReference a = scanPoints[edgeIndex++];
-                        if (!a.Valid) continue;
+                        StandingReference a = scanPoints[edgeIndex];
+                        if (!a.Valid) { edgeIndex++; continue; }
                         // Sparse observed edges are evidence of connections, never
-                        // evidence of disconnection. Directed native routes stay local.
-                        for (int j = 0; j < scanPoints.Count; j++)
+                        // evidence of disconnection. Check one edge per budgeted
+                        // operation; stacked decks cannot create an unbounded slice.
+                        if (edgeNeighbours.Count==0)
                         {
-                            StandingReference b = scanPoints[j];
-                            if (!b.Valid || String.CompareOrdinal(a.Id,b.Id) >= 0 ||
-                                Vector3.Distance(a.Position,b.Position) > MapSpacing*1.45f) continue;
+                            int x=Mathf.FloorToInt(a.Position.x/(MapSpacing*1.5f)), z=Mathf.FloorToInt(a.Position.z/(MapSpacing*1.5f));
+                            for(int dx=-1;dx<=1;dx++) for(int dz=-1;dz<=1;dz++)
+                            {
+                                List<StandingReference> bucket;
+                                if(edgeBuckets.TryGetValue(((long)(x+dx)<<32)^(uint)(z+dz),out bucket))
+                                    foreach(StandingReference b in bucket)
+                                        if(String.CompareOrdinal(a.Id,b.Id)<0 && Vector3.Distance(a.Position,b.Position)<=MapSpacing*1.45f)
+                                            edgeNeighbours.Add(b);
+                            }
+                        }
+                        if(neighbourIndex<edgeNeighbours.Count)
+                        {
+                            StandingReference b=edgeNeighbours[neighbourIndex++];
                             if (mapPhysics.Segment(a.Position,b.Position) && mapPhysics.Segment(b.Position,a.Position))
                                 mapEdges.Add(Json.Object("from",a.Id,"to",b.Id,"direction","both","observedAt",Time.realtimeSinceStartup));
                         }
+                        if(neighbourIndex>=edgeNeighbours.Count) { edgeIndex++; edgeNeighbours.Clear(); neighbourIndex=0; }
                     }
                     else { scanCompleted = Time.realtimeSinceStartup; break; }
                 }
             }
             finally { mapMilliseconds = watch.Elapsed.TotalMilliseconds; }
+        }
+
+        private static long EdgeBucket(Vector3 p)
+        { return ((long)Mathf.FloorToInt(p.x/(MapSpacing*1.5f))<<32) ^ (uint)Mathf.FloorToInt(p.z/(MapSpacing*1.5f)); }
+
+        private void ObserveMotion(string key, Transform anchor, Json.Record value)
+        {
+            MotionObservation previous; observedMotion.TryGetValue(key,out previous);
+            float elapsed=previous==null ? 0 : Time.realtimeSinceStartup-previous.Time;
+            value["motion"]=previous==null ? "unknown" : previous.Matrix!=anchor.localToWorldMatrix ? "observed_moving" : "observed_stationary";
+            value["velocity"]=previous==null ? null : Values.Vector(elapsed>.001f ? (anchor.position-previous.Position)/elapsed : Vector3.zero);
+            value["observedAt"]=Time.realtimeSinceStartup;
+            observedMotion[key]=new MotionObservation { Position=anchor.position, Matrix=anchor.localToWorldMatrix, Time=Time.realtimeSinceStartup };
         }
 
         private static bool ValidateStanding(StandingReference p, WalkPhysics check)
@@ -156,29 +197,57 @@ namespace SousChef.Plugin.Navigation
         {
             mapUntil = Time.realtimeSinceStartup + 3;
             WarmGroundedMap(player);
-            var points = new List<object>(); var platforms = new List<object>(); var targets = new List<object>();
+            var points = new List<object>(); var platforms = new List<object>(); var targets = new List<object>(); var supports = new List<object>();
+            var grouped = new Dictionary<string,List<StandingReference>>();
             foreach (StandingReference p in standing.Values)
             {
                 if (p.Anchor != null) p.Position = p.Anchor.TransformPoint(p.Local);
                 points.Add(Json.Object("id",p.Id,"binding","floor","position",Values.Vector(p.Position),"supportId",p.SupportId,
                     "supportLocalPosition",Values.Vector(p.Local),"platform",p.Platform,"standing",p.Valid ? "verified" : "blocked",
                     "observedAt",p.Observed,"routeStatus","unknown"));
-                if (p.Platform && p.Valid && !platformPoints.ContainsKey(p.SupportId))
+                if (p.Platform && p.Valid && p.Anchor != null)
                 {
-                    // Freeze a support-local safe point. Later samples cannot
-                    // silently move an accepted platform destination elsewhere.
-                    platformPoints[p.SupportId] = new StandingReference { Id="d"+(++nextId), Ground=p.Ground, Anchor=p.Anchor,
-                        Local=p.Local, Position=p.Position, SupportId=p.SupportId, Platform=true, Valid=true, Observed=p.Observed };
+                    List<StandingReference> group;
+                    if (!grouped.TryGetValue(p.SupportId,out group)) { group=new List<StandingReference>(); grouped[p.SupportId]=group; }
+                    group.Add(p);
                 }
+            }
+            foreach (var group in grouped)
+            {
+                Vector3 centre=Vector3.zero; foreach(StandingReference p in group.Value) centre+=p.Position;
+                centre/=group.Value.Count;
+                StandingReference nearest=group.Value[0];
+                foreach(StandingReference p in group.Value)
+                    if(Vector3.Distance(p.Position,centre)<Vector3.Distance(nearest.Position,centre)) nearest=p;
+                if (!platformPoints.ContainsKey(group.Key))
+                    platformPoints[group.Key]=new StandingReference { Id="d"+(++nextId), Ground=nearest.Ground, Anchor=nearest.Anchor,
+                        Local=nearest.Local, Position=nearest.Position, SupportId=nearest.SupportId, Platform=true, Valid=true, Observed=nearest.Observed };
+                Transform anchor=nearest.Anchor;
+                var occupants=new List<object>(); var stations=new List<object>();
+                foreach(PlayerControls chefOnMap in UnityEngine.Object.FindObjectsOfType<PlayerControls>())
+                {
+                    bool owned;
+                    if(chefOnMap.PlayerIDProvider!=null && SupportOwner(chefOnMap.GroundCollider,chefOnMap.gameObject,out owned)==anchor)
+                        occupants.Add((int)chefOnMap.PlayerIDProvider.GetID()+1);
+                }
+                foreach(Destination station in identities.Values)
+                    if(station.Object!=null && station.Object.transform.IsChildOf(anchor)) stations.Add(station.Id);
+                var supportValue=Json.Object("id",group.Key,"label",anchor.gameObject.name,"position",Values.Vector(centre),
+                    "occupants",occupants,"stations",stations,"evidence","native_IParentable; observed transform delta; no arrival forecast");
+                ObserveMotion(group.Key,anchor,supportValue); supports.Add(supportValue);
             }
             foreach (StandingReference p in platformPoints.Values)
                 if (p.Anchor != null) platforms.Add(Json.Object("id",p.Id,"binding","platform","label",p.Anchor.gameObject.name,
                     "supportId",p.SupportId,"position",Values.Vector(p.Anchor.TransformPoint(p.Local)),
+                    "supportLocalPosition",Values.Vector(p.Local),
                     "standing","requires_revalidation","routeStatus","unknown","ownershipEvidence","native_IParentable"));
             foreach (Destination d in identities.Values)
             {
                 if (d.Object == null || !d.Object.activeInHierarchy) continue;
                 var value = (Json.Record)Identity(d); value["binding"] = "station";
+                ObserveMotion(d.Id,d.Object.transform,value);
+                foreach(var group in grouped)
+                    if(d.Object.transform.IsChildOf(group.Value[0].Anchor)) { value["supportId"]=group.Key; break; }
                 value["standing"] = "requires_approach_check"; value["routeStatus"] = "unknown";
                 if (available.ContainsKey(d.Id) && Time.realtimeSinceStartup-lastPlan < .2f)
                 { value["routeStatus"] = "verified"; value["routeDistance"] = d.Distance; }
@@ -192,7 +261,8 @@ namespace SousChef.Plugin.Navigation
             return Json.Object("version",1,"epoch",mapEpoch,"observedAt",Time.realtimeSinceStartup,
                 "orientation",Json.Object("known",oriented,"source",oriented ? "game_camera" : "unavailable",
                     "right",Values.Vector(right.normalized),"up",Values.Vector(up.normalized)),
-                "points",points,"platforms",platforms,"stations",targets,"walkingEdges",mapEdges.ToArray(),
+                "actor",Json.Object("playerId",2,"position",Values.Vector(player.transform.position)),
+                "points",points,"platforms",platforms,"supports",supports,"stations",targets,"walkingEdges",mapEdges.ToArray(),
                 "coverage",Json.Object("complete",false,"reason",mapError ?? (mapLimited ? "discovery_limit" : "sampled_geometry"),
                     "samplingComplete",!seeding && probeIndex>=scanPoints.Count && edgeIndex>=scanPoints.Count,
                     "pointCount",standing.Count,"generation",scanGeneration,"lastSweepAt",scanCompleted,
@@ -222,14 +292,14 @@ namespace SousChef.Plugin.Navigation
             haveMotion=motionSampleValid=false; settlingSince=-1; teleportsCompleted=0; executionTrace.Clear();
             // Accept identity first; route eligibility is refreshed in Tick. A
             // closed passage is a neutral, cancellable wait, not a substitute.
-            neutral(); movementWaiting="checking_route"; return null;
+            move(Vector3.zero,50); movementWaiting="checking_route"; return null;
         }
 
         private bool WaitForGroundedRoute(string reason)
         {
             if (movementReference == null) return false;
             movementWaiting=reason ?? "route_unknown"; route=null; arrival.Reset(); facingSince=-1;
-            haveMotion=motionSampleValid=false; ResetWalkingProgress(); neutral();
+            haveMotion=motionSampleValid=false; ResetWalkingProgress(); move(Vector3.zero,50);
             return true;
         }
     }

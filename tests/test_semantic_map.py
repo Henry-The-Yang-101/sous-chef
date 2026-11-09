@@ -1,11 +1,12 @@
 import copy
 import json
+from pathlib import Path
 import unittest
 
 from harness.semantic_map import sample_floor, spatial_context
 from harness.decision.compiler import Compiler, Clarification, build_context
 from harness.decision.service import InterpreterService
-from harness.decision.protocol import DecisionError
+from harness.decision.protocol import DecisionError, validate_response
 from test_decision import world, Script
 
 
@@ -63,12 +64,23 @@ class SamplingTests(unittest.TestCase):
         data=scene();value=spatial_context({'movement':data,'players':[{'playerId':1,'position':[0,0,4]}]})
         a=next(p for p in value['candidates'] if p['id']=='d1')
         self.assertEqual(a['screen'],{'right':0,'up':0})
+        self.assertEqual(a['location'],'bottom left')
+        self.assertNotIn('position',a)
+        self.assertNotIn('right',value['orientation'])
         self.assertEqual({p['playerId'] for p in value['players']},{1,2})
         data['orientation'].update(right=[-1,0,0],up=[0,0,-1])
         rotated=spatial_context({'movement':data})
         self.assertEqual(next(p for p in rotated['candidates'] if p['id']=='d1')['screen'],{'right':1,'up':1})
         data['orientation']['known']=False
         self.assertNotIn('screen',spatial_context({'movement':data})['candidates'][0])
+
+    def test_moving_counter_velocity_uses_same_camera_frame_without_forecasting(self):
+        data=scene();data['stations'][0].update(motion='observed_moving',velocity=[2,0,-3])
+        data['orientation'].update(right=[-1,0,0],up=[0,0,-1])
+        point=next(p for p in spatial_context({'movement':data})['candidates'] if p['id']=='d1')
+        self.assertEqual(point['motion'],'observed_moving')
+        self.assertEqual(point['screen_velocity'],{'right':-2,'up':3})
+        self.assertNotIn('velocity',point)
 
     def test_identity_revalidation_allows_motion_but_rejects_rebinding_and_epoch(self):
         before={'movement':scene()};after=copy.deepcopy(before)
@@ -79,9 +91,25 @@ class SamplingTests(unittest.TestCase):
         with self.assertRaises(DecisionError):InterpreterService._exact_bindings(before,after,task)
         after=copy.deepcopy(before);after['movement']['epoch']='new_round'
         with self.assertRaises(DecisionError):InterpreterService._exact_bindings(before,after,task)
+        after=copy.deepcopy(before);after['movement']['stations'][0]['supportId']='changed_parent'
+        task['tasks'][0]['arguments']['destination_id']='d1'
+        InterpreterService._exact_bindings(before,after,task)
+        after['movement']['stations'][0]['objectInstanceId']=999
+        with self.assertRaises(DecisionError):InterpreterService._exact_bindings(before,after,task)
 
 
 class MovementCompilerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_recorded_board_requests_match_current_production_context(self):
+        evidence=json.loads((Path(__file__).resolve().parents[1]/'docs/grounded-movement-language.json').read_text())
+        for trial in evidence['trials']:
+            data=scene()
+            if trial['name']=='final-rotated-request':data['orientation'].update(right=[-1,0,0],up=[0,0,-1])
+            script=Script([{'binding':'station'},{k:a['noul'] for k,a in trial['response']['answers'].items()}])
+            c=Compiler({'id':'replay','text':trial['request']['state']['utterance']['text']},context(data),script)
+            self.assertEqual(await c.movement(1),{'destination_id':trial['expectedDestination']})
+            self.assertEqual(script.requests[1],trial['request'])
+            validate_response(script.requests[1],trial['response'])
+
     async def test_bottom_left_board_has_spatial_context_and_exact_identity(self):
         script=Script([{'simple_coverage':0},{'next_task':'native_action'},{'action':'navigate_to'},
                        {'binding':'station'},{'d1':1,'d2':0},{},{'next_task':'done'},{}])

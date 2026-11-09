@@ -1,0 +1,576 @@
+{
+  "date": "2026-11-08",
+  "runtime": ".local/milestone5-native",
+  "runtimeBuild": {
+    "pid": 74296,
+    "level": "s_sushi_1_2",
+    "portBase": 28702,
+    "bridgeSha256": "d5d0a2cec2b8060b330f6cc7383f2f80d8acc22fffd78449e2aa3dace6be15e5"
+  },
+  "scope": "Real headless Unity/PhysX with installed game assemblies, isolated ports 28702-28704. Native deterministic selections, no Jev provider calls. No pose/cargo/route writes during measured navigation.",
+  "runs": [
+    {
+      "level": "s_sushi_1_2",
+      "selection": "top-left",
+      "target": {
+        "id": "d40",
+        "binding": "floor",
+        "supportId": "support_526282",
+        "platform": false,
+        "standing": "verified",
+        "observedAt": 45.25226974487305,
+        "routeStatus": "unknown",
+        "screen": {
+          "right": 0.0,
+          "up": 1.0
+        },
+        "location": "top left",
+        "height": 0,
+        "nearby_stations": [
+          {
+            "id": "d30",
+            "label": "countertop_01_standard_wood (7)",
+            "kind": "counter",
+            "distance": 1.31
+          },
+          {
+            "id": "d31",
+            "label": "utensil_fire_extinguisher_01",
+            "kind": "item",
+            "distance": 1.4
+          },
+          {
+            "id": "d22",
+            "label": "countertop_01_standard_wood (4)",
+            "kind": "counter",
+            "distance": 1.88
+          }
+        ]
+      },
+      "result": "arrived",
+      "arrival": {
+        "stanceError": 0.13773909211158752,
+        "facingErrorDegrees": 0,
+        "relativeSpeed": 0,
+        "nativeSelected": true,
+        "positioned": true,
+        "canPickup": false,
+        "canPlace": false,
+        "canUse": false,
+        "readyForAction": true
+      },
+      "samples": 18,
+      "waitingSamples": 2,
+      "bindingStable": true,
+      "sampledPoints": 121,
+      "floorCandidates": 18,
+      "camera": {
+        "known": true,
+        "source": "game_camera"
+      },
+      "catalogRoundtripMsMedian": 31.904875009786338,
+      "discoveryMs": 1181.2052080058493,
+      "mapSliceMsMedian": 0.577,
+      "mapSliceMsMax": 4.153,
+      "scope": "Native Unity/PhysX, headless. Geometry selection is deterministic, no Jev calls.",
+      "receipt": {
+        "state": "succeeded",
+        "reason": "arrived"
+      },
+      "supportObservations": [],
+      "coverage": {
+        "complete": false,
+        "reason": "sampled_geometry",
+        "samplingComplete": true,
+        "pointCount": 121,
+        "generation": 1,
+        "lastSweepAt": 45.709232330322266,
+        "sliceMilliseconds": 0.001,
+        "connectivity": "observed_bidirectional_edges_only; missing paths are unknown"
+      },
+      "localEvidenceDirectory": ".local/milestone5-final-floor",
+      "traceSha256": "5161eb1baf07ce8ccd0eb72a2873a0f0854a852d80cd4c714cd01dea57df278c"
+    },
+    {
+      "level": "s_sushi_1_2",
+      "selection": "left-board",
+      "target": {
+        "id": "d176",
+        "label": "countertop_01_chopping_board_wood_no_edge (2)",
+        "kind": "workstation",
+        "foodName": null,
+        "binding": "station",
+        "motion": "observed_stationary",
+        "observedAt": 54.49272918701172,
+        "standing": "requires_approach_check",
+        "routeStatus": "verified",
+        "routeDistance": 9.050782203674316,
+        "screen": {
+          "right": 0.209,
+          "up": 1.24
+        },
+        "location": "top left",
+        "height": 0,
+        "nearby_stations": [
+          {
+            "id": "d176",
+            "label": "countertop_01_chopping_board_wood_no_edge (2)",
+            "kind": "workstation",
+            "distance": 0.0
+          },
+          {
+            "id": "d174",
+            "label": "countertop_01_chopping_board_wood_no_edge (1)",
+            "kind": "workstation",
+            "distance": 1.2
+          },
+          {
+            "id": "d175",
+            "label": "countertop_01_standard_wood (4)",
+            "kind": "counter",
+            "distance": 1.2
+          }
+        ],
+        "screen_velocity": {
+          "right": 0,
+          "up": 0
+        }
+      },
+      "result": "positioned_no_action",
+      "arrival": {
+        "stanceError": 0.11681487411260605,
+        "facingErrorDegrees": 0,
+        "relativeSpeed": 0,
+        "nativeSelected": true,
+        "positioned": true,
+        "canPickup": false,
+        "canPlace": false,
+        "canUse": false,
+        "readyForAction": false
+      },
+      "samples": 13,
+      "waitingSamples": 0,
+      "bindingStable": true,
+      "sampledPoints": 121,
+      "floorCandidates": 18,
+      "camera": {
+        "known": true,
+        "source": "game_camera"
+      },
+      "catalogRoundtripMsMedian": 31.73322949442081,
+      "discoveryMs": 722.4879169953056,
+      "mapSliceMsMedian": 0.6065,
+      "mapSliceMsMax": 2.075,
+      "scope": "Native Unity/PhysX, headless. Geometry selection is deterministic, no Jev calls.",
+      "receipt": {
+        "state": "succeeded",
+        "reason": "positioned_no_action"
+      },
+      "supportObservations": [],
+      "coverage": {
+        "complete": false,
+        "reason": "sampled_geometry",
+        "samplingComplete": true,
+        "pointCount": 121,
+        "generation": 6,
+        "lastSweepAt": 54.387935638427734,
+        "sliceMilliseconds": 0.001,
+        "connectivity": "observed_bidirectional_edges_only; missing paths are unknown"
+      },
+      "localEvidenceDirectory": ".local/milestone5-final-board",
+      "traceSha256": "d1335d92b12cca948671f1763f509ed7d3f79e142863ffff997e2cd2dbb7ccd7"
+    },
+    {
+      "level": "s_rapids_2_1",
+      "selection": "occupied-platform",
+      "target": {
+        "id": "d342",
+        "binding": "platform",
+        "label": "Raft_Top",
+        "supportId": "support_575700",
+        "standing": "requires_revalidation",
+        "routeStatus": "unknown",
+        "ownershipEvidence": "native_IParentable",
+        "screen": {
+          "right": 0.001,
+          "up": 0.927
+        },
+        "location": "top left",
+        "height": 0,
+        "nearby_stations": [
+          {
+            "id": "d318",
+            "label": "countertop_01_standard_old (2)",
+            "kind": "counter",
+            "distance": 1.23
+          },
+          {
+            "id": "d319",
+            "label": "countertop_01_standard_old (3)",
+            "kind": "counter",
+            "distance": 1.71
+          },
+          {
+            "id": "d317",
+            "label": "countertop_01_standard_old (1)",
+            "kind": "counter",
+            "distance": 1.73
+          }
+        ]
+      },
+      "result": "arrived",
+      "arrival": {
+        "stanceError": 0.10220639407634735,
+        "facingErrorDegrees": 0,
+        "relativeSpeed": 0,
+        "nativeSelected": true,
+        "positioned": true,
+        "canPickup": false,
+        "canPlace": false,
+        "canUse": false,
+        "readyForAction": true
+      },
+      "samples": 10,
+      "waitingSamples": 0,
+      "bindingStable": true,
+      "sampledPoints": 66,
+      "floorCandidates": 18,
+      "camera": {
+        "known": true,
+        "source": "game_camera"
+      },
+      "catalogRoundtripMsMedian": 28.494646001490764,
+      "discoveryMs": 515.4730409849435,
+      "mapSliceMsMedian": 0.6045,
+      "mapSliceMsMax": 2.042,
+      "scope": "Native Unity/PhysX, headless. Geometry selection is deterministic, no Jev calls.",
+      "receipt": {
+        "state": "succeeded",
+        "reason": "arrived"
+      },
+      "supportObservations": [
+        {
+          "id": "support_575700",
+          "point_count": 30,
+          "label": "Raft_Top",
+          "occupants": [
+            2
+          ],
+          "stations": [
+            "d307",
+            "d308",
+            "d309",
+            "d310",
+            "d311",
+            "d312",
+            "d313",
+            "d314",
+            "d315",
+            "d316",
+            "d317",
+            "d318",
+            "d319"
+          ],
+          "evidence": "native_IParentable; observed transform delta; no arrival forecast",
+          "motion": "observed_moving",
+          "observedAt": 62.563785552978516,
+          "screen": {
+            "right": 0.27,
+            "up": 0.932
+          },
+          "location": "top left",
+          "height": 0,
+          "nearby_stations": [
+            {
+              "id": "d313",
+              "label": "countertop_01_standard_old (8)",
+              "kind": "counter",
+              "distance": 2.42
+            },
+            {
+              "id": "d315",
+              "label": "countertop_01_standard_old (7)",
+              "kind": "counter",
+              "distance": 2.67
+            },
+            {
+              "id": "d312",
+              "label": "countertop_01_standard_old (9)",
+              "kind": "counter",
+              "distance": 2.73
+            }
+          ],
+          "screen_velocity": {
+            "right": 0.2232640733507183,
+            "up": -0.08261812381691933
+          }
+        },
+        {
+          "id": "support_576226",
+          "point_count": 36,
+          "label": "Main_Raft",
+          "occupants": [
+            1
+          ],
+          "stations": [
+            "d320",
+            "d321",
+            "d322",
+            "d323",
+            "d324",
+            "d325",
+            "d326",
+            "d327",
+            "d328",
+            "d329",
+            "d330",
+            "d331",
+            "d332",
+            "d333",
+            "d334",
+            "d335",
+            "d336",
+            "d337",
+            "d338"
+          ],
+          "evidence": "native_IParentable; observed transform delta; no arrival forecast",
+          "motion": "observed_stationary",
+          "observedAt": 62.56452941894531,
+          "screen": {
+            "right": 0.739,
+            "up": 0.111
+          },
+          "location": "bottom right",
+          "height": 0,
+          "nearby_stations": [
+            {
+              "id": "d329",
+              "label": "workstation_plate_station",
+              "kind": "counter",
+              "distance": 2.01
+            },
+            {
+              "id": "d328",
+              "label": "workstation_plate_return",
+              "kind": "plate_station",
+              "distance": 2.64
+            },
+            {
+              "id": "d330",
+              "label": "DispenserCrate 3 (3)",
+              "kind": "ingredient_supply",
+              "distance": 3.31
+            }
+          ],
+          "screen_velocity": {
+            "right": 0.0,
+            "up": 0.0
+          }
+        }
+      ],
+      "coverage": {
+        "complete": false,
+        "reason": "sampled_geometry",
+        "samplingComplete": true,
+        "pointCount": 66,
+        "generation": 10,
+        "lastSweepAt": 62.56291961669922,
+        "sliceMilliseconds": 0.618,
+        "connectivity": "observed_bidirectional_edges_only; missing paths are unknown"
+      },
+      "localEvidenceDirectory": ".local/milestone5-final-raft",
+      "traceSha256": "98c551ca7e52d20bbbd19218b557c5c9271db1f2dbcfff6872f8490bbb509b49"
+    },
+    {
+      "level": "s_rapids_2_1",
+      "selection": "other-platform",
+      "target": {
+        "id": "d500",
+        "binding": "platform",
+        "label": "Main_Raft",
+        "supportId": "support_589512",
+        "standing": "requires_revalidation",
+        "routeStatus": "unknown",
+        "ownershipEvidence": "native_IParentable",
+        "screen": {
+          "right": 0.702,
+          "up": 0.132
+        },
+        "location": "bottom right",
+        "height": 0,
+        "nearby_stations": [
+          {
+            "id": "d429",
+            "label": "workstation_plate_station",
+            "kind": "counter",
+            "distance": 2.17
+          },
+          {
+            "id": "d428",
+            "label": "workstation_plate_return",
+            "kind": "plate_station",
+            "distance": 3.09
+          },
+          {
+            "id": "d430",
+            "label": "DispenserCrate 3 (3)",
+            "kind": "ingredient_supply",
+            "distance": 3.19
+          }
+        ]
+      },
+      "result": "waiting_cancelled",
+      "arrival": null,
+      "samples": 269,
+      "waitingSamples": 269,
+      "bindingStable": true,
+      "sampledPoints": 66,
+      "floorCandidates": 18,
+      "camera": {
+        "known": true,
+        "source": "game_camera"
+      },
+      "catalogRoundtripMsMedian": 23.244542011525482,
+      "discoveryMs": 535.5416249949485,
+      "mapSliceMsMedian": 0.515,
+      "mapSliceMsMax": 6.102,
+      "scope": "Native Unity/PhysX, headless. Geometry selection is deterministic, no Jev calls.",
+      "receipt": {
+        "state": "cancelled",
+        "reason": "stopped"
+      },
+      "supportObservations": [
+        {
+          "id": "support_588986",
+          "point_count": 30,
+          "label": "Raft_Top",
+          "occupants": [
+            2
+          ],
+          "stations": [
+            "d407",
+            "d408",
+            "d409",
+            "d410",
+            "d411",
+            "d412",
+            "d413",
+            "d414",
+            "d415",
+            "d416",
+            "d417",
+            "d418",
+            "d419"
+          ],
+          "evidence": "native_IParentable; observed transform delta; no arrival forecast",
+          "motion": "observed_moving",
+          "observedAt": 69.89152526855469,
+          "screen": {
+            "right": 0.269,
+            "up": 0.932
+          },
+          "location": "top left",
+          "height": 0,
+          "nearby_stations": [
+            {
+              "id": "d413",
+              "label": "countertop_01_standard_old (8)",
+              "kind": "counter",
+              "distance": 2.42
+            },
+            {
+              "id": "d415",
+              "label": "countertop_01_standard_old (7)",
+              "kind": "counter",
+              "distance": 2.67
+            },
+            {
+              "id": "d412",
+              "label": "countertop_01_standard_old (9)",
+              "kind": "counter",
+              "distance": 2.73
+            }
+          ],
+          "screen_velocity": {
+            "right": 0.19647634598713198,
+            "up": -0.07414581611833937
+          }
+        },
+        {
+          "id": "support_589512",
+          "point_count": 36,
+          "label": "Main_Raft",
+          "occupants": [
+            1
+          ],
+          "stations": [
+            "d420",
+            "d421",
+            "d422",
+            "d423",
+            "d424",
+            "d425",
+            "d426",
+            "d427",
+            "d428",
+            "d429",
+            "d430",
+            "d431",
+            "d432",
+            "d433",
+            "d434",
+            "d435",
+            "d436",
+            "d437",
+            "d438"
+          ],
+          "evidence": "native_IParentable; observed transform delta; no arrival forecast",
+          "motion": "observed_stationary",
+          "observedAt": 69.89265441894531,
+          "screen": {
+            "right": 0.739,
+            "up": 0.112
+          },
+          "location": "bottom right",
+          "height": 0,
+          "nearby_stations": [
+            {
+              "id": "d429",
+              "label": "workstation_plate_station",
+              "kind": "counter",
+              "distance": 2.01
+            },
+            {
+              "id": "d428",
+              "label": "workstation_plate_return",
+              "kind": "plate_station",
+              "distance": 2.64
+            },
+            {
+              "id": "d430",
+              "label": "DispenserCrate 3 (3)",
+              "kind": "ingredient_supply",
+              "distance": 3.31
+            }
+          ],
+          "screen_velocity": {
+            "right": 0.0,
+            "up": 0.0
+          }
+        }
+      ],
+      "coverage": {
+        "complete": false,
+        "reason": "sampled_geometry",
+        "samplingComplete": true,
+        "pointCount": 66,
+        "generation": 14,
+        "lastSweepAt": 69.80606079101562,
+        "sliceMilliseconds": 0.002,
+        "connectivity": "observed_bidirectional_edges_only; missing paths are unknown"
+      },
+      "localEvidenceDirectory": ".local/milestone5-final-crossing",
+      "traceSha256": "71a37f006844b97abdb6f331788687e69d90b74a6d8058955234bd780bbddd26"
+    }
+  ]
+}

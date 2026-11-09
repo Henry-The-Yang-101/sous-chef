@@ -1,4 +1,4 @@
-# Jev interpreter (milestone 4)
+# Jev interpreter (milestones 4–5)
 
 Implemented 6 November 2026. Provider calls from Python have **not** been run.
 The adapter follows the [System One API](https://docs.typesafe.ai/api/system-one)
@@ -31,7 +31,7 @@ The `.env` file is ignored by Git; the key is absent from browser state and logs
   comparing equivalent/different/unclear meanings and an independent ambiguity
   Noul; both gates must pass.
 - Intent routing uses a queue summary and separate early vetoes for concurrent
-  duties, external deadlines and region destinations. These vetoes do not replace
+  duties, external deadlines and persistent area constraints. These vetoes do not replace
   full-plan verification. Later stages retain exact queue entries and target
   bindings for scoped edits and native arguments.
 - Task selection includes explicit boundaries between preparation, plated-dish
@@ -66,7 +66,8 @@ The `.env` file is ignored by Git; the key is absent from browser state and logs
   exact target identities are rechecked. Moving an object does not itself change
   its binding. Native start validation still owns physical feasibility.
 - Exact assembly allocation generation remains unsupported: use the existing
-  manual assembly controls. Semantic-region movement is milestone 5. Concurrent
+  manual assembly controls. Grounded movement uses observed station, platform and
+  floor bindings; see [milestone 5](grounded-movement.md). Concurrent
   high-level responsibilities and event/timed work are not approximated as FIFO.
   Existing exact-target native action contracts can be selected when grounded.
 

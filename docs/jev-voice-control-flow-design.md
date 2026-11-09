@@ -1307,7 +1307,9 @@ automatic acceptance only after these checks, with clear mode indication.
 
 ### Milestone 5 — Grounded destinations and movement
 
-Revised design agreed **8 November 2026**; implementation remains pending. This
+Revised design agreed **8 November 2026**; implemented **8 November 2026**.
+Implementation details, evidence and remaining validation limits are in
+[Grounded movement](grounded-movement.md). This
 milestone supersedes the semantic-region selection proposal in section 12.3 and
 earlier `move_to_region` examples and schema sketches. Physical supports,
 connectivity, orientation and evidence remain necessary, but named semantic

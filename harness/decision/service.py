@@ -346,8 +346,9 @@ class InterpreterService:
         def movement(semantic):
             value = semantic.get('movement') or {}
             entries = value.get('points', []) + value.get('platforms', []) + value.get('stations', [])
-            return {c['id']: (value.get('epoch'), c.get('binding'), c.get('objectInstanceId'),
-                             c.get('supportId'), c.get('supportLocalPosition')) for c in entries}
+            return {c['id']: (value.get('epoch'), c.get('binding'),
+                             c.get('objectInstanceId') if c.get('binding') == 'station'
+                             else (c.get('supportId'), c.get('supportLocalPosition'))) for c in entries}
         old_movement, new_movement = movement(before), movement(after)
         for task in plan['tasks']:
             if task['action'] == 'navigate_to' and before.get('movement'):
