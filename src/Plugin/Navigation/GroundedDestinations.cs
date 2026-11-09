@@ -298,6 +298,7 @@ namespace SousChef.Plugin.Navigation
         private bool WaitForGroundedRoute(string reason)
         {
             if (movementReference == null) return false;
+            ResetPlayerYield();
             movementWaiting=reason ?? "route_unknown"; route=null; arrival.Reset(); facingSince=-1;
             haveMotion=motionSampleValid=false; ResetWalkingProgress(); move(Vector3.zero,50);
             return true;

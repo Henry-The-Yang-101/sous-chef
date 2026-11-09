@@ -67,6 +67,8 @@ namespace SousChef.Plugin.Navigation
         public bool HasPortals { get { return portals.Count != 0; } }
         public float StepHeight { get { return Mathf.Min(.65f, chef.Movement.StepHeightMax); } }
         public Vector3 Position { get { Vector3 p = chef.transform.position; p.y -= pivotToFoot; return p; } }
+        public Bounds BodyBounds { get { return capsule.bounds; } }
+        public float BodyRadius { get { return nativeRadius; } }
         public IEnumerable<Collider> Colliders { get { for (int i = 0; i < nearbyCount; i++) yield return nearby[i]; } }
         public bool SharesCurrentSupport(Vector3 target)
         {

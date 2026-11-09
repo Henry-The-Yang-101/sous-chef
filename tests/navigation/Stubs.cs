@@ -180,6 +180,7 @@ namespace UnityEngine
         public static float Tan(float x) { return (float)Math.Tan(x); }
         public static float Sin(float x) { return (float)Math.Sin(x); }
         public static float Cos(float x) { return (float)Math.Cos(x); }
+        public static float Sqrt(float x) { return (float)Math.Sqrt(x); }
         public static float Abs(float x) { return Math.Abs(x); }
         public static float Min(float a,float b) { return Math.Min(a,b); }
         public static int Min(int a,int b) { return Math.Min(a,b); }

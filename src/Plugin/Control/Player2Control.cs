@@ -70,6 +70,7 @@ namespace SousChef.Plugin.Control
         private static PlayerControls focusProbe;
         private readonly Stopwatch clock = Stopwatch.StartNew();
         private PlayerControls target;
+        private readonly List<PlayerControls> localTeammates = new List<PlayerControls>(3);
         private Component flow;
         private GameInputConfig.ConfigEntry config;
         private PlayerControls.ControlSchemeData scheme;
@@ -93,7 +94,7 @@ namespace SousChef.Plugin.Control
 
         public Player2Control(int port, string session, int? voicePort)
         {
-            navigation = new NavigationActions(Walk, NeutralNavigation);
+            navigation = new NavigationActions(Walk, NeutralNavigation, localTeammates);
             interactions = new InteractionActions(navigation, Buttons, FinishInteraction);
             logistics = new LogisticsActions(navigation, interactions, Buttons, FinishLogistics);
             tasks = new TaskActions(navigation, interactions, Buttons, FinishLogistics);
@@ -200,14 +201,22 @@ namespace SousChef.Plugin.Control
         private void Discover()
         {
             PlayerControls found = null; int matches = 0;
+            var inputConfig = PlayerInputLookup.GetInputConfig();
+            localTeammates.Clear();
             foreach (var candidate in Resources.FindObjectsOfTypeAll<PlayerControls>())
             {
                 if (!candidate.gameObject.scene.IsValid() || !candidate.gameObject.scene.isLoaded || !candidate.gameObject.activeInHierarchy) continue;
                 var provider = candidate.GetComponent<PlayerIDProvider>();
-                if (provider != null && provider.GetID() == PlayerInputLookup.Player.Two) { found = candidate; matches++; }
+                if (provider == null) continue;
+                var id = provider.GetID();
+                if (id == PlayerInputLookup.Player.Two) { found = candidate; matches++; }
+                else
+                {
+                    var teammate = inputConfig == null ? null : inputConfig.GetInputConfigEntry(id);
+                    if (teammate != null && teammate.IsLocal()) localTeammates.Add(candidate);
+                }
             }
             if (matches != 1) found = null; // Never guess between duplicate IDs.
-            var inputConfig = PlayerInputLookup.GetInputConfig();
             var entry = inputConfig == null ? null : inputConfig.GetInputConfigEntry(PlayerInputLookup.Player.Two);
             if (target != found || config != entry || (scheme != null && (found == null || found.ControlScheme != scheme)))
                 { Revoke("player_assignment_changed"); navigation.Reset("player_assignment_changed"); semanticCatalog.Reset(); ChangeEpoch(); }

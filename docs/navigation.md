@@ -71,11 +71,15 @@ sweeps check clearance along edges. This accounts for rotating walls, moving
 parents, enabled/disabled collision, narrow passages and other physical objects.
 Triggers are not automatically solid walls; known fire and respawn regions are
 excluded. Portal triggers are excluded from ordinary walking and crossed only by
-explicit native transport edges. **Local player chefs are deliberately ignored as obstacles**,
-including their carried descendants; Player 2 can push past Player 1 using normal
-game physics. Pedestrians and other non-player objects retain their native solid
-colliders and are rechecked as they move. A fully jammed chef can still hit the
-no-progress watchdog; ignoring a chef does not teleport through a physical jam.
+explicit native transport edges. Local chefs and their carried objects do not
+invalidate geometry or make destinations disappear. During ordinary walking,
+Player 2 predicts close approaches to local teammates over the next 0.4 seconds.
+It waits for a crossing teammate, or takes a checked step aside when waiting
+would leave it in the way. It can back up if a passing lane is blocked.
+Intentional yielding keeps the current action and does not count toward stall
+recovery. Standing directly on a working stance can delay arrival until the
+teammate moves. Pedestrians and other non-player objects retain their native
+solid colliders and are rechecked as they move.
 
 The lattice uses an extra 0.025-unit body clearance margin. A chef already resting
 against a wall may legally be inside that margin. Connectors from the current pose use consistent native body clearance with a
