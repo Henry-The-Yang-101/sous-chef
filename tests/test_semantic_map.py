@@ -170,15 +170,25 @@ class MovementCompilerTests(unittest.IsolatedAsyncioTestCase):
             for i in range(56)
         ]
         batches = []
+        station_ids = [s['id'] for s in data['stations']]
         async def ask(request):
             if 'binding' in request['questions']:
                 return response(request, {'binding': 'station'})
+            if 'interchangeable' in request['questions']:
+                approved = request['state']['compiler']['approved']
+                id_column = approved['columns'].index('id')
+                self.assertEqual([row[id_column] for row in approved['rows']], station_ids)
+                return response(request, {'interchangeable': 0})
             batches.append(list(request['questions']))
-            return response(request, {key: float(key == 'd155') for key in request['questions']})
+            return response(request)
         c = Compiler({'id': 'test', 'text': 'Go to the chopping board'}, context(data), ask)
+        with self.assertRaises(Clarification) as caught:
+            await c.movement(1)
+        self.assertEqual(list(caught.exception.options), station_ids)
+        c.resolve(caught.exception, 'd155')
         self.assertEqual(await c.movement(1), {'destination_id': 'd155'})
         self.assertLess(len(batches[0]), 18)
-        self.assertEqual([key for batch in batches for key in batch], [s['id'] for s in data['stations']])
+        self.assertEqual([key for batch in batches for key in batch], station_ids)
 
     async def test_equivalent_positions_use_approval_not_divided_choice_probability(self):
         script=Script([{'binding':'floor'},dict.fromkeys([p['id'] for p in sample_floor(scene()['points'],scene()['walkingEdges'])[0]],0)])

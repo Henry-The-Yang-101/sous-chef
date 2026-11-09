@@ -71,6 +71,13 @@ def ingredient_label(ingredient):
     return re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', label).replace('_', ' ')
 
 
+def movement_rows(candidates):
+    columns = [key for key in ('id', 'binding', 'label', 'kind', 'screen', 'height', 'supportId',
+                               'motion', 'screen_velocity', 'routeStatus', 'routeDistance')
+               if any(key in candidate for candidate in candidates)]
+    return {'columns': columns, 'rows': [[candidate.get(key) for key in columns] for candidate in candidates]}
+
+
 def task_spec(action, arguments=None, count=1):
     return {'kind': 'native_task' if contract(action)['kind'] == 'task' else 'native_action',
             'action': action, 'capability_version': REGISTRY_VERSION, 'arguments': arguments or {},
@@ -527,7 +534,7 @@ class Compiler:
         if (stage, 'destination') in self.overrides:
             approved = [c for c in candidates if c['id'] == self.overrides[(stage,'destination')]]
         elif len(approved) > 1:
-            result = await self.batch(stage, {'interchangeable': scoped_noul(
+            question = {'interchangeable': scoped_noul(
                 f'For movement occurrence {index}, may local navigation choose ANY of these approved destinations without asking the user which one? '
                 'Each listed candidate has separately passed the destination-fit check. Judge whether the utterance distinguishes them, not whether their coordinates are identical. '
                 'For an area request, leaving the exact tile unspecified deliberately allows local choice within that area. '
@@ -535,8 +542,15 @@ class Compiler:
                 'Return YES when each satisfies the requested destination and their differences concern details the user left open. '
                 'For example, "go to the right side" allows different positions on that side, even with different vertical screen coordinates, travel distances or nearby stations. '
                 'Return NO when choosing would resolve a genuinely unspecified reference or change a requested station identity, support, layer, side or relative relation. '
-                'For example, "go to that board" with two unresolved board identities requires clarification. Do not impose an exact tile or other constraint absent from the utterance.')},
-                action='navigate_to', next_occurrence=index, movement=overview, approved=approved)
+                'For example, "go to that board" with two unresolved board identities requires clarification. Do not impose an exact tile or other constraint absent from the utterance.')}
+            fields = dict(action='navigate_to', next_occurrence=index, movement=overview, approved=approved)
+            if not context_fits(self.state(**fields), question):
+                # Equivalence is one comparison across the entire approved set.
+                # Share field names and omit repeated nearby-station summaries.
+                fields['approved'] = movement_rows(approved)
+                fields['movement'] = dict(overview, observed_stations=movement_rows(overview['observed_stations']))
+                question['interchangeable']['instructions'] += ' In each table, the columns name the values in every row.'
+            result = await self.batch(stage, question, **fields)
             if result['interchangeable']['noul'] < self.settings.critical_probability:
                 self.clarify(stage, 'destination', 'These destinations have different possible meanings. Which one?',
                              {c['id']: candidate_description(c) for c in approved})
