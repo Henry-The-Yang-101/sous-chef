@@ -80,19 +80,15 @@ class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
                 recorded = session(case)
                 outcome = await scripted_replay(recorded)
                 if case['name'] in ('release_holdout_sequential', 'nativerelease_holdout_sequential'):
-                    # These recordings stopped at a tentative "done". The
-                    # current compiler sends that draft to the verifier instead.
+                    # The recording's tentative "done" omitted serving. A
+                    # focused completeness check must keep the draft on hold.
                     self.assertEqual(outcome['status'], 'request')
-                    self.assertEqual(set(outcome['request']['questions']), {'coverage', 'unambiguous'})
                     request = outcome['request']
-                    self.assertEqual([t['action'] for t in request['state']['compiler']['proposed']['tasks']],
-                                     ['toss_burnt_food'])
-                    # Serving is missing, so a rejecting verifier must keep
-                    # this incomplete draft from becoming an accepted plan.
+                    self.assertEqual(set(request['questions']), {'missing_task'})
                     recorded['responses'].append({'request': request,
-                                                  'response': support.response(request, {'coverage': 'different'})})
+                                                  'response': support.response(request, {'missing_task': 1})})
                     blocked = await scripted_replay(recorded)
-                    self.assertEqual((blocked['status'], blocked['stage']), ('clarification', 'coverage'))
+                    self.assertEqual(blocked, case['outcome'])
                     continue
                 self.assertEqual(outcome, case['outcome'])
                 self.assertEqual(score_outcome(case['expected'], outcome), case['score'])

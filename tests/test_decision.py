@@ -133,7 +133,7 @@ class CompilerTests(unittest.IsolatedAsyncioTestCase):
     async def test_tentative_list_and_task_end_still_require_complete_plan(self):
         steps = [{'next_task': 'prepare_near_player'}, {'ingredient': 'ingredient_rice'},
                  {'preparation': 'cooked'}, {'quantity': 'count_3'},
-                 {'ingredient': ('done', .65)}, {}, {}, {'next_task': ('done', .65)}]
+                 {'ingredient': ('done', .65)}, {}, {}, {'next_task': ('done', .65)}, {'missing_task': .23}]
         complete, _ = compiler('Bring me three cooked rice', [{}] + steps + [{}])
         items = (await complete.compile())['plan']['tasks'][0]['arguments']['items']
         self.assertEqual(items, [{'ingredient': 'rice', 'preparation': 'cooked', 'quantity': 3}])
@@ -143,6 +143,23 @@ class CompilerTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(Clarification) as caught:
             await incomplete.compile()
         self.assertEqual(caught.exception.stage, 'coverage')
+
+    async def test_plain_handoff_uses_raw_when_catalog_only_confirms_raw_and_chopping_is_inapplicable(self):
+        kitchen = world()
+        kitchen['capabilities']['semantic_catalog']['displayOptions']['preparationOptions'].append({
+            'id': 'seaweed', 'label': 'Seaweed',
+            'preparations': {'raw': 'applicable', 'chopped': 'not_applicable', 'cooked': 'unknown'},
+        })
+        ctx = build_context(kitchen, {'revision': 0})
+        steps = [{'next_task': 'prepare_near_player'}, {'ingredient': 'ingredient_seaweed'}]
+        c, _ = compiler('Bring me one seaweed', [{}] + steps + [
+            {'preparation': 'unspecified'}, {}, {'ingredient': 'done'}, {}, {}, {'next_task': 'done'}, {}], ctx)
+        items = (await c.compile())['plan']['tasks'][0]['arguments']['items']
+        self.assertEqual(items, [{'ingredient': 'seaweed', 'preparation': 'raw', 'quantity': 1}])
+
+        c, _ = compiler('Bring me one chopped seaweed', [{}] + steps + [{'preparation': 'chopped'}, {}], ctx)
+        with self.assertRaises(Unsupported):
+            await c.compile()
 
     async def test_clarification_preserves_draft_and_cached_decisions(self):
         c, s = compiler('Give me two chopped carrots and one onion, then wash', [
@@ -182,7 +199,8 @@ class CompilerTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_low_confidence_done_and_failed_coverage_never_truncate(self):
         for final in ({'next_task': ('done', .84)}, {'next_task': 'done'}):
-            c, _ = compiler('Wash and more work', [{'simple_coverage': 0}, {'next_task': 'wash_dishes'}, {}, final, {'coverage': 'different'}])
+            c, _ = compiler('Wash and more work', [{'simple_coverage': 0}, {'next_task': 'wash_dishes'}, {}, final,
+                                                   {'missing_task': 1, 'coverage': 'different'}])
             with self.assertRaises(Clarification): await c.compile()
 
     async def test_missing_simple_candidate_falls_back_to_full_registry(self):

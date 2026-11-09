@@ -48,8 +48,9 @@ The `.env` file is ignored by Git; the key is absent from browser state and logs
   full quantities are already represented. Corrections preserve unaffected fields;
   clarification is reserved for meaning that changes the executable plan.
 - Counts are locally extracted candidates, never Score values or generated JSON.
-  Contract defaults apply only to omitted fields; unspecified preparation asks
-  for clarification. Counts outside native limits are not clamped.
+  Contract defaults apply only to omitted fields. A plain ingredient handoff uses
+  raw when the catalog confirms only raw and rules out chopping. Other unspecified
+  preparations ask for clarification. Counts outside native limits are not clamped.
 - A clarification retains the original draft and cached decisions. Buttons bind
   exact options; spoken/typed replies distinguish an answer, cancellation and new
   commands. Buffered follow-ups are checked for corrections before accepting the
