@@ -37,7 +37,6 @@ native arc and a reachable release stance, including height differences. A
 target above the current arc can remain available if P2 can walk to a higher
 release stance. Downward throws use their actual longer flight time and range;
 player catches use three-dimensional distance and the native forward scan.
-See the [native height results](throw-heights.md) for upward/downward scenarios.
 
 Each compatible target/player has a `throw` preview with `state` (`pending`,
 `feasible`, or `unavailable`), `reason` and, when feasible, `plan`. Planning runs
@@ -52,9 +51,8 @@ obstacles and wind can change. Nearby native counter/ground handoffs remain
 available when their own checked handoff plan succeeds.
 
 Ingredient containers use their native catch triggers, including rice entering
-a pot below its solid top. Both a cooker and its current pot can be throw targets;
-capacity, compatibility and clear-flight checks still apply. See the
-[cooker regression checks](throw-cookers.md).
+a pot below its solid top. Both a cooker and its current pot can be throw targets.
+Capacity, compatibility and clear-flight checks still apply.
 
 ```python
 from clients.actions import ActionClient
@@ -260,10 +258,9 @@ Wind volumes are sampled from current native state; future changes, native
 Update/FixedUpdate ordering, human movement after release and changing collision
 geometry can invalidate a prediction. The implementation is **not a live-verified perfect-throw guarantee**.
 
-The [2026-11-02 native corrections and verification](throw-fix.md) replace the
-oversized pivot sphere with native collider queries, use actual receiving
-surfaces, and account for the chef's forward catch scan. Planning continues in
-bounded Update slices and reserves clearance for walking arrival error. Requests
+Throw planning uses native collider queries, actual receiving surfaces, and
+the chef's forward catch scan. Planning runs in bounded Update
+slices and reserves clearance for walking arrival error. Requests
 without a supported clear throw/catch window retain cargo and report a blocker.
 
 ## Wire additions

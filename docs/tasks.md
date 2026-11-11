@@ -113,9 +113,6 @@ successfully handed off until the round resets; later preparation requests and
 repetitions leave those objects for the human and find another available source.
 This reservation does not alter the explicit low-level pickup commands.
 
-See [automatic ingredient regressions](automatic-ingredients.md) for the story
-4-1 traffic-kitchen native verification and its road-navigation limitation.
-
 Storage/handoff destinations must have an empty native holder. An empty plate on
 a counter is occupied: placing food there may transfer contents while retaining
 the carried object. A movement stall before any button press selects an alternate
@@ -155,8 +152,6 @@ and transport reservations, and any parked handoff per entry. A belt dispatch
 reserves its unit; it counts after the recipient can collect it.
 `completedRepetitions` is the number of full lists delivered. For example,
 three A and zero B on a one-A/one-B request still means zero full repetitions.
-The wire request and Stop behavior are unchanged. See the
-[native scheduler checks](preparation-scheduler.md) for the exact fixtures and receipts.
 
 Chopping boards are scheduled the same way. Food already on a board, such as food
 the human threw there, is chopped in place and preferred to an equal-stage copy
@@ -199,8 +194,7 @@ countertops are used when putting equipment down; conveyor belts are not storage
 Handoff comparison runs at most ten times per second, previews at most four
 counter throws plus player/floor options, and gives pending previews a bounded
 0.4-second comparison window before using an already proven alternative.
-Flight work keeps the existing sliced worker-backed planner. See the
-[rice and spaced-handoff checks](rice-handoffs.md).
+Flight planning runs in bounded slices in the worker.
 An armed native throw is committed: releasing its use button also launches during
 cleanup. The executor keeps observing that cargo if its final proof changes or a
 native launch arrives early. A failed primitive handoff can still fulfill the task
@@ -310,7 +304,7 @@ On moving kitchens, the executor can prove a local safe counter on the chef's
 current support and park the finished container there. Actual walking and
 placement still require the normal native checks.
 Use unlimited repetitions for ongoing monitoring, including idle periods when
-equipment is empty. See the [fryer regression and native checks](equipment-monitoring.md).
+equipment is empty.
 
 ## Examples
 
@@ -327,5 +321,5 @@ chef.run_task('prepare_near_player', items=[
 The integer/null repetition parameter is ready for a future caller to choose;
 there is no Score primitive or Jev dependency in these actions.
 
-See [native verification and reproduction steps](task-verification.md) for tested
-scenarios, fixture boundaries, evidence paths and remaining map coverage.
+See [native simulator](native-simulator.md#autonomous-task-audits-bridge-08) for
+commands to exercise these tasks.

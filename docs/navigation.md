@@ -354,8 +354,6 @@ native velocity with destination motion, both for braking and settling. Changing
 parents does not count as a velocity sample. This prevents a chef standing still
 on a moving raft from repeatedly failing alignment, while still rejecting real
 motion past the target, native walking momentum, wind and conveyor drift.
-See [the walking-jitter investigation](walking-jitter.md) for the 4-2 reproduction,
-input-expiry comparison and regression results.
 Neutral braking can begin one native movement window before the checked stance,
 because the previous movement command can still integrate after an Update changes
 input. That prediction never counts as arrival; the actual pose and settling
@@ -498,5 +496,4 @@ at 0.01) beyond the existing skin. This handles a raised floor under a native-he
 ceiling and the corresponding stable floor contact. The bottom exception requires
 a ground-mask box; neither exception applies to hazards or side/slope contacts.
 Lower ceilings and deeper penetrations remain blocked, and changing contact offset
-invalidates cached geometry queries. See the `s_sushi_1_1` native pickup/placement
-regression in [validation.md](validation.md).
+invalidates cached geometry queries.

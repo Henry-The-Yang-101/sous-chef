@@ -9,20 +9,11 @@ The former approximate CPU simulator has been removed. Navigation unit tests
 remain for isolated regressions; this native runtime is the simulator for
 complete level traversal.
 
-The [conveyor investigation](conveyor-navigation.md) records directional segment
-checks in all four world directions, repeated native mine/sushi traversal, the
-drifting-arrival regression, and remaining contact failures, including at 20 FPS.
-Run `scripts/conveyor_audit.py` against an isolated runtime to repeat those checks.
+Run `scripts/conveyor_audit.py` against an isolated runtime to check belt traversal.
 The mine replay stages P1 outside the spawn aisle so the check isolates belt traversal.
 
-The [raft regression audit](raft-handoff-regressions.md) covers repeated food
-preparation, floor-wide handoffs, native chopping latency, moving support and
-open-edge release rejection. Use `scripts/raft_handoff_audit.py` for its focused
-2-1 and 4-2 cases.
-
-The [teleporter coverage report](teleporter-audit.md) records all 28 entrances
-across the nine installed two-player portal kitchens, including explicit setup
-fixtures and the remaining spawn-access limitation.
+Run `scripts/raft_handoff_audit.py` for focused 2-1 and 4-2 cases covering food
+preparation, floor handoffs and moving supports.
 
 ## Start and repeat
 
@@ -213,17 +204,8 @@ for the first route is in `.local/job-recovery-results/baseline/`.
 
 ## Autonomous task audits (bridge 0.8)
 
-The [cross-kitchen environment audit](environment-task-audit.md) records task behavior
-in all 140 installed two-player kitchens, with focused replays of failed handoffs,
-backpack pickups, water-gun washing and equipment rescue.
-
-See [task verification](task-verification.md) for preparation, utensils, ready-food
-serving, mixer monitoring, dishes, firefighting, disposal and repetition tests.
-See [preparation regressions](preparation-regressions.md) for story 4-2 floor-food,
-chopping-board, available-work scheduling and repeat-handoff checks.
-See [automatic ingredient preparation](automatic-ingredients.md) for conveyor
-spawn catalogues, story 4-1 preparation, and pickup recovery when belt cargo moves
-out of reach or is destroyed.
+The audit scripts cover preparation, utensil logistics, equipment monitoring,
+dishwashing, firefighting and recovery around moving ingredients.
 The opt-in task fixtures create native initial conditions; measured actions still
 use normal logical inputs. The previous 500 ms recovery window is now indefinite.
 
@@ -378,11 +360,9 @@ verified in the same process.
 
 ## Chocolate stair round trips — 2026-11-02
 
-The baseline below precedes the fixes described in the
-[stair investigation](stair-investigation.md), which records the native causes,
-implementation and final results: 50/50 round trips (100/100 legs) at requested
-20, 30, 60 and 120 FPS, including consecutive trips in one round. The longest
-measured horizontal pause in that final matrix was 75 ms.
+After the stair traversal fixes, all 50 round trips (100 legs) completed at
+requested rates of 20, 30, 60 and 120 FPS, including consecutive trips in one
+round. The longest measured horizontal pause was 75 ms.
 
 The baseline source at `60bb718` was rebuilt and run in the native headless
 `s_wizard_school_3_4` kitchen. **That baseline failed this validation.**

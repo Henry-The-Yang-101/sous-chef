@@ -16,11 +16,11 @@ from scripts.jev_playground import NextRequest
 from harness.decision.compiler import Compiler, build_context
 from harness.decision.protocol import validate_response
 
-EVIDENCE = ROOT / 'docs/jev-coordinates-playground.json'
+FIXTURES = ROOT / 'tests/fixtures/jev-movement-cases.json'
 
 
 def fixtures():
-    return json.loads(EVIDENCE.read_text())['fixtures']
+    return json.loads(FIXTURES.read_text())
 
 
 async def request(case, stage='candidates', recorded=()):

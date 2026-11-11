@@ -1,7 +1,5 @@
 # Local scheduler — Milestone 2
 
-Implementation of the [voice-control design](jev-voice-control-flow-design.md).
-
 ## Native receipt protocol
 
 The control hello and status advertise `receiptProtocolVersion: 1`. Status also
@@ -79,8 +77,7 @@ It exposes active/waiting/suspended/reconciling status and the latest outcome.
   harness restart, pause and focus loss preserving the same native request.
   Retrying a completed ID returned its receipt, conflicting payload was rejected,
   replacement waited for cancellation and then completed, Stop rejected a late
-  fenced request, and round reset invalidated pending work. The recorded bridge
-  build hash and native receipts are in [scheduler-verification.json](scheduler-verification.json).
+  fenced request, and round reset invalidated pending work.
 - Chrome UI verified against that native harness: a two-step draft accepted
   atomically, pending steps survived reload, dependency-breaking edits were
   disabled, an unlimited monitor blocked append, and Stop returned the chef to

@@ -1,4 +1,5 @@
 import copy
+import gzip
 import json
 from pathlib import Path
 import unittest
@@ -101,22 +102,26 @@ class SamplingTests(unittest.TestCase):
 
 
 class MovementCompilerTests(unittest.IsolatedAsyncioTestCase):
+    @classmethod
+    def setUpClass(cls):
+        path = Path(__file__).parent / 'fixtures/jev-movement-replay.json.gz'
+        with gzip.open(path, 'rt', encoding='utf-8') as file:
+            cls.replay = json.load(file)
+
     def assert_current_request_matches_recording(self, current, recorded):
         recorded = copy.deepcopy(recorded)
         self.assertEqual(recorded['state'].pop('dialogue'), {'recent_turns': []})
         self.assertEqual(current, recorded)
 
     async def test_historical_labeled_requests_remain_archived(self):
-        evidence=json.loads((Path(__file__).resolve().parents[1]/'docs/grounded-movement-language.json').read_text())
-        for trial in evidence['trials']:
+        for trial in self.replay['historical_trials']:
             validate_response(trial['request'],trial['response'])
 
     async def test_numerical_playground_requests_match_production(self):
         from scripts.jev_coordinates_playground import fixtures, request
-        evidence=json.loads((Path(__file__).resolve().parents[1]/'docs/jev-coordinates-playground.json').read_text())
         for case in fixtures():
             variant='holdout' if case['name'].startswith('holdout_') else 'final'
-            trial=next(r for r in evidence['trials'] if r['case']==case['name'] and r['variant']==variant)
+            trial=next(r for r in self.replay['trials'] if r['case']==case['name'] and r['variant']==variant)
             current=await request(case)
             self.assert_current_request_matches_recording(current, trial['request'])
             validate_response(trial['request'], trial['response'])
@@ -127,13 +132,12 @@ class MovementCompilerTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_recorded_movement_gates_preserve_floor_clarification(self):
         from scripts.jev_coordinates_playground import fixtures
-        evidence=json.loads((Path(__file__).resolve().parents[1]/'docs/jev-coordinates-playground.json').read_text())
         for name in ('interior','moving_raft','floor'):
             case=next(c for c in fixtures() if c['name']==name)
-            history=[next(r for r in evidence['trials'] if r['case']==name and r['variant']==variant)
+            history=[next(r for r in self.replay['trials'] if r['case']==name and r['variant']==variant)
                      for variant in ('stages','final')]
             if name=='floor':
-                history.append(next(r for r in evidence['trials'] if r['variant']=='equivalence_final2'))
+                history.append(next(r for r in self.replay['trials'] if r['variant']=='equivalence_final2'))
             async def ask(value):
                 observed=history.pop(0)
                 self.assert_current_request_matches_recording(value, observed['request'])

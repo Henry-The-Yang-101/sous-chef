@@ -1,8 +1,7 @@
 # Shared capability contracts — Milestone 1
 
-Implemented 6 November 2026 for the [voice-control design](jev-voice-control-flow-design.md#milestone-1--shared-capability-contracts).
-This milestone supplies contracts, observation and validation. It does not accept
-or execute a queued plan, load speech recognition, or call Jev.
+Capability contracts define the shared task schema and validation rules for
+the [scheduler](scheduler.md) and [Jev interpreter](jev-interpreter.md).
 
 ## Owning schema and adapters
 
@@ -163,6 +162,4 @@ reported as task completion. Focus loss uses the native input-focus fixture.
 Timings in the evidence are observations from this isolated run, not a baseline
 comparison or a certification of sustained performance in moving kitchens.
 
-Final counts, binary hash and native observations are recorded in
-[`capability-contracts-validation.json`](capability-contracts-validation.json).
 The normal installed game plugin is not replaced by these checks.

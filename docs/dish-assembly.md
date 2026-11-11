@@ -162,16 +162,7 @@ proof succeeds. See the validation section below for the scenarios actually run.
 
 ## Validation
 
-The original three-case baseline follows. The broader decision audit and its
-remaining failures are recorded separately in
-[dish-assembly-sweep.md](dish-assembly-sweep.md).
-The later simplification and retained general scheduling fixes are documented in
-[dish-assembly-recovery.md](dish-assembly-recovery.md).
-
-The final plugin and isolated runtime DLL have the same SHA-256:
-`8e784901ccd7ca831bb4d2c7bc30fff4ba19406a69833cfe24ec146d4deb67b1`.
-The recorded results and request identities are in
-[dish-assembly-validation.json](dish-assembly-validation.json).
+The table shows three baseline cases.
 
 | Native replay | Level | Verified additions | Result |
 | --- | --- | ---: | --- |

@@ -4,6 +4,7 @@ Old responses are mock decisions for current control flow, NOT measurements of
 the revised prompts. Production playground replay still rejects changed requests.
 """
 import copy
+import gzip
 import hashlib
 import json
 from pathlib import Path
@@ -19,12 +20,11 @@ from scripts.jev_playground import next_request
 import test_decision as support
 
 ROOT = Path(__file__).resolve().parents[1]
-EVIDENCE = json.loads((ROOT / 'docs/jev-playground-round4.json').read_text())
-ROUND3 = json.loads((ROOT / 'docs/jev-playground-round3.json').read_text())
-PREVIOUS = json.loads((ROOT / 'docs/jev-playground-round2.json').read_text())
-PREVIOUS_TRIALS = {trial['id']: trial for trial in PREVIOUS['trials']}
-TRIALS = {trial['id']: trial for trial in EVIDENCE['trials']}
-CASES = {case['name']: case for case in EVIDENCE['sessions']}
+with gzip.open(ROOT / 'tests/fixtures/jev-playground-replay.json.gz', 'rt', encoding='utf-8') as file:
+    REPLAY = json.load(file)
+PREVIOUS_TRIALS = {trial['id']: trial for trial in REPLAY['previous_trials']}
+TRIALS = {trial['id']: trial for trial in REPLAY['trials']}
+CASES = {case['name']: case for case in REPLAY['sessions']}
 RELEASE = [case for case in CASES.values() if case.get('variant') == 'nativerelease' and case['type'] == 'command']
 
 
@@ -61,8 +61,7 @@ async def scripted_replay(recorded):
 
 class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
     def test_current_and_historical_wire_observations_validate(self):
-        historical = json.loads((ROOT / 'docs/jev-playground-evaluation.json').read_text())
-        for trial in list(TRIALS.values()) + ROUND3['trials'] + PREVIOUS['trials'] + historical['trials']:
+        for trial in [*TRIALS.values(), *REPLAY['previous_trials'], *REPLAY['historical_trials']]:
             with self.subTest(trial=trial['id']):
                 validate_request(trial['request'])
                 validate_response(trial['request'], trial['response'])
@@ -162,9 +161,7 @@ class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(accepted_controls, expected_controls)
 
     def test_historical_dialogue_choices_exercise_service_control_flow(self):
-        for case in PREVIOUS['sessions']:
-            if case['type'] != 'final_dialogue':
-                continue
+        for case in REPLAY['previous_dialogues']:
             with self.subTest(case=case['name']):
                 fixture = support.ServiceTests()
                 fixture.setUp(settings=support.PLAYGROUND_SETTINGS)
@@ -212,7 +209,7 @@ class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(all(not case.get('reused_observations') for case in holdout))
         self.assertEqual(len({key for case in holdout for key in case['trial_ids']}), 445)
         path = 'tests/fixtures/jev-clarification-corpus.json'
-        self.assertEqual(hashlib.sha256((ROOT/path).read_bytes()).hexdigest(), EVIDENCE['freeze']['sha256'][path])
+        self.assertEqual(hashlib.sha256((ROOT/path).read_bytes()).hexdigest(), REPLAY['clarification_corpus_sha256'])
 
     def test_scoring_does_not_reward_abstention_or_partial_matches(self):
         case = CASES['nativerelease_holdout_raw_player4']

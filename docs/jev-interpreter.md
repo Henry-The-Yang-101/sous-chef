@@ -84,12 +84,6 @@ spoken clarification answers and early rejection of unsupported constraints.
 Destructive edits also require separate deletion/interruption evidence or a
 direct scoped answer.
 These are policy thresholds, not calibrated probabilities of correctness.
-The paired playground evaluation used the earlier gates. With native catalog
-certainty corrected, it completed 12/18 supported requests without clarification,
-versus 7/18 previously. Both runs explicitly rejected 4/6 unsupported requests
-and unnecessarily clarified two. Both correctly clarified two ambiguous requests.
-No wrong complete result passed. Some gains remain borderline across runs.
-[Paired playground evaluation](jev-playground-round4.md)
 Clarifications remain frequent, including correct
 drafts. Preview remains the recommended mode; automatic acceptance is an explicit
 experimental opt-in.
@@ -119,27 +113,7 @@ the round that sent it. If no usage is returned (for example, on a timed-out
 request), the harness has no count to add. Install bridge 0.8.11 or later to keep
 the round identity stable through Player 2 reassignment.
 
-## Selective prompt revision — 7 November 2026
-
-Short contrasts are attached only to questions with overlapping meanings. Task
-selection no longer receives the kitchen catalog; binding still uses observed
-identities and local compatibility checks. Target identity does not prove
-reachability, unknown preparation applicability does not prove incompatibility,
-and accepted dialogue plans do not prove completed execution.
-
-This revision has not been tested or evaluated with Jev, at the user's request.
-The round-4 scores above describe the previous prompts; they do not establish
-performance for this revision. Acceptance thresholds and native validation remain
-unchanged. Historical response tests now explicitly inject mock choices instead
-of claiming that old responses were produced by the new prompts.
-
 ## Verification
-
-The [numerical-coordinate evaluation](jev-coordinates-playground.md) tests the
-milestone-5 spatial candidate prompts in the Playground. Generated location labels
-are removed; screen positions use x rightward and y downward. The final candidate
-stage improves selection, while a bottom-area request still clarifies at its .97
-equivalence gate. This is separate from full-plan or live API validation.
 
 `python3 -m unittest discover -s tests -p 'test_*.py'`
 
@@ -162,10 +136,6 @@ matched the selected tickets, including the cooked rice in the second recipe.
 
 `scripts/jev_playground.py` exports exact production requests and replays copied
 playground responses without any network code. Its kitchen is explicitly synthetic.
-Historical playground observations, tuning, fixed-prompt holdout results and limitations are
-recorded in the [previous-prompt evaluation report](jev-playground-round4.md) and its
-[raw request/response evidence](jev-playground-round4.json). The paired corpus
-runner, `scripts/jev_evaluate.py`, audits positive gold against native contracts
-and catalogs, and scores explicit rejection separately from clarification.
-The [first round](jev-playground-evaluation.md) remains
-available as historical evidence.
+The corpus runner, `scripts/jev_evaluate.py`, audits expected outcomes against
+native contracts and catalogs. It scores explicit rejection separately from
+clarification.

@@ -258,8 +258,7 @@ python3 scripts/check.py
 Tests cover live removal, staleness, identity/session mismatch, command rejection,
 disconnect/reconnect, browser closure and inactivity, Stop, shutdown and the HTTP path.
 They also cover dispenser metadata, phone authentication, forwarded Host/Origin
-checks and phone command/heartbeat round trips. See
-[the validation record](validation.md) for actual Arcade Couch browser tests.
+checks and phone command/heartbeat round trips.
 
 Phone sharing was rechecked on November 5, 2026: all 117 Python tests passed,
 including automatic tunnel startup, explicit opt-outs, startup failure and tunnel
@@ -372,7 +371,4 @@ own controls.
 The [milestone 4 Jev interpreter](jev-interpreter.md) accepts finalized speech or
 typed commands after explicit enabling. Add `JEV_API_KEY` to the repository's
 `.env` and restart the harness. It starts in Preview, supports bounded
-clarification and scoped queue edits, and shares the mute/Stop gate. The
-[playground evaluation](jev-playground-evaluation.md) records actual provider
-responses and the remaining interpretation limitations. Python API connectivity
-was intentionally not exercised during implementation.
+clarification and scoped queue edits, and shares the mute/Stop gate.

@@ -60,8 +60,8 @@ Native conveyor regressions also cover upstream edge rejection on weaker belts,
 live reversals, stopped belts, rotated directions, checked lateral exits,
 non-drifting arrival stances, padded turn support, contact recovery and preserved
 turn waypoints. Exact conveyor-field, neighbour and native-entry-history changes
-invalidate saved searches. See [the native conveyor report](../../docs/conveyor-navigation.md)
-for the repeatable simulator audit and its remaining traversal failures.
+invalidate saved searches. Run `scripts/conveyor_audit.py` against an isolated
+native simulator to repeat the conveyor checks.
 
 `fixtures/wizard-stair-corner.json` contains eight measured floor/tread/wedge box
 transforms from the live Chocolate stair failure in `s_wizard_school_3_4`.
