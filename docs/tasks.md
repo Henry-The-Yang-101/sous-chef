@@ -45,19 +45,50 @@ Stop still cancels while suspended; raw manual input leases are not retained.
 
 The localhost Tasks panel uses `/api/task`, with the current `sessionId` and
 `arguments` containing `action`, `repetitions` (integer or null), and preparation
-or assembly parameters where required. The UI always lists all nine tasks, while
+or exact target/assembly parameters where required. The UI always lists all ten tasks, while
 `catalog.taskOptions` contains only currently eligible tasks and controls whether
 Start task is enabled. Preparation choices use the level-specific
 `catalog.displayOptions.preparationOptions`; the live eligibility lists remain
 separate. The server and executor both revalidate before starting. Stop works while
 waiting, working, suspended or between repetitions, including from a new tab
 or a reconnected client. Reconnection observes the original job without replaying
-its command. There is no task queue or voice/Jev integration yet.
+its command. The [scheduler](scheduler.md) queues tasks and the
+[Jev interpreter](jev-interpreter.md) builds grounded plans.
 
 Wire: `task REQUEST ACTION 1..10|forever`; preparation additionally takes player
 `1|3|4`, followed by 1–10 triples of base64url selector, preparation state and
 quantity `1..10`. Task lines are bounded to 2048 ASCII bytes; legacy commands keep
 their 256-byte parser bound.
+
+## Press a button or switch
+
+`press_button` walks to one exact native control, safely parks held cargo if
+needed, and reuses the `activate` interaction. No model is called by the executor.
+One task performs one activation; ordinary “press”, “click” or “push” uses
+`trigger`. Explicit `on`/`off` is accepted only for controls with an observable
+toggle state. Already-satisfied states finish without toggling again.
+
+```python
+client.run_task('press_button', target_id='d9')
+client.run_task('press_button', target_id='d10', desired_state='off')
+```
+
+Wire: `task REQUEST press_button 1 TARGET_ID trigger|on|off`.
+
+Jev first selects the task, then receives a separate control-choice prompt.
+Only controls with a verified Player 2 walking route are selectable. The prompt
+reuses the movement map's camera-relative coordinates, player locations and
+nearby stations, so copies can be distinguished by “bottom”, “left”, or a
+nearby landmark. Unreachable copies remain visible as reference landmarks;
+they never cause a differently located button to be substituted. Ambiguous
+references ask for an exact choice. Unknown routes require a fresh observation.
+
+The chosen object stays bound through queueing and movement. Native execution
+rechecks the route, empty hands, interaction selection and input gate before
+pressing. Success requires the control's Player 2 trigger acknowledgement or
+the requested observed toggle state. Unacknowledged presses are not replayed;
+a vanished control fails without selecting another one. Timed holds, pressure
+plates and menu buttons are outside this task's contract.
 
 ## Assemble an assigned dish
 

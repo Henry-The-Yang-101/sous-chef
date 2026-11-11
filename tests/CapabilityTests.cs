@@ -18,6 +18,7 @@ internal static class CapabilityTests
                 "source", command.Source, "selector", command.Selector, "condition", command.Condition,
                 "milliseconds", command.Milliseconds, "desired_state", command.DesiredState,
                 "task", task == null ? null : task.Action, "player", task == null ? 0 : task.Player,
+                "target", task == null ? null : task.Target, "task_desired_state", task == null ? null : task.DesiredState,
                 "repetitions", task == null ? 0 : task.Repetitions,
                 "items", task == null ? null : task.Items.Select(item => Json.Object("ingredient", item.Selector, "preparation", item.Preparation, "quantity", item.Quantity)).ToArray(),
                 "order", task == null || task.Assembly == null ? null : task.Assembly.Order,

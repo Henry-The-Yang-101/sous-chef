@@ -53,12 +53,12 @@ class ActionClient(ControlClient):
         self._request('cancel', epoch, generation, request_id=request_id)
         return self.last_response['receipt']
 
-    def run_task(self, action, repetitions=1, *, items=None, player_id=1, order_id=None, bases=None, components=None, equipment=None):
+    def run_task(self, action, repetitions=1, *, items=None, player_id=1, order_id=None, bases=None, components=None, equipment=None, target_id=None, desired_state=None):
         """Run one task. None means until Stop; assembly accepts exactly one ticket."""
         if contract(action)['kind'] != 'task':
             raise ValueError('Unknown task action')
         arguments = {key: value for key, value in dict(items=items, order_id=order_id, bases=bases,
-                     components=components, equipment=equipment).items() if value is not None}
+                     components=components, equipment=equipment, target_id=target_id, desired_state=desired_state).items() if value is not None}
         if action == 'prepare_near_player' or player_id != 1 or type(player_id) is not int:
             arguments['player_id'] = player_id
         return self.run_capability(action, arguments, repetitions)

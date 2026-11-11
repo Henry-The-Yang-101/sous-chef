@@ -13,6 +13,7 @@ namespace SousChef.Core
     {
         public static readonly string[] Names = CapabilityRegistry.Tasks;
         public string Action;
+        public string Target, DesiredState = "trigger";
         public int Repetitions = 1, Player = 1; // Zero means until explicitly stopped.
         public readonly List<PreparationRequest> Items = new List<PreparationRequest>();
         public AssemblyRequest Assembly;
@@ -23,6 +24,13 @@ namespace SousChef.Core
             if (tokens[3] == "forever") task.Repetitions = 0;
             else if (!Int32.TryParse(tokens[3], NumberStyles.None, CultureInfo.InvariantCulture, out task.Repetitions) || task.Repetitions < 1 || task.Repetitions > CapabilityRegistry.MaxRepetitions)
                 throw new ArgumentException("invalid_repetitions");
+            if (task.Action == "press_button")
+            {
+                if (task.Repetitions != 1) throw new ArgumentException("activation_requires_one_request");
+                if (tokens.Length != 6 || !ControlCommand.DestinationId(tokens[4])) throw new ArgumentException("invalid_destination");
+                if (!ControlCommand.ActivationState(tokens[5])) throw new ArgumentException("invalid_state");
+                task.Target = tokens[4]; task.DesiredState = tokens[5]; return task;
+            }
             if (task.Action == "assemble_dish")
             {
                 if (task.Repetitions != 1) throw new ArgumentException("assembly_requires_one_ticket");

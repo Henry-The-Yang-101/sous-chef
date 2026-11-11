@@ -35,6 +35,9 @@ internal static class Program
         Assert(ControlCommand.Parse("task loop monitor_equipment forever").Task.Repetitions == 0, "infinite task grammar");
         Assert(ControlCommand.Parse("task serve deliver_completed_dishes 2").Task.Repetitions == 2, "dish delivery uses the standard task grammar");
         Assert(ControlCommand.Parse("task serve deliver_completed_dishes forever").Task.Repetitions == 0, "dish delivery supports continuous monitoring");
+        Assert(ControlCommand.Parse("task button press_button 1 d42 off").Task.Target == "d42", "button task pins an exact target");
+        foreach (string invalid in new[] { "1", "1 d1", "1 d1 toggle", "1 switch trigger", "1 d1x trigger", "1 d1 trigger extra", "2 d1 trigger", "forever d1 trigger" })
+        { bool rejected = false; try { ControlCommand.Parse("task bad press_button " + invalid); } catch (ArgumentException) { rejected = true; } Assert(rejected, "reject invalid button task " + invalid); }
         var command = ControlCommand.Parse("task prep prepare_near_player 3 1 sY2hpY2tlbg chopped 2 scG90 empty 1");
         Assert(command.Task.Items.Count == 2 && command.Task.Items[0].Selector == "chicken" && command.Task.Items[0].Quantity == 2, "mixed ingredient utensil task grammar");
         var assembly = ControlCommand.Parse("task dish assemble_dish 1 sb3JkZXJfQQ 2 d1 d2 1 d3 2 d4 d5").Task.Assembly;

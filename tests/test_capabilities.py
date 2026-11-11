@@ -48,7 +48,7 @@ class RegistryTests(unittest.TestCase):
 
     def test_complete_registry_has_no_speculative_executable_features(self):
         data = registry()
-        self.assertEqual(len(TASK_NAMES), 9)
+        self.assertEqual(len(TASK_NAMES), 10)
         self.assertEqual(len(ACTION_NAMES), 19)
         self.assertTrue(set(TASK_NAMES).isdisjoint(ACTION_NAMES))
         for spec in data['contracts']:
@@ -59,7 +59,7 @@ class RegistryTests(unittest.TestCase):
         for name in data['not_implemented'] + ['input', '__dict__', 'claim']:
             with self.assertRaises(ValidationError): contract(name)
         data['contracts'].clear()
-        self.assertEqual(len(registry()['contracts']), 28)
+        self.assertEqual(len(registry()['contracts']), 29)
 
     def test_strict_fields_defaults_and_quantities(self):
         value = validate_arguments('prepare_near_player', {'items': [{'ingredient': 'carrot'}]})

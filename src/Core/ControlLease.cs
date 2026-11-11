@@ -76,12 +76,11 @@ namespace SousChef.Core
                 p[0] == "work_at" || p[0] == "activate" || p[0] == "wait_until")
             {
                 int count = p[0] == "work_at" || p[0] == "wait_until" ? 5 : p[0] == "activate" ? 4 : 3;
-                if (p.Length != count || p[2].Length < 2 || p[2].Length > 32 || p[2][0] != 'd') throw new ArgumentException("invalid_destination");
-                for (int i = 1; i < p[2].Length; i++) if (p[2][i] < '0' || p[2][i] > '9') throw new ArgumentException("invalid_destination");
+                if (p.Length != count || !DestinationId(p[2])) throw new ArgumentException("invalid_destination");
                 result.Destination = p[2];
                 if (p[0] == "activate")
                 {
-                    if (p[3] != "on" && p[3] != "off" && p[3] != "trigger") throw new ArgumentException("invalid_state");
+                    if (!ActivationState(p[3])) throw new ArgumentException("invalid_state");
                     result.DesiredState = p[3];
                 }
                 if (count == 5)
@@ -117,9 +116,10 @@ namespace SousChef.Core
             foreach (char c in value) if (!(c >= 'a' && c <= 'z') && !(c >= 'A' && c <= 'Z') && !(c >= '0' && c <= '9') && c != '-' && c != '_') return false;
             return true;
         }
-        private static bool DestinationId(string value)
+        internal static bool ActivationState(string value) { return value == "on" || value == "off" || value == "trigger"; }
+        internal static bool DestinationId(string value)
         {
-            if (value.Length < 2 || value.Length > 32 || value[0] != 'd') return false;
+            if (value == null || value.Length < 2 || value.Length > 32 || value[0] != 'd') return false;
             for (int i = 1; i < value.Length; i++) if (value[i] < '0' || value[i] > '9') return false;
             return true;
         }

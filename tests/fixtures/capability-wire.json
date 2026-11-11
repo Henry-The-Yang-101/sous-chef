@@ -26,5 +26,6 @@
   {"name":"put_out_fire","arguments":{},"wire":"task probe put_out_fire 1","native":{"operation":"task","task":"put_out_fire","repetitions":1}},
   {"name":"toss_burnt_food","arguments":{},"wire":"task probe toss_burnt_food 1","native":{"operation":"task","task":"toss_burnt_food","repetitions":1}},
   {"name":"monitor_equipment","arguments":{},"repetitions":null,"wire":"task probe monitor_equipment forever","native":{"operation":"task","task":"monitor_equipment","repetitions":0}},
-  {"name":"deliver_completed_dishes","arguments":{},"repetitions":10,"wire":"task probe deliver_completed_dishes 10","native":{"operation":"task","task":"deliver_completed_dishes","repetitions":10}}
+  {"name":"deliver_completed_dishes","arguments":{},"repetitions":10,"wire":"task probe deliver_completed_dishes 10","native":{"operation":"task","task":"deliver_completed_dishes","repetitions":10}},
+  {"name":"press_button","arguments":{"target_id":"d9","desired_state":"trigger"},"wire":"task probe press_button 1 d9 trigger","native":{"operation":"task","task":"press_button","target":"d9","task_desired_state":"trigger","repetitions":1}}
 ]

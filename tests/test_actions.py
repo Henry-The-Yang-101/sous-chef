@@ -28,6 +28,14 @@ def reply(n, **fields):
 
 
 class ActionsTests(unittest.TestCase):
+    def test_button_task_uses_exact_target_and_default_trigger(self):
+        c = client(reply(1), reply(2))
+        c.run_task('press_button', target_id='d9')
+        c.run_task('press_button', target_id='d10', desired_state='off')
+        self.assertEqual(c.socket.sent, [b'task 1 press_button 1 d9 trigger\n', b'task 2 press_button 1 d10 off\n'])
+        for args in ({}, {'target_id': 'bottom'}, {'target_id': 'd9', 'repetitions': None}):
+            with self.assertRaises(ValueError): c.run_task('press_button', **args)
+
     def test_stable_fenced_dispatch_and_receipt_lookup(self):
         c = client(reply('a' * 32, receipt={'state': 'running'}), reply(2, receipt={'state': 'succeeded'}), reply('stopid', receipt={'state': 'succeeded'}))
         self.assertEqual(c.execute('a' * 32, 'epoch', 7, 'wash_dishes', {})['state'], 'running')

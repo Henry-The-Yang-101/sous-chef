@@ -444,7 +444,6 @@ namespace SousChef.Plugin.Control
                     identity["operations"] = offered.ToArray();
                     identity["workConditions"] = InteractionActions.ConditionsFor(go, true);
                     identity["waitConditions"] = InteractionActions.ConditionsFor(go, false);
-                    identity["activationStates"] = ActionObservations.ToggleState(go).HasValue ? new[] { "trigger", "on", "off" } : new[] { "trigger" };
                 }
                 catch (Exception) { identity["operations"] = new string[0]; identity["reason"] = "observation_unavailable"; }
                 targets.Add(identity);

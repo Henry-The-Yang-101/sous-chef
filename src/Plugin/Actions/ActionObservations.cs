@@ -124,6 +124,15 @@ namespace SousChef.Plugin.Actions
         }
         public static ServerAttachStation DryingStation(ServerWashingStation sink)
         { return Read<ServerAttachStation>(sink, "m_dryingAttachStation"); }
+        public static bool ActivationTarget(GameObject target)
+        {
+            return target != null && target.activeInHierarchy && target.GetComponent<ClientInteractable>() != null &&
+                target.GetComponent<PhysicalAttachment>() == null && target.GetComponent<PickupItemSpawner>() == null &&
+                target.GetComponent<ServerWorkstation>() == null && target.GetComponent<ServerWashingStation>() == null &&
+                Receiver(target).GetComponent<ServerWorkableItem>() == null;
+        }
+        public static string[] ActivationStates(GameObject target)
+        { return ToggleState(target).HasValue ? new[] { "trigger", "on", "off" } : new[] { "trigger" }; }
         public static bool? ToggleState(GameObject target)
         {
             var toggle = target.GetComponent<ClientTriggerToggleOnAnimator>();

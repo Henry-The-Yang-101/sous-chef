@@ -580,6 +580,13 @@ function renderTasks(catalog, visible, busy, live) {
   setJobOptions(el('task-kind'), Object.entries(taskLabels()).map(([value, label]) => ({value, label})));
   const kind = el('task-kind').value;
   const preparing = kind === 'prepare_near_player', assembling = kind === 'assemble_dish';
+  const pressing = kind === 'press_button';
+  el('task-button').hidden = !pressing;
+  const controls = (catalog.semanticCatalog?.targets || visible.targets || []).filter(target => target.possibleOperations?.includes('activate'));
+  setJobOptions(el('button-target'), controls.map(target => ({value: target.id, label: `${nameOf(target)} · ${target.id}`})));
+  const selectedControl = controls.find(target => target.id === el('button-target').value);
+  setJobOptions(el('button-state'), (selectedControl?.activationStates || ['trigger']).map(value => ({value, label: value === 'trigger' ? 'Press once' : `Set ${value}`})));
+  const validButton = !pressing || Boolean(selectedControl && el('button-state').value);
   el('task-assembly').hidden = !assembling;
   el('task-preparation').hidden = !preparing;
   const recipient = definition(parameter('prepare_near_player', 'player_id'));
@@ -609,6 +616,7 @@ function renderTasks(catalog, visible, busy, live) {
   for (const field of el('task-form').querySelectorAll('input, select, button')) if (field.id !== 'task-run') field.disabled = false;
   for (const field of el('task-preparation').querySelectorAll('input, select, button')) field.disabled = !preparing;
   for (const field of el('task-assembly').querySelectorAll('select')) field.disabled = !assembling;
+  for (const field of el('task-button').querySelectorAll('select')) field.disabled = !pressing;
   const repetition = capability(kind)?.repeat;
   const repeatSelect = el('task-repeat');
   if (repetition) {
@@ -625,7 +633,7 @@ function renderTasks(catalog, visible, busy, live) {
     row.children[0].value && row.children[2].checkValidity()));
   const playerPresent = !preparing || (catalog.semanticCatalog?.players || catalog.players || []).some(player => String(player.playerId) === el('task-player').value);
   const queueReady = live && !pending && state?.capabilities?.compatible && state?.queue?.nativeContext && !state.queue.barrier && !state.queue.error;
-  const validSelection = Boolean(kind && validItems && playerPresent && validAssembly);
+  const validSelection = Boolean(kind && validItems && playerPresent && validAssembly && validButton);
   const unlimitedDraft = draftTasks.some(t => t.repeat.mode === 'until_cancelled');
   el('task-stage').disabled = !queueReady || !validSelection || draftTasks.length >= (capabilityRegistry?.max_plan_tasks || 5) || unlimitedDraft;
   const proposed = draftTasks.length ? draftTasks : validSelection ? [selectedTaskSpec()] : [];
@@ -659,10 +667,13 @@ function renderTasks(catalog, visible, busy, live) {
 el('task-kind').addEventListener('change', render);
 el('task-add-item').addEventListener('click', () => { addTaskItem(); render(); });
 el('task-player').addEventListener('change', render);
-for (const id of ['assembly-order', 'assembly-bases', 'assembly-components', 'assembly-equipment']) el(id).addEventListener('change', render);
+for (const id of ['assembly-order', 'assembly-bases', 'assembly-components', 'assembly-equipment', 'button-target', 'button-state']) el(id).addEventListener('change', render);
 function selectedTaskSpec() {
   const action = el('task-kind').value;
   const args = {};
+  if (action === 'press_button') {
+    args.target_id = el('button-target').value; args.desired_state = el('button-state').value;
+  }
   if (action === 'assemble_dish') {
     args.order_id = el('assembly-order').value;
     args.bases = selectedResources('assembly-bases'); args.components = selectedResources('assembly-components'); args.equipment = selectedResources('assembly-equipment');
@@ -679,6 +690,7 @@ function taskDescription(spec) {
   let details = '';
   if (spec.arguments.items) details = ' · ' + spec.arguments.items.map(i => `${i.quantity} ${i.preparation} ${i.ingredient}`).join(', ') + ` → Player ${spec.arguments.player_id}`;
   if (spec.arguments.order_id) details = ' · ticket ' + spec.arguments.order_id;
+  if (spec.arguments.target_id) details = ` · ${spec.arguments.target_id} · ${spec.arguments.desired_state || 'trigger'}`;
   return `${taskLabels()[spec.action] || actionNames[spec.action]} · ${repeat}${details}`;
 }
 async function submitPlan(edit) {

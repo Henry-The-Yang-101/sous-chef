@@ -4,12 +4,12 @@ namespace SousChef.Core
     public static class CapabilityRegistry
     {
         public const int Version = 1;
-        public const string Hash = "6b253e397c3cb8d3432e47b1da16ab3790330fa1fa401717d9dc4b613cc48546";
+        public const string Hash = "9ea1fc80d81a5049ba16f3268028b5a99921249446cbe135bb5320c99cf87adb";
         public const int MaxRepetitions = 10;
         public const int MaxPreparationItems = 10;
         public const int MaxQuantity = 10;
         public const int MaxAllocationGroup = 24;
-        public static readonly string[] Tasks = { "assemble_dish", "prepare_near_player", "take_ready", "wash_dishes", "deliver_dirty_dishes", "put_out_fire", "toss_burnt_food", "monitor_equipment", "deliver_completed_dishes" };
+        public static readonly string[] Tasks = { "press_button", "assemble_dish", "prepare_near_player", "take_ready", "wash_dishes", "deliver_dirty_dishes", "put_out_fire", "toss_burnt_food", "monitor_equipment", "deliver_completed_dishes" };
         public static readonly string[] Actions = { "navigate_to", "pick_up", "place_at", "add_ingredient", "collect_contents", "work_at", "activate", "discard", "wait_until", "throw_to", "throw_to_player", "stop" };
         public static readonly string[] Logistics = { "move_item", "fetch_ingredient", "get_plate", "get_utensil", "stage_item", "return_utensil", "clear_station" };
         public static readonly string[] Preparations = { "raw", "chopped", "cooked", "mixed", "empty" };

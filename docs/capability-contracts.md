@@ -114,6 +114,7 @@ iteration. Stop is rejected inside plans and retains its independent control pat
 | --- | --- |
 | `prepare_near_player` | The whole requested item list; each entry owes its quantity |
 | `assemble_dish` | One exact ticket; always exactly one repetition |
+| `press_button` | One exact control activation; always exactly one repetition |
 | `take_ready` / `monitor_equipment` | One ready food collection and serving/parking |
 | `wash_dishes` | One washing batch, not one plate |
 | `deliver_dirty_dishes` | One dirty-dish batch handoff |

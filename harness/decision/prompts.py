@@ -97,6 +97,9 @@ EXECUTION_CONSTRAINTS = {
 # Interpretation notes refine existing contracts; they neither enable a task nor
 # replace registry limits, candidate generation or native feasibility checks.
 TASK_BOUNDARIES = {
+    'press_button': 'Requested result: walk to and press/click/push a particular button, switch or other native control. '
+        'Walking and safely parking held cargo are included. The exact reachable control is selected in a follow-up question using camera-relative positions. '
+        'A plain press means one trigger. An explicit on/off request requires an observed toggle state. No timed holds or pressure plates.',
     'prepare_near_player': 'Requested result: ingredient portions or empty utensils delivered to a player. '
         'For a plate handoff, an unqualified "plate" means a clean, empty plate. Choose empty as its preparation. '
         'Honor any stated condition or contents. '

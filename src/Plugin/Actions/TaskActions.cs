@@ -51,12 +51,13 @@ namespace SousChef.Plugin.Actions
             navigation = nav; child = primitive; inventory = new LogisticsInventory(nav); input = buttons; release = finished;
             groundPass = new GroundPassAccess(CanReachLanding, CanCollectLanding);
             handoffThrows = new ThrowOptions(nav, groundPass); child.GroundAccess = groundPass;
-            RegisterPreparation(); RegisterAssembly(); RegisterTakeReady(); RegisterWashing(); RegisterDirtyDelivery(); RegisterFire(); RegisterBurnt(); RegisterMonitor(); RegisterDishDelivery();
+            RegisterPreparation(); RegisterAssembly(); RegisterTakeReady(); RegisterWashing(); RegisterDirtyDelivery(); RegisterFire(); RegisterBurnt(); RegisterMonitor(); RegisterDishDelivery(); RegisterButton();
         }
         partial void RegisterPreparation(); partial void RegisterTakeReady(); partial void RegisterWashing();
         partial void RegisterDirtyDelivery(); partial void RegisterFire(); partial void RegisterBurnt(); partial void RegisterMonitor();
         partial void RegisterDishDelivery();
         partial void RegisterAssembly();
+        partial void RegisterButton();
         private void Register(string name, Func<bool> available, Func<IEnumerable<TaskStep>> steps)
         { RegisterForRequest(name, _ => available(), steps); }
         private void RegisterForRequest(string name, Func<TaskRequest, bool> available, Func<IEnumerable<TaskStep>> steps)
@@ -65,6 +66,7 @@ namespace SousChef.Plugin.Actions
         {
             return Run.Describe(Json.Object("taskAction", request == null ? null : request.Action,
                 "repetitions", request == null ? 1 : request.Repetitions, "infinite", request != null && request.Repetitions == 0,
+                "targetId", request == null ? null : request.Target, "desiredState", request == null || request.Target == null ? null : request.DesiredState,
                 "completedRepetitions", completed, "completedSteps", completedSteps, "waitingReason", waitingReason,
                 "preparation", preparation == null ? null : preparation.Describe(), "assembly", assembly == null ? null : assembly.Describe(), "handoff", handoffEvidence, "pendingDeliveries", pendingDeliveries.Count, "observationError", observationError,
                 "handoffPlanning", waitingReason == "waiting_for_player_handoff" ? handoffThrows.Describe() : null,
@@ -77,6 +79,11 @@ namespace SousChef.Plugin.Actions
             if (command.Task == null || !definitions.TryGetValue(command.Task.Action, out definition)) return "unsupported_task";
             chef = actor; request = command.Task; inventory.Refresh(chef);
             assembly = null;
+            buttonTarget = null;
+            if (request.Action == "press_button")
+            {
+                string error = BindButton(); if (error != null) return error;
+            }
             if (request.Action == "assemble_dish")
             {
                 string error = BindAssembly(); if (error != null) return error;
@@ -95,6 +102,8 @@ namespace SousChef.Plugin.Actions
             try
             {
                 if (assembly != null && !assembly.Order.Live) { Finish("blocked", "assembly_order_unavailable"); return; }
+                if (request.Action == "press_button" && !ActionObservations.ActivationTarget(buttonTarget))
+                { Finish("blocked", "button_target_unavailable"); return; }
                 // Native portals temporarily hide/detach carried objects. Let
                 // the selected transport finish before interpreting cargo or
                 // recipe changes; the input-edge guard still runs on arrival.
@@ -214,7 +223,7 @@ namespace SousChef.Plugin.Actions
             if (handsPlan != null) handsPlan.Dispose(); handsPlan = null; handsCargo = null; suspendedStep = null;
             release();
         }
-        private TaskStep Do(string operation, GameObject target, string condition = null)
+        private TaskStep Do(string operation, GameObject target, string condition = null, string desiredState = "trigger")
         {
             if (operation == "pick_up") target = ActionObservations.PickupTarget(target);
             GameObject originalHeld = ActionObservations.Held(chef), originalOccupant = ActionObservations.Occupant(target);
@@ -235,7 +244,7 @@ namespace SousChef.Plugin.Actions
                     !System.Object.ReferenceEquals(ActionObservations.Held(chef), originalHeld)) throw new InvalidOperationException("task_cargo_changed");
                 return operation != "place_at" && operation != "collect_contents" && operation != "work_at" || System.Object.ReferenceEquals(ActionObservations.Occupant(target), originalOccupant);
             }, Command = delegate { return new ControlCommand {
-                Operation = operation, Destination = navigation.RegisterItem(target), Condition = condition, DesiredState = "trigger" }; } };
+                Operation = operation, Destination = navigation.RegisterItem(target), Condition = condition, DesiredState = desiredState }; } };
         }
         private static TaskStep Until(string phase, Func<bool> ready) { return new TaskStep { Phase = phase, Ready = ready }; }
         public void Decorate(Json.Record catalog, PlayerControls actor, bool parentBusy = false)

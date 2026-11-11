@@ -28,7 +28,7 @@ namespace SousChef.Plugin.Actions
             if (!bin && (holder || ActionObservations.Container(go) != null))
             { operations.Add("add_ingredient"); operations.Add("collect_contents"); }
             if (work) operations.Add("work_at");
-            if (go.GetComponent<ClientInteractable>() != null && !work) operations.Add("activate");
+            if (ActionObservations.ActivationTarget(go)) operations.Add("activate");
             if (!bin && (holder || GameObjectUtils.RequestInterface<IHandleCatch>(ActionObservations.Receiver(go)) != null)) operations.Add("throw_to");
             var workConditions = new List<string>(InteractionActions.ConditionsFor(go, true));
             if (work && !sink && !workConditions.Contains("work_complete")) workConditions.Add("work_complete");
@@ -38,6 +38,7 @@ namespace SousChef.Plugin.Actions
                 foreach (string condition in new[] { "cooked", "mixed" }) if (!waitConditions.Contains(condition)) waitConditions.Add(condition);
             identity["processingEquipment"] = TaskNative.Equipment(go);
             identity["possibleOperations"] = operations.ToArray();
+            identity["activationStates"] = ActionObservations.ActivationStates(go);
             identity["possibleWorkConditions"] = workConditions.ToArray();
             identity["possibleWaitConditions"] = waitConditions.ToArray();
         }

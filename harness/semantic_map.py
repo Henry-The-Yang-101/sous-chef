@@ -130,3 +130,18 @@ def candidate_description(item):
     if 'height' in item:
         label += f' · height={item["height"]:g}'
     return label + f' ({item["id"]})'
+
+
+def interaction_context(semantic, operation):
+    """Project exact interaction targets in the same camera frame as movement.
+
+    Retain non-reachable copies as reference landmarks: a reachable top button
+    cannot become the bottom button just because the bottom one has no route.
+    """
+    scene = spatial_context(semantic)
+    targets = {t['id']: t for t in semantic.get('targets', []) if operation in t.get('possibleOperations', [])}
+    scene['candidates'] = [dict(c, **{k: targets[c['id']][k] for k in ('activationStates',) if k in targets[c['id']]})
+                           for c in scene['candidates'] if c.get('binding') == 'station' and c['id'] in targets]
+    scene['binding_meaning'] = 'Each target binds the exact observed native control, including as it moves.'
+    scene['route_policy'] = 'Only targets with routeStatus=verified are selectable. Unknown or blocked controls are reference landmarks only. Never substitute a reachable control that does not match the request. Native execution revalidates the route.'
+    return scene

@@ -12,7 +12,7 @@ import re
 
 from clients.capabilities import REGISTRY_HASH, REGISTRY_VERSION, contract, registry, schema
 from harness.plans import validate_plan
-from harness.semantic_map import spatial_context, candidate_description
+from harness.semantic_map import spatial_context, candidate_description, interaction_context
 from .config import MODEL, SCHEMA, Settings
 from .protocol import DecisionError, context_fits, validate_request, validate_response
 from .prompts import (APPENDED_WORK_SCOPE, EXECUTION_CONSTRAINTS, INGREDIENT_COMMON_NAMES, INTENT_ROUTE, INTERPRETATION_POLICY, OBJECT_CHOICE, OBJECT_REFERENCE,
@@ -242,6 +242,8 @@ class Compiler:
                 state.setdefault('world', {})['movement'] = {
                     'snapshot': {k:v for k,v in spatial_context(self.context['semantic']).items() if k != 'candidates'},
                     'selected_destinations': list(self.movement_choices.values())}
+            if any(task['action'] == 'press_button' for task in self.tasks):
+                state.setdefault('world', {})['controls'] = interaction_context(self.context['semantic'], 'activate')
         return state
 
     async def batch(self, stage, questions, **fields):
@@ -474,15 +476,22 @@ class Compiler:
         result = {}
         properties = self.contracts[action]['parameters']['properties']
         for field, node in properties.items():
+            if action == 'press_button' and field == 'target_id':
+                result[field] = await self.interaction_target(action, index)
+                continue
             node = schema(node)
             candidates = self.argument_candidates(action, field, node)
+            if action == 'press_button' and field == 'desired_state':
+                target = next(t for t in self.context['semantic']['targets'] if t['id'] == result['target_id'])
+                candidates = [(v, label) for v, label in candidates if v in target.get('activationStates', ['trigger'])]
             options = {f'value_{i}': label for i,(_,label) in enumerate(candidates)}
             options.update(unspecified='Not specified in this command.', ambiguous='No single grounded value matches.', unsupported='The requested value is absent or unsupported.')
             stage = f'task.{index}.{field}'
             reference = OBJECT_CHOICE if node.get('format') in ('destination', 'selector') else ''
             answers = await self.batch(stage, {field: scoped_choice(f'Resolve {field} for task occurrence {index} ({action}). Choose only a supplied candidate. Do not invent positions or targets. '
                 + reference +
-                'A supplied target identifies an object; it does not prove current reachability or successful execution.', options)}, action=action, resolved_fields=result)
+                'A supplied target identifies an object; it does not prove current reachability or successful execution. '
+                + ('For a plain press, push or click, choose trigger. Choose on/off only when explicitly requested; an unavailable state is unsupported. ' if action == 'press_button' else ''), options)}, action=action, resolved_fields=result)
             key = self.select(stage, field, answers, options, f'Choose {field.replace("_", " ")} for {action.replace("_", " ")}.', allow=('unspecified', 'unsupported'))
             if key == 'unsupported': raise Unsupported('The requested argument is not available in the grounded catalog.')
             if key == 'unspecified':
@@ -490,6 +499,32 @@ class Compiler:
                 self.clarify(stage, field, f'Choose {field.replace("_", " ")}.', options)
             result[field] = candidates[int(key.split('_')[1])][0]
         return result
+
+    async def interaction_target(self, action, index):
+        scene = interaction_context(self.context['semantic'], 'activate')
+        candidates = [c for c in scene['candidates'] if c.get('routeStatus') == 'verified']
+        if not candidates:
+            raise Unsupported('No button or switch has a verified walking route for Player 2 in this snapshot. Wait for a route and try again.')
+        if len(candidates) > 200:
+            raise DecisionError('Too many grounded controls')
+        options = {c['id']: candidate_description(c) for c in candidates}
+        options.update(ambiguous='The requested control is unclear between distinct targets.',
+                       unsupported='The requested control is absent, lacks a verified route, or is not a native activation target.')
+        stage = f'task.{index}.target_id'
+        answers = await self.batch(stage, {'target_id': scoped_choice(
+            f'Choose the exact control for task occurrence {index} from the reachable options. '
+            + OBJECT_CHOICE +
+            'Use compiler.controls.coordinate_meaning: screen.x increases left to right; screen.y increases top to bottom. '
+            'Compare all observed controls, including non-selectable landmarks, when resolving bottom, top, left, right or near a player/station. '
+            'Unknown orientation cannot resolve a directional reference. Preserve all stated spatial constraints. '
+            'If the intended control is not selectable, choose unsupported; never choose a different reachable button. '
+            'Walking and clearing held cargo are included in this task, not separate assignments. '
+            'Choose the object here; whether to trigger it or set on/off is resolved next.', options)},
+            action=action, next_occurrence=index, controls=scene)
+        selected = self.select(stage, 'target_id', answers, options, 'Which button or switch should I press?', allow=('unsupported',))
+        if selected == 'unsupported':
+            raise Unsupported('The requested button or switch has no matching reachable activation target.')
+        return selected
 
     async def assembly(self, index):
         assigned = {task['arguments']['order_id'] for task in self.tasks if task['action'] == 'assemble_dish'}
@@ -874,6 +909,10 @@ class Compiler:
                 ident = task['arguments']['order_id']
                 order = self.pending_orders.get(ident)
                 descriptions.append(f'Assemble {order_label(order) if order else "ticket " + ident}.')
+            elif task['action'] == 'press_button':
+                args = task['arguments']
+                target = next((c for c in interaction_context(self.context['semantic'], 'activate')['candidates'] if c['id'] == args['target_id']), None)
+                descriptions.append(f'Walk to and activate {candidate_description(target) if target else args["target_id"]}; {args["desired_state"]}.')
             else:
                 descriptions.append(f'{spec["label"]}: {count}' +
                                     (' ' + json.dumps(task['arguments'], ensure_ascii=False) if task['arguments'] else ''))

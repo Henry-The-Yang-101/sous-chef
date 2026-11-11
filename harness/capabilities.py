@@ -61,6 +61,14 @@ def assess_arguments(name, arguments, semantic):
         candidates = movement.get('points', []) + movement.get('platforms', []) + movement.get('stations', [])
         found = next((c for c in candidates if c['id'] == args['destination_id']), None)
         add('applicable' if found else 'not_applicable', 'registered_movement_binding' if found else 'movement_binding_stale', 'destination_id')
+    elif name == 'press_button':
+        target = next((t for t in semantic.get('targets', []) if t['id'] == args['target_id']), None)
+        valid = target is not None and 'activate' in target.get('possibleOperations', [])
+        add('applicable' if valid else 'not_applicable', 'exact_activation_target', 'target_id')
+        if valid:
+            add('applicable' if args['desired_state'] in target.get('activationStates', ['trigger']) else 'not_applicable',
+                'observed_activation_state', 'desired_state')
+        add('unknown', 'route_and_interaction_require_native_revalidation', 'target_id')
     elif name == 'prepare_near_player':
         players = {p.get('playerId') for p in semantic.get('players', [])}
         add('applicable' if args['player_id'] in players else 'unknown', 'recipient_observation', 'player_id')

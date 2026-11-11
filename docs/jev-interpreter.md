@@ -77,6 +77,13 @@ restart the game and harness after updating the repository.
   [milestone 5](grounded-movement.md). Concurrent
   high-level responsibilities and event/timed work are not approximated as FIFO.
   Existing exact-target native action contracts can be selected when grounded.
+- Button/switch requests select `press_button`, followed by a grounded control
+  Choice using the same camera-relative positions as movement. Only controls with
+  verified walking routes are selectable; other copies remain reference landmarks
+  so “the bottom button” cannot silently select a different reachable control.
+  A further field question resolves trigger/on/off. The task parks held cargo and
+  reuses native activation with exact target and outcome checks. Install bridge
+  0.8.12 and restart the game and harness to use the updated capability registry.
 
 The default gates are .60 for ordinary choices, `done` and coverage, and .80
 for unlimited work, complete simple-plan selection, destructive edits, explicit

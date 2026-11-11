@@ -89,6 +89,60 @@
   },
   "contracts": [
     {
+      "name": "press_button",
+      "kind": "task",
+      "version": 1,
+      "label": "Press button or switch",
+      "description": "Walk to one exact reachable button, switch or other native control and activate it. Safely park held cargo first.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "target_id": {
+            "$ref": "#/$defs/destination"
+          },
+          "desired_state": {
+            "type": "string",
+            "enum": [
+              "on",
+              "off",
+              "trigger"
+            ],
+            "default": "trigger"
+          }
+        },
+        "required": [
+          "target_id"
+        ],
+        "additionalProperties": false
+      },
+      "repeat": {
+        "unit": "activation",
+        "minimum": 1,
+        "maximum": 1,
+        "until_cancelled": false,
+        "default": 1
+      },
+      "candidate_sources": [
+        "targets",
+        "movement.stations"
+      ],
+      "start_preconditions": [
+        "An exact native activation target with a verified walking route; on/off requires a readable toggle state."
+      ],
+      "completion_evidence": "The selected control acknowledges Player 2’s native trigger, or its observed toggle already reaches the requested on/off state.",
+      "cancellation": "Stop cancels and neutralizes owned input; a committed activation cannot be undone.",
+      "checkpoint_resume": false,
+      "limitations": [
+        "One activation per task. Press/click/push defaults to trigger; on/off binds a requested state.",
+        "Never substitutes another control. Routes and native interaction gates are rechecked before pressing. Unknown routes are not offered to Jev.",
+        "No timed holds, pressure plates, menus, or claims about downstream machinery."
+      ],
+      "wire_arguments": [
+        "target_id",
+        "desired_state"
+      ]
+    },
+    {
       "name": "assemble_dish",
       "kind": "task",
       "version": 1,

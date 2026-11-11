@@ -30,6 +30,7 @@ function fixture() {
   el('task-form').querySelectorAll = () => ['task-kind', 'task-player', 'task-run', 'task-add-item'].map(el);
   el('task-preparation').querySelectorAll = () => row.children;
   el('task-assembly').querySelectorAll = () => [];
+  el('task-button').querySelectorAll = () => [el('button-target'), el('button-state')];
   el('task-player').replaceChildren({value: '1'}, {value: '3'});
   el('throw-kind').replaceChildren({value: 'throw_to_player'}, {value: 'throw_to'});
   const context = vm.createContext({
@@ -48,6 +49,28 @@ const visible = {displayOptions: {
   items: [{id: 'pot1', label: 'Pot', utensilType: 'pot'}], utensilTypes: ['pot'],
   deliveryDestinations: [{id: 'counter', label: 'Counter'}, {id: 'board', label: 'Board'}],
 }};
+
+test('button task binds its selected control and exposes only observed toggle states', () => {
+  const {context: c, el} = fixture();
+  const catalog = {semanticCatalog: {targets: [
+    {id: 'd1', label: 'Button', possibleOperations: ['activate'], activationStates: ['trigger']},
+    {id: 'd2', label: 'Switch', possibleOperations: ['activate'], activationStates: ['trigger', 'on', 'off']},
+    {id: 'd3', label: 'Sink', possibleOperations: ['work_at']},
+  ]}};
+  c.renderTasks(catalog, visible, false, true); el('task-kind').value = 'press_button';
+  c.renderTasks(catalog, visible, false, true);
+  assert.equal(el('task-button').hidden, false);
+  assert.equal(el('task-run').disabled, true);
+  el('button-target').value = 'd2'; c.renderTasks(catalog, visible, false, true);
+  el('button-state').value = 'off'; c.renderTasks(catalog, visible, false, true);
+  assert.equal(el('task-run').disabled, false);
+  assert.deepEqual(JSON.parse(JSON.stringify(c.selectedTaskSpec().arguments)), {target_id: 'd2', desired_state: 'off'});
+  assert.equal(el('task-repeat').disabled, true);
+  el('button-target').value = 'd1'; c.renderTasks(catalog, visible, false, true);
+  assert.ok(el('button-state').options.every(o => !o.value || o.value === 'trigger'));
+  catalog.semanticCatalog.targets = []; c.renderTasks(catalog, visible, false, true);
+  assert.equal(el('task-run').disabled, true);
+});
 
 test('interpreter preview exposes exact native arguments and blocks accept during a correction', () => {
   const {context: c, el} = fixture();
@@ -146,7 +169,7 @@ test('assembly keeps allocation explicit, preserves choices and rejects overlaps
 test('all tasks and jobs remain selectable while unavailable, pending or busy', () => {
   const {context: c, el} = fixture();
   c.renderTasks({}, visible, true, true); c.renderJobs({}, visible, true, true);
-  assert.equal(el('task-kind').options.length, 10); assert.equal(el('job-kind').options.length, 8);
+  assert.equal(el('task-kind').options.length, 11); assert.equal(el('job-kind').options.length, 8);
   assert.equal(el('task-kind').disabled, false); assert.equal(el('job-kind').disabled, false);
   assert.equal(el('task-run').disabled, true); assert.equal(el('job-run').disabled, true);
   el('task-kind').value = 'wash_dishes';

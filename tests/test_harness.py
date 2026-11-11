@@ -487,7 +487,7 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(code, 200)
         data = json.loads(body)
         self.assertEqual(data['registry']['registry_hash'], REGISTRY_HASH)
-        self.assertEqual(len(data['state']['entries']), 28)
+        self.assertEqual(len(data['state']['entries']), 29)
         self.assertFalse(data['state']['compatible'])  # Legacy bridge has no manifest.
         self.assertEqual(self.native.calls, [])
         bootstrap = json.loads(self.request('GET', '/api/bootstrap')[1])
