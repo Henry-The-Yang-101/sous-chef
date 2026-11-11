@@ -145,7 +145,9 @@ namespace SousChef.Plugin.Navigation
             for (int i = 0, sign = first; i < count; i++, sign = -sign)
             {
                 Vector3 direction = forward + side * sign;
-                if (!passing && Vector3.Dot(direction, planned) <= 0) continue;
+                // A new detour must still advance along the route. Keep waiting
+                // if the only alternative would retreat into the teammate's lane.
+                if ((!passing || sign != stationarySide) && Vector3.Dot(direction, planned) <= 0) continue;
                 if (!TryYieldStep(position, direction, drift, speed, window, milliseconds)) continue;
                 switchedStationarySide = passing && (switchedStationarySide || sign != stationarySide);
                 stationaryBlocker = blocker.Player;
