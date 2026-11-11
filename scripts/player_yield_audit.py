@@ -26,7 +26,7 @@ CASES = {
     'wall-side': ((8.4, -4.45), (8.4, -1.2), (0, -1, 650), 'yield_step'),
     'occupied-stance': ((8.4, -3.6), (17.0, -1.2), (0, 0, 2300), 'yield_wait'),
     'narrow-aisle': (None, None, (0, 1, 250, 1300), 'yield_wait'),
-    'stationary-corner': ((10.2, 4.6), (8.4, 4.6), (0, 0, 3200), 'yield_step'),
+    'stationary-corner': ((10.2, 4.6), (8.4, 4.6), (0, 0, 2400), 'yield_step'),
 }
 
 

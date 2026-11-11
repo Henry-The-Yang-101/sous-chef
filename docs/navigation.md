@@ -76,6 +76,8 @@ invalidate geometry or make destinations disappear. During ordinary walking,
 Player 2 predicts close approaches to local teammates over the next 0.4 seconds.
 It waits for a crossing teammate, or takes a checked step aside when waiting
 would leave it in the way. It can back up if a passing lane is blocked.
+When passing a stationary teammate, it keeps its chosen side. If the way around
+is blocked, it can switch sides once, then waits if it still cannot pass.
 Intentional yielding keeps the current action and does not count toward stall
 recovery. Standing directly on a working stance can delay arrival until the
 teammate moves. Pedestrians and other non-player objects retain their native

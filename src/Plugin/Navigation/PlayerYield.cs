@@ -12,6 +12,7 @@ namespace SousChef.Plugin.Navigation
 
         private struct TeammateMotion
         {
+            public PlayerControls Player;
             public Vector3 Offset, Velocity;
             public float Clearance;
             public bool Moving { get { return Velocity.sqrMagnitude > .04f; } }
@@ -33,12 +34,16 @@ namespace SousChef.Plugin.Navigation
         private bool yieldingPlayer;
         private Vector3 yieldSide;
         private float yieldSideUntil;
+        private PlayerControls stationaryBlocker;
+        private int stationarySide;
+        private bool switchedStationarySide;
 
         private void ResetPlayerYield()
         {
             yieldingPlayer = false;
             yieldSide = Vector3.zero;
             yieldSideUntil = 0;
+            stationaryBlocker = null;
         }
 
         private bool YieldToTeammates(Vector3 position, Vector3 planned,
@@ -76,7 +81,7 @@ namespace SousChef.Plugin.Navigation
                 float reach = clearance + (maxSpeed + motion.magnitude) * PlayerLookahead;
                 float distance = offset.sqrMagnitude;
                 if (distance >= reach * reach) continue;
-                var sample = new TeammateMotion { Offset = offset, Velocity = motion, Clearance = clearance };
+                var sample = new TeammateMotion { Player = teammate, Offset = offset, Velocity = motion, Clearance = clearance };
                 nearbyTeammates.Add(sample);
                 if (distance < blockerDistance && sample.Conflicts(planned, sample.Moving ? PlayerLookahead : plannedWindow))
                 {
@@ -93,37 +98,27 @@ namespace SousChef.Plugin.Navigation
             if (committed && TryYieldStep(position, yieldSide, drift, speed, window, milliseconds))
                 return true;
             if (float.IsPositiveInfinity(blockerDistance)) return false;
+            if (blocker.Moving || stationaryBlocker != blocker.Player) stationaryBlocker = null;
             bool occupiedStance = !blocker.Moving && (blocker.Offset - remaining).sqrMagnitude < blocker.Clearance * blocker.Clearance;
             bool canHold = CanHoldPosition(position, holding, window);
             if (canHold && (blocker.Moving || occupiedStance) && ClearOfTeammates(holding))
                 return SendYield(position, Vector3.zero, milliseconds, "yield_wait");
 
-            if (!committed)
+            if (!committed && !blocker.Moving)
             {
-                // Step out of the teammate's lane. Prefer the side we are
-                // already on, with a consistent tie break for a head-on meeting.
-                Vector3 lane = (blocker.Moving ? blocker.Velocity : blocker.Offset).normalized;
+                if (TryPassStationary(blocker, position, planned, drift, speed, window, milliseconds)) return true;
+            }
+            else if (!committed)
+            {
+                // Step out of the teammate's lane. Prefer the side we are on.
+                Vector3 lane = blocker.Velocity.normalized;
                 Vector3 side = new Vector3(lane.z, 0, -lane.x);
-                if (Vector3.Dot(side, blocker.Moving ? -blocker.Offset : planned) < 0) side = -side;
-                Vector3 forward = Vector3.zero;
-                if (!blocker.Moving)
-                {
-                    // Follow a tangent to a stationary body, so successive
-                    // steps make progress around it instead of shuffling sideways.
-                    float sine = Mathf.Clamp01((blocker.Clearance + .05f) / Mathf.Sqrt(blockerDistance));
-                    forward = lane * Mathf.Sqrt(1 - sine * sine);
-                    side *= sine;
-                }
+                if (Vector3.Dot(side, -blocker.Offset) < 0) side = -side;
                 for (int i = 0; i < 2; i++, side = -side)
                 {
-                    Vector3 direction = forward + side;
-                    if (!blocker.Moving && Vector3.Dot(direction, planned) <= 0) continue;
-                    if (!TryYieldStep(position, direction, drift, speed, window, milliseconds)) continue;
-                    if (blocker.Moving)
-                    {
-                        yieldSide = direction;
-                        yieldSideUntil = now + SideCommitmentSeconds;
-                    }
+                    if (!TryYieldStep(position, side, drift, speed, window, milliseconds)) continue;
+                    yieldSide = side;
+                    yieldSideUntil = now + SideCommitmentSeconds;
                     return true;
                 }
             }
@@ -132,6 +127,32 @@ namespace SousChef.Plugin.Navigation
             // If nowhere can clear their trajectory, stop pushing. On moving
             // ground keep the checked route command if neutral would lose footing.
             return canHold && SendYield(position, Vector3.zero, milliseconds, "yield_wait");
+        }
+
+        private bool TryPassStationary(TeammateMotion blocker, Vector3 position, Vector3 planned,
+            Vector3 drift, float speed, float window, int milliseconds)
+        {
+            Vector3 lane = blocker.Offset.normalized;
+            float sine = Mathf.Clamp01((blocker.Clearance + .05f) / blocker.Offset.magnitude);
+            Vector3 forward = lane * Mathf.Sqrt(1 - sine * sine);
+            Vector3 side = new Vector3(lane.z, 0, -lane.x) * sine;
+            bool passing = stationaryBlocker == blocker.Player;
+            int first = passing ? stationarySide : Vector3.Dot(side, planned) < 0 ? -1 : 1;
+            // Keep the direction around the chef, not the world-space heading.
+            // A wall may force one reversal. Trying that blocked side again on
+            // the way back would turn a short detour into an endless shuttle.
+            int count = passing && switchedStationarySide ? 1 : 2;
+            for (int i = 0, sign = first; i < count; i++, sign = -sign)
+            {
+                Vector3 direction = forward + side * sign;
+                if (!passing && Vector3.Dot(direction, planned) <= 0) continue;
+                if (!TryYieldStep(position, direction, drift, speed, window, milliseconds)) continue;
+                switchedStationarySide = passing && (switchedStationarySide || sign != stationarySide);
+                stationaryBlocker = blocker.Player;
+                stationarySide = sign;
+                return true;
+            }
+            return false;
         }
 
         private bool ClearOfTeammates(Vector3 movement)

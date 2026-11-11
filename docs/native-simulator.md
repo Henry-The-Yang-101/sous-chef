@@ -285,6 +285,9 @@ after P2 first moves and restores the original bindings after the timed input.
 The mine case uses native spawn positions and delays P1's input so P2 has to
 wait for the aisle to clear. The audit records native separation, P1
 displacement, navigation phases and arrival.
+The `stationary-corner` case reproduces the pacing loop in story 1-2: P1 stays
+beside the rice crate while P2 walks to the fish crate. It requires arrival
+without disturbing P1 or repeatedly reversing the sidestep.
 
 ```sh
 python3 scripts/player_yield_audit.py --runtime .local/yield-native --output .local/yield-results --fps 60 20
