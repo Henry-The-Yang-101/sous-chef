@@ -719,6 +719,7 @@ class Compiler:
             field_stage = stage + '.fields'
             scope = f'For preparation task occurrence {index}, item occurrence {item_index}, ingredient {ingredient["id"]}: '
             answers = await self.batch(field_stage, {'preparation': scoped_choice(scope + 'What preparation state is requested? Resolve the actual request, not the easiest available state. '
+                'Apply any preparation default from the task interpretation before choosing unspecified. '
                 'Report an explicitly requested state even if the catalog rules it out. Never substitute another state. '
                 'Unknown applicability means the catalog has not established compatibility.', preparations)},
                 action=action, next_occurrence=index, next_item=item_index, ingredient=ingredient, items=items)
@@ -811,6 +812,7 @@ class Compiler:
             if not append:
                 proposed_meaning += queue_meaning
             reference += INGREDIENT_COMMON_NAMES + ('For ingredients, compare the spoken words to the catalog names in proposed_meaning. '
+                          'A preparation state supplied by the task interpretation as a default resolves an omitted state. '
                           'Player 1 is the speaker, so "me" means Player 1. One repetition of a list fulfills the list once. '
                           'Use world.ingredient_names_in_this_kitchen to check names in context. '
                           'When only Sushi Fish is listed as a fish, "fish" is that ingredient. A distinct species like salmon still needs to match. '

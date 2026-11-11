@@ -98,6 +98,8 @@ EXECUTION_CONSTRAINTS = {
 # replace registry limits, candidate generation or native feasibility checks.
 TASK_BOUNDARIES = {
     'prepare_near_player': 'Requested result: ingredient portions or empty utensils delivered to a player. '
+        'For a plate handoff, an unqualified "plate" means a clean, empty plate. Choose empty as its preparation. '
+        'Honor any stated condition or contents. '
         'Raw, chopped, cooked and mixed describe ingredient preparation, not a completed plated order. '
         'Fetching and processing are steps within this assignment; a list for one recipient is one task.',
     'deliver_completed_dishes': 'Requested result: an already completed plated order delivered to the serving window. '

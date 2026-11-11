@@ -13,7 +13,7 @@ import unittest
 from clients.capabilities import REGISTRY_HASH, contract
 from harness.decision.compiler import Compiler, Clarification, build_context
 from harness.decision.config import Settings
-from harness.decision.prompts import task_description
+from harness.decision.prompts import TASK_BOUNDARIES, task_description
 from harness.decision.protocol import DecisionError, validate_request, validate_response
 from scripts.jev_evaluate import audit_case, score_outcome, semantic_result
 from scripts.jev_playground import next_request
@@ -74,15 +74,17 @@ class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
     async def test_48_historical_nonmovement_sequences_preserve_control_flow(self):
         current = [c for c in CASES.values() if c.get('variant') in ('release', 'nativerelease') and c['type'] == 'command' and not c['name'].endswith(('_region', '_navigate'))]
         self.assertEqual(len(current), 48)
+        task_descriptions = {name: task_description(contract(name)) for name in TASK_BOUNDARIES}
         for case in current:
             with self.subTest(case=case['name']):
                 # These are scripted decisions, not fresh model observations.
                 recorded = session(case)
                 outcome = await scripted_replay(recorded)
                 expected = case['outcome']
-                if 'assemble_dish' in expected.get('options', {}):
-                    expected = dict(expected, options={**expected['options'],
-                        'assemble_dish': task_description(contract('assemble_dish'))})
+                if expected.get('field') == 'next_task':
+                    # Keep the recorded choice keys and use current task labels.
+                    expected = dict(expected, options={key: task_descriptions.get(key, label)
+                        for key, label in expected['options'].items()})
                 if case['name'] in ('release_holdout_sequential', 'nativerelease_holdout_sequential'):
                     # The recording's tentative "done" omitted serving. A
                     # focused completeness check must keep the draft on hold.
