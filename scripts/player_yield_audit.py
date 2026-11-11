@@ -26,6 +26,7 @@ CASES = {
     'wall-side': ((8.4, -4.45), (8.4, -1.2), (0, -1, 650), 'yield_step'),
     'occupied-stance': ((8.4, -3.6), (17.0, -1.2), (0, 0, 2300), 'yield_wait'),
     'narrow-aisle': (None, None, (0, 1, 250, 1300), 'yield_wait'),
+    'stationary-corner': ((10.2, 4.6), (8.4, 4.6), (0, 0, 3200), 'yield_step'),
 }
 
 
@@ -37,8 +38,10 @@ def audit_case(runtime, output, name):
     p1, p2, axes, expected = CASES[name]
     blocked = name == 'occupied-stance'
     mine = name == 'narrow-aisle'
-    generation = sim.read_status(runtime)['generation'] + 1
-    sim.command(runtime, 'load s_mine_4_3' if mine else 'load s_sushi_1_1')
+    corner = name == 'stationary-corner'
+    generation = sim.wait_ready(runtime)['generation'] + 1
+    level = 's_mine_4_3' if mine else 's_sushi_1_2' if corner else 's_sushi_1_1'
+    sim.command(runtime, 'load ' + level)
     ready = sim.wait_ready(runtime, generation)
     if not mine:
         for player, (x, z) in enumerate((p1, p2), 1):
@@ -57,7 +60,7 @@ def audit_case(runtime, output, name):
         returning = None
         with trace.open('w') as out:
             target = 'utensil_frying_pan_01' if mine else 'SushiFish'
-            result = sim.navigate_leg(client, target, SimpleNamespace(timeout=3 if blocked else 15), out)
+            result = sim.navigate_leg(client, target, SimpleNamespace(timeout=4 if corner else 3 if blocked else 15), out)
             if mine and result['success']:
                 returning = sim.navigate_leg(client, 'Meat', SimpleNamespace(timeout=15), out)
         final = client.status()
@@ -75,6 +78,10 @@ def audit_case(runtime, output, name):
         for row in json.loads(line)['navigation']['executionTrace']:
             decisions[row['frame']] = row
     phases = Counter(row['phase'] for row in decisions.values())
+    # Ignore neutral frames between opposite sidesteps; input can stop briefly
+    # at a wall without actually breaking the pacing loop.
+    steps = [row['input'] for row in decisions.values() if row['phase'] == 'yield_step']
+    reversals = sum(a[0] * b[0] + a[2] * b[2] < -.5 for a, b in zip(steps, steps[1:]))
     start, end = samples[0]['p1'], samples[-1]['p1']
     x, y, duration = axes[:3]
     progress = x * (end[0] - start[0]) - y * (end[2] - start[2])
@@ -99,9 +106,10 @@ def audit_case(runtime, output, name):
     # Reject stops, loss of progress and lateral displacement in P1's input
     # path. At 20 FPS the input fixture can quantize a walk by one native frame.
     success = (finished and saw_expected and disturbance < .05 and gap >= .76
-               and (not (x or y) or progress >= minimum_progress)
+               and (not (x or y) or progress >= minimum_progress) and (not corner or reversals <= 1)
                and phases['stall_reroute'] == 0)
     return dict(name=name, success=success, result=result, phases=dict(phases),
+                yieldReversals=reversals,
                 player1Progress=progress, player1Disturbance=disturbance, minimumSeparation=gap,
                 returning=returning, conveyors=conveyors, firstWaitSeconds=wait_started)
 
