@@ -4,36 +4,6 @@ A local observation and Player 2 control bridge for couch co-op in the native ma
 Overcooked! 2. The target is two separate local players, each controlling their
 own chef simultaneously. Online multiplayer is outside the supported scope.
 
-Bridge **0.8.10** lets [the task queue and autonomous Player 2 jobs run while the game is in the background](docs/control-lifecycle.md). Bridge **0.8.9** added [fenced execution receipts and the durable local task queue](docs/scheduler.md). The 0.8.8 release added a compact observation stream for the harness map, FPS and station contents. It includes the [held-item task recovery](docs/held-item-regressions.md), [raft handoff and board scheduling fixes](docs/raft-handoff-regressions.md), and earlier [preparation fixes](docs/preparation-regressions.md).
-
-Bridge 0.5 adds [first-layer interaction actions](docs/actions.md): pickup,
-placement, ingredient addition, work, activation, disposal, typed waits, and
-targeted throws to stations or another local player. Bridge 0.6 adds finite
-logistics jobs: move/fetch/stage items, get plates/utensils, return utensils and
-clear stations. Throws use native launch velocity and account for wind and
-height; nearby player handoffs prefer checked placement/drop. Each checks its
-observed outcome; container-to-container transfers remain a higher-layer task.
-Player 2 can be created with the game's Split Controller option and controlled
-directly through logical inputs, independently of Player 1. See
-[Player 2 control](docs/control.md) for the API and lifecycle rules.
-Bridge 0.4 adds [autonomous walking actions](docs/navigation.md): list reachable
-meaningful destinations, call `navigate_to(destination_id)`, or interrupt with
-`stop()`. The plugin handles routing and steering; callers never send waypoints.
-Run `python3 -m harness.server` for a [live clickable action harness](docs/harness.md)
-at [localhost:8765](http://127.0.0.1:8765). It shows dispenser food names and
-walking/direct distances, with a Cloudflare HTTPS QR link for phone access when
-`cloudflared` is installed (in PATH or `.tools/cloudflared`). Use `--no-tunnel`
-for same-Wi-Fi access.
-It captures active kitchens, including paused rounds. Outside a round it sends
-status messages without a map, so consumers cannot mistake the level selector
-for a kitchen.
-
-The bridge combines scene graphs and collision geometry with 151 explicit
-schemas for chefs, food, attachments, processing, orders, score, timers,
-environmental forces and special mechanics. It preserves references and
-server/client provenance. Unsupported observations are reported rather than
-guessed. Coverage of every DLC mechanic has not been live-verified.
-
 ## Run
 
 Requires macOS, Python 3.12+, Steam, and a local installation of Overcooked! 2.
@@ -169,33 +139,4 @@ needed. The launcher caches its native executable in `.local/apple-speech-test/`
 Use `--locale en-CA` to change language, `--check` to check availability without
 opening the microphone, or `--file recording.wav` to transcribe an existing file.
 
-### Faster gameplay observations
 
-Bridge 0.3.0 adds a compact gameplay stream on **127.0.0.1:24704**, targeting
-**20 Hz** by default, while retaining the complete **5 Hz** map stream on 24702.
-Set `[Gameplay] Hz` to 1–30 in the BepInEx config while the game is closed.
-The fast stream includes fresh transforms, velocities, supported gameplay fields
-and collider bounds; full geometry and comprehensive discovery remain in the
-original stream. Rates depend on live game performance.
-
-```sh
-python3 clients/bridge.py --port 24704 --frames 100
-python3 scripts/profile_streams.py --seconds 15
-python3 scripts/profile_streams.py --seconds 15 --stream full
-```
-
-Use `GameplayWorld` from `clients/world.py` to index fast samples. See
-[the protocol](docs/protocol.md#gameplay-stream-bridge-030) for identity,
-freshness, discovery delay and recovery semantics.
-The profiler includes average rendering FPS from Unity frame counters. This
-average can hide stutters; compare capture p95/max as well, in the same kitchen
-and with the same clients connected.
-
-Autonomous multi-step tasks, repeat counts, and indefinite environmental waiting
-are documented in [docs/tasks.md](docs/tasks.md). The localhost **Tasks** panel
-accepts atomic plans through the [shared scheduler](docs/scheduler.md), with queue editing and restart recovery. It uses the same production task executor.
-The [Voice commands panel](docs/apple-speech-service.md) provides local Apple speech
-capture, push-to-talk, pause endpointing, shared mute, and transcript inspection.
-It starts muted; the only model transport is an optional local fake. Jev task
-interpretation is milestone 4. [Dish assembly](docs/dish-assembly.md) binds one ticket and its assigned
-resources, verifies exact-recipe additions, and schedules assembly, mixing and cooking.
