@@ -124,10 +124,13 @@ namespace SousChef.Plugin.Actions
         }
         public static ServerAttachStation DryingStation(ServerWashingStation sink)
         { return Read<ServerAttachStation>(sink, "m_dryingAttachStation"); }
-        public static bool ActivationTarget(GameObject target)
+        public static bool ButtonTarget(GameObject target)
         {
+            // Sessions (terminals, cannons, draggable objects) take over the
+            // chef's controls; a one-shot press cannot fulfill that interaction.
             return target != null && target.activeInHierarchy && target.GetComponent<ClientInteractable>() != null &&
                 target.GetComponent<PhysicalAttachment>() == null && target.GetComponent<PickupItemSpawner>() == null &&
+                target.GetComponent<ClientSessionInteractable>() == null &&
                 target.GetComponent<ServerWorkstation>() == null && target.GetComponent<ServerWashingStation>() == null &&
                 Receiver(target).GetComponent<ServerWorkableItem>() == null;
         }

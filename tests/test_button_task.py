@@ -1,9 +1,12 @@
 import copy
+import gzip
+import json
+from pathlib import Path
 import unittest
 
 from clients.capabilities import ValidationError, wire_command
 from harness.capabilities import assess_arguments
-from harness.decision.compiler import Clarification, Unsupported, build_context
+from harness.decision.compiler import Compiler, Clarification, Unsupported, build_context
 from harness.decision.protocol import DecisionError
 from harness.decision.service import InterpreterService
 from harness.semantic_map import interaction_context
@@ -18,7 +21,7 @@ def kitchen():
     semantic['targets'] = []
     for i, station in enumerate(semantic['movement']['stations']):
         station.update(label='Button', kind='interaction', routeStatus='verified')
-        semantic['targets'].append(dict(station, possibleOperations=['activate'], activationStates=['trigger', 'on', 'off']))
+        semantic['targets'].append(dict(station, possibleOperations=['activate', 'press_button'], activationStates=['trigger', 'on', 'off']))
     return value
 
 
@@ -27,6 +30,19 @@ def context(value):
 
 
 class ButtonCompilerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_recorded_jev_bottom_button_request_matches_production(self):
+        recorded = json.loads(gzip.decompress(Path(__file__).with_name('fixtures').joinpath('jev-button-replay.json.gz').read_bytes()))
+        self.assertTrue(recorded['synthetic_kitchen'])
+        history = iter(recorded['requests'])
+        async def ask(request):
+            exchange = next(history)
+            self.assertEqual(request, exchange['request'])
+            return exchange['response']
+        c = Compiler({'id': 'bottom_test', 'text': recorded['utterance']}, context(kitchen()), ask)
+        result = await c.compile()
+        self.assertEqual(result, recorded['result'])
+        self.assertIsNone(next(history, None))
+
     async def test_task_then_reachable_target_then_state_and_full_verification(self):
         value = kitchen()
         c, script = compiler('Push the bottom button', [
@@ -95,11 +111,11 @@ class ButtonContractTests(unittest.TestCase):
         semantic = kitchen()['capabilities']['semantic_catalog']
         semantic['targets'][1]['possibleOperations'] = ['work_at']
         semantic['movement']['orientation'].update(right=[-1, 0, 0], up=[0, 0, -1])
-        controls = interaction_context(semantic, 'activate')
+        controls = interaction_context(semantic, 'press_button')
         self.assertEqual([t['id'] for t in controls['candidates']], ['d1'])
         self.assertEqual(controls['candidates'][0]['screen'], {'x': 1, 'y': 0})
         semantic['movement']['orientation']['known'] = False
-        self.assertNotIn('screen', interaction_context(semantic, 'activate')['candidates'][0])
+        self.assertNotIn('screen', interaction_context(semantic, 'press_button')['candidates'][0])
 
     def test_preacceptance_rejects_rebound_or_missing_target_but_allows_motion(self):
         before = kitchen()['capabilities']['semantic_catalog']

@@ -135,7 +135,7 @@
       "limitations": [
         "One activation per task. Press/click/push defaults to trigger; on/off binds a requested state.",
         "Never substitutes another control. Routes and native interaction gates are rechecked before pressing. Unknown routes are not offered to Jev.",
-        "No timed holds, pressure plates, menus, or claims about downstream machinery."
+        "No timed holds, pressure plates, menus, driving/boarding sessions, or claims about downstream machinery."
       ],
       "wire_arguments": [
         "target_id",

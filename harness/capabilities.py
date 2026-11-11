@@ -63,7 +63,7 @@ def assess_arguments(name, arguments, semantic):
         add('applicable' if found else 'not_applicable', 'registered_movement_binding' if found else 'movement_binding_stale', 'destination_id')
     elif name == 'press_button':
         target = next((t for t in semantic.get('targets', []) if t['id'] == args['target_id']), None)
-        valid = target is not None and 'activate' in target.get('possibleOperations', [])
+        valid = target is not None and 'press_button' in target.get('possibleOperations', [])
         add('applicable' if valid else 'not_applicable', 'exact_activation_target', 'target_id')
         if valid:
             add('applicable' if args['desired_state'] in target.get('activationStates', ['trigger']) else 'not_applicable',

@@ -102,7 +102,7 @@ namespace SousChef.Plugin.Actions
             try
             {
                 if (assembly != null && !assembly.Order.Live) { Finish("blocked", "assembly_order_unavailable"); return; }
-                if (request.Action == "press_button" && !ActionObservations.ActivationTarget(buttonTarget))
+                if (request.Action == "press_button" && !ActionObservations.ButtonTarget(buttonTarget))
                 { Finish("blocked", "button_target_unavailable"); return; }
                 // Native portals temporarily hide/detach carried objects. Let
                 // the selected transport finish before interpreting cargo or

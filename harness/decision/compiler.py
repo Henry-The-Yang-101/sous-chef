@@ -243,7 +243,7 @@ class Compiler:
                     'snapshot': {k:v for k,v in spatial_context(self.context['semantic']).items() if k != 'candidates'},
                     'selected_destinations': list(self.movement_choices.values())}
             if any(task['action'] == 'press_button' for task in self.tasks):
-                state.setdefault('world', {})['controls'] = interaction_context(self.context['semantic'], 'activate')
+                state.setdefault('world', {})['controls'] = interaction_context(self.context['semantic'], 'press_button')
         return state
 
     async def batch(self, stage, questions, **fields):
@@ -501,7 +501,7 @@ class Compiler:
         return result
 
     async def interaction_target(self, action, index):
-        scene = interaction_context(self.context['semantic'], 'activate')
+        scene = interaction_context(self.context['semantic'], 'press_button')
         candidates = [c for c in scene['candidates'] if c.get('routeStatus') == 'verified']
         if not candidates:
             raise Unsupported('No button or switch has a verified walking route for Player 2 in this snapshot. Wait for a route and try again.')
@@ -911,7 +911,7 @@ class Compiler:
                 descriptions.append(f'Assemble {order_label(order) if order else "ticket " + ident}.')
             elif task['action'] == 'press_button':
                 args = task['arguments']
-                target = next((c for c in interaction_context(self.context['semantic'], 'activate')['candidates'] if c['id'] == args['target_id']), None)
+                target = next((c for c in interaction_context(self.context['semantic'], 'press_button')['candidates'] if c['id'] == args['target_id']), None)
                 descriptions.append(f'Walk to and activate {candidate_description(target) if target else args["target_id"]}; {args["desired_state"]}.')
             else:
                 descriptions.append(f'{spec["label"]}: {count}' +

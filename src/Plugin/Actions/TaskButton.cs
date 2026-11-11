@@ -13,7 +13,7 @@ namespace SousChef.Plugin.Actions
         {
             if (request.Repetitions != 1 || !ControlCommand.ActivationState(request.DesiredState)) return "invalid_button_request";
             buttonTarget = navigation.Resolve(request.Target);
-            if (!ActionObservations.ActivationTarget(buttonTarget)) return "button_target_unavailable";
+            if (!ActionObservations.ButtonTarget(buttonTarget)) return "button_target_unavailable";
             if (request.DesiredState != "trigger" && !ActionObservations.ToggleState(buttonTarget).HasValue)
                 return "unsupported_activation_state";
             return null;
@@ -21,7 +21,7 @@ namespace SousChef.Plugin.Actions
         private bool ButtonAvailable(TaskRequest selected)
         {
             foreach (GameObject target in navigation.Targets())
-                if ((selected == null || target == buttonTarget) && ActionObservations.ActivationTarget(target) && Reachable(target)) return true;
+                if ((selected == null || target == buttonTarget) && ActionObservations.ButtonTarget(target) && Reachable(target)) return true;
             return false;
         }
         private IEnumerable<TaskStep> PressButton()
@@ -30,7 +30,7 @@ namespace SousChef.Plugin.Actions
             // and uses the ordinary native activation edge and outcome proof.
             // Never rebind a vanished control or replay an unverified press.
             TaskStep activation = Do("activate", buttonTarget, desiredState: request.DesiredState);
-            activation.BeforePress = () => ActionObservations.ActivationTarget(buttonTarget);
+            activation.BeforePress = () => ActionObservations.ButtonTarget(buttonTarget);
             yield return activation;
             completed++;
         }

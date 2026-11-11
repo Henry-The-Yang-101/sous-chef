@@ -53,8 +53,8 @@ const visible = {displayOptions: {
 test('button task binds its selected control and exposes only observed toggle states', () => {
   const {context: c, el} = fixture();
   const catalog = {semanticCatalog: {targets: [
-    {id: 'd1', label: 'Button', possibleOperations: ['activate'], activationStates: ['trigger']},
-    {id: 'd2', label: 'Switch', possibleOperations: ['activate'], activationStates: ['trigger', 'on', 'off']},
+    {id: 'd1', label: 'Button', possibleOperations: ['activate', 'press_button'], activationStates: ['trigger']},
+    {id: 'd2', label: 'Switch', possibleOperations: ['activate', 'press_button'], activationStates: ['trigger', 'on', 'off']},
     {id: 'd3', label: 'Sink', possibleOperations: ['work_at']},
   ]}};
   c.renderTasks(catalog, visible, false, true); el('task-kind').value = 'press_button';

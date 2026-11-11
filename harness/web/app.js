@@ -582,7 +582,7 @@ function renderTasks(catalog, visible, busy, live) {
   const preparing = kind === 'prepare_near_player', assembling = kind === 'assemble_dish';
   const pressing = kind === 'press_button';
   el('task-button').hidden = !pressing;
-  const controls = (catalog.semanticCatalog?.targets || visible.targets || []).filter(target => target.possibleOperations?.includes('activate'));
+  const controls = (catalog.semanticCatalog?.targets || visible.targets || []).filter(target => target.possibleOperations?.includes('press_button'));
   setJobOptions(el('button-target'), controls.map(target => ({value: target.id, label: `${nameOf(target)} · ${target.id}`})));
   const selectedControl = controls.find(target => target.id === el('button-target').value);
   setJobOptions(el('button-state'), (selectedControl?.activationStates || ['trigger']).map(value => ({value, label: value === 'trigger' ? 'Press once' : `Set ${value}`})));

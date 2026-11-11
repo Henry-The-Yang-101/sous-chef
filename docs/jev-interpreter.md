@@ -141,6 +141,31 @@ Live Jev requests in an isolated native game tested “Make the next order” an
 preview and then completed through the task queue. Independent plate checks
 matched the selected tickets, including the cooked rice in the second recipe.
 
+Button verification on **2026-11-11** used bridge 0.8.12 in an isolated native
+story 4-5 (`s_sushi_4_5`) runtime. Live Jev interpreted “Push the bottom button”,
+selected the lower switch at screen `(0.456, 0.616)`, and passed full-plan
+verification. The upper switch at `(0.559, 0.364)` remained a non-selectable
+landmark because its route was unknown. Player 2 approached the selected lower
+switch and completed exactly one native trigger.
+
+Both switch-press completion probes used explicit supported starting poses.
+The lower switch is disabled in the kitchen's initial platform state: an initial
+unstaged request walked there and waited with `interaction_unavailable` until
+the probe stopped it. A separate upper-switch task then completed from a staged
+pose, enabling the lower switch; the successful Jev bottom-switch run started
+from a staged floor point about three world units away. These checks prove
+target interpretation, approach and activation, not autonomous road crossing.
+Local evidence is in `.local/button-live-sushi-bottom-enabled.json`,
+`.local/button-native-staged-top.json` and `.local/button-switch-frame.ndjson`.
+The isolated runtime was stopped afterward; the normal installed plugin was
+not replaced.
+
+The full check passed 3,003 core assertions, 470 navigation checks, 964 action
+checks and 30 catalog checks. Python tests (277) and browser-form tests (14)
+passed. `tests/fixtures/jev-button-replay.json.gz` preserves a live Jev response
+sequence for a clearly labelled synthetic top/bottom kitchen; the offline test
+requires its requests to match the current production compiler exactly.
+
 `scripts/jev_playground.py` exports exact production requests and replays copied
 playground responses without any network code. Its kitchen is explicitly synthetic.
 The corpus runner, `scripts/jev_evaluate.py`, audits expected outcomes against

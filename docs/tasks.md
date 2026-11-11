@@ -88,7 +88,10 @@ rechecks the route, empty hands, interaction selection and input gate before
 pressing. Success requires the control's Player 2 trigger acknowledgement or
 the requested observed toggle state. Unacknowledged presses are not replayed;
 a vanished control fails without selecting another one. Timed holds, pressure
-plates and menu buttons are outside this task's contract.
+plates and menu buttons are outside this task's contract. Native session
+interactions (driving terminals, cannons and draggable objects) are also excluded:
+they take over the chef's controls and need an ongoing interaction. The existing
+explicit `activate` action remains available for those objects.
 
 ## Assemble an assigned dish
 

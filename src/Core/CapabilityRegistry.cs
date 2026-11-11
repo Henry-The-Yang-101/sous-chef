@@ -4,7 +4,7 @@ namespace SousChef.Core
     public static class CapabilityRegistry
     {
         public const int Version = 1;
-        public const string Hash = "9ea1fc80d81a5049ba16f3268028b5a99921249446cbe135bb5320c99cf87adb";
+        public const string Hash = "1ba0697c5c126be8c2a76d45b78b8130f4b2e76f05cc72f854127864d4282429";
         public const int MaxRepetitions = 10;
         public const int MaxPreparationItems = 10;
         public const int MaxQuantity = 10;

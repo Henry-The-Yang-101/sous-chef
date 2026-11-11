@@ -320,6 +320,7 @@ public interface IPickup { bool CanHandlePickup(ICarrier carrier); }
 public interface IPlacement { bool CanHandlePlacement(ICarrier carrier,UnityEngine.Vector2 forward,PlacementContext context); }
 public class PlacementContext { public enum Source { Player } public PlacementContext(Source s) { } }
 public class ClientPlayerAttachmentCarrier : UnityEngine.MonoBehaviour, ICarrier { public UnityEngine.GameObject Item; public UnityEngine.GameObject InspectCarriedItem() { return Item; } }
+public class ClientSessionInteractable : UnityEngine.MonoBehaviour { }
 public class ClientInteractable : UnityEngine.MonoBehaviour { public bool UsePlacementButton, Allowed=true; public int Users; public int InteractorCount() { return Users; } public bool CanInteract(UnityEngine.GameObject chef) { return Allowed; } }
 public class InteractionObjects
 {

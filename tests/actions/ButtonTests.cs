@@ -18,6 +18,18 @@ internal static partial class Program
     }
     private static void ButtonTasks()
     {
+        {
+            var w = new World(); var terminal = Button(w); terminal.Add(new ClientSessionInteractable());
+            var tool = Button(w); tool.Add(new PhysicalAttachment());
+            foreach (var target in new[] { terminal, tool, w.Target })
+            {
+                var identity = Json.Object(); SousChef.Plugin.Actions.HarnessOptions.Target(identity, target);
+                Check(!((string[])identity["possibleOperations"]).Contains("press_button"), "sessions, portable tools and workstations are not one-shot buttons");
+                Check(Press(w, target) == "button_target_unavailable", "native button binding enforces the same discovery predicate");
+            }
+            var legacy = Json.Object(); SousChef.Plugin.Actions.HarnessOptions.Target(legacy, terminal);
+            Check(((string[])legacy["possibleOperations"]).Contains("activate"), "session exclusion preserves the explicit native activate contract");
+        }
         foreach (bool placement in new[] { false, true })
         {
             var w = new World(); var button = Button(w, placement); var other = Button(w);

@@ -28,7 +28,8 @@ namespace SousChef.Plugin.Actions
             if (!bin && (holder || ActionObservations.Container(go) != null))
             { operations.Add("add_ingredient"); operations.Add("collect_contents"); }
             if (work) operations.Add("work_at");
-            if (ActionObservations.ActivationTarget(go)) operations.Add("activate");
+            if (go.GetComponent<ClientInteractable>() != null && !work) operations.Add("activate");
+            if (ActionObservations.ButtonTarget(go)) operations.Add("press_button");
             if (!bin && (holder || GameObjectUtils.RequestInterface<IHandleCatch>(ActionObservations.Receiver(go)) != null)) operations.Add("throw_to");
             var workConditions = new List<string>(InteractionActions.ConditionsFor(go, true));
             if (work && !sink && !workConditions.Contains("work_complete")) workConditions.Add("work_complete");
