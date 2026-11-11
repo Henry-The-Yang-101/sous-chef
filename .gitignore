@@ -11,3 +11,5 @@ artifacts/
 .env.*
 !.env.example
 
+
+/AGENTS.md
