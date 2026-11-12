@@ -44,6 +44,15 @@ internal static partial class Program
             Check(DriveAssembly(w)==1 && w.Tasks.Run.State=="succeeded","explicit raw stock is chopped in place and its exact successor is plated");
         }
         {
+            var w=new World();var first=AssemblyPlate(w,w.Delivery(),Leaf("fish"));
+            var alternative=AssemblyPlate(w,w.Delivery(),Leaf("rice"));
+            var rice=AssemblyRawPrefab(w,"rice",0);w.Target.Add(new PickupItemSpawner {m_itemPrefab=rice});
+            var request=AssemblyJob(w,new[]{first,alternative},new GameObject[0],Leaf("fish"),Leaf("rice"));
+            request.Assembly.Components.Add(w.IdOf(w.Target));StartAssembly(w,request);
+            Check(DriveAssembly(w)==1 && w.Tasks.Run.State=="succeeded" && RecipeProof.Equal(RecipeProof.Composition(alternative),Leaf("rice")),
+                "an unselected partial plate cannot hide missing ingredient demand on the selected plate");
+        }
+        {
             var w=new World();var plate=AssemblyPlate(w,w.Delivery());
             var wrong=AssemblyRawPrefab(w,"prawn");w.Target.Add(new PickupItemSpawner {m_itemPrefab=wrong});
             var board=w.Delivery();board.Add(new ServerWorkstation());
@@ -59,10 +68,17 @@ internal static partial class Program
             w.Target.GetComponent<Placement>().Accepts=item=>true;
             Check(DriveAssembly(w)==1 && w.Tasks.Run.State=="succeeded","newly available board resumes the same automatic order");
         }
+        foreach(bool inSink in new[]{true,false})
         {
             var w=new World();var rack=w.Delivery();rack.Add(new Pickup());
             var sink=w.Target;sink.Add(new WashingStation());
-            var washing=sink.Add(new ServerWashingStation {m_plateCount=2,m_dryingAttachStation=rack.GetComponent<ServerAttachStation>()});
+            var washing=sink.Add(new ServerWashingStation {m_plateCount=inSink ? 2 : 0,m_dryingAttachStation=rack.GetComponent<ServerAttachStation>()});
+            if(!inSink)
+            {
+                var dirty=new GameObject("dirty plates");dirty.Add(new ServerDirtyPlateStack());dirty.Add(new ServerStack()).m_stackItems.AddRange(new[]{new GameObject("dirty plate 1"),new GameObject("dirty plate 2")});
+                dirty.Add(new PhysicalAttachment());dirty.Add(new Pickup());
+                var counter=w.Delivery();counter.Add(new Pickup());counter.GetComponent<ServerAttachStation>().Item=dirty;
+            }
             var fish=AssemblyFood(w,w.Delivery(),"fish");
             var request=AssemblyJob(w,new GameObject[0],new GameObject[0],Leaf("fish"));StartAssembly(w,request);
             bool washed=false;
@@ -74,6 +90,14 @@ internal static partial class Program
                 "automatic order washes only the needed plate and then uses the native drying-rack output: "+Json.Encode(w.Tasks.Describe()));
         }
         {
+            var w=new World();var plate=AssemblyPlate(w,w.Delivery());var obstruction=AssemblyFood(w,w.Target,"prawn");
+            var supply=w.Delivery();supply.Add(new Pickup());supply.Add(new PickupItemSpawner {m_itemPrefab=AssemblyRawPrefab(w,"fish")});
+            var staging=w.Delivery();staging.Add(new Pickup());staging.transform.position=new Vector3(-2,0,0);
+            var request=AssemblyJob(w,new[]{plate},new GameObject[0],Leaf("fish"));request.Assembly.Bases.Clear();StartAssembly(w,request);
+            Check(DriveAssembly(w,400)==1 && w.Tasks.Run.State=="succeeded" && obstruction.activeInHierarchy && RecipeProof.Equal(RecipeProof.Composition(obstruction),Leaf("prawn")),
+                "an occupied chopping board is cleared safely before fetching the recipe's raw stock: "+Json.Encode(w.Tasks.Describe()));
+        }
+        {
             var w=new World();var plate=AssemblyPlate(w,w.Delivery());var board=w.Target;
             var raw=SpawnAssemblyIngredient(w,AssemblyRawPrefab(w,"fish"));board.GetComponent<ServerAttachStation>().Item=raw;
             var burner=w.Delivery();burner.Add(new Pickup());burner.Add(new ServerCookingStation());
@@ -81,7 +105,7 @@ internal static partial class Program
             pan.Add(new ServerIngredientContainer()).Contents.Add(Leaf("rice"));var step=new CookingStepData {m_uID=31};
             pan.Add(new CookingHandler {m_cookingType=step});pan.Add(new CookableContainer());var cooking=pan.Add(new ServerCookingHandler());pan.Add(new ProcessorComposition {Step=step});
             burner.GetComponent<ServerAttachStation>().Item=pan;
-            w.Delivery().transform.position=new Vector3(-2,0,0);
+            var staging=w.Delivery();staging.Add(new Pickup());staging.transform.position=new Vector3(-2,0,0);
             var cooked=new CookedCompositeAssembledNode {m_composition=new[]{Leaf("rice")},m_cookingStep=step,m_progress=CookedCompositeOrderNode.CookingProgress.Cooked};
             var request=AssemblyJob(w,new[]{plate},new[]{raw},Leaf("fish"),cooked);
             request.Assembly.Equipment.Add(w.Navigation.RegisterItem(pan));request.Assembly.Equipment.Add(w.IdOf(burner));StartAssembly(w,request);
@@ -94,6 +118,25 @@ internal static partial class Program
             GameObject firstPickup=null;
             int additions=DriveAssembly(w,300,beforeArrival:(target,op)=>{if(op=="pick_up" && firstPickup==null)firstPickup=ActionObservations.Receiver(target);});
             Check(firstPickup==pan && additions==2 && w.Tasks.Run.State=="succeeded","rescues cooking before returning to chop and finish the exact dish: "+Json.Encode(w.Tasks.Describe()));
+        }
+        {
+            var w=new World();var plate=AssemblyPlate(w,w.Delivery());var supply=w.Delivery();supply.Add(new Pickup());
+            supply.Add(new PickupItemSpawner {m_itemPrefab=AssemblyRawPrefab(w,"potato")});
+            var burner=w.Delivery();burner.Add(new Pickup());burner.Add(new ServerCookingStation());
+            var pan=new GameObject("empty potato pan");pan.Add(new PhysicalAttachment());pan.Add(new Pickup());pan.Add(new IngredientTransfer());
+            pan.Add(new ServerIngredientContainer());var step=new CookingStepData {m_uID=31};
+            pan.Add(new CookingHandler {m_cookingType=step});pan.Add(new CookableContainer());var cooking=pan.Add(new ServerCookingHandler());pan.Add(new ProcessorComposition {Step=step});
+            burner.GetComponent<ServerAttachStation>().Item=pan;
+            var staging=w.Delivery();staging.Add(new Pickup());staging.transform.position=new Vector3(-2,0,0);
+            var goal=new CookedCompositeAssembledNode {m_composition=new[]{Leaf("potato")},m_cookingStep=step,m_progress=CookedCompositeOrderNode.CookingProgress.Cooked};
+            var request=AssemblyJob(w,new[]{plate},new GameObject[0],goal);request.Assembly.Bases.Clear();StartAssembly(w,request);
+            GameObject firstPickup=null;bool cooked=false;
+            int additions=DriveAssembly(w,500,beforeArrival:(target,op)=>{if(op=="pick_up" && firstPickup==null)firstPickup=target;},onTick:()=>{
+                if(ActionObservations.Occupant(burner)==pan && pan.GetComponent<ServerIngredientContainer>().GetContentsCount()>0)
+                {cooked=true;cooking.m_ServerData.m_cookingState=ProcessingState.Completed;}
+            });
+            Check(firstPickup==supply && cooked && additions==2 && w.Tasks.Run.State=="succeeded",
+                "automatic cooked order fetches and chops before staging empty cookware, then cooks and plates: "+Json.Encode(w.Tasks.Describe()));
         }
     }
 }

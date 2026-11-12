@@ -55,7 +55,13 @@ internal static partial class Program
                 var holder=target.GetComponent<ServerAttachStation>();if(holder!=null)holder.Item=null;
             }
             else if(w.Skills.Run.Operation=="place_at" && w.Carrier.Item!=null)
-            {target.GetComponent<ServerAttachStation>().Item=w.Carrier.Item;w.Hold(null);}
+            {
+                var sink=target.GetComponent<ServerWashingStation>();
+                if(sink!=null && TaskNative.Dirty(w.Carrier.Item))
+                {sink.m_plateCount+=ActionObservations.StackCount(w.Carrier.Item);w.Carrier.Item.activeInHierarchy=false;}
+                else target.GetComponent<ServerAttachStation>().Item=w.Carrier.Item;
+                w.Hold(null);
+            }
             else if(w.Skills.Run.Operation=="transfer_contents" && w.Carrier.Item!=null)
             {
                 var cargo=w.Carrier.Item;var contents=ActionObservations.Container(target);
@@ -434,6 +440,11 @@ internal static partial class Program
             Check(!step.AbandonBeforePress(),"a transient route rebuild retains its bounded opportunity");
             Time.realtimeSinceStartup+=2.1f;
             Check(step.AbandonBeforePress() && !w.Inputs.Contains(1),"stalled planning yields to other assembly work before any irreversible input");
+            step=((IEnumerable<TaskStep>)typeof(TaskActions).GetMethod("ExecuteAssembly",flags).Invoke(w.Tasks,new[]{job})).First();
+            w.Skills.Run.Advance("navigating");
+            Check(!step.AbandonBeforePress(),"a new walking attempt gets its own progress budget");
+            Time.realtimeSinceStartup+=4.1f;w.Chef.transform.position+=new Vector3(.02f,0,0);
+            Check(step.AbandonBeforePress() && !w.Inputs.Contains(1),"tiny movement impulses while yielding to a player cannot monopolize assembly");
             w.Skills.Cancel("test");catalog["complete"]=true;
             Check(select.Invoke(w.Tasks,null)==null,"a complete catalogue proving no source route withholds speculative pickup");
             inventory.EndObservation();w.Tasks.Cancel("test");

@@ -26,7 +26,10 @@ def main():
         catalog = audit.load(args.level)
         write(args.output / 'catalog-before.json', catalog)
         audit.snap('before')
-        order = next(order for order in catalog['assemblyOrders'] if not args.recipe or order['recipe'] == args.recipe)
+        order = next((order for order in catalog['assemblyOrders'] if not args.recipe or order['recipe'] == args.recipe), None)
+        if order is None:
+            raise RuntimeError('Requested recipe is not among this round’s initial tickets: ' +
+                               ', '.join(order['recipe'] for order in catalog['assemblyOrders']))
         audit.client.assemble_dish(order['id'])
         started = time.monotonic()
         last = None

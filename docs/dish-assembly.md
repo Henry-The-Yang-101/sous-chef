@@ -192,31 +192,26 @@ fixtures, and independently compares the finished native plate to the recipe:
 python3 scripts/full_order_audit.py --runtime .local/full-order-dev --port-base 38720 --output .local/full-order-fish --level s_sushi_1_1 --recipe Sushi_PlainFish
 ```
 
-The cases below are earlier explicit-allocation baselines.
+Native full-order replays on November 12, 2026 used only order IDs, ordinary
+Player 2 inputs and native progress clocks. No prepared ingredients were supplied.
+Each finished under one request/lease and passed the independent plate proof:
 
-The table shows three baseline cases.
-
-| Native replay | Level | Verified additions | Result |
+| Recipe | Level | Verified additions | Local evidence |
 | --- | --- | ---: | --- |
-| Prepared fish, either assigned plate | `s_sushi_1_1` | 1 | Exact `Sushi_PlainFish` composition |
-| Fish, seaweed and rice cooked in an assigned pot | `s_sushi_1_2` | 4 | Exact `Sushi_Fish` composition |
-| Flour + egg, mix → pan → cook → portal → plate | `s_wizard_school_3_4` | 4 | Exact `Pancake_Plain` composition |
+| `Sushi_PlainFish` | `s_sushi_1_1` | 1 | `.local/full-order-fish-01/report.json` |
+| `Pasta_Marinara_New` | `s_balloon_2_3` | 6 | `.local/full-order-pasta-06/report.json` |
+| `Pancake_Plain` | `s_wizard_school_3_4` | 4 | `.local/full-order-pancake-01/report.json` |
 
-All three finished successfully under one request and lease per recipe. A browser
-submission then selected between the two allocated plates and recognized the
-already-completed pancake with **zero** additional transfers. The full repository
-check passed: 2,885 core assertions, 391 navigation checks, 1,041 executor checks,
-and 20 catalogue checks. After the final harness endpoint change, all 133 Python
-tests passed; these include seven browser-form tests run through Node.
+The action suite additionally checks explicit raw stock, repeated quantities,
+multiple work successors, wrong/missing ingredients, occupied boards, sink
+washing, heat interruption during chopping, partial alternative plates and
+bounded blocked-route retries. Existing exact-allocation, transfer, navigation,
+pause and Stop regressions remain in the suite. `scripts/check.py` builds against
+the installed game's real assemblies and runs the core, navigation, action,
+catalogue and Python/browser checks.
 
-The action suite covers alternative and partial plates, partial assembly bases,
-wrong/duplicate/unassigned ingredients, processing boundaries, ticket/base changes
-during travel, lost resources, suppressed versus ambiguous transfers, combined
-cooking, same-vessel mix-then-cook dependencies, already-prepared food temporarily
-held by another player, portal cargo visibility, and exact final composition. Core
-and Python tests cover the allocation grammar and typed client. Browser checks
-cover the allocation form and required selection; the normal game installation
-is unchanged.
+Earlier explicit-allocation replays for prepared fish, cooked rice sushi and
+mix-then-cook pancakes remain reproducible with `scripts/assembly_audit.py`.
 
 Use an isolated native runtime and a new output directory per case:
 

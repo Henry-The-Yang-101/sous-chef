@@ -31,7 +31,7 @@ namespace SousChef.Plugin.Actions
                 if (AssemblyResources.PlateFits(assembly.Order, item))
                 { if (!assembly.Bases.Contains(item)) assembly.Bases.Add(item); }
                 else if (assembly.Stages.Exists(stage => stage.Processing && AssemblyResources.VesselFor(stage, item)))
-                { if (!assembly.Equipment.Contains(item)) assembly.Equipment.Add(item); }
+                { if (!assembly.Equipment.Contains(item) && !assembly.Components.Contains(item)) assembly.Equipment.Add(item); }
                 else if (UsefulAssemblyIngredient(item) && !assembly.Components.Contains(item)) assembly.Components.Add(item);
             }
             foreach (var target in navigation.Targets())
@@ -50,9 +50,13 @@ namespace SousChef.Plugin.Actions
         {
             var ready = new List<AssembledDefinitionNode>();
             var seen = new HashSet<GameObject>();
-            foreach (var item in assembly.Components.Concat(assembly.Equipment).Concat(assembly.Bases))
+            foreach (var item in assembly.Components.Concat(assembly.Equipment).Concat(
+                assembly.Bases.Where(item => item != null && item.GetComponent<PreparationContainer>() != null)))
                 if (item != null && seen.Add(item) && !assembly.Stages.Exists(stage => stage.Vessel == item) && AssemblyResources.Ready(item))
-                    ready.AddRange(RecipeProof.Parts(RecipeProof.Composition(item)));
+                {
+                    var composition = RecipeProof.Composition(item);
+                    if (assembly.Stages.Exists(stage => RecipeProof.Subset(composition, stage.Inputs))) ready.AddRange(RecipeProof.Parts(composition));
+                }
             var needs = new List<AssemblyNeed>();
             CollectAssemblyNeeds(assembly.Root, ready, needs);
             return needs;
@@ -134,10 +138,10 @@ namespace SousChef.Plugin.Actions
             string operation = work ? "work_at" : job.Operation == "stage_component" ? "place_at" : "pick_up";
             var prefab = supply ? source.GetComponent<PickupItemSpawner>().m_itemPrefab : null;
             Func<bool> needed = () => AssemblyNeeds().Exists(need => need.Stage == job.Stage && RecipeProof.Equal(need.Goal, job.Preparation));
-            Func<bool> valid = () => supply ? needed() && source != null && source.GetComponent<PickupItemSpawner>() != null &&
+            Func<bool> valid = () => needed() && (supply ? source != null && source.GetComponent<PickupItemSpawner>() != null &&
                 source.GetComponent<PickupItemSpawner>().m_itemPrefab == prefab && AssemblyPreparation.Produces(prefab, job.Preparation) :
                 source != null && AssemblyPreparation.Produces(source, job.Preparation) &&
-                (!work || ActionObservations.Occupant(target) == source);
+                (!work || ActionObservations.Occupant(target) == source));
             var next = AssemblyStep(operation, target, valid, work ? "work_complete" : null);
             next.FreeHands = ClearAssemblyHands;
             if (operation == "pick_up") next.UseHeld = held => !supply && held == source;

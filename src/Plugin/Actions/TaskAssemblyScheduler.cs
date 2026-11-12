@@ -72,10 +72,11 @@ namespace SousChef.Plugin.Actions
         private List<AssembledDefinitionNode> AssemblyOutputs(GameObject except)
         {
             var available = new List<AssembledDefinitionNode>();
+            var seen = new HashSet<GameObject>();
             foreach (var item in assembly.Components)
-                if (item != except && AssemblyResources.Ready(item)) available.Add(RecipeProof.Composition(item));
+                if (item != except && seen.Add(item) && AssemblyResources.Ready(item)) available.Add(RecipeProof.Composition(item));
             foreach (var item in assembly.Equipment)
-                if (item != except && AssemblyResources.Ready(item)) available.Add(RecipeProof.Composition(item));
+                if (item != except && seen.Add(item) && AssemblyResources.Ready(item)) available.Add(RecipeProof.Composition(item));
             return available;
         }
         private bool ProcessingStationFor(AssemblySchedule.Stage stage, GameObject station)
@@ -163,6 +164,21 @@ namespace SousChef.Plugin.Actions
         }
         private AssemblyJob StoreAssemblyCargo(GameObject held)
         {
+            if (held != null && held.GetComponent<ServerIngredientContainer>() != null && LogisticsInventory.Empty(held) &&
+                held.GetComponent<ServerPlate>() == null && held.GetComponent<PreparationContainer>() == null)
+            {
+                // Empty cookware can go back on a compatible appliance. This
+                // keeps boards/counters free for raw preparation and hot food.
+                GameObject station = null; float cost = Single.MaxValue;
+                foreach (var target in assembly.Equipment)
+                {
+                    if (!TaskNative.Equipment(target) || AssemblyDeferred(target) || ActionObservations.Occupant(target) != null || !CanDeliver(held, target)) continue;
+                    float distance = AssemblyApproachCost(target, held, true);
+                    if (distance < cost) { cost = distance; station = target; }
+                }
+                if (station != null) return new AssemblyJob { Stage = assembly.Root, Source = held,
+                    Destination = station, Operation = "place_at", Storage = true };
+            }
             var counter = AssemblyParking(held, true);
             return counter == null ? null : new AssemblyJob { Stage = assembly.Root, Source = held,
                 Destination = counter, Operation = "place_at", Storage = true };
@@ -219,14 +235,20 @@ namespace SousChef.Plugin.Actions
                 }
                 else if (!stage.Processing || !completeInputs)
                 {
+                    var source = AssemblySource(stage, probeUnknown);
                     if (entry.Holder == null || !(Counter(entry.Holder) || stage.Processing && stage.Mixing && ProcessingStationFor(stage, entry.Holder)) || TaskNative.Component<ServerConveyorStation>(entry.Holder) != null)
                     {
-                        var counter = AssemblyParking(stage.Vessel, probeUnknown);
-                        if (counter != null) return MoveAssembly(stage, entry, counter);
+                        // Leave empty cookware on its appliance until a usable
+                        // ingredient exists. Staging every empty vessel first
+                        // can occupy the very boards needed to prepare inputs.
+                        if (source != null || !RecipeProof.Empty(current))
+                        {
+                            var counter = AssemblyParking(stage.Vessel, probeUnknown);
+                            if (counter != null) return MoveAssembly(stage, entry, counter);
+                        }
                     }
                     else
                     {
-                        var source = AssemblySource(stage, probeUnknown);
                         // Probing an assigned source does not justify fetching
                         // it for an unknown receiving route. That would shuttle
                         // safe cooked food between hands and storage whenever
@@ -400,7 +422,8 @@ namespace SousChef.Plugin.Actions
             }
             else if (operation == "place_at")
                 valid = () => (job.Storage ? addition == null ? RecipeProof.Composition(item) == null : RecipeProof.Equal(addition, RecipeProof.Composition(item)) : StageFits(stage)) && System.Object.ReferenceEquals(ActionObservations.Held(chef), item) && ActionObservations.Occupant(target) == null &&
-                    (!TaskNative.Equipment(target) || ProcessingStationFor(stage, target) && (stage.Mixing ? RecipeProof.Subset(StageContents(stage), stage.Inputs) : RecipeProof.Equal(RecipeProof.Composition(item), stage.Inputs)));
+                    (!TaskNative.Equipment(target) || job.Storage && LogisticsInventory.Empty(item) && CanDeliver(item, target) ||
+                        ProcessingStationFor(stage, target) && (stage.Mixing ? RecipeProof.Subset(StageContents(stage), stage.Inputs) : RecipeProof.Equal(RecipeProof.Composition(item), stage.Inputs)));
             else if (operation == "activate")
                 valid = () => StageFits(stage) && System.Object.ReferenceEquals(ActionObservations.Occupant(target), item) &&
                     RecipeProof.Equal(RecipeProof.Composition(item), stage.Inputs) && ProcessorOff(target, stage.Mixing);
