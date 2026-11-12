@@ -185,12 +185,17 @@ namespace SousChef.Plugin.Actions
             if (NeedsWork(lane.Order, source.Item) || source.Supply)
             {
                 foreach (var item in inventory.Items)
-                    if (!item.InUse && item.Empty && TaskNative.ProcessingHandler(item.Item, mixing) != null &&
+                    if (!item.InUse && item.Empty && !Foreign(item.Item) && TaskNative.ProcessingHandler(item.Item, mixing) != null &&
                         ApproachCost(item.Source) != Single.MaxValue) return true;
                 // Full pan: prepare its successor on a board. Once chopped it
                 // becomes the preferred source and cannot enter this branch.
                 if (!buffered && NeedsWork(lane.Order, source.Item))
-                    foreach (var batch in preparation.Cooking) if (batch.Mixing == mixing) return true;
+                    {
+                        foreach (var batch in preparation.Cooking) if (batch.Mixing == mixing) return true;
+                        if (ProcessorBuffered != null && !ProcessorBuffered(this, mixing))
+                            foreach (var item in inventory.Items)
+                                if (!item.Empty && TaskNative.ProcessingHandler(item.Item, mixing) != null && TaskNative.Equipment(item.Holder)) return true;
+                    }
                 return false;
             }
             LogisticsItem empty; GameObject equipment;

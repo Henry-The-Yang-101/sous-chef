@@ -21,6 +21,7 @@ namespace SousChef.Plugin.Control
             if (receipt == null) return;
             if (command.Operation == "forget_task")
             {
+                if (ForgetKitchen(command.ReceiptId, "removed_from_queue")) { receipt.State = "succeeded"; return; }
                 SuspendedTask discarded;
                 if (suspendedTasks.TryGetValue(command.ReceiptId, out discarded))
                 {

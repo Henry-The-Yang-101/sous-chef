@@ -9,6 +9,7 @@ namespace SousChef.Plugin.Actions
     internal sealed class TaskStep
     {
         public string Phase;
+        public GameObject Target;
         public Func<ControlCommand> Command;
         public Func<bool> Ready;
         public Func<bool> Progress;
@@ -140,7 +141,7 @@ namespace SousChef.Plugin.Actions
                         if (!ActionRecovery.Transient(child.Run.Reason)) { Finish(child.Run.State == "cancelled" ? "cancelled" : "failed", child.Run.Reason); return; }
                         Wait(child.Run.Reason); return;
                     }
-                    step.Succeeded = true;
+                    step.Succeeded = true; ObserveWorkOwnership(step);
                     completedSteps++; step = null;
                 }
                 if (step != null && step.Progress != null)
@@ -185,7 +186,7 @@ namespace SousChef.Plugin.Actions
                 ControlCommand command = step.Command();
                 if (command == null) { Wait(step.Phase); return; }
                 command.Id = Run.RequestId; command.Indefinite = true;
-                string error = child.Start(chef, Run.Owner, command, step.BeforePress);
+                string error = child.Start(chef, Run.Owner, command, () => AuthorizeScheduledStep(step) && (step.BeforePress == null || step.BeforePress()));
                 if (error != null)
                 {
                     if (step.ReplanOnBlock) step = null;
@@ -234,7 +235,7 @@ namespace SousChef.Plugin.Actions
             GameObject expected = originalOccupant ?? target;
             var stack = expected == null ? null : expected.GetComponent<ServerStack>();
             if (expected != null && expected.GetComponent<CleanPlateStack>() != null) expected = stack == null ? null : stack.InspectTopOfStack();
-            return new TaskStep { Phase = operation,
+            return new TaskStep { Phase = operation, Target = target,
                 EmptyHands = operation == "pick_up" || operation == "work_at" || operation == "activate",
                 UseHeld = operation == "pick_up" ? (Func<GameObject, bool>)(held => System.Object.ReferenceEquals(held, expected)) : null,
                 Ready = delegate {

@@ -43,7 +43,7 @@ namespace SousChef.Plugin.Actions
 
         private LogisticsItem AssemblyEntry(GameObject item)
         {
-            if (item == null || !item.activeInHierarchy || item.GetComponent<ServerPlate>() != null && item.GetComponent<ServerPlate>().IsReserved()) return null;
+            if (Foreign(item) || item == null || !item.activeInHierarchy || item.GetComponent<ServerPlate>() != null && item.GetComponent<ServerPlate>().IsReserved()) return null;
             foreach (var entry in inventory.Items)
             {
                 // Native additions/conveyors can destroy a cached item between
@@ -59,9 +59,9 @@ namespace SousChef.Plugin.Actions
         { return AssemblyResources.PlateFits(assembly.Order, item); }
         private bool AssemblyObtainable(LogisticsItem entry, string operation, bool probeUnknown)
         {
-            return Obtainable(entry, operation) || probeUnknown && !(bool)inventory.Catalog["complete"] &&
+            return !Foreign(entry.Item) && !Foreign(entry.Holder) && (Obtainable(entry, operation) || probeUnknown && !(bool)inventory.Catalog["complete"] &&
                 LogisticsChecks.Collect(chef, entry, operation, true) == "source_unreachable" &&
-                LogisticsChecks.CanCollectEmpty(chef, entry.Source);
+                LogisticsChecks.CanCollectEmpty(chef, entry.Source));
         }
         private GameObject SelectAssemblyBase()
         {

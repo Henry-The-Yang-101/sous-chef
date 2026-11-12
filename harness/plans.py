@@ -70,6 +70,7 @@ class Plan:
     tasks: tuple[NativeTask | NativeAction, ...]
     after_plan: str
     on_failure: str
+    ordering: str = "sequence"
 
 
 def validate_plan(value, *, capabilities=None, existing_unlimited=False):
@@ -81,7 +82,10 @@ def validate_plan(value, *, capabilities=None, existing_unlimited=False):
     """
     fields = ('schema_version', 'capability_version', 'command_id', 'expected_queue_revision',
               'queue_edit', 'tasks', 'after_plan', 'on_failure')
-    closed(value, fields, fields, 'plan')
+    closed(value, fields + ("ordering",), fields, 'plan')
+    ordering = value.get("ordering", "sequence")
+    if ordering not in ("sequence", "independent"):
+        raise ValidationError("Invalid plan ordering")
     data = registry()
     if value['schema_version'] != data['plan_schema_version'] or type(value['capability_version']) is not int or value['capability_version'] != REGISTRY_VERSION:
         raise ValidationError('Plan/capability version mismatch')
@@ -91,7 +95,7 @@ def validate_plan(value, *, capabilities=None, existing_unlimited=False):
         raise ValidationError('expected_queue_revision: expected a nonnegative integer')
     if value['queue_edit'] not in ('append', 'insert_next', 'interrupt', 'replace_active', 'replace_pending', 'replace_all'):
         raise ValidationError('queue_edit: expected a task-plan operation')
-    if existing_unlimited and value['queue_edit'] == 'append':
+    if existing_unlimited and value['queue_edit'] == 'append' and ordering != 'independent':
         raise ValidationError('Cannot append behind an unlimited task')
     if value['after_plan'] not in ('continue_pending', 'pause_pending') or value['on_failure'] != 'pause_pending':
         raise ValidationError('Unsupported continuation/failure policy')
@@ -117,7 +121,7 @@ def validate_plan(value, *, capabilities=None, existing_unlimited=False):
         if supported is not None and raw['action'] not in supported:
             raise ValidationError('Native capability not implemented')
         repeat = Repeat.parse(raw['action'], raw['repeat'])
-        if repeat.count is None and i != len(raw_tasks) - 1:
+        if repeat.count is None and i != len(raw_tasks) - 1 and ordering != 'independent':
             raise ValidationError('Unlimited work must be the final task')
         arguments = validate_arguments(raw['action'], raw['arguments'], raw['capability_version'])
         if capabilities is not None and assess_arguments(raw['action'], arguments, capabilities['semantic_catalog'])['state'] == 'not_applicable':
@@ -127,4 +131,4 @@ def validate_plan(value, *, capabilities=None, existing_unlimited=False):
         task.wire_command()  # Also enforce the native command byte budget.
         tasks.append(task)
     return Plan(value['schema_version'], REGISTRY_VERSION, command_id, revision, value['queue_edit'],
-                tuple(tasks), value['after_plan'], value['on_failure'])
+                tuple(tasks), value['after_plan'], value['on_failure'], ordering)

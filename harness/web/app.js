@@ -634,15 +634,17 @@ function renderTasks(catalog, visible, busy, live) {
   const playerPresent = !preparing || (catalog.semanticCatalog?.players || catalog.players || []).some(player => String(player.playerId) === el('task-player').value);
   const queueReady = live && !pending && state?.capabilities?.compatible && state?.queue?.nativeContext && !state.queue.barrier && !state.queue.error;
   const validSelection = Boolean(kind && validItems && playerPresent && validAssembly && validButton);
-  const unlimitedDraft = draftTasks.some(t => t.repeat.mode === 'until_cancelled');
+  const nativeScheduler = state?.control?.kitchenSchedulerVersion === 1;
+  if (el('plan-ordering-label')) el('plan-ordering-label').hidden = !nativeScheduler;
+  const unlimitedDraft = !nativeScheduler && draftTasks.some(t => t.repeat.mode === 'until_cancelled');
   el('task-stage').disabled = !queueReady || !validSelection || draftTasks.length >= (capabilityRegistry?.max_plan_tasks || 5) || unlimitedDraft;
   const proposed = draftTasks.length ? draftTasks : validSelection ? [selectedTaskSpec()] : [];
   const pendingTasks = state?.queue?.pending || [];
   const activeTask = state?.queue?.active;
-  const appendForever = [activeTask, ...pendingTasks].some(t => t?.spec.repeat.mode === 'until_cancelled');
+  const appendForever = !nativeScheduler && [activeTask, ...pendingTasks].some(t => t?.spec.repeat.mode === 'until_cancelled');
   el('task-run').disabled = !queueReady || !proposed.length || appendForever || pendingTasks.length + proposed.length > (state?.queue?.capacity || 10);
   const dependentActive = activeTask && pendingTasks.some(t => t.dependsOn.includes(activeTask.id));
-  const nowForever = proposed.some(t => t.repeat.mode === 'until_cancelled') && pendingTasks.length > 0;
+  const nowForever = !nativeScheduler && proposed.some(t => t.repeat.mode === 'until_cancelled') && pendingTasks.length > 0;
   el('task-now').disabled = !queueReady || !proposed.length || dependentActive || nowForever || pendingTasks.length + proposed.length > (state?.queue?.capacity || 10);
   let message = !live ? 'Waiting for fresh game state.' : !queueReady ? 'Queue unavailable or reconciling. Stop remains independent.' : '';
   if (!message && !validSelection && !draftTasks.length) message = 'Choose a task and its required ingredients, recipient or exact allocation.';
@@ -698,6 +700,7 @@ async function submitPlan(edit) {
   const plan = {schema_version: capabilityRegistry.plan_schema_version, capability_version: capabilityRegistry.version,
     command_id: newId(), expected_queue_revision: draftOrigin?.revision ?? state.queue.revision, queue_edit: edit,
     tasks: draftTasks.length ? [...draftTasks] : [selectedTaskSpec()], after_plan: 'continue_pending', on_failure: 'pause_pending'};
+  if (state?.control?.kitchenSchedulerVersion === 1) plan.ordering = el('plan-ordering')?.value || 'independent';
   const context = draftOrigin?.context || state.queue.nativeContext;
   pending = true; lastError = ''; render();
   try {
@@ -706,12 +709,21 @@ async function submitPlan(edit) {
   } catch (error) { lastError = error.message; }
   finally { pending = false; render(); }
 }
+function portionProgress(entry) {
+  const jobs = entry?.receipt?.evidence?.jobs;
+  if (!jobs?.length) return '';
+  return ' · ' + jobs.map(job => {
+    const detail = job.progress?.details?.preparation?.[0];
+    const item = detail ? `${detail.preparation} ${detail.ingredient}` : job.action.replaceAll('_', ' ');
+    return `${item}: ${job.state}${job.scheduling?.reason ? ' (' + job.scheduling.reason.replaceAll('_', ' ') + ')' : ''}`;
+  }).join('; ');
+}
 function renderQueue() {
   const queue = state?.queue;
   const enabled = Boolean(token && queue && !pending && !queue.error);
   el('queue-status').textContent = !queue ? 'Waiting for the queue…' : queue.error || (queue.barrier ? 'Stopping native work; dispatch held.' : queue.active?.state === 'reconciling' ? 'Dispatch held: native outcome unknown.' : queue.paused ? 'Dispatch paused.' : 'Dispatch enabled.') +
     ` ${queue.pending.length} / ${queue.capacity} pending.` + (queue.reason ? ' ' + explain(queue.reason) : '');
-  el('queue-active').textContent = queue?.active ? `${taskDescription(queue.active.spec)} · ${queue.active.state.replaceAll('_', ' ')}${queue.active.reason ? ' · ' + explain(queue.active.reason) : ''}` : 'No active queued task.';
+  el('queue-active').textContent = queue?.active ? `${taskDescription(queue.active.spec)} · ${queue.active.state.replaceAll('_', ' ')}${queue.active.reason ? ' · ' + explain(queue.active.reason) : ''}${portionProgress(queue.active)}` : 'No active queued task.';
   el('queue-pause').disabled = !enabled || queue.paused;
   el('queue-resume').disabled = !enabled || !queue.paused || !fresh() || Boolean(queue.barrier) || queue.active?.state === 'reconciling';
   el('queue-clear').disabled = !enabled || !queue.pending.length;
@@ -721,7 +733,7 @@ function renderQueue() {
     el('queue-pending').dataset.signature = signature;
     el('queue-pending').replaceChildren(...(queue?.pending || []).map((entry, index, all) => {
       const li = document.createElement('li'); const text = document.createElement('span');
-      text.textContent = `${taskDescription(entry.spec)} · ${entry.state.replaceAll('_', ' ')}${entry.reason ? ' · ' + explain(entry.reason) : ''}`;
+      text.textContent = `${taskDescription(entry.spec)} · ${entry.state.replaceAll('_', ' ')}${entry.reason ? ' · ' + explain(entry.reason) : ''}${portionProgress(entry)}`;
       li.append(text);
       const button = (label, disabled, action) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = label; b.disabled = !enabled || disabled; b.onclick = action; li.append(b); };
       button('Remove', all.some(t => t.dependsOn.includes(entry.id)), () => queueEdit('remove_pending', {task_id: entry.id}));
@@ -730,7 +742,7 @@ function renderQueue() {
         if (other >= 0 && other < all.length) [reordered[index], reordered[other]] = [reordered[other], reordered[index]];
         const positions = new Map(reordered.map((t, i) => [t.id, i]));
         const breaksDependency = reordered.some(t => t.dependsOn.some(dep => positions.has(dep) && positions.get(dep) > positions.get(t.id)));
-        const breaksUnlimited = reordered.slice(0, -1).some(t => t.spec.repeat.mode === 'until_cancelled');
+        const breaksUnlimited = reordered.slice(0, -1).some(t => t.spec.repeat.mode === 'until_cancelled' && !t.nativeQueued);
         button(label, other < 0 || other >= all.length || breaksDependency || breaksUnlimited, () => queueEdit('reorder_pending', {task_ids: reordered.map(t => t.id)}));
       }
       return li;

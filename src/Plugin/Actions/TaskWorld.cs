@@ -89,7 +89,7 @@ namespace SousChef.Plugin.Actions
         private readonly Dictionary<int, float> humanDistances = new Dictionary<int, float>();
         private readonly Dictionary<string, CounterMotion> counterMotion = new Dictionary<string, CounterMotion>();
         private bool botSearchComplete, humanSearchComplete;
-        private readonly HashSet<GameObject> deliveredItems = new HashSet<GameObject>();
+        private HashSet<GameObject> deliveredItems = new HashSet<GameObject>();
         private PlayerControls Human(int player = 1)
         {
             PlayerControls found = null;
@@ -182,7 +182,7 @@ namespace SousChef.Plugin.Actions
                 go.GetComponent<ServerRubbishBin>() == null && go.GetComponent<PickupItemSpawner>() == null && go.GetComponent<ServerPlateStation>() == null;
         }
         private bool CanDeliver(GameObject item, GameObject target, bool supplyPrefab = false)
-        { string op; return LogisticsChecks.Delivery(chef, "stage_item", item, target, out op, supplyPrefab) == null; }
+        { if (Foreign(target) || Foreign(ActionObservations.Occupant(target))) return false; string op; return LogisticsChecks.Delivery(chef, "stage_item", item, target, out op, supplyPrefab) == null; }
         // A continuously moving support can invalidate the catalogue frontier.
         // Prove one local interaction stance with the same native walk checks.
         private float StorageDistance(GameObject target, float maximum)
@@ -248,6 +248,7 @@ namespace SousChef.Plugin.Actions
         // same native support; this is not a route proof.
         private bool Obtainable(LogisticsItem entry, string operation)
         {
+            if (Foreign(entry.Item) || Foreign(entry.Holder)) return false;
             string collect = LogisticsChecks.Collect(chef, entry, operation, true);
             return collect == null || collect == "source_unreachable" && ApproachCost(entry.Source) != Single.MaxValue && LogisticsChecks.CanCollectEmpty(chef, entry.Source);
         }

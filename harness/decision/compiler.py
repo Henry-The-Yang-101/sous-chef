@@ -119,7 +119,8 @@ def build_context(world, queue):
     supported = {c['name'] for c in capabilities['entries'] if c['support'] == 'implemented'}
     contracts = [c for c in registry()['contracts'] if c['name'] in supported and c.get('category') != 'control']
     semantic = copy.deepcopy(capabilities.get('semantic_catalog', {}))
-    return {'task_suspension': world.get('control', {}).get('taskSuspensionVersion') == 1,
+    return {'kitchen_scheduler': world.get('control', {}).get('kitchenSchedulerVersion') == 1,
+            'task_suspension': world.get('control', {}).get('taskSuspensionVersion') == 1,
             'contracts': contracts, 'semantic': semantic, 'capabilities': copy.deepcopy(capabilities),
             'scheduler': {'active': compact_task(queue.get('active')),
                           'pending': [compact_task(t) for t in queue.get('pending', [])],
@@ -292,6 +293,8 @@ class Compiler:
         # Exact-target repositioning, like later semantic movement, should hold retained work.
         if edit != 'interrupt' and len(self.tasks) == 1 and self.tasks[0]['action'] == 'navigate_to':
             result['after_plan'] = 'pause_pending'
+        if self.context.get('kitchen_scheduler'):
+            result['ordering'] = getattr(self, 'ordering', 'independent')
         validate_plan(result, capabilities=self.context['capabilities'])
         scheduler = self.context['scheduler']
         active = [scheduler['active']['spec']] if scheduler.get('active') and edit not in INTERRUPTIONS else []
@@ -304,7 +307,7 @@ class Compiler:
         pending = pending + self.tasks if edit == 'append' else self.tasks + pending
         if len(pending) > 10:
             self.clarify('queue', 'capacity', 'The queue would exceed ten pending tasks. Remove work or submit a smaller plan.')
-        if any(t['repeat']['mode'] == 'until_cancelled' for t in (active + pending)[:-1]):
+        if not self.context.get('kitchen_scheduler') and any(t['repeat']['mode'] == 'until_cancelled' for t in (active + pending)[:-1]):
             self.clarify('queue', 'unlimited', 'Unlimited work must stay at the end of the queue. Replace it or use a finite count.')
         return result
 
@@ -339,6 +342,11 @@ class Compiler:
                 'Explicitly cancelling or replacing work uses the corresponding replacement operation. '
                 'In make the next order, next identifies a kitchen ticket and scheduling defaults to append. '
                 'Preserve all stated ordering and conditions. Urgency preserves pending work.')
+        if self.context.get('kitchen_scheduler'):
+            for field, question in questions.items():
+                if field in EXECUTION_CONSTRAINTS:
+                    question['instructions'] += (' Native kitchen scheduling supports interleaving preparation, serving, equipment monitoring and washing. '
+                        'These ordinary kitchen duties and cooking while chopping are supported. Only reject concurrency requiring simultaneous chef inputs or conditions outside those contracts.')
         answers = await self.batch('route', questions, candidate_plans={k:self.describe([v]) for k,v in simple.items()})
         route = self.select('route', 'route', answers, routes, 'Please restate the complete command.')
         if route == 'no_change':
@@ -384,6 +392,14 @@ class Compiler:
                 self.tasks = [copy.deepcopy(simple[selected])]
         if not self.tasks:
             await self.discover()
+        self.ordering = 'sequence'
+        if self.context.get('kitchen_scheduler'):
+            self.ordering = 'independent'
+            if len(self.tasks) > 1:
+                options = {'independent': 'The requested tasks may interleave; and/list order alone does not require finishing one first.',
+                           'sequence': 'The speaker explicitly requires completing tasks in this order (then, before, after).'}
+                answers = await self.batch('ordering', {'ordering': scoped_choice('Does this request impose a completion dependency between its task occurrences?', options)})
+                self.ordering = self.select('ordering', 'ordering', answers, options, 'Must these tasks finish in order?')
         plan = self.plan(edit)
         await self.coverage(plan)
         return {'kind': 'plan', 'plan': plan, 'message': self.describe(self.tasks),
@@ -407,8 +423,8 @@ class Compiler:
                 f'The following work is ALREADY represented: {represented}. '
                 f'Identify the next requested task, occurrence {index}, AFTER that work. '
                 'The plan\'s place in the existing queue is already resolved. Scheduling language alone adds no task. '
-                'A request to bring a named ingredient or utensil is a preparation task even if its preparation state is omitted. '
-                'An ingredient list for one recipient is ONE preparation task; do not split it by ingredient. '
+                'A request to bring a named ingredient or utensil is a preparation task even if its preparation state is omitted. ' +
+                ('An ingredient list creates independent portions. Explicit then/before/after between ingredients requires separate preparation task occurrences. ' if self.context.get('kitchen_scheduler') else 'An ingredient list for one recipient is ONE preparation task; do not split it by ingredient. ') +
                 'Repeated task names remain separate occurrences when requested again. If no additional work remains, choose done. '
                 'Select the requested responsibility, not an incidental fetching, moving or serving step inside its contract. '
                 'Choose the requested task family even when its arguments may be unavailable. '
@@ -834,6 +850,9 @@ class Compiler:
         # change the verifier's input or distract it from the actual work.
         if 'tasks' in proposed:
             semantic_plan = {k: proposed[k] for k in ('tasks', 'queue_edit', 'after_plan')}
+            if 'ordering' in proposed:
+                semantic_plan['ordering'] = proposed['ordering']
+                meaning += ' Task ordering: ' + proposed['ordering']
         else:
             semantic_plan = {'queue_edit': {k:v for k,v in proposed['queue_edit'].items() if k in ('operation','task_id')}}
         confirmation_field = 'confirm_' + hashlib.sha256(json.dumps(semantic_plan, sort_keys=True).encode()).hexdigest()
@@ -849,6 +868,8 @@ class Compiler:
             # Only the verifier projection omits placement. The confirmation
             # digest and accepted plan still bind the exact queue effect.
             verification_plan = {'tasks': semantic_plan['tasks']}
+            if 'ordering' in semantic_plan:
+                verification_plan['ordering'] = semantic_plan['ordering']
         proposed_meaning = self.describe(self.tasks) if append else meaning
         fields = {}
         if any(task['action'] == 'assemble_dish' for task in self.tasks):

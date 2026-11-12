@@ -317,7 +317,13 @@ class HarnessBridge:
                 ctx = entry['context']
                 if client.hello['sessionId'] != ctx['session']:
                     raise HarnessError('Bridge session changed; dispatch was withheld')
-                if operation == 'forget':
+                if operation == 'hold':
+                    receipt = client.hold_schedule(entry['id'], ctx['epoch'], ctx['fence'], entry['hold'])
+                elif operation == 'enqueue':
+                    spec = entry['spec']
+                    receipt = client.enqueue(entry['requestId'], ctx['epoch'], ctx['fence'], spec['action'], spec['arguments'],
+                        spec['repeat'].get('count'), urgent=entry.get('urgent', False), version=spec['capability_version'])
+                elif operation == 'forget':
                     receipt = client.forget_task(entry['id'], ctx['epoch'], ctx['fence'], entry['requestId'])
                 elif operation == 'resume':
                     receipt = client.resume_task(entry['resumeId'], ctx['epoch'], ctx['fence'], entry['requestId'])

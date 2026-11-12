@@ -176,7 +176,7 @@ namespace SousChef.Plugin.Actions
             inventory.Refresh(chef); GameObject best = null; float cost = Single.MaxValue;
             foreach (LogisticsItem candidate in inventory.Items)
             {
-                if (!candidate.Empty || candidate.InUse || deliveredItems.Contains(candidate.Item) || !TaskNative.Equipment(candidate.Holder ?? candidate.Source) ||
+                if (Foreign(candidate.Item) || Foreign(candidate.Holder) || !candidate.Empty || candidate.InUse || deliveredItems.Contains(candidate.Item) || !TaskNative.Equipment(candidate.Holder ?? candidate.Source) ||
                     TaskNative.ProcessingHandler(candidate.Item, mixing) == null) continue;
                 string operation;
                 if (LogisticsChecks.Delivery(chef, "fetch_ingredient", item, candidate.Source, out operation) != null) continue;
@@ -192,7 +192,7 @@ namespace SousChef.Plugin.Actions
             inventory.Refresh(chef); container = null; station = null;
             foreach (LogisticsItem item in inventory.Items)
             {
-                if (!item.Empty || item.InUse || deliveredItems.Contains(item.Item) || ApproachCost(item.Source) == Single.MaxValue || !LogisticsChecks.CanCollectEmpty(chef, item.Source) ||
+                if (Foreign(item.Item) || Foreign(item.Holder) || !item.Empty || item.InUse || deliveredItems.Contains(item.Item) || ApproachCost(item.Source) == Single.MaxValue || !LogisticsChecks.CanCollectEmpty(chef, item.Source) ||
                     TaskNative.ProcessingHandler(item.Item, mixing) == null) continue;
                 string operation;
                 if (LogisticsChecks.Delivery(chef, "fetch_ingredient", food, item.Item, out operation) != null) continue;

@@ -21,7 +21,7 @@ namespace SousChef.Plugin.Actions
         {
             inventory.Refresh(chef); var sources = new List<LogisticsItem>();
             foreach (LogisticsItem item in inventory.Items)
-                if (!item.Supply && TaskNative.Dirty(item.Item) && !item.InUse && Reachable(item.Source) && LogisticsChecks.CanCollectEmpty(chef, item.Source)) sources.Add(item);
+                if (!Foreign(item.Item) && !Foreign(item.Holder) && !item.Supply && TaskNative.Dirty(item.Item) && !item.InUse && Reachable(item.Source) && LogisticsChecks.CanCollectEmpty(chef, item.Source)) sources.Add(item);
             sources.Sort(delegate(LogisticsItem a, LogisticsItem b) { return a.Distance.CompareTo(b.Distance); });
             return sources;
         }

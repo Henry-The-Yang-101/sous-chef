@@ -28,6 +28,19 @@ class ActionClient(ControlClient):
             return self.last_response['control']
         return self._request(operation, *tokens)
 
+    def enqueue(self, request_id, epoch, generation, name, arguments, repetitions=1, *, urgent=False, version=None):
+        self._context(epoch, generation)
+        operation, tokens = wire_command(name, arguments, repetitions, version)
+        if operation != 'task':
+            raise ValueError('Only native tasks can enter the kitchen scheduler')
+        self._request('enqueue', epoch, generation, int(urgent), operation, *tokens, request_id=request_id)
+        return self.last_response['receipt']
+
+    def hold_schedule(self, request_id, epoch, generation, hold):
+        self._context(epoch, generation)
+        self._request('schedule_hold', epoch, generation, int(hold), request_id=request_id)
+        return self.last_response['receipt']
+
     def execute(self, request_id, epoch, generation, name, arguments, repetitions=1, *, version=None):
         """Fenced, deduplicated dispatch. An absent receipt is never a retry signal."""
         self._context(epoch, generation)

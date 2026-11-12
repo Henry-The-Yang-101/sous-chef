@@ -12,6 +12,7 @@ import uuid
 from clients.capabilities import REGISTRY_VERSION, ValidationError, registry
 from clients.control import ControlError
 from harness.plan_store import PlanStore
+from harness.kitchen_queue import KitchenQueue
 from harness.plans import NativeAction, closed, identity, validate_plan
 
 
@@ -42,7 +43,7 @@ def task_spec(task):
             'repeat': {'mode': task.repeat.mode, **({'count': task.repeat.count} if task.repeat.count is not None else {})}}
 
 
-class Scheduler:
+class Scheduler(KitchenQueue):
     CAPACITY = 10
     USER_PAUSE = 'Dispatch paused by user'
     KITCHEN_CHANGED = 'Kitchen or Player 2 changed; old work invalidated'
@@ -115,7 +116,7 @@ class Scheduler:
         if len(pending) > Scheduler.CAPACITY:
             raise ValidationError('Queue capacity is ten pending tasks')
         ordered = ([active] if active else []) + pending
-        if any(t['spec']['repeat']['mode'] == 'until_cancelled' for t in ordered[:-1]):
+        if any(t['spec']['repeat']['mode'] == 'until_cancelled' and not t.get('nativeQueued') for t in ordered[:-1]):
             raise ValidationError('Unlimited work must be at the end of the whole queue')
         seen = {t['id'] for t in outcomes if t['state'] == 'succeeded'}
         for entry in ordered:
@@ -142,14 +143,20 @@ class Scheduler:
             value = copy.deepcopy(self.data)
             value['context'] = current
             entries = []
+            modern = world['control'].get('kitchenSchedulerVersion') == 1
             for task in plan.tasks:
                 entries.append(dict(id=unique_id(), commandId=plan.command_id, spec=task_spec(task),
-                    dependsOn=[entries[-1]['id']] if entries else [], state='pending', reason=None,
+                    dependsOn=[entries[-1]['id']] if entries and plan.ordering == 'sequence' else [],
+                    nativeQueued=modern and not isinstance(task, NativeAction), urgent=plan.queue_edit == 'interrupt', state='pending', reason=None,
                     requestId=None, after='continue_pending'))
             entries[-1]['after'] = plan.after_plan
             active, pending = value['active'], value['pending']
+            if modern and plan.queue_edit == 'insert_next' and active:
+                for entry in entries:
+                    if not entry['dependsOn']:
+                        entry['dependsOn'] = [active['id']]
             removed = []
-            if plan.queue_edit == 'interrupt':
+            if plan.queue_edit == 'interrupt' and not modern:
                 if world['control'].get('taskSuspensionVersion') != 1:
                     raise QueueConflict('Update the bridge to interrupt and resume tasks')
                 if any(entry['spec']['repeat']['mode'] == 'until_cancelled' for entry in entries):
@@ -194,7 +201,7 @@ class Scheduler:
 
     @staticmethod
     def _outcome(value, entry, state, reason):
-        if entry.get('requestId') and entry.get('wasSuspended') and state != 'succeeded':
+        if entry.get('requestId') and (entry.get('wasSuspended') or entry.get('nativeQueued')) and state not in ('succeeded', 'failed'):
             value.setdefault('discarded', []).append(dict(id=unique_id(), requestId=entry['requestId']))
         outcome = dict(copy.deepcopy(entry), state=state, reason=reason)
         value['outcomes'].append(outcome)
@@ -321,6 +328,8 @@ class Scheduler:
             self.worker_lock.release()
 
     def _tick(self):
+        if not self.fault and self._tick_kitchen():
+            return
         if self.fault:
             return
         intent = None

@@ -10,7 +10,7 @@ namespace SousChef.Core
         public long Sequence;
         public string Epoch, Payload, ReceiptId;
         public long DispatchGeneration;
-        public bool Fenced;
+        public bool Fenced, Scheduled, Priority;
         public int Milliseconds, Buttons;
         public float X, Y;
         public bool Indefinite;
@@ -24,7 +24,7 @@ namespace SousChef.Core
         // Small, bounded ASCII command grammar; replies are NDJSON.
         public static ControlCommand Parse(string line)
         {
-            if (line == null || line.Length > (line.StartsWith("execute ", StringComparison.Ordinal) ? 2304 : line.StartsWith("task ", StringComparison.Ordinal) ? 2048 : 256)) throw new ArgumentException("command_too_long");
+            if (line == null || line.Length > ((line.StartsWith("execute ", StringComparison.Ordinal) || line.StartsWith("enqueue ", StringComparison.Ordinal)) ? 2304 : line.StartsWith("task ", StringComparison.Ordinal) ? 2048 : 256)) throw new ArgumentException("command_too_long");
             string[] p = line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
             if (p.Length < 2 || p[1].Length > 32) throw new ArgumentException("invalid_command");
             foreach (char c in p[1]) if (!Char.IsLetterOrDigit(c) && c != '-' && c != '_') throw new ArgumentException("invalid_id");
@@ -34,12 +34,19 @@ namespace SousChef.Core
                 if (p.Length != 3 || !WireId(p[2])) throw new ArgumentException("invalid_receipt_id");
                 result.ReceiptId = p[2]; return result;
             }
-            if (p[0] == "execute" || p[0] == "cancel" || p[0] == "cancel_current" || p[0] == "suspend" || p[0] == "resume" || p[0] == "forget_task")
+            if (p[0] == "enqueue" || p[0] == "schedule_hold" || p[0] == "execute" || p[0] == "cancel" || p[0] == "cancel_current" || p[0] == "suspend" || p[0] == "resume" || p[0] == "forget_task")
             {
                 long generation;
                 if (p.Length < 4 || !WireId(p[2]) || !Int64.TryParse(p[3], NumberStyles.None, CultureInfo.InvariantCulture, out generation) || generation < 0)
                     throw new ArgumentException("invalid_dispatch_context");
-                if (p[0] == "cancel" || p[0] == "cancel_current") { if (p.Length != 4) throw new ArgumentException("invalid_arguments"); }
+                if (p[0] == "schedule_hold") { if (p.Length != 5 || (p[4] != "0" && p[4] != "1")) throw new ArgumentException("invalid_hold"); result.Priority = p[4] == "1"; }
+                else if (p[0] == "enqueue")
+                {
+                    if (p.Length < 8 || (p[4] != "0" && p[4] != "1") || p[5] != "task") throw new ArgumentException("invalid_scheduled_task");
+                    result = Parse("task " + p[1] + " " + String.Join(" ", p, 6, p.Length - 6));
+                    result.Scheduled = true; result.Priority = p[4] == "1";
+                }
+                else if (p[0] == "cancel" || p[0] == "cancel_current") { if (p.Length != 4) throw new ArgumentException("invalid_arguments"); }
                 else if (p[0] == "suspend" || p[0] == "resume" || p[0] == "forget_task")
                 {
                     if (p.Length != 5 || !WireId(p[4])) throw new ArgumentException("invalid_receipt_id");

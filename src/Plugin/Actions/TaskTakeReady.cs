@@ -19,7 +19,7 @@ namespace SousChef.Plugin.Actions
                 bool mixer = TaskNative.IsMixer(station);
                 if (mixer && !includeMixing) continue;
                 GameObject item = ActionObservations.Receiver(station);
-                if (TaskNative.Burnt(item) || TaskNative.State(item, mixer) == null) continue;
+                if (Foreign(item) || Foreign(station) || TaskNative.Burnt(item) || TaskNative.State(item, mixer) == null) continue;
                 if (LogisticsInventory.Empty(item) && ActionObservations.Container(station) != null) continue;
                 if (readyOnly && !TaskNative.Ready(item, mixer)) continue;
                 float cost = (TaskNative.Ready(item, mixer) ? TaskNative.Remaining(item, mixer, true) * 100 : 100000) + distance;
