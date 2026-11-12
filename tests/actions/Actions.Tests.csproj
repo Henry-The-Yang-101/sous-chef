@@ -7,6 +7,6 @@
     <Compile Include="../../src/Core/Navigation.cs" /><Compile Include="../../src/Core/Json.cs" /><Compile Include="../../src/Core/WorkerWire.cs"/><Compile Include="../../src/Core/WorkerHost.cs"/><Compile Include="../../src/Core/RemoteWalk.cs"/><Compile Include="../../src/Core/RemoteFlight.cs"/><Compile Include="../../src/Core/FlightBatch.cs"/>
     <Compile Include="../../src/Core/CapabilityRegistry.cs" /><Compile Include="../../src/Core/ActionRun.cs" /><Compile Include="../../src/Core/TaskRequest.cs" /><Compile Include="../../src/Core/ControlLease.cs" /><Compile Include="../../src/Core/ThrowTrajectory.cs" />
     <Compile Include="../../src/Plugin/Navigation/*.cs" /><Compile Include="../../src/Plugin/Actions/*.cs" />
-    <Compile Include="../navigation/Stubs.cs" /><Compile Include="ActionStubs.cs" /><Compile Include="Program.cs" /><Compile Include="AssemblyTests.cs" /><Compile Include="ButtonTests.cs" />
+    <Compile Include="../navigation/Stubs.cs" /><Compile Include="ActionStubs.cs" /><Compile Include="Program.cs" /><Compile Include="AssemblyTests.cs" /><Compile Include="AssemblyPreparationTests.cs" /><Compile Include="ButtonTests.cs" />
   </ItemGroup>
 </Project>

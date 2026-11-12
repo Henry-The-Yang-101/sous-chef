@@ -79,7 +79,7 @@ class RegistryTests(unittest.TestCase):
     def test_exact_allocation_bounds_disjointness_and_wire_budget(self):
         valid = dict(order_id='flow:One:7', bases=['d1'])
         self.assertEqual(validate_arguments('assemble_dish', valid)['components'], [])
-        for change in ({'bases': []}, {'bases': ['d1'] * 2}, {'components': ['d1']},
+        for change in ({'bases': [], 'components': ['d2']}, {'bases': ['d1'] * 2}, {'components': ['d1']},
                        {'equipment': ['d１２']}, {'components': ['d2'] * 25}, {'items': []}):
             with self.subTest(change=change), self.assertRaises(ValidationError): wire_command('assemble_dish', {**valid, **change})
         resources = ['d' + str(i).zfill(31) for i in range(72)]

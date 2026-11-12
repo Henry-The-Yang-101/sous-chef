@@ -14,13 +14,19 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from scripts.jev_playground import NextRequest
 from harness.decision.compiler import Compiler, build_context
+from clients.capabilities import REGISTRY_HASH, REGISTRY_VERSION
 from harness.decision.protocol import validate_response
 
 FIXTURES = ROOT / 'tests/fixtures/jev-movement-cases.json'
 
 
 def fixtures():
-    return json.loads(FIXTURES.read_text())
+    cases = json.loads(FIXTURES.read_text())
+    # The scene is frozen; capabilities are supplied by the current compiler.
+    # Keep archived model exchanges untouched.
+    for case in cases:
+        case["world"]["capabilities"].update(version=REGISTRY_VERSION, registry_hash=REGISTRY_HASH)
+    return cases
 
 
 async def request(case, stage='candidates', recorded=()):

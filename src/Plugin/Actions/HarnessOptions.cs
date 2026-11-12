@@ -52,7 +52,8 @@ namespace SousChef.Plugin.Actions
             var seenItems = new HashSet<int>();
             foreach (LogisticsItem item in inventory.Items)
             {
-                if (!item.Supply) { items.Add(item.Describe()); seenItems.Add(item.Item.GetInstanceID()); }
+                items.Add(item.Describe());
+                if (!item.Supply) seenItems.Add(item.Item.GetInstanceID());
                 if (item.IngredientId != null && ingredientIds.Add(item.IngredientId))
                     ingredients.Add(Json.Object("id", item.IngredientId, "label", item.IngredientName));
                 string type = Utensil(item.Item);

@@ -1,13 +1,34 @@
 # Assemble an assigned dish
 
-`assemble_dish` produces one dish for one exact native ticket. The caller owns
-intent and allocation. The deterministic executor chooses among those resources,
+`assemble_dish` produces one dish for one exact native ticket. The caller selects
+the ticket and may restrict resources. The deterministic executor plans the work,
 uses ordinary P2 inputs, and reports success only when the selected plate's
 composition and native plating step match the original recipe. Serving is a
 separate task. The voice compiler can select the ticket with Jev before
 submitting the same exact native task.
 
-## Caller contract
+## Automatic orders
+
+```python
+chef.assemble_dish(selected_ticket['id'])
+```
+
+Omit all three resource groups to make the whole order from the observed kitchen.
+The executor fetches the required quantities from ingredient dispensers or loose
+stock, follows native work-prefab chains for chopping, mixes/cooks each recipe
+branch, removes ready batches from heat, and plates the exact result. It can wash
+one needed plate at a sink and clear occupied workspaces using safe storage.
+Conveyor arrivals and newly freed resources are reconsidered while waiting.
+Serving remains a separate task.
+
+Preparation is part of the recipe dependency scheduler. Existing prepared and
+partly prepared food satisfies demand before new stock is fetched. A spawned
+portion and each verified chopping successor stay owned by the same request.
+Chopping and washing yield at native work boundaries when a cooking batch needs
+rescue; partial progress stays in the game. No ingredient names or recipe-specific
+procedures are hardcoded.
+
+## Explicit resource contract
 
 ```python
 catalog = chef.available_actions()
@@ -36,10 +57,11 @@ All resources are IDs from the current catalogue:
   plate, a suitable assigned preparation base is completed before final plating.
   Cookable preparation bases, such as dough, can also supply a processing vessel
   without appearing a second time in the equipment allocation.
-- `components`: up to 24 exact prepared ingredient/container instances. These are
-  **item IDs**, not dispenser selectors or station IDs. An assigned raw rice,
-  flour or egg is usable when that is the recipe's required input; unchopped
-  workable stock is not substituted for its finished ingredient.
+- `components`: up to 24 exact ingredient/container instances or ingredient
+  dispenser IDs. Raw stock is chopped through its native work chain. A dispenser
+  authorizes fetching only the missing recipe quantities; its current prefab is
+  checked again before pickup. Chopping boards and safe storage are selected
+  locally. Existing prepared ingredients are used directly.
 - `equipment`: up to 24 assigned vessel and processing-station IDs. For example,
   assign both the bowl and mixer, and the pan and burner. Native compatibility
   chooses among these; unassigned equipment is never taken. Empty storage
@@ -48,7 +70,8 @@ All resources are IDs from the current catalogue:
 An object may appear in only one allocation group. A clean-stack allocation pins
 its current top plate. A later top plate cannot replace it. Missing or temporarily
 inaccessible assigned objects cause bounded periodic waiting. They never authorize
-an unassigned replacement or dispenser spawn. Explicit allocation may reuse
+an unassigned replacement or dispenser spawn. Allocated dispensers explicitly
+authorize spawning; verified work successors replace their original raw items. Explicit allocation may reuse
 objects previously handed off by preparation; ambient lookalikes remain untouched.
 
 The generic client equivalent is `run_task('assemble_dish', order_id=...,
@@ -59,7 +82,8 @@ task REQUEST assemble_dish 1 SELECTOR_ORDER BASE_COUNT BASE_IDS... COMPONENT_COU
 ```
 
 `SELECTOR_ORDER` uses the existing `s` + unpadded base64url selector encoding.
-The manual Tasks panel exposes the same ticket and allocation fields. Native
+The manual Tasks panel exposes the same ticket and optional allocation fields.
+Leaving every allocation field empty selects automatic resources (`0 0 0` on the wire). Native
 eligibility is rechecked on submission.
 
 ## Voice commands
@@ -70,11 +94,10 @@ soonest to latest expiry. Ties preserve kitchen order and untimed tickets come
 last. “Next order” selects the first ticket, and the normal queue default is
 append.
 
-The plugin proposes exact resources from observed plates, prepared components,
-and equipment. The voice compiler binds that proposal to the selected ticket.
-It checks the ticket and allocation again before acceptance. A selected ticket
-that expires or lacks an allocation needs a new command after the kitchen
-changes. The executor still checks reachability and native interactions.
+Voice commands use automatic resources and bind only the exact ticket.
+A lack of prepared components no longer rejects the command. The compiler
+rechecks the ticket before acceptance; the executor checks ingredients,
+quantities, reachability and native interactions throughout execution.
 
 ## Scheduler and proofs
 
@@ -149,10 +172,10 @@ not a count of button presses.
 
 ## Scope
 
-Prepared-component assembly and recipe-derived mixing/cooking are implemented.
-The task does not chop, dispense replacements, wash a missing plate, transport
-resources across a gap, serve, or choose another order. Those remain separate
-intent/allocation decisions. Optional recipe branches and unknown native node
+Automatic ingredient collection, chopping, recipe-derived mixing/cooking, sink
+washing and plating are implemented. Explicit resource mode retains the caller's
+allocation boundaries. The task does not serve or choose another order. Unsupported
+gap transport and specialized wash tools still require help. Optional recipe branches and unknown native node
 kinds are withheld from the assembly catalogue rather than guessed. A physically
 impossible allocation can remain waiting until the kitchen changes or Stop.
 
@@ -161,6 +184,15 @@ timing. Native input checks remain authoritative even when the structural recipe
 proof succeeds. See the validation section below for the scenarios actually run.
 
 ## Validation
+
+The full-order audit starts with the level's actual stock, without prepared-food
+fixtures, and independently compares the finished native plate to the recipe:
+
+```sh
+python3 scripts/full_order_audit.py --runtime .local/full-order-dev --port-base 38720 --output .local/full-order-fish --level s_sushi_1_1 --recipe Sushi_PlainFish
+```
+
+The cases below are earlier explicit-allocation baselines.
 
 The table shows three baseline cases.
 

@@ -113,6 +113,8 @@ def validate_arguments(name, arguments, version=None):
     result = validate(contract(name, version)['parameters'], arguments)
     if name == 'assemble_dish':
         assigned = result['bases'] + result['components'] + result['equipment']
+        if assigned and not result['bases']:
+            raise ValidationError('assembly: explicit resources require at least one base')
         if len(set(assigned)) != len(assigned):
             raise ValidationError('assembly: assign each resource to exactly one group')
     if name in ('move_item', 'stage_item', 'clear_station'):

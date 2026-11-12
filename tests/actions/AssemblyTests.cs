@@ -42,10 +42,16 @@ internal static partial class Program
             onTick?.Invoke();w.Tick(.11f);if(!w.Skills.Run.Running)continue;
             var target=w.Navigation.Resolve(w.Skills.Run.Target);
             if(w.Skills.Run.Phase=="navigating") {beforeArrival?.Invoke(target,w.Skills.Run.Operation);w.ArriveAt(target);}
+            if(w.Skills.Run.Phase=="working" && w.Skills.Run.Operation=="work_at" && w.Inputs.Last()==2)
+            {
+                var raw=ActionObservations.Occupant(target);var next=raw?.GetComponent<WorkableItem>()?.GetNextPrefab();
+                if(next!=null) { raw.GetComponent<ServerWorkableItem>().Finished=true;raw.activeInHierarchy=false;target.GetComponent<ServerAttachStation>().Item=SpawnAssemblyIngredient(w,next); }
+            }
             if(w.Skills.Run.Phase!="pressing" || w.Inputs.Last()!=1)continue;
             if(w.Skills.Run.Operation=="pick_up" && w.Carrier.Item==null)
             {
-                var cargo=ActionObservations.Receiver(target);w.Hold(cargo);
+                var supply=target.GetComponent<PickupItemSpawner>();
+                var cargo=supply==null ? ActionObservations.Receiver(target) : SpawnAssemblyIngredient(w,supply.m_itemPrefab);w.Hold(cargo);
                 var holder=target.GetComponent<ServerAttachStation>();if(holder!=null)holder.Item=null;
             }
             else if(w.Skills.Run.Operation=="place_at" && w.Carrier.Item!=null)
@@ -397,6 +403,7 @@ internal static partial class Program
 
     private static void AssemblyProofs()
     {
+        AssemblyFromScratch();
         AssemblyResourceProposals();
         {
             var w=new World();var plateCounter=w.Delivery();var plate=AssemblyPlate(w,plateCounter);

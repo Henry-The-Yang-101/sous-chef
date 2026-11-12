@@ -602,16 +602,16 @@ function renderTasks(catalog, visible, busy, live) {
   }
   const orders = catalog.semanticCatalog?.assemblyOrders || catalog.assemblyOrders || visible.assemblyOrders || [];
   setJobOptions(el('assembly-order'), orders.map(order => ({value: order.id, label: `${order.recipe.replaceAll('_', ' ')} · ticket ${order.id.split(':').at(-1)}`})));
-  const resources = (displayOptions(visible).items || []).filter(item => !item.supply);
+  const resources = displayOptions(visible).items || [];
   const resourceLabel = item => `${nameOf(item)} · ${item.id}`;
-  const bases = resources.filter(item => item.plate || item.cleanPlate || item.assemblyBase);
+  const bases = resources.filter(item => !item.supply && (item.plate || item.cleanPlate || item.assemblyBase));
   setResourceOptions('assembly-bases', bases.map(item => ({value: item.id, label: resourceLabel(item)})));
   setResourceOptions('assembly-components', resources.map(item => ({value: item.id, label: resourceLabel(item)})));
   const equipment = new Map(resources.filter(item => item.utensilType).map(item => [item.id, item]));
   for (const target of visible.targets || []) if (target.processingEquipment) equipment.set(target.id, target);
   setResourceOptions('assembly-equipment', Array.from(equipment.values()).map(item => ({value: item.id, label: resourceLabel(item)})));
   const assigned = ['assembly-bases', 'assembly-components', 'assembly-equipment'].map(selectedResources);
-  const validAssembly = !assembling || (el('assembly-order').value && assigned[0].length > 0 && assigned.every((group, i) => group.length <= parameter('assemble_dish', ['bases', 'components', 'equipment'][i]).maxItems) && new Set(assigned.flat()).size === assigned.flat().length);
+  const validAssembly = !assembling || (el('assembly-order').value && (assigned.flat().length === 0 || assigned[0].length > 0) && assigned.every((group, i) => group.length <= parameter('assemble_dish', ['bases', 'components', 'equipment'][i]).maxItems) && new Set(assigned.flat()).size === assigned.flat().length);
   // Browsing and editing remain possible while execution is blocked.
   for (const field of el('task-form').querySelectorAll('input, select, button')) if (field.id !== 'task-run') field.disabled = false;
   for (const field of el('task-preparation').querySelectorAll('input, select, button')) field.disabled = !preparing;

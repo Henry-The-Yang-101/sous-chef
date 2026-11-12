@@ -138,7 +138,7 @@ test('Jev usage shows current and saved totals and recent rounds with sub-cent c
   assert.equal(el('jev-current-usage').textContent, '0 tokens · $0.00');
 });
 
-test('assembly keeps allocation explicit, preserves choices and rejects overlaps', () => {
+test('assembly supports automatic resources and explicit allocations without overlaps', () => {
   const {context: c, el} = fixture();
   const catalog = {taskOptions: [{name: 'assemble_dish'}], assemblyOrders: [{id: 'flow:One:7', recipe: 'Sushi_Fish'}]};
   const kitchen = {targets: [{id: 'burner', label: 'Burner', processingEquipment: true}], displayOptions: {items: [
@@ -151,7 +151,11 @@ test('assembly keeps allocation explicit, preserves choices and rejects overlaps
   assert.equal(el('task-run').disabled, true);
   assert.equal(el('assembly-bases').selectedOptions.length, 0);
   assert.deepEqual(el('assembly-equipment').options.map(o => o.value), ['pot', 'burner']);
-  assert.ok(!el('assembly-components').options.some(o => o.value === 'supply'));
+  assert.ok(el('assembly-components').options.some(o => o.value === 'supply'));
+  el('assembly-order').value = 'flow:One:7';
+  c.renderTasks(catalog, kitchen, false, true);
+  assert.equal(el('task-run').disabled, false);
+  assert.deepEqual(Array.from(c.selectedTaskSpec().arguments.bases), []);
   el('assembly-order').value = 'flow:One:7';
   el('assembly-bases').options[0].selected = true;
   el('assembly-components').options.find(o => o.value === 'fish').selected = true;

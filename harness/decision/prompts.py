@@ -122,7 +122,7 @@ TASK_BOUNDARIES = {
     'toss_burnt_food': 'Requested result: dispose of ruined food and return any surviving empty utensil. '
         'Returning the utensil is included, not an additional requested assignment.',
     'assemble_dish': 'Requested result: assemble one pending kitchen ticket, such as "make the next order" or "make the fish sushi". '
-        'The exact ticket is resolved separately. The kitchen allocates resources locally. Serving and ingredient preparation are separate tasks.',
+        'The exact ticket is resolved separately. Fetching ingredients, chopping, mixing, cooking, removing ready food from heat, washing a needed plate and plating are included. The kitchen chooses resources locally. Serving is a separate task.',
 }
 
 

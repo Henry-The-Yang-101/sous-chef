@@ -91,7 +91,7 @@ def assess_arguments(name, arguments, semantic):
                 status = 'unknown'
                 if item:
                     status = 'applicable'
-                    if item.get('supply') or (group == 'bases' and not any(item.get(k) for k in ('plate', 'cleanPlate', 'assemblyBase'))):
+                    if (item.get('supply') and group != 'components') or (group == 'bases' and not any(item.get(k) for k in ('plate', 'cleanPlate', 'assemblyBase'))):
                         status = 'not_applicable'
                     if group == 'equipment' and not item.get('utensilType') and not (target or {}).get('processingEquipment'):
                         status = 'not_applicable'

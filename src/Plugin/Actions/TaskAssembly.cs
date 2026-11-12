@@ -13,8 +13,8 @@ namespace SousChef.Plugin.Actions
         private string BindAssembly()
         {
             var allocation = request.Assembly;
-            if (allocation == null || request.Repetitions != 1 || allocation.Bases.Count == 0) return "invalid_assembly_allocation";
-            var schedule = new AssemblySchedule();
+            if (allocation == null || request.Repetitions != 1 || allocation.Bases.Count == 0 && !allocation.Automatic) return "invalid_assembly_allocation";
+            var schedule = new AssemblySchedule { Automatic = allocation.Automatic };
             foreach (var order in AssemblyOrders.Observe()) if (order.Id == allocation.Order) { schedule.Order = order; break; }
             if (schedule.Order == null) return "assembly_order_unavailable";
             var seen = new HashSet<GameObject>();
@@ -27,9 +27,15 @@ namespace SousChef.Plugin.Actions
                     GameObject item = null;
                     if (group == 2) item = navigation.Resolve(id);
                     else foreach (var entry in inventory.Items)
-                        if (entry.ItemId == id && !entry.Supply) { item = LogisticsChecks.Payload(entry); break; }
+                        if (entry.ItemId == id && (!entry.Supply || group == 1))
+                        {
+                            item = entry.Supply ? entry.Source : LogisticsChecks.Payload(entry);
+                            if (entry.Supply) objects = schedule.Supplies;
+                            break;
+                        }
                     if (item == null || !seen.Add(item)) return "assembly_resource_unavailable";
                     objects.Add(item);
+                    objects = group == 0 ? schedule.Bases : group == 1 ? schedule.Components : schedule.Equipment;
                 }
             }
             schedule.Initialize(); assembly = schedule; return null;
@@ -160,6 +166,7 @@ namespace SousChef.Plugin.Actions
             while (!assembly.Verified)
             {
                 inventory.Refresh(chef);
+                RefreshAssemblyResources();
                 if (System.Object.ReferenceEquals(assembly.Base, null)) assembly.Base = SelectAssemblyBase();
                 SelectAssemblyWorkspace();
                 var plate = assembly.Base;

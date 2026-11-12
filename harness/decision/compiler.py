@@ -569,11 +569,7 @@ class Compiler:
         recipe = self.assembly_recipes.get(order['ticket_id'])
         if not recipe:
             raise Unsupported(f'{order_label(order)} uses a recipe outside the assembly task’s supported scope.')
-        if 'allocation' not in recipe:
-            raise Unsupported('Voice assembly requires an updated game plugin with resource allocation observations.')
-        if recipe['allocation'] is None:
-            raise Unsupported(f'{order_label(order)} needs a compatible plate, prepared components and any required equipment before it can be assigned.')
-        return {'order_id': order['ticket_id'], **recipe['allocation']}
+        return {'order_id': order['ticket_id']}
 
     async def movement(self, index):
         scene = spatial_context(self.context['semantic'])

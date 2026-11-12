@@ -56,16 +56,17 @@ namespace SousChef.Core
     {
         public string Order;
         public readonly List<string> Bases = new List<string>(), Components = new List<string>(), Equipment = new List<string>();
+        public bool Automatic { get { return Bases.Count == 0 && Components.Count == 0 && Equipment.Count == 0; } }
         internal static AssemblyRequest Parse(string[] tokens)
         {
-            if (tokens.Length < 9) throw new ArgumentException("invalid_assembly_allocation");
+            if (tokens.Length < 8) throw new ArgumentException("invalid_assembly_allocation");
             var result = new AssemblyRequest { Order = ControlCommand.DecodeSelector(tokens[4]) };
             int cursor = 5; var seen = new HashSet<string>();
             foreach (var list in new[] { result.Bases, result.Components, result.Equipment })
             {
                 int count;
                 if (cursor >= tokens.Length || !Int32.TryParse(tokens[cursor++], NumberStyles.None, CultureInfo.InvariantCulture, out count) ||
-                    count < (list == result.Bases ? 1 : 0) || count > CapabilityRegistry.MaxAllocationGroup || cursor + count > tokens.Length)
+                    count < 0 || count > CapabilityRegistry.MaxAllocationGroup || cursor + count > tokens.Length)
                     throw new ArgumentException("invalid_assembly_allocation");
                 for (int i = 0; i < count; i++)
                 {
@@ -76,6 +77,7 @@ namespace SousChef.Core
                 }
             }
             if (cursor != tokens.Length) throw new ArgumentException("invalid_assembly_allocation");
+            if (result.Bases.Count == 0 && !result.Automatic) throw new ArgumentException("invalid_assembly_allocation");
             return result;
         }
     }

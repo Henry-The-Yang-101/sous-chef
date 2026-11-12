@@ -19,6 +19,8 @@ namespace SousChef.Plugin.Actions
         }
         public AssemblyOrder Order;
         public readonly List<GameObject> Bases = new List<GameObject>(), Components = new List<GameObject>(), Equipment = new List<GameObject>();
+        public readonly List<GameObject> Supplies = new List<GameObject>();
+        public bool Automatic;
         public GameObject Base;
         public long Additions;
         public string Waiting;
@@ -71,7 +73,7 @@ namespace SousChef.Plugin.Actions
             var stages = new List<object>();
             foreach (var stage in Stages) stages.Add(Json.Object("operation", stage.Processing ? stage.Mixing ? "mix" : "cook" : "assemble",
                 "vesselInstanceId", stage.Vessel == null ? null : (object)stage.Vessel.GetInstanceID()));
-            return Json.Object("orderId", Order.Id, "recipe", Order.Recipe.name, "baseInstanceId", Base == null ? null : (object)Base.GetInstanceID(),
+            return Json.Object("orderId", Order.Id, "recipe", Order.Recipe.name, "automaticResources", Automatic, "baseInstanceId", Base == null ? null : (object)Base.GetInstanceID(),
                 "verifiedAdditions", Additions, "compositionVerified", Verified, "waitingReason", Waiting, "stages", stages,
                 "decisions", decisions.ToArray());
         }

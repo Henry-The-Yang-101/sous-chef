@@ -84,8 +84,8 @@ class ActionClient(ControlClient):
             arguments['player_id'] = player_id
         return self.run_capability(action, arguments, repetitions)
 
-    def assemble_dish(self, order_id, *, bases, components, equipment=None):
-        """Assemble one exact live ticket using only these allocated native IDs."""
+    def assemble_dish(self, order_id, *, bases=None, components=None, equipment=None):
+        """Make one exact ticket; omit resources to fetch and prepare from the kitchen."""
         return self.run_task('assemble_dish', order_id=order_id, bases=bases,
                              components=components, equipment=equipment)
 

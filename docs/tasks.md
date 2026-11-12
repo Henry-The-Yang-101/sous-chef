@@ -95,18 +95,18 @@ explicit `activate` action remains available for those objects.
 
 ## Assemble an assigned dish
 
-`assemble_dish` binds one exact live ticket and an explicit allocation of bases,
-components and equipment. It chooses among suitable plates, reuses partial
-assembly bases, combines prepared components, and can schedule recipe-derived
-mixing and cooking. It checks the intended recipe immediately before every
-addition and verifies the resulting native composition. Jev remains responsible
-for the intended order and resource allocation; no model is called here.
+`assemble_dish` binds one exact live ticket. With automatic resources it fetches
+ingredients, chops them through native work stages, mixes and cooks recipe
+branches, rescues ready food, washes a needed plate at a sink, and plates the
+dish. Existing prepared components and partial dishes are reused. It verifies
+the recipe immediately before each addition and checks the resulting native
+composition. No model is called by the executor.
 
 ```python
-catalog = chef.available_actions()
-# The caller chooses the ticket and IDs from this kitchen's catalogue.
+chef.assemble_dish(order_id)  # Complete order using kitchen resources.
+# Optional restriction to exact stock and ingredient dispensers:
 chef.assemble_dish(order_id, bases=[plate_a, plate_b],
-                   components=[prepared_fish, seaweed, rice],
+                   components=[fish_dispenser, seaweed, rice],
                    equipment=[pot, burner])
 ```
 

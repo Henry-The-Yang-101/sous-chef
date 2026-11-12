@@ -129,7 +129,7 @@
       "start_preconditions": [
         "An exact native activation target with a verified walking route; on/off requires a readable toggle state."
       ],
-      "completion_evidence": "The selected control acknowledges Player 2’s native trigger, or its observed toggle already reaches the requested on/off state.",
+      "completion_evidence": "The selected control acknowledges Player 2\u2019s native trigger, or its observed toggle already reaches the requested on/off state.",
       "cancellation": "Stop cancels and neutralizes owned input; a committed activation cannot be undone.",
       "checkpoint_resume": false,
       "limitations": [
@@ -146,8 +146,8 @@
       "name": "assemble_dish",
       "kind": "task",
       "version": 1,
-      "label": "Assemble assigned dish",
-      "description": "Produce one exact live ticket using only allocated bases, component instances and equipment; mixing/cooking follow its native recipe.",
+      "label": "Make an order",
+      "description": "Produce one exact live ticket: fetch ingredients, follow native chopping, mixing and cooking dependencies, rescue hot food and plate the finished dish. With no allocation, choose kitchen resources as they become available.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -159,9 +159,10 @@
             "items": {
               "$ref": "#/$defs/destination"
             },
-            "minItems": 1,
+            "minItems": 0,
             "maxItems": 24,
-            "uniqueItems": true
+            "uniqueItems": true,
+            "default": []
           },
           "components": {
             "type": "array",
@@ -185,8 +186,7 @@
           }
         },
         "required": [
-          "order_id",
-          "bases"
+          "order_id"
         ],
         "additionalProperties": false
       },
@@ -203,14 +203,14 @@
         "targets"
       ],
       "start_preconditions": [
-        "A live supported recipe ticket; compatible allocated plate and explicit resources."
+        "One live supported recipe ticket. Physical resource and route availability are rechecked during execution."
       ],
       "completion_evidence": "Exact selected plate composition and native plating step match the original live ticket.",
       "cancellation": "Stop cancels and neutralizes owned input; committed physical effects are not rolled back.",
       "checkpoint_resume": false,
       "limitations": [
-        "No chopping, dispenser replacements, plate washing, serving, automatic next order, gap transport or optional/unknown recipe branches.",
-        "Allocation binds exact objects; bases are alternatives. Clean stacks pin their current top plate. Missing resources wait; they never permit substitution."
+        "Serving and choosing another ticket are separate tasks. Unknown/optional recipe branches and unsupported transport still require human help.",
+        "Omit all resource groups for automatic kitchen resources. An explicit allocation requires a base and binds exact objects and ingredient dispensers; native work successors remain owned by the task."
       ]
     },
     {

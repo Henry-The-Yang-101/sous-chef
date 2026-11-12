@@ -11,6 +11,8 @@ namespace SousChef.Plugin.Actions
             public AssemblySchedule.Stage Stage;
             public GameObject Source, Destination;
             public string Operation;
+            public string Utility;
+            public AssembledDefinitionNode Preparation;
             public bool Rescue, Storage;
         }
         private static AssembledDefinitionNode StageContents(AssemblySchedule.Stage stage)
@@ -142,7 +144,8 @@ namespace SousChef.Plugin.Actions
             // Exhaust work with known routes before probing another allocated
             // dependency. Missing entries in an incomplete catalogue are not
             // evidence that every assigned source is unreachable.
-            var work = SelectStageWork(assembly.Root) ?? SelectStageWork(assembly.Root, true) ?? StoreEmptyAssemblyUtensil();
+            var work = SelectAssemblyWashing() ?? SelectStageWork(assembly.Root) ?? SelectAssemblyPreparation(false) ??
+                SelectStageWork(assembly.Root, true) ?? SelectAssemblyPreparation(true) ?? StoreEmptyAssemblyUtensil();
             var deadline = work == null || work.Storage ? null : AssemblyTripDeadline(work);
             if (deadline == null) return work;
             var cargo = ActionObservations.Held(chef);
@@ -290,11 +293,18 @@ namespace SousChef.Plugin.Actions
             }
             return best;
         }
-        private bool AssemblyPlanningStalled(ref float since)
+        private bool AssemblyPlanningStalled(ref float since, ref Vector3 position, ref Collider support)
         {
-            if (child.Run.Phase != "recovering_navigation") { since = -1; return false; }
-            if (since < 0) since = Time.realtimeSinceStartup;
-            return Time.realtimeSinceStartup - since >= 2;
+            bool recovering = child.Run.Phase == "recovering_navigation";
+            if (!recovering && child.Run.Phase != "navigating") { since = -1; return false; }
+            var currentSupport = chef.GroundCollider;
+            var current = AssemblyRelativePosition(chef.transform.position, currentSupport);
+            // Native walking can keep yielding to another chef while reporting
+            // small velocity impulses. Measure useful progress on the support,
+            // so neither those impulses nor a moving platform reset the budget.
+            if (since < 0 || support != currentSupport || (current - position).sqrMagnitude >= .25f)
+            { since = Time.realtimeSinceStartup; position = current; support = currentSupport; }
+            return Time.realtimeSinceStartup - since >= (recovering ? 2 : 4);
         }
         private float AssemblyReturnSeconds(GameObject station)
         {
@@ -350,6 +360,16 @@ namespace SousChef.Plugin.Actions
         }
         private IEnumerable<TaskStep> ExecuteAssembly(AssemblyJob job)
         {
+            if (job.Utility != null)
+            {
+                foreach (var step in ExecuteAssemblyAccess(job)) yield return step;
+                yield break;
+            }
+            if (job.Preparation != null)
+            {
+                foreach (var step in ExecuteAssemblyPreparation(job)) yield return step;
+                yield break;
+            }
             var stage = job.Stage; var item = job.Source; var target = job.Destination;
             assembly.Record(job.Rescue ? "rescue_finished_batch" : job.Storage ? "park_assembly_cargo" : job.Operation, stage, item, target);
             if (job.Operation == "approach_heat")
@@ -379,7 +399,7 @@ namespace SousChef.Plugin.Actions
                     AssemblyTransfer(item, stage.Vessel, stage.Inputs, stage.Processing && stage.Mixing);
             }
             else if (operation == "place_at")
-                valid = () => (job.Storage ? RecipeProof.Equal(addition, RecipeProof.Composition(item)) : StageFits(stage)) && System.Object.ReferenceEquals(ActionObservations.Held(chef), item) && ActionObservations.Occupant(target) == null &&
+                valid = () => (job.Storage ? addition == null ? RecipeProof.Composition(item) == null : RecipeProof.Equal(addition, RecipeProof.Composition(item)) : StageFits(stage)) && System.Object.ReferenceEquals(ActionObservations.Held(chef), item) && ActionObservations.Occupant(target) == null &&
                     (!TaskNative.Equipment(target) || ProcessingStationFor(stage, target) && (stage.Mixing ? RecipeProof.Subset(StageContents(stage), stage.Inputs) : RecipeProof.Equal(RecipeProof.Composition(item), stage.Inputs)));
             else if (operation == "activate")
                 valid = () => StageFits(stage) && System.Object.ReferenceEquals(ActionObservations.Occupant(target), item) &&
@@ -401,15 +421,15 @@ namespace SousChef.Plugin.Actions
             // a broad catalogue in a kitchen whose counters keep moving.
             next.FreeHands = ClearAssemblyHands;
             var abandon = next.AbandonBeforePress;
-            float planningSince = -1;
+            float planningSince = -1; bool stalled = false; Vector3 planningPosition = Vector3.zero; Collider planningSupport = null;
             next.AbandonBeforePress = () => abandon() || !job.Rescue &&
-                (!job.Storage && (AssemblyHeatDue(true) || AssemblyTripDeadline(job) != null) || AssemblyPlanningStalled(ref planningSince));
+                (!job.Storage && (AssemblyHeatDue(true) || AssemblyTripDeadline(job) != null) || (stalled = AssemblyPlanningStalled(ref planningSince, ref planningPosition, ref planningSupport)));
             yield return next;
             if (!next.Succeeded)
             {
                 assembly.Record("replan_uncompleted_step", stage, item, target);
                 var key = operation == "place_at" || operation == "transfer_contents" ? target : item;
-                if (next.RouteFailed && !job.Rescue) DeferAssemblyRoute(key, target);
+                if ((next.RouteFailed || stalled) && !job.Rescue) DeferAssemblyRoute(key, target);
                 else assembly.RetryAt[key] = Time.realtimeSinceStartup + (job.Rescue ? .2f : 1);
                 yield break;
             }
