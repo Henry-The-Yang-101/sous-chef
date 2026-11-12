@@ -123,7 +123,13 @@ internal static partial class Program
             }
         }
         Check(w.Tasks.Run.Running && pickups==2 && w.Releases==0,"pending transport does not block preparing subsequent repetitions, but finite completion still waits for delivery");
+        Check(w.Tasks.Suspend(),"transport-wait task can be preempted");
         human.GetComponent<ServerPlayerAttachmentCarrier>().Item=shipment;
+        Time.realtimeSinceStartup+=.25f; Time.frameCount++;
+        w.Tasks.ObserveSuspended();
+        Check((int)((Json.Record)((Json.Record)w.Tasks.Describe())["details"])["pendingDeliveries"]==0,
+            "suspended tasks retain deliveries completed while urgent work owns input");
+        w.Tasks.Resume();
         for(int n=0;n<8 && w.Tasks.Run.Running;n++)w.Tick(.25f);
         Check(w.Tasks.Run.State=="succeeded" && pickups==2 && w.Releases==1,"two repetitions perform two observed deliveries with one parent release");
         request.Repetitions=0;Check(w.Tasks.Start(w.Chef,1,new ControlCommand {Id="loop",Operation="task",Task=request})==null,"infinite task accepted");

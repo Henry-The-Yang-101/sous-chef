@@ -10,8 +10,10 @@ families and 19 existing action adapters (including independent Stop). Every
 entry specifies version, description, closed parameter schema, required fields,
 defaults, candidate sources, repetition unit/limits, start preconditions,
 completion evidence, cancellation, resume support and limitations. Regions,
-unrestricted container transfers, concurrent duties and checkpoint/resume are
-explicitly unimplemented.
+unrestricted container transfers, concurrent duties and serialized checkpoint/resume
+are explicitly unimplemented. Bridge 0.8.13 advertises live task suspension separately
+through `control.taskSuspensionVersion`. It preserves executors within the same game
+session, including across a harness restart. See [urgent interruption](scheduler.md#urgent-task-interruption).
 
 The Python client validates and encodes through
 [`clients/capabilities.py`](../clients/capabilities.py). Existing convenience

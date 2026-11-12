@@ -192,6 +192,8 @@ namespace SousChef.Plugin.Control
             if (tasks.Run.Running && lease.Owner(Now) != tasks.Run.Owner) tasks.Cancel("control_lost");
             server.Pump(Handle);
             CompleteSuspension();
+            if (reason == null)
+                foreach (var saved in suspendedTasks.Values) saved.Task.ObserveSuspended();
             if (reason == null) { navigation.Tick(target); if (tasks.Run.Running) tasks.TickChild(); else interactions.Tick(); logistics.Tick(); tasks.Tick(); }
             else if (observationAllowed) navigation.WarmCatalogue(target);
             if (observationAllowed) navigation.WarmGroundedMap(target);

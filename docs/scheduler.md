@@ -142,3 +142,18 @@ The Jev compiler offers interruption when the connected bridge advertises this
 support. Requests such as “deliver the order right now” select interruption.
 Ordinary requests append, “do this next” waits for the current task, and explicit
 cancellation retains its replacement meaning. Preview acceptance still applies.
+
+Verification on 2026-11-12 passed 283 Python tests, 14 browser tests, 3,003 core
+assertions, 470 navigation checks, 975 action checks and 30 catalog checks.
+Queue regressions cover nested interruptions, lost suspension/resumption
+acknowledgments, harness restart, sequence dependencies, unlimited work, Stop
+and removing suspended entries. Native action regressions cover interrupting
+chopping, settling a committed placement and observing transport completion
+while suspended.
+
+An isolated native `s_sushi_1_2` game also completed two preemption scenarios.
+A finite fish-preparation task was interrupted during chopping and, in a
+separate run, while carrying its ingredient toward placement. An urgent raw
+ingredient assignment completed first in each case. The original task resumed
+with the same native request ID and completed successfully. These probes used
+typed plans. Jev urgent routing was checked with scripted provider responses.

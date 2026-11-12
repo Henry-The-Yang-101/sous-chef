@@ -64,6 +64,55 @@ class SuspensionTests(unittest.TestCase):
             finally:
                 queue.close()
 
+    def test_nested_urgent_tasks_resume_in_order_and_stop_clears_all(self):
+        native = SuspendableNative()
+        queue = Scheduler(native)
+        try:
+            queue.accept(plan(tasks=[spec(count=None)]), context_of(native.state())); queue.tick()
+            original = queue.snapshot()['active']['requestId']
+            queue.accept(plan(1, [spec('take_ready')], 'interrupt', 'first'), context_of(native.state()))
+            queue.tick(); queue.tick()
+            first = queue.snapshot()['active']['requestId']
+            queue.accept(plan(2, [spec('deliver_completed_dishes')], 'interrupt', 'second'), context_of(native.state()))
+            queue.tick(); queue.tick()
+            native.finish(); queue.tick(); queue.tick()
+            self.assertEqual(queue.snapshot()['active']['requestId'], first)
+            native.receipts[first]['state'] = 'succeeded'
+            native.world['control']['claimed'] = False
+            queue.tick(); queue.tick()
+            self.assertEqual(queue.snapshot()['active']['requestId'], original)
+            queue.stop(); queue.tick()
+            self.assertIsNone(queue.snapshot()['active'])
+            self.assertFalse(queue.snapshot()['pending'])
+            self.assertEqual(native.receipts[original]['state'], 'cancelled')
+        finally:
+            queue.close()
+
+    def test_lost_suspend_and_resume_acknowledgments_do_not_reexecute(self):
+        native = SuspendableNative()
+        queue = Scheduler(native)
+        try:
+            queue.accept(plan(), context_of(native.state())); queue.tick()
+            original = queue.snapshot()['active']['requestId']
+            queue.accept(plan(1, [spec('take_ready')], 'interrupt', 'first'), context_of(native.state()))
+            original_io = native.queue_io
+            lost = set()
+            def lose_ack(operation, entry):
+                result = original_io(operation, entry)
+                if operation in ('suspend', 'resume') and operation not in lost:
+                    lost.add(operation)
+                    raise OSError('lost acknowledgment')
+                return result
+            native.queue_io = lose_ack
+            queue.tick(); queue.tick(); queue.tick()
+            native.finish(); queue.tick(); queue.tick(); queue.tick()
+            self.assertEqual(queue.snapshot()['active']['requestId'], original)
+            self.assertEqual(queue.snapshot()['active']['state'], 'running')
+            self.assertEqual(len([c for c in native.calls if c[0] == 'execute']), 2)
+            self.assertEqual(native.world['control']['dispatchGeneration'], 1)
+        finally:
+            queue.close()
+
     def test_removing_suspended_work_discards_native_checkpoint(self):
         native = SuspendableNative()
         queue = Scheduler(native)

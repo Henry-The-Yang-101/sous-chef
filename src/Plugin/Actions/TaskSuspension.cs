@@ -32,6 +32,14 @@ namespace SousChef.Plugin.Actions
             foreach (var observer in observers.Values) observer.Dispose(); observers.Clear();
             Run.Finish("cancelled", reason);
         }
+        public void ObserveSuspended()
+        {
+            // Transport already launched by this task can complete while another
+            // task owns input. Retain that evidence without advancing its plan.
+            try { ObserveDeliveries(); }
+            catch (Exception error) { observationError = error.ToString(); }
+        }
+
         public void TickChild()
         {
             if (restoration == null) child.Tick();
@@ -118,7 +126,7 @@ namespace SousChef.Plugin.Actions
                             restoringStarted = saved.Started; suspendedCargo = saved.Cargo; preemptedAt = saved.PreemptedAt;
                             restoringChild.ResumeTask(elapsed);
                         }
-                        else { ResumeAfterPause(elapsed); child.ResumeTask(elapsed); }
+                        else { ResumeAfterPause(elapsed); nextDeliveryCheck = 0; child.ResumeTask(elapsed); }
                         return;
                     }
                     restorationStep = restoration.Current;
