@@ -202,6 +202,13 @@ Each finished under one request/lease and passed the independent plate proof:
 | `Pasta_Marinara_New` | `s_balloon_2_3` | 6 | `.local/full-order-pasta-06/report.json` |
 | `Pancake_Plain` | `s_wizard_school_3_4` | 4 | `.local/full-order-pancake-01/report.json` |
 
+Additional pizza probes did not complete: `s_wizard_3_2` prepared dough and all
+three toppings but could not establish an oven route; the observed starting
+inventory in `s_wizard_3_1` exposed only the tomato dispenser. These waits are
+not successful dish proofs (`.local/full-order-pizza-01/` and
+`.local/full-order-pizza-02/`). Navigation and currently obtainable stock remain
+physical prerequisites; automatic resources do not bypass them.
+
 The action suite additionally checks explicit raw stock, repeated quantities,
 multiple work successors, wrong/missing ingredients, occupied boards, sink
 washing, heat interruption during chopping, partial alternative plates and
