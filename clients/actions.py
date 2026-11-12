@@ -36,9 +36,11 @@ class ActionClient(ControlClient):
         self._request('enqueue', epoch, generation, int(urgent), operation, *tokens, request_id=request_id)
         return self.last_response['receipt']
 
-    def hold_schedule(self, request_id, epoch, generation, hold):
+    def hold_schedule(self, request_id, epoch, generation, hold, duties=15):
         self._context(epoch, generation)
-        self._request('schedule_hold', epoch, generation, int(hold), request_id=request_id)
+        if type(duties) is not int or not 0 <= duties <= 15:
+            raise ValueError('Invalid kitchen duty mask')
+        self._request('schedule_hold', epoch, generation, int(hold), duties, request_id=request_id)
         return self.last_response['receipt']
 
     def execute(self, request_id, epoch, generation, name, arguments, repetitions=1, *, version=None):

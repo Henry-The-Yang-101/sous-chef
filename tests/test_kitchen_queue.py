@@ -33,7 +33,7 @@ class KitchenNative(Native):
             return copy.deepcopy(self.receipts[request])
         if operation == 'hold':
             self.calls.append((operation, copy.deepcopy(entry)))
-            self.world['control']['kitchenScheduler']['held'] = entry['hold']
+            self.world['control']['kitchenScheduler'].update(held=entry['hold'], duties=entry.get('duties', 15))
             return dict(id=entry['id'], state='succeeded')
         if operation == 'forget':
             self.calls.append((operation, copy.deepcopy(entry)))
@@ -95,7 +95,7 @@ class KitchenQueueTests(unittest.TestCase):
             self.queue = Scheduler(self.native, path)
             self.accept([spec()])
             self.native.lost = True
-            self.tick()
+            while not self.requests(): self.tick()
             self.queue.close()
             self.queue = Scheduler(self.native, path)
             self.addCleanup(self.queue.close)
@@ -107,7 +107,7 @@ class KitchenQueueTests(unittest.TestCase):
 
     def test_missing_receipt_never_replays_or_admits_more_work(self):
         self.accept([spec(), spec('take_ready')])
-        self.tick()
+        while not self.requests(): self.tick()
         self.native.receipts.clear(); self.native.publish()
         self.tick(4)
         self.assertEqual(len(self.requests()), 1)
@@ -130,9 +130,69 @@ class KitchenQueueTests(unittest.TestCase):
         self.assertEqual(self.native.receipts[original]['state'], 'waiting')
         self.assertTrue([entry for op, entry in self.native.calls if op == 'enqueue'][-1]['urgent'])
 
+    def test_urgent_plan_resumes_dispatch_after_explicit_pause(self):
+        self.accept([spec()]); self.tick(3)
+        self.queue.edit(dict(operation_id='pause', expected_queue_revision=1, operation='pause_pending'))
+        self.tick(2)
+        self.accept([spec('take_ready')], edit='interrupt'); self.tick(3)
+        self.assertFalse(self.queue.snapshot()['paused'])
+        self.assertFalse(self.native.world['control']['kitchenScheduler']['held'])
+        self.assertEqual(len(self.requests()), 2)
+
+    def test_pause_after_independent_plan_waits_for_every_command(self):
+        raw = dict(plan(0, [spec(), spec('take_ready')], 'append', 'parallel_plan'),
+                   ordering='independent', after_plan='pause_pending')
+        self.queue.accept(raw, context_of(self.native.state())); self.tick(4)
+        first, last = self.requests()
+        self.native.complete(last); self.tick(3)
+        self.assertFalse(self.queue.snapshot()['paused'])
+        self.native.complete(first); self.tick(3)
+        self.assertTrue(self.queue.snapshot()['paused'])
+        self.queue.edit(dict(operation_id='resume', expected_queue_revision=1, operation='resume_pending'))
+        self.tick(3)
+        self.assertFalse(self.queue.snapshot()['paused'])
+
     def test_pause_and_resume_send_native_hold(self):
         self.accept([spec(), spec('take_ready')]); self.tick(4)
         for revision, operation, held in [(1, 'pause_pending', True), (2, 'resume_pending', False)]:
             self.queue.edit(dict(operation_id=operation, expected_queue_revision=revision, operation=operation))
             self.tick()
             self.assertEqual(self.native.world['control']['kitchenScheduler']['held'], held)
+
+    def test_explicit_duty_suppresses_automatic_duplicate(self):
+        self.accept([spec('deliver_completed_dishes')])
+        self.tick(3)
+        self.assertEqual(self.native.world['control']['kitchenScheduler']['duties'] & 1, 0)
+
+    def test_do_next_waits_for_current_group(self):
+        self.accept([spec()]); self.tick(3)
+        self.accept([spec('take_ready')], edit='insert_next'); self.tick(3)
+        self.assertEqual(len(self.requests()), 1)
+        self.native.complete(self.requests()[0]); self.tick(4)
+        self.assertEqual(len(self.requests()), 2)
+
+    def test_replacement_cancels_exact_group_even_if_native_selection_changes(self):
+        self.accept([spec(), spec('take_ready')]); self.tick(4)
+        original = self.queue.snapshot()['active']['requestId']
+        other = self.queue.snapshot()['pending'][0]['requestId']
+        self.native.world['control']['kitchenScheduler']['activeRequestId'] = other
+        self.accept([spec('wash_dishes')], edit='replace_active')
+        self.tick(3)
+        self.assertEqual(self.native.receipts[original]['state'], 'cancelled')
+        self.assertEqual(self.native.receipts[other]['state'], 'waiting')
+        self.assertFalse(any(op == 'cancel' for op, _ in self.native.calls))
+
+
+class KitchenCompilerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_explicit_order_is_verified_and_preserved(self):
+        from test_decision import compiler, world
+        from harness.decision.compiler import build_context
+        kitchen = world(); kitchen['control']['kitchenSchedulerVersion'] = 1
+        context = build_context(kitchen, dict(revision=0, active=None, pending=[]))
+        c, script = compiler('Wash dishes then collect ready food', [
+            {'simple_coverage': 0}, {'next_task': 'wash_dishes'}, {},
+            {'next_task': 'take_ready'}, {}, {'next_task': 'done'},
+            {'ordering': 'sequence'}, {}], context)
+        result = await c.compile()
+        self.assertEqual(result['plan']['ordering'], 'sequence')
+        self.assertIn('sequence', str(script.requests[-1]))

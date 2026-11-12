@@ -38,6 +38,7 @@ namespace SousChef.Plugin.Actions
             var demand = new List<Demand>();
             foreach (var order in orders)
                 MissingDemand(order.Goal, null, order.Expires ? order.Ticket.Remaining : Single.MaxValue, stock, demand);
+            var identities = new Dictionary<string, HashSet<string>>();
             foreach (var need in demand)
             {
                 TaskActions chosen = null;
@@ -48,8 +49,10 @@ namespace SousChef.Plugin.Actions
                     var desired = job.request.Items[0];
                     if (need.Processing != null && Passive(desired) && desired.Preparation != need.Processing) continue;
                     if (need.Processing == null && Passive(desired)) continue;
+                    HashSet<string> matches;
+                    if (!identities.TryGetValue(desired.Selector, out matches)) identities.Add(desired.Selector, matches = observer.PreparationIdentities(desired.Selector, true));
                     var ingredient = need.Ingredient as IngredientAssembledNode;
-                    if (ingredient == null || !job.PreparationIdentities(desired.Selector, true).Contains("i" + ingredient.m_ingriedientOrderNode.m_uID)) continue;
+                    if (ingredient == null || !matches.Contains("i" + ingredient.m_ingriedientOrderNode.m_uID)) continue;
                     if (chosen == null || job.ownedFood.Count > chosen.ownedFood.Count) chosen = job;
                 }
                 if (chosen != null) chosen.assignedOrderSeconds = need.Seconds;

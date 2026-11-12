@@ -40,7 +40,7 @@ namespace SousChef.Plugin.Actions
             float stationDistance = inventory.DistanceTo(station);
             foreach (LogisticsItem candidate in inventory.Items)
             {
-                if ((!candidate.CleanPlate && candidate.UtensilType == null) || !candidate.Empty || candidate.InUse ||
+                if (Foreign(candidate.Item) || Foreign(candidate.Holder) || (!candidate.CleanPlate && candidate.UtensilType == null) || !candidate.Empty || candidate.InUse ||
                     !CanCollect(LogisticsChecks.Payload(candidate), source) || LogisticsChecks.Collect(chef, candidate, candidate.CleanPlate ? "get_plate" : "move_item", true) != null ||
                     !LogisticsChecks.AcceptsPlacement(chef, LogisticsChecks.Payload(candidate), station)) continue;
                 if (System.Object.ReferenceEquals(candidate.Item, ActionObservations.Held(chef))) return candidate;

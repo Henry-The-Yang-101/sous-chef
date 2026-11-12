@@ -5,14 +5,15 @@ namespace SousChef.Core
     // A priority is recomputed from live observations, never retained as a stale heap key.
     public sealed class WorkOffer
     {
-        public bool Ready = true;
+        public bool Ready = true, Feasible = true;
         public string Reason, Stage;
         public int Class = 3;
-        public float Slack = Single.MaxValue, Remaining = 20, Cost, Age;
+        public float Slack = Single.MaxValue, Remaining = 20, Cost, Age, PassiveSeconds;
         public bool PreferTo(WorkOffer other)
         {
             if (!Ready) return false;
             if (other == null || !other.Ready) return true;
+            if (Class >= 2 && other.Class >= 2 && Feasible != other.Feasible) return Feasible;
             if (Class != other.Class) return Class < other.Class;
             // Deadline differences smaller than the estimate's uncertainty do not
             // justify repeatedly putting down and recovering the same cargo.
@@ -24,8 +25,8 @@ namespace SousChef.Core
         public object Describe(string state)
         {
             return Json.Object("state", state, "stage", Stage, "reason", Reason,
-                "class", Class, "slackSeconds", Slack == Single.MaxValue ? null : (object)Slack,
-                "remainingChefSeconds", Remaining, "switchCostSeconds", Cost);
+                "class", Class, "estimatedFeasible", Feasible, "slackSeconds", Slack == Single.MaxValue ? null : (object)Slack,
+                "remainingChefSeconds", Remaining, "remainingProcessingSeconds", PassiveSeconds, "switchCostSeconds", Cost);
         }
     }
 }

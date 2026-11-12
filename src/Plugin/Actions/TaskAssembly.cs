@@ -177,7 +177,7 @@ namespace SousChef.Plugin.Actions
                     {
                         assembly.Verified = true; assembly.Waiting = null; completed = 1;
                         assembly.Record("composition_verified", assembly.Root, null, plate);
-                        deliveredItems.Add(plate); yield break;
+                        RecordDelivery(plate); yield break;
                     }
                 }
                 var job = SelectAssemblyWork();

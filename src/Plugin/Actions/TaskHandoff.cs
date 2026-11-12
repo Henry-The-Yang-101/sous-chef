@@ -157,6 +157,7 @@ namespace SousChef.Plugin.Actions
         // human ends here undelivered (absent from deliveredItems) for the caller.
         private IEnumerable<TaskStep> Give(GameObject item, int player = 1, Action<GameObject, int> dispatch = null, bool lossTolerant = false, Func<bool> defer = null)
         {
+            if (Foreign(item) || request.Action == "prepare_near_player" && PreviouslyDelivered(item) && !deliveredItems.Contains(item)) yield break;
             groundPass.Reset();
             Func<bool> lost = () => item == null || !System.Object.ReferenceEquals(ActionObservations.Held(chef), item);
             var excluded = new List<Vector3>();
@@ -175,7 +176,7 @@ namespace SousChef.Plugin.Actions
                 if (choice == null)
                 {
                     if (!lost() && defer != null && defer()) yield break;
-                    if (HumanCanCollect(item, player)) { deliveredItems.Add(item); yield break; }
+                    if (HumanCanCollect(item, player)) { RecordDelivery(item); yield break; }
                     if (lossTolerant) yield break;
                     throw new InvalidOperationException("task_cargo_changed");
                 }
@@ -238,7 +239,7 @@ namespace SousChef.Plugin.Actions
                     if (dispatch != null) dispatch(item, player);
                     else yield return Until("waiting_for_transport_delivery", delegate { return HumanCanCollect(item, player); });
                 }
-                deliveredItems.Add(item);
+                RecordDelivery(item);
                 yield break;
             }
         }

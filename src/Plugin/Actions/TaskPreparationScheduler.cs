@@ -64,7 +64,7 @@ namespace SousChef.Plugin.Actions
                 if (item == null || !item.activeInHierarchy) { lane.ParkedMeal = null; continue; }
                 var human = Human(request.Player);
                 if (human != null && System.Object.ReferenceEquals(ActionObservations.Held(human), item))
-                { deliveredItems.Add(item); completed = preparation.Complete(lane, item); lane.ParkedMeal = null; }
+                { RecordDelivery(item); completed = preparation.Complete(lane, item); lane.ParkedMeal = null; }
                 else if (Passive(lane.Order) && LogisticsInventory.Empty(item)) lane.ParkedMeal = null;
             }
         }
@@ -96,6 +96,14 @@ namespace SousChef.Plugin.Actions
                 }
             }
             return ready;
+        }
+
+        private bool PreparationHeatReady()
+        {
+            if (preparation == null) return false;
+            foreach (var batch in preparation.Cooking)
+                if (batch.Intact && TaskNative.Ready(batch.Container, batch.Mixing)) return true;
+            return false;
         }
 
         private PrepJob SelectPreparation(float availableSeconds, ref BoardWait boardWait, PreparationSchedule.Lane exclude = null)
@@ -265,6 +273,7 @@ namespace SousChef.Plugin.Actions
                 // This is a safe action boundary, not a new per-frame world scan.
                 if (ReadyPreparationWaiting()) yield break;
                 var work = Reschedulable("work_at", board, "work_complete");
+                work.BeforePress = () => !PreparationHeatReady();
                 GameObject initialWorkCargo = ActionObservations.Held(chef);
                 work.ReplanForHeld = held => !System.Object.ReferenceEquals(held, initialWorkCargo) && UsefulCatch(held);
                 yield return work;

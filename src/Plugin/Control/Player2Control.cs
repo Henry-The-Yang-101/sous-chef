@@ -82,7 +82,7 @@ namespace SousChef.Plugin.Control
         private string unavailable = "player2_absent";
         private bool disposed;
         private float suspendedAt = -1;
-        private bool Autonomous { get { return navigation.Action.State == "navigating" || interactions.Run.Running || logistics.Run.Running || tasks.Run.Running; } }
+        private bool Autonomous { get { return kitchenEnabled || navigation.Action.State == "navigating" || interactions.Run.Running || logistics.Run.Running || tasks.Run.Running; } }
         private bool PreservingSuspension(string reason)
         {
             return Autonomous && (reason == "paused" || reason == "game_unfocused" || reason == "input_suppressed");
@@ -194,8 +194,8 @@ namespace SousChef.Plugin.Control
             CompleteSuspension();
             if (reason == null)
                 foreach (var saved in suspendedTasks.Values) saved.Task.ObserveSuspended();
-            if (reason == null) TickKitchen();
-            if (reason == null) { navigation.Tick(target); if (tasks.Run.Running) tasks.TickChild(); else interactions.Tick(); logistics.Tick(); tasks.Tick(); }
+            if (reason == null) TickKitchenSafely();
+            if (reason == null && kitchenError == null) { navigation.Tick(target); if (tasks.Run.Running) tasks.TickChild(); else interactions.Tick(); logistics.Tick(); tasks.Tick(); }
             else if (observationAllowed) navigation.WarmCatalogue(target);
             if (observationAllowed) navigation.WarmGroundedMap(target);
             // The browser may be in front while the catalogue is observed.
@@ -303,7 +303,7 @@ namespace SousChef.Plugin.Control
                 }
             }
             if (command.Scheduled) error = EnqueueKitchen(client, command, receipt);
-            else if (command.Operation == "schedule_hold") { kitchenHeld = command.Priority; receipt.State = "succeeded"; }
+            else if (command.Operation == "schedule_hold") { SetKitchenHold(command.Priority, command.DutyMask); receipt.State = "succeeded"; }
             else if (command.Operation == "stop" || command.Operation == "cancel" || command.Operation == "cancel_current")
             {
                 dispatchGeneration++; Revoke("stopped", command.Operation == "cancel_current"); navigation.Stop("stopped"); CaptureReceipt();

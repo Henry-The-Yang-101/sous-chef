@@ -41,11 +41,11 @@ namespace SousChef.Plugin.Actions
                 child.Cancel("task_reconcile_hands"); childStarted = false;
             }
             input(0); waitingReason = null; retryAt = 0;
-            if (step.UseHeld != null && step.UseHeld(held))
+            if (!Foreign(held) && step.UseHeld != null && step.UseHeld(held))
             {
-                step.Succeeded = true; completedSteps++; step = null; return true;
+                step.Succeeded = true; ObserveWorkOwnership(step); completedSteps++; step = null; return true;
             }
-            if (step.ReplanForHeld != null && step.ReplanForHeld(held))
+            if (!Foreign(held) && step.ReplanForHeld != null && step.ReplanForHeld(held))
             {
                 step = null; return true;
             }

@@ -156,6 +156,10 @@ class Scheduler(KitchenQueue):
                     if not entry['dependsOn']:
                         entry['dependsOn'] = [active['id']]
             removed = []
+            if plan.queue_edit == 'interrupt' and any(entry['spec']['repeat']['mode'] == 'until_cancelled' for entry in entries):
+                raise ValidationError('Urgent work must be finite so earlier work can resume')
+            if plan.queue_edit == 'interrupt' and modern:
+                value['paused'], value['reason'] = False, None
             if plan.queue_edit == 'interrupt' and not modern:
                 if world['control'].get('taskSuspensionVersion') != 1:
                     raise QueueConflict('Update the bridge to interrupt and resume tasks')
@@ -180,7 +184,8 @@ class Scheduler(KitchenQueue):
                 if active:
                     removed.append(active)
                     active = None
-                value['barrier'] = dict(self._barrier(current), preserveTasks=True)
+                if not modern or any(not entry.get('nativeQueued') for entry in removed):
+                    value['barrier'] = dict(self._barrier(current), preserveTasks=True)
                 value['paused'], value['reason'] = False, None
             pending = pending + entries if plan.queue_edit == 'append' else entries + pending
             self._validate_order(active, pending, value['outcomes'])
@@ -253,15 +258,19 @@ class Scheduler(KitchenQueue):
                     raise QueueConflict('Resolve the unknown native outcome before resuming')
                 self._validate_order(value['active'], value['pending'], value['outcomes'])
                 value['paused'], value['reason'] = False, None
+                if world.get('control', {}).get('kitchenScheduler', {}).get('error'):
+                    value['resumeKitchen'] = True
             elif op == 'skip_active':
                 if value['barrier']:
                     raise QueueConflict('Cancellation is already pending')
                 if not value['active']:
                     raise QueueConflict('There is no active task to skip')
                 self._validate_order(None, value['pending'], value['outcomes'])
+                exact_native = value['active'].get('nativeQueued')
                 self._outcome(value, value['active'], 'cancelled', 'Explicitly skipped; partial effects remain')
                 value['active'] = None
-                value['barrier'] = dict(self._barrier(value['context']), preserveTasks=True)
+                if not exact_native:
+                    value['barrier'] = dict(self._barrier(value['context']), preserveTasks=True)
                 value['paused'], value['reason'] = False, None
             value['revision'] += 1
             result = {'operationId': ident, 'revision': value['revision']}

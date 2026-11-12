@@ -722,7 +722,7 @@ function renderQueue() {
   const queue = state?.queue;
   const enabled = Boolean(token && queue && !pending && !queue.error);
   el('queue-status').textContent = !queue ? 'Waiting for the queue…' : queue.error || (queue.barrier ? 'Stopping native work; dispatch held.' : queue.active?.state === 'reconciling' ? 'Dispatch held: native outcome unknown.' : queue.paused ? 'Dispatch paused.' : 'Dispatch enabled.') +
-    ` ${queue.pending.length} / ${queue.capacity} pending.` + (queue.reason ? ' ' + explain(queue.reason) : '');
+    ` ${queue.pending.length} / ${queue.capacity} pending.` + (state?.control?.kitchenScheduler?.enabled ? ' Kitchen duties active until Stop.' : '') + (queue.reason ? ' ' + explain(queue.reason) : '');
   el('queue-active').textContent = queue?.active ? `${taskDescription(queue.active.spec)} · ${queue.active.state.replaceAll('_', ' ')}${queue.active.reason ? ' · ' + explain(queue.active.reason) : ''}${portionProgress(queue.active)}` : 'No active queued task.';
   el('queue-pause').disabled = !enabled || queue.paused;
   el('queue-resume').disabled = !enabled || !queue.paused || !fresh() || Boolean(queue.barrier) || queue.active?.state === 'reconciling';

@@ -89,7 +89,15 @@ namespace SousChef.Plugin.Actions
         private readonly Dictionary<int, float> humanDistances = new Dictionary<int, float>();
         private readonly Dictionary<string, CounterMotion> counterMotion = new Dictionary<string, CounterMotion>();
         private bool botSearchComplete, humanSearchComplete;
-        private HashSet<GameObject> deliveredItems = new HashSet<GameObject>();
+        private readonly HashSet<GameObject> deliveredItems = new HashSet<GameObject>();
+        private DeliveryHistory sharedDeliveries;
+        private bool PreviouslyDelivered(GameObject item)
+        { return sharedDeliveries == null ? deliveredItems.Contains(item) : sharedDeliveries.Contains(item); }
+        private void RecordDelivery(GameObject item)
+        {
+            deliveredItems.Add(item);
+            if (sharedDeliveries != null) sharedDeliveries.Add(item);
+        }
         private PlayerControls Human(int player = 1)
         {
             PlayerControls found = null;

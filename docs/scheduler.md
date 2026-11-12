@@ -1,4 +1,10 @@
-# Local scheduler — Milestone 2
+# Task scheduling
+
+Bridge 0.8.15 adds the [native kitchen scheduler](kitchen-scheduler.md), with
+independent portions, global priorities, and standing kitchen duties. The FIFO
+coordinator described below remains the compatibility path for older bridges.
+
+## Legacy coordinator — Milestone 2
 
 ## Native receipt protocol
 

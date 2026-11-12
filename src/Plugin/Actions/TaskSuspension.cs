@@ -47,11 +47,16 @@ namespace SousChef.Plugin.Actions
 
         public bool Suspend()
         {
+            // Finish clearing another job's cargo before checkpointing. Otherwise
+            // two scheduled iterators can retain the same object as suspended cargo
+            // and endlessly recover it from one another.
+            if (ReservedByOther != null && Foreign(ActionObservations.Held(chef))) return false;
             if (navigation.NativeTeleportInProgress(chef)) return false;
             if (!(restoration == null ? child : restoringChild).SuspendTask()) return false;
             if (restoration != null)
                 restorationStack.Push(new RestorationState { Plan = restoration, Step = restorationStep,
                     Child = restoringChild, Started = restoringStarted, Cargo = suspendedCargo, PreemptedAt = preemptedAt });
+            if (childStarted && child.Run.State == "succeeded") ObserveWorkOwnership(step);
             navigation.Stop("task_suspended");
             suspendedCargo = ActionObservations.Held(chef);
             preemptedAt = Time.realtimeSinceStartup;

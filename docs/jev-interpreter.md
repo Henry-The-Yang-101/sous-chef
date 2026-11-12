@@ -22,6 +22,12 @@ restart the game and harness after updating the repository.
 
 ## Behavior and boundaries
 
+On bridge 0.8.15, preparation quantities become independent native portion jobs.
+Jev resolves explicit task ordering and verifies it with the full plan. Kitchen
+duties can interleave under the [native scheduler](kitchen-scheduler.md); older
+bridges retain the sequential restrictions described below.
+
+
 - Ordinary work appends. Once Jev selects append, the final check verifies the
   requested work and any conditions on it. In Automatic mode a verified plan
   goes straight to the end of the queue. Queue-only edits, scoped replacement,

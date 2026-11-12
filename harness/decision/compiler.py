@@ -863,6 +863,10 @@ class Compiler:
             return
         append = edit == 'append'
         reference = OBJECT_REFERENCE if 'tasks' in proposed else ''
+        if self.context.get('kitchen_scheduler'):
+            reference += (' Each preparation occurrence expands into independently scheduled portions. List order within it does not impose sequencing. '
+                          'An explicit then/before/after between ingredients requires separate task occurrences and sequence ordering. '
+                          'Independent ordering permits interleaving; sequence ordering requires completing each occurrence first. ')
         verification_plan = semantic_plan
         if append:
             # Only the verifier projection omits placement. The confirmation
@@ -951,4 +955,5 @@ class Compiler:
             else:
                 descriptions.append(f'{spec["label"]}: {count}' +
                                     (' ' + json.dumps(task['arguments'], ensure_ascii=False) if task['arguments'] else ''))
-        return '; then '.join(descriptions)
+        separator = '; and ' if self.context.get('kitchen_scheduler') and getattr(self, 'ordering', 'independent') == 'independent' else '; then '
+        return separator.join(descriptions)

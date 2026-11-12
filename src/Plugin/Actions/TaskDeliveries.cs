@@ -12,7 +12,7 @@ namespace SousChef.Plugin.Actions
         private float nextDeliveryCheck;
         internal void DispatchDelivery(GameObject item, int player, Func<bool> intact = null, Action<bool> receipt = null)
         {
-            deliveredItems.Add(item); // In transit is already allocated to the human.
+            RecordDelivery(item); // In transit is already allocated to the human.
             pendingDeliveries.Add(new PendingDelivery { Item = item, Player = player, Intact = intact, Receipt = receipt });
         }
         private void ObserveDeliveries()

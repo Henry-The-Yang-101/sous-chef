@@ -54,7 +54,7 @@ namespace SousChef.Plugin.Actions
             GameObject cargo = ActionObservations.Held(chef);
             foreach (LogisticsItem entry in inventory.Items)
             {
-                if (!entry.Supply && (deliveredItems.Contains(entry.Item) || preparation != null && preparation.Reserved(entry.Item))) continue;
+                if (!entry.Supply && (PreviouslyDelivered(entry.Item) || preparation != null && preparation.Reserved(entry.Item))) continue;
                 bool match = utensil ? plate ? entry.CleanPlate : entry.Empty && entry.UtensilType == utensilType :
                     ids.Count == 0 ? LogisticsInventory.IngredientMatches(entry, selector) : ids.Contains(entry.IngredientId);
                 if (!match) continue;
@@ -96,7 +96,7 @@ namespace SousChef.Plugin.Actions
         }
         private bool HeldPreparation(GameObject held, PreparationRequest desired)
         {
-            if (held == null || deliveredItems.Contains(held) || preparation != null && preparation.Reserved(held)) return false;
+            if (held == null || Foreign(held) || PreviouslyDelivered(held) || preparation != null && preparation.Reserved(held)) return false;
             inventory.Refresh(chef);
             foreach (LogisticsItem entry in inventory.Items)
             {
@@ -176,7 +176,7 @@ namespace SousChef.Plugin.Actions
             inventory.Refresh(chef); GameObject best = null; float cost = Single.MaxValue;
             foreach (LogisticsItem candidate in inventory.Items)
             {
-                if (Foreign(candidate.Item) || Foreign(candidate.Holder) || !candidate.Empty || candidate.InUse || deliveredItems.Contains(candidate.Item) || !TaskNative.Equipment(candidate.Holder ?? candidate.Source) ||
+                if (Foreign(candidate.Item) || Foreign(candidate.Holder) || !candidate.Empty || candidate.InUse || PreviouslyDelivered(candidate.Item) || !TaskNative.Equipment(candidate.Holder ?? candidate.Source) ||
                     TaskNative.ProcessingHandler(candidate.Item, mixing) == null) continue;
                 string operation;
                 if (LogisticsChecks.Delivery(chef, "fetch_ingredient", item, candidate.Source, out operation) != null) continue;
@@ -192,7 +192,7 @@ namespace SousChef.Plugin.Actions
             inventory.Refresh(chef); container = null; station = null;
             foreach (LogisticsItem item in inventory.Items)
             {
-                if (Foreign(item.Item) || Foreign(item.Holder) || !item.Empty || item.InUse || deliveredItems.Contains(item.Item) || ApproachCost(item.Source) == Single.MaxValue || !LogisticsChecks.CanCollectEmpty(chef, item.Source) ||
+                if (Foreign(item.Item) || Foreign(item.Holder) || !item.Empty || item.InUse || PreviouslyDelivered(item.Item) || ApproachCost(item.Source) == Single.MaxValue || !LogisticsChecks.CanCollectEmpty(chef, item.Source) ||
                     TaskNative.ProcessingHandler(item.Item, mixing) == null) continue;
                 string operation;
                 if (LogisticsChecks.Delivery(chef, "fetch_ingredient", food, item.Item, out operation) != null) continue;

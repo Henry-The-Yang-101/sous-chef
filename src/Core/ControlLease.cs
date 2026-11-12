@@ -11,6 +11,7 @@ namespace SousChef.Core
         public string Epoch, Payload, ReceiptId;
         public long DispatchGeneration;
         public bool Fenced, Scheduled, Priority;
+        public int DutyMask = 15;
         public int Milliseconds, Buttons;
         public float X, Y;
         public bool Indefinite;
@@ -39,7 +40,7 @@ namespace SousChef.Core
                 long generation;
                 if (p.Length < 4 || !WireId(p[2]) || !Int64.TryParse(p[3], NumberStyles.None, CultureInfo.InvariantCulture, out generation) || generation < 0)
                     throw new ArgumentException("invalid_dispatch_context");
-                if (p[0] == "schedule_hold") { if (p.Length != 5 || (p[4] != "0" && p[4] != "1")) throw new ArgumentException("invalid_hold"); result.Priority = p[4] == "1"; }
+                if (p[0] == "schedule_hold") { if ((p.Length != 5 && p.Length != 6) || (p[4] != "0" && p[4] != "1")) throw new ArgumentException("invalid_hold"); result.Priority = p[4] == "1"; if (p.Length == 6 && (!Int32.TryParse(p[5], out result.DutyMask) || result.DutyMask < 0 || result.DutyMask > 15)) throw new ArgumentException("invalid_duties"); }
                 else if (p[0] == "enqueue")
                 {
                     if (p.Length < 8 || (p[4] != "0" && p[4] != "1") || p[5] != "task") throw new ArgumentException("invalid_scheduled_task");

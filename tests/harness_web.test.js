@@ -307,3 +307,20 @@ test('queue Add works while busy; unlimited and dependent Run now are blocked', 
   c.renderTasks({}, visible, true, true);
   assert.equal(el('task-run').disabled, true);
 });
+
+test('native scheduling permits new work alongside an unlimited duty and exposes portion progress', () => {
+  const {context: c, el} = fixture();
+  c.state.control.kitchenSchedulerVersion = 1;
+  c.state.queue.active = {id: 'active', nativeQueued: true, spec: {repeat: {mode: 'until_cancelled'}}};
+  c.renderTasks({}, visible, true, true); el('task-kind').value = 'wash_dishes';
+  c.renderTasks({}, visible, true, true);
+  assert.equal(el('task-run').disabled, false);
+  assert.equal(el('plan-ordering-label').hidden, false);
+  vm.runInContext(source.slice(source.indexOf('function portionProgress('), source.indexOf('function renderQueue(')), c);
+  const message = c.portionProgress({receipt: {evidence: {jobs: [
+    {action: 'prepare_near_player', state: 'blocked', scheduling: {reason: 'waiting_for_processing_output'},
+     progress: {details: {preparation: [{ingredient: 'rice', preparation: 'cooked'}]}}},
+  ]}}});
+  assert.match(message, /cooked rice: blocked/);
+  assert.match(message, /waiting for processing output/);
+});

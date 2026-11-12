@@ -10,13 +10,17 @@ namespace SousChef.Plugin.Actions
         internal Func<TaskActions, GameObject, bool> ReservedByOther { get; set; }
         internal Func<TaskActions, bool, bool> ProcessorBuffered { get; set; }
         private readonly HashSet<GameObject> ownedFood = new HashSet<GameObject>();
+        private readonly HashSet<GameObject> ownedSinks = new HashSet<GameObject>();
         private readonly HashSet<GameObject> ownedBoards = new HashSet<GameObject>();
         internal bool Owns(GameObject item)
         {
             if (item == null) return false;
             if (ownedFood.Contains(item)) return true;
+            ownedSinks.RemoveWhere(sink => sink == null || ActionObservations.DirtyCount(sink) == 0);
+            if (ownedSinks.Contains(item)) return true;
             foreach (var board in new List<GameObject>(ownedBoards))
-                if (board == null || ActionObservations.Occupant(board) == null || !ownedFood.Contains(ActionObservations.Occupant(board))) ownedBoards.Remove(board);
+                if (board == null || !(childStarted && step != null && step.Target == board && step.Phase == "work_at") &&
+                    (ActionObservations.Occupant(board) == null || !ownedFood.Contains(ActionObservations.Occupant(board)))) ownedBoards.Remove(board);
             foreach (var board in ownedBoards)
                 if (board != null && (board == item || ActionObservations.Occupant(board) == item)) return true;
             if (preparation != null)
@@ -30,12 +34,18 @@ namespace SousChef.Plugin.Actions
         }
         private bool Foreign(GameObject item) { return item != null && ReservedByOther != null && ReservedByOther(this, item); }
         internal void ConfigureScheduling(PlayerControls actor, TaskRequest desired) { chef = actor; request = desired; }
-        internal void ShareDeliveries(HashSet<GameObject> deliveries) { deliveredItems = deliveries; }
-        internal bool AtSchedulingBoundary { get { return restoration == null && handsPlan == null && (!childStarted || child.CanRetry && (child.RouteUnavailable || child.NavigationStalled)); } }
+        internal void ShareDeliveries(DeliveryHistory deliveries) { sharedDeliveries = deliveries; }
+        internal bool AtSchedulingBoundary { get { return restoration == null && handsPlan == null && (!childStarted || child.Run.Operation == "work_at" || child.CanRetry && (child.RouteUnavailable || child.NavigationStalled)); } }
         private bool AuthorizeScheduledStep(TaskStep next)
         {
             if (ReservedByOther == null) return true;
-            if (Foreign(next.Target) || Foreign(ActionObservations.Occupant(next.Target))) return false;
+            var occupant = ActionObservations.Occupant(next.Target);
+            if (Foreign(next.Target) || Foreign(occupant)) return false;
+            // A selected source can have been delivered by another job before
+            // this job resumes. Revalidate the shared ledger at the input edge.
+            if (request.Action == "prepare_near_player" && next.Phase == "pick_up" && PreviouslyDelivered(occupant ?? next.Target)) return false;
+            if (next.Target != null && next.Target.GetComponent<ServerWashingStation>() != null &&
+                (next.Phase == "work_at" || next.Phase == "place_at" && TaskNative.Dirty(ActionObservations.Held(chef)))) ownedSinks.Add(next.Target);
             if (next.Phase == "work_at" && next.Target != null && next.Target.GetComponent<ServerWorkstation>() != null)
             {
                 var item = ActionObservations.Occupant(next.Target);
@@ -116,6 +126,8 @@ namespace SousChef.Plugin.Actions
                 }
                 if (desired.Action == "prepare_near_player")
                 {
+                    offer.Slack = assignedOrderSeconds == Single.MaxValue ? assignedOrderSeconds : assignedOrderSeconds - offer.Remaining - 8;
+                    offer.Class = offer.Slack == Single.MaxValue ? 3 : 2;
                     if (preparation == null) preparation = new PreparationSchedule(desired);
                     float available; ObserveCooking(out available);
                     BoardWait wait = BoardWait.None;
@@ -128,7 +140,8 @@ namespace SousChef.Plugin.Actions
                     else
                     {
                         offer.Remaining = ReadyToGive(job) ? 3 : PreparationSeconds(job.Lane.Order, job.Source);
-                        offer.Slack = PreparationOrderSlack(job.Lane.Order, offer.Remaining);
+                        offer.PassiveSeconds = Passive(job.Lane.Order) ? ProcessingBudget(job.Lane.Order.Preparation == "mixed") : 0;
+                        offer.Slack = PreparationOrderSlack(job.Lane.Order, offer.Remaining + offer.PassiveSeconds);
                         offer.Class = offer.Slack == Single.MaxValue ? 3 : 2;
                         offer.Reason = ReadyToGive(job) ? "finish_prepared_portion" : "advance_requested_portion";
                     }
@@ -150,11 +163,11 @@ namespace SousChef.Plugin.Actions
                 else if (desired.Action == "monitor_equipment" || desired.Action == "take_ready")
                 { offer.Ready = childStarted; offer.Reason = "waiting_for_processing_output"; }
                 else if (desired.Action == "put_out_fire")
-                { offer.Ready = FireAvailable() || childStarted; offer.Class = 0; offer.Slack = 0; offer.Reason = "extinguish_fire"; }
+                { bool fire = FireAvailable(); offer.Ready = fire || childStarted; offer.Class = fire ? 0 : 3; offer.Slack = 0; offer.Reason = "extinguish_fire"; }
                 else if (desired.Action == "wash_dishes")
                 {
                     var sink = Sink();
-                    offer.Ready = sink != null && HasDirtyDishes(sink) || sink == null && WashingSupported() && DirtySources().Count > 0;
+                    offer.Ready = sink != null && !Foreign(sink) && HasDirtyDishes(sink) || sink == null && WashingSupported() && DirtySources().Count > 0;
                     offer.Remaining = 6; offer.Reason = "replenish_clean_plates";
                     bool clean = false;
                     foreach (var item in inventory.Items) if (item.CleanPlate && !Foreign(item.Item)) clean = true;
@@ -164,7 +177,8 @@ namespace SousChef.Plugin.Actions
                 }
                 else if (waitingReason != null && !childStarted)
                 { offer.Ready = step == null || step.Ready == null || step.Ready(); }
-                if (offer.Class == 2 && offer.Slack < 5) offer.Class = 0;
+                if (offer.Class == 2)
+                { offer.Feasible = offer.Slack >= -2; if (offer.Feasible && offer.Slack < 5) offer.Class = 0; }
                 return offer;
             }
             catch (Exception) { offer.Ready = false; offer.Reason = "scheduling_observation_unavailable"; return offer; }
@@ -176,6 +190,32 @@ namespace SousChef.Plugin.Actions
             foreach (var lane in preparation.Lanes)
                 if (Passive(lane.Order) && (lane.Order.Preparation == "mixed") == mixing && lane.WantsMore && ownedFood.Count > 0) return true;
             return false;
+        }
+        internal bool WaitingForOwner(TaskActions owner, string reason)
+        {
+            if (step != null && step.Target != null && (owner.Owns(step.Target) || owner.Owns(ActionObservations.Occupant(step.Target)))) return true;
+            if (reason == "waiting_for_chopping_board")
+                foreach (var station in navigation.Targets())
+                    if (station.GetComponent<ServerWorkstation>() != null && owner.Owns(station)) return true;
+            if (assembly != null && assembly.Base == null)
+                foreach (var entry in inventory.Items)
+                    if (entry.CleanPlate && owner.Owns(entry.Item)) return true;
+            return false;
+        }
+        private float ProcessingBudget(bool mixing)
+        {
+            float duration = Single.MaxValue;
+            foreach (var item in inventory.Items)
+            {
+                var handler = TaskNative.ProcessingHandler(item.Item, mixing);
+                if (handler == null) continue;
+                var property = handler.GetType().GetProperty(mixing ? "AccessMixingTime" : "AccessCookingTime");
+                if (property == null) continue;
+                float observed = Convert.ToSingle(property.GetValue(handler, null));
+                if (observed > 0) duration = Math.Min(duration, observed);
+            }
+            // No observed duration is unknown, not an invented recipe-specific time.
+            return duration == Single.MaxValue ? 0 : duration;
         }
         private float PreparationOrderSlack(PreparationRequest desired, float remaining)
         {
