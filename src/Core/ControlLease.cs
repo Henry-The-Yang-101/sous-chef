@@ -34,12 +34,17 @@ namespace SousChef.Core
                 if (p.Length != 3 || !WireId(p[2])) throw new ArgumentException("invalid_receipt_id");
                 result.ReceiptId = p[2]; return result;
             }
-            if (p[0] == "execute" || p[0] == "cancel")
+            if (p[0] == "execute" || p[0] == "cancel" || p[0] == "cancel_current" || p[0] == "suspend" || p[0] == "resume" || p[0] == "forget_task")
             {
                 long generation;
                 if (p.Length < 4 || !WireId(p[2]) || !Int64.TryParse(p[3], NumberStyles.None, CultureInfo.InvariantCulture, out generation) || generation < 0)
                     throw new ArgumentException("invalid_dispatch_context");
-                if (p[0] == "cancel") { if (p.Length != 4) throw new ArgumentException("invalid_arguments"); }
+                if (p[0] == "cancel" || p[0] == "cancel_current") { if (p.Length != 4) throw new ArgumentException("invalid_arguments"); }
+                else if (p[0] == "suspend" || p[0] == "resume" || p[0] == "forget_task")
+                {
+                    if (p.Length != 5 || !WireId(p[4])) throw new ArgumentException("invalid_receipt_id");
+                    result.ReceiptId = p[4];
+                }
                 else
                 {
                     if (p.Length < 5 || (p[4] != "task" && (Array.IndexOf(ActionRun.AllNames, p[4]) < 0 || p[4] == "stop")))

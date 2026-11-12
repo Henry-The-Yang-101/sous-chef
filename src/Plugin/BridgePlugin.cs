@@ -12,7 +12,7 @@ namespace SousChef.Plugin
     [BepInPlugin("dev.souschef.observer", "Sous Chef Observer", BridgePlugin.Version)]
     public sealed class BridgePlugin : BaseUnityPlugin
     {
-        internal const string Version = "0.8.12";
+        internal const string Version = "0.8.13";
         private StreamServer server, gameplayServer, harnessServer;
         private SceneCapture harnessCapture;
         private long harnessSequence;

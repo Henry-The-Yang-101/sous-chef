@@ -98,6 +98,7 @@ namespace SousChef.Plugin.Actions
         public void Tick()
         {
             if (!Run.Running) return;
+            if (restoration != null) { RestoreCargo(); return; }
             inventory.BeginObservation();
             try
             {
@@ -212,6 +213,7 @@ namespace SousChef.Plugin.Actions
         }
         private void Finish(string state, string reason)
         {
+            ClearRestoration(reason);
             navigation.CancelRecoveryPlanning();
             // Keep the parent running during child cleanup so its callback cannot
             // release the lease before all owned input has been neutralized.

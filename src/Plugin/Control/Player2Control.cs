@@ -12,13 +12,13 @@ namespace SousChef.Plugin.Control
 {
     // Replace only the existing P2 chef's logical inputs. No OS events, new
     // players, global lookup patches, menu bindings or P1 fields are modified.
-    internal sealed class Player2Control : IDisposable
+    internal sealed partial class Player2Control : IDisposable
     {
         private readonly NavigationActions navigation;
-        private readonly InteractionActions interactions;
-        private readonly LogisticsActions logistics;
+        private InteractionActions interactions;
+        private LogisticsActions logistics;
         private readonly ThrowOptions throwOptions;
-        private readonly TaskActions tasks;
+        private TaskActions tasks;
         private bool lastWasTask;
         private readonly ReceiptBook receipts = new ReceiptBook();
         private ReceiptBook.Entry activeReceipt;
@@ -191,7 +191,8 @@ namespace SousChef.Plugin.Control
             if (logistics.Run.Running && lease.Owner(Now) != logistics.Run.Owner) logistics.Cancel("control_lost");
             if (tasks.Run.Running && lease.Owner(Now) != tasks.Run.Owner) tasks.Cancel("control_lost");
             server.Pump(Handle);
-            if (reason == null) { navigation.Tick(target); interactions.Tick(); logistics.Tick(); tasks.Tick(); }
+            CompleteSuspension();
+            if (reason == null) { navigation.Tick(target); if (tasks.Run.Running) tasks.TickChild(); else interactions.Tick(); logistics.Tick(); tasks.Tick(); }
             else if (observationAllowed) navigation.WarmCatalogue(target);
             if (observationAllowed) navigation.WarmGroundedMap(target);
             // The browser may be in front while the catalogue is observed.
@@ -298,10 +299,14 @@ namespace SousChef.Plugin.Control
                     return Json.Object("type", "reply", "id", command.Id, "ok", true, "control", Describe(client), "receipt", receipt.Describe());
                 }
             }
-            if (command.Operation == "stop" || command.Operation == "cancel")
+            if (command.Operation == "stop" || command.Operation == "cancel" || command.Operation == "cancel_current")
             {
-                dispatchGeneration++; Revoke("stopped"); navigation.Stop("stopped"); CaptureReceipt();
+                dispatchGeneration++; Revoke("stopped", command.Operation == "cancel_current"); navigation.Stop("stopped"); CaptureReceipt();
                 if (receipt != null) { receipt.State = "succeeded"; receipt.Reason = "stopped"; }
+            }
+            else if (command.Operation == "suspend" || command.Operation == "resume" || command.Operation == "forget_task")
+            {
+                HandleTaskSuspension(client, command, receipt);
             }
             else if (command.Operation == "actions")
             {
@@ -371,7 +376,7 @@ namespace SousChef.Plugin.Control
             if (receipt != null && command.Operation != "cancel")
             {
                 if (error != null) { receipt.State = "rejected"; receipt.Reason = error; }
-                else { activeReceipt = receipt; receiptOperation = command.Operation; CaptureReceipt(); }
+                else if (command.Operation != "suspend" && command.Operation != "resume" && command.Operation != "forget_task") { activeReceipt = receipt; receiptOperation = command.Operation; CaptureReceipt(); }
             }
             return Json.Object("type", "reply", "id", command.Id, "ok", receipt != null || error == null,
                 "error", error, "control", Describe(client), "availableActions", actions, "receipt", receipt == null ? null : receipt.Describe());
@@ -380,7 +385,7 @@ namespace SousChef.Plugin.Control
         public object Describe(int client)
         {
             int owner = lease.Owner(Now);
-            return Json.Object("kitchenEpoch", kitchenEpoch, "dispatchGeneration", dispatchGeneration, "receiptProtocolVersion", 1, "player", 2, "navigation", navigation.Describe(), "action", lastWasTask ? tasks.Describe() : lastWasLogistics ? logistics.Describe() : interactions.Describe(), "available", unavailable == null, "reason", unavailable,
+            return Json.Object("kitchenEpoch", kitchenEpoch, "dispatchGeneration", dispatchGeneration, "receiptProtocolVersion", 1, "taskSuspensionVersion", 1, "player", 2, "navigation", navigation.Describe(), "action", lastWasTask ? tasks.Describe() : lastWasLogistics ? logistics.Describe() : interactions.Describe(), "available", unavailable == null, "reason", unavailable,
                 "roundId", localRound ? (object)roundSequence : null,
                 "worker", WorkerHost.Current == null ? Json.Object("state", "disabled") : Json.Object("state", WorkerHost.Current.Ready ? "ready" : "fallback", "pid", WorkerHost.Current.ProcessId, "error", WorkerHost.Current.Error, "encodedMessages", WorkerHost.Current.EncodedMessages, "throwBatches", WorkerHost.Current.Flights == null ? 0L : WorkerHost.Current.Flights.CompletedBatches),
                 "claimed", owner != 0, "ownedByYou", client != 0 && owner == client, "suspended", suspendedAt >= 0,
@@ -520,7 +525,7 @@ namespace SousChef.Plugin.Control
             if (scheme.m_dashButton == bridgeDash) scheme.m_dashButton = oldDash;
             scheme = null;
         }
-        private void Revoke(string reason) { suspendedAt = -1; tasks.Cancel(reason); logistics.Cancel(reason); interactions.Cancel(reason); if (navigation.Action.State == "navigating") navigation.Stop(reason); lease.Revoke(reason); Restore(); }
+        private void Revoke(string reason, bool preserveTasks = false) { if (!preserveTasks) ClearSuspendedTasks(reason); suspendedAt = -1; tasks.Cancel(reason); logistics.Cancel(reason); interactions.Cancel(reason); if (navigation.Action.State == "navigating") navigation.Stop(reason); lease.Revoke(reason); Restore(); }
         public void Dispose()
         {
             disposed = true;

@@ -1244,6 +1244,26 @@ internal static partial class Program
         int ends=ClientMessenger.Ends;w.Skills.Cancel("stopped");
         Check(w.Skills.Run.State=="cancelled" && ClientMessenger.Ends==ends+1 && w.Chef.GetCurrentlyInteractingForTest()==null,"stop ends only the owned sticky native interaction");
 
+        w=new World();raw=w.Ingredient("raw");cooked=w.Ingredient("chopped");
+        raw.Add(new ServerWorkableItem());raw.Add(new WorkableItem {Next=cooked});
+        w.Target.GetComponent<ServerAttachStation>().Item=raw;
+        w.Start("work_at","work_complete",ms:100000);w.Arrive();
+        Check(w.Skills.SuspendTask(),"mid-chop work can release input immediately");
+        Check(w.Inputs.Last()==0 && w.Skills.Run.Running,"suspension neutralizes input and retains the work request");
+        Time.realtimeSinceStartup+=20;
+        w.Chef.transform.position=new Vector3(3,0,0);
+        w.Skills.ResumeTask(20);
+        Check(w.Skills.Run.Running && w.Skills.Run.Phase=="navigating","resumed chopping reapproaches its original board");
+        w.Arrive();
+        Check(w.Inputs.Last()==2,"resumed chopping holds use again");
+        w.Target.GetComponent<ServerAttachStation>().Item=cooked;w.Tick();
+        Check(w.Skills.Run.State=="succeeded","interrupted chopping completes from the original ingredient outcome");
+
+        w=new World();var cargo=w.Ingredient("fish");w.Hold(cargo);w.Start("place_at");w.Arrive();w.Verify();
+        Check(!w.Skills.SuspendTask(),"a committed placement settles before suspension");
+        w.Hold(null);w.Target.GetComponent<ServerAttachStation>().Item=cargo;w.Verify();
+        Check(w.Skills.SuspendTask() && w.Skills.Run.State=="succeeded","settled placement retains completion and can be suspended without replay");
+
         w=new World();raw=w.Ingredient("raw");cooked=w.Ingredient("chopped");raw.Add(new ServerWorkableItem());raw.Add(new WorkableItem {Next=cooked});
         w.Target.GetComponent<ServerAttachStation>().Item=raw;w.Start("work_at","work_complete");w.Arrive();
         w.Target.GetComponent<ServerAttachStation>().Item=cooked;w.Tick();

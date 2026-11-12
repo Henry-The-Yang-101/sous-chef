@@ -171,3 +171,10 @@ playground responses without any network code. Its kitchen is explicitly synthet
 The corpus runner, `scripts/jev_evaluate.py`, audits expected outcomes against
 native contracts and catalogs. It scores explicit rejection separately from
 clarification.
+
+Bridge 0.8.13 adds finite urgent plans through `interrupt`. With this bridge,
+“right now”, “immediately” and urgency can suspend the current task and run the
+new plan first. The original task resumes afterward, including chopping already
+in progress. The full-plan verification includes this queue effect. See
+[scheduler interruption](scheduler.md#urgent-task-interruption) for native
+suspension, item recovery and restart behavior.

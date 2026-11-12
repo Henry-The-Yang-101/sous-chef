@@ -48,10 +48,31 @@ class ActionClient(ControlClient):
         self._request('receipt', request_id)
         return self.last_response['receipt']
 
-    def cancel(self, request_id, epoch, generation):
+    def cancel(self, request_id, epoch, generation, *, preserve_tasks=False):
         self._context(epoch, generation)
-        self._request('cancel', epoch, generation, request_id=request_id)
+        self._request('cancel_current' if preserve_tasks else 'cancel', epoch, generation, request_id=request_id)
         return self.last_response['receipt']
+
+    def forget_task(self, request_id, epoch, generation, task_id):
+        self._context(epoch, generation)
+        self._context(task_id, 0)
+        self._request('forget_task', epoch, generation, task_id, request_id=request_id)
+        return self.last_response['receipt']
+
+    def suspend_task(self, request_id, epoch, generation, task_id):
+        self._context(epoch, generation)
+        self._context(task_id, 0)
+        self._request('suspend', epoch, generation, task_id, request_id=request_id)
+        return self.last_response['receipt']
+
+    def resume_task(self, request_id, epoch, generation, task_id):
+        self._context(epoch, generation)
+        self._context(task_id, 0)
+        self._request('resume', epoch, generation, task_id, request_id=request_id)
+        receipt = self.last_response['receipt']
+        if receipt['state'] != 'succeeded':
+            raise ControlError('resume_rejected:' + str(receipt.get('reason')))
+        return self.receipt(task_id)
 
     def run_task(self, action, repetitions=1, *, items=None, player_id=1, order_id=None, bases=None, components=None, equipment=None, target_id=None, desired_state=None):
         """Run one task. None means until Stop; assembly accepts exactly one ticket."""

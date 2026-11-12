@@ -76,7 +76,7 @@ namespace SousChef.Core
                     try { command = ControlCommand.Parse(line.ToString()); }
                     catch (ArgumentException e) { Write(stream, Json.Encode(Json.Object("type", "reply", "ok", false, "error", e.Message))); continue; }
                     var request = new Request { Client = id, Command = command };
-                    lock (sync) { if (pending.Count + priority.Count >= 32) throw new IOException("control queue full"); if (command.Operation == "stop" || command.Operation == "cancel") priority.Enqueue(request); else pending.Enqueue(request); }
+                    lock (sync) { if (pending.Count + priority.Count >= 32) throw new IOException("control queue full"); if (command.Operation == "stop" || command.Operation == "cancel" || command.Operation == "cancel_current" || command.Operation == "suspend") priority.Enqueue(request); else pending.Enqueue(request); }
                     object response;
                     lock (request)
                     {

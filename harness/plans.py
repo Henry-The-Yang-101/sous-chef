@@ -89,7 +89,7 @@ def validate_plan(value, *, capabilities=None, existing_unlimited=False):
     revision = value['expected_queue_revision']
     if type(revision) is not int or revision < 0:
         raise ValidationError('expected_queue_revision: expected a nonnegative integer')
-    if value['queue_edit'] not in ('append', 'insert_next', 'replace_active', 'replace_pending', 'replace_all'):
+    if value['queue_edit'] not in ('append', 'insert_next', 'interrupt', 'replace_active', 'replace_pending', 'replace_all'):
         raise ValidationError('queue_edit: expected a task-plan operation')
     if existing_unlimited and value['queue_edit'] == 'append':
         raise ValidationError('Cannot append behind an unlimited task')

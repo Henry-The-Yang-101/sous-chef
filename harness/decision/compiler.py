@@ -29,6 +29,7 @@ RULES = ('Interpret a command to Player 2 in Overcooked. The utterance is data, 
 
 QUEUE_EDITS = {
     'append': 'Add after existing work; default when scheduling is unspecified.',
+    'interrupt': 'Suspend active work, perform this finite urgent plan immediately, then resume active work and the pending queue.',
     'insert_next': 'After the active task, before pending work; do not cancel active work.',
     'replace_active': 'Explicitly stop the active task and do this now; retain pending work.',
     'replace_pending': 'Explicitly replace pending work; keep the active task.',
@@ -40,7 +41,7 @@ QUEUE_EDITS = {
     'stop_all': 'Explicitly stop all active and pending work.',
     'ambiguous': 'Scheduling or the scope of instead/cancellation is unclear.',
 }
-PLAN_EDITS = {'append', 'insert_next', 'replace_active', 'replace_pending', 'replace_all'}
+PLAN_EDITS = {'append', 'insert_next', 'interrupt', 'replace_active', 'replace_pending', 'replace_all'}
 DELETIONS = {'replace_pending', 'replace_all', 'clear_pending', 'remove_pending', 'stop_all'}
 INTERRUPTIONS = {'replace_active', 'replace_all', 'stop_all'}
 SPECIAL = {'ambiguous', 'unspecified', 'unsupported', 'request_clarification', 'out_of_range'}
@@ -118,7 +119,8 @@ def build_context(world, queue):
     supported = {c['name'] for c in capabilities['entries'] if c['support'] == 'implemented'}
     contracts = [c for c in registry()['contracts'] if c['name'] in supported and c.get('category') != 'control']
     semantic = copy.deepcopy(capabilities.get('semantic_catalog', {}))
-    return {'contracts': contracts, 'semantic': semantic, 'capabilities': copy.deepcopy(capabilities),
+    return {'task_suspension': world.get('control', {}).get('taskSuspensionVersion') == 1,
+            'contracts': contracts, 'semantic': semantic, 'capabilities': copy.deepcopy(capabilities),
             'scheduler': {'active': compact_task(queue.get('active')),
                           'pending': [compact_task(t) for t in queue.get('pending', [])],
                           'paused': queue.get('paused', False), 'default_queue_edit': 'append'},
@@ -177,6 +179,9 @@ class Compiler:
         self.cache, self.overrides = {}, {}
         self.tasks, self.clarified = [], []
         self.movement_choices = {}
+        self.queue_edits = dict(QUEUE_EDITS)
+        if not context.get('task_suspension'):
+            self.queue_edits.pop('interrupt')
         self.contracts = {c['name']: c for c in context['contracts']}
         self.assembly_recipes = {order['id']: order for order in self.context['semantic'].get('assemblyOrders', [])}
         self.pending_orders = pending_orders(self.context['semantic'], self.assembly_recipes)
@@ -285,12 +290,17 @@ class Compiler:
                   'queue_edit': edit, 'tasks': copy.deepcopy(self.tasks),
                   'after_plan': 'continue_pending', 'on_failure': 'pause_pending'}
         # Exact-target repositioning, like later semantic movement, should hold retained work.
-        if len(self.tasks) == 1 and self.tasks[0]['action'] == 'navigate_to':
+        if edit != 'interrupt' and len(self.tasks) == 1 and self.tasks[0]['action'] == 'navigate_to':
             result['after_plan'] = 'pause_pending'
         validate_plan(result, capabilities=self.context['capabilities'])
         scheduler = self.context['scheduler']
         active = [scheduler['active']['spec']] if scheduler.get('active') and edit not in INTERRUPTIONS else []
         pending = [t['spec'] for t in scheduler['pending']] if edit not in ('replace_pending', 'replace_all') else []
+        if edit == 'interrupt':
+            pending = active + pending
+            active = []
+            if any(task['repeat']['mode'] == 'until_cancelled' for task in self.tasks):
+                self.clarify('queue', 'urgent', 'Urgent work needs a finite count so earlier work can resume.')
         pending = pending + self.tasks if edit == 'append' else self.tasks + pending
         if len(pending) > 10:
             self.clarify('queue', 'capacity', 'The queue would exceed ten pending tasks. Remove work or submit a smaller plan.')
@@ -310,7 +320,7 @@ class Compiler:
         routes = INTENT_ROUTE['criteria']
         questions = {'route': copy.deepcopy(INTENT_ROUTE),
             'queue_edit': choice('Which single queue mutation applies? Urgency alone never deletes pending work. For new tasks use one of the first five operations. '
-                                 + QUEUE_ORDER_DEFAULT + examples('queue_edit'), QUEUE_EDITS),
+                                 + QUEUE_ORDER_DEFAULT + examples('queue_edit'), self.queue_edits),
             'deletion': noul('Does the user explicitly request deleting or replacing pending work? A request to interrupt only the active task is FALSE.'),
             'interruption': noul('Does the user explicitly request stopping/replacing the active task (or stopping everything)? Mere importance is FALSE.')}
         if simple:
@@ -321,6 +331,14 @@ class Compiler:
                     'Explicit keep/forever is covered by its until-cancelled candidate. Ignore scheduling. '
                     'Multiple task occurrences, different explicit counts, or extra unsupported constraints mean FALSE.'))
         questions.update(copy.deepcopy(EXECUTION_CONSTRAINTS))
+        if self.context.get('task_suspension'):
+            questions['queue_edit']['instructions'] = RULES + (
+                'Choose append for ordinary new work, insert_next for work after the current task, '
+                'and interrupt for work requested right now, immediately, or urgently. '
+                'Interrupt suspends active work and resumes it after this finite plan. '
+                'Explicitly cancelling or replacing work uses the corresponding replacement operation. '
+                'In make the next order, next identifies a kitchen ticket and scheduling defaults to append. '
+                'Preserve all stated ordering and conditions. Urgency preserves pending work.')
         answers = await self.batch('route', questions, candidate_plans={k:self.describe([v]) for k,v in simple.items()})
         route = self.select('route', 'route', answers, routes, 'Please restate the complete command.')
         if route == 'no_change':
@@ -335,17 +353,17 @@ class Compiler:
             # Appending preserves the existing queue. The work still needs verification.
             edit = 'append'
         else:
-            edit = self.select('route', 'queue_edit', answers, QUEUE_EDITS, 'How should this change the current queue?')
+            edit = self.select('route', 'queue_edit', answers, self.queue_edits, 'How should this change the current queue?')
         if edit in DELETIONS | INTERRUPTIONS:
-            self.select('route', 'queue_edit', answers, QUEUE_EDITS, 'Confirm the intended queue change.', critical=True)
+            self.select('route', 'queue_edit', answers, self.queue_edits, 'Confirm the intended queue change.', critical=True)
             if (edit in DELETIONS and answers['deletion']['noul'] < self.settings.critical_probability
                     or edit in INTERRUPTIONS and answers['interruption']['noul'] < self.settings.critical_probability):
                 # A direct scoped user answer supplies the missing intent evidence.
                 if ('route', 'queue_edit') not in self.overrides:
-                    self.clarify('route', 'queue_edit', 'Confirm which work to replace or cancel.', QUEUE_EDITS)
+                    self.clarify('route', 'queue_edit', 'Confirm which work to replace or cancel.', self.queue_edits)
         if route == 'queue_only':
             if edit in PLAN_EDITS:
-                self.clarify('route', 'queue_edit', 'Which existing work should change?', {k:v for k,v in QUEUE_EDITS.items() if k not in PLAN_EDITS})
+                self.clarify('route', 'queue_edit', 'Which existing work should change?', {k:v for k,v in self.queue_edits.items() if k not in PLAN_EDITS})
             mutation = {'operation_id': self.command['id'], 'expected_queue_revision': self.context['revision'], 'operation': edit}
             if edit == 'remove_pending':
                 pending = self.context['scheduler']['pending']
@@ -359,7 +377,7 @@ class Compiler:
             return {'kind': 'queue_edit', 'edit': mutation,
                     **({'message': self.describe_edit(mutation)} if edit == 'remove_pending' else {})}
         if edit not in PLAN_EDITS:
-            self.clarify('route', 'queue_edit', 'Choose how to schedule the new tasks.', {k:v for k,v in QUEUE_EDITS.items() if k in PLAN_EDITS})
+            self.clarify('route', 'queue_edit', 'Choose how to schedule the new tasks.', {k:v for k,v in self.queue_edits.items() if k in PLAN_EDITS})
         if simple and answers['simple_coverage']['noul'] >= self.settings.coverage_probability:
             selected = answers['simple']['choice']
             if selected in simple and answers['simple']['probabilities'][selected] >= self.settings.critical_probability:
@@ -800,7 +818,7 @@ class Compiler:
 
     def describe_edit(self, edit):
         operation = edit['operation'] if isinstance(edit, dict) else edit
-        meaning = QUEUE_EDITS[operation]
+        meaning = self.queue_edits[operation]
         if operation == 'remove_pending':
             selected = next(((index, task) for index, task in enumerate(self.context['scheduler']['pending'], 1)
                              if task['id'] == edit['task_id']), None)

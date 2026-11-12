@@ -110,3 +110,35 @@ replace_pending and replace_all. `/api/queue` takes `edit` with `operation_id`,
 all pending `task_ids` exactly once. Other edits are clear_pending, pause_pending,
 resume_pending and skip_active. The Stop endpoint remains separate and does not
 require a current queue revision. Native task clicks no longer use `/api/task`.
+
+## Urgent task interruption
+
+Bridge 0.8.13 advertises `taskSuspensionVersion: 1` in control status. Plans may
+use `queue_edit: interrupt` for finite urgent work. The scheduler suspends the
+active native task, places the urgent plan before it, then resumes the same
+native request before continuing the original pending sequence. Unlimited
+assignments can be suspended this way. Native actions outside the task executor
+currently require their existing replacement operation.
+
+Suspension retains the task iterator, repetition counts, child observations and
+original cargo identity in the running game. Chopping and washing release their
+owned interaction immediately and reapproach the same workstation on resume.
+Already committed pickup, placement and throw actions finish observing their
+outcome before suspension completes. Native teleport transitions also finish
+before handing control to urgent work. Resumption parks unrelated cargo and
+recovers the original carried object. Missing or destroyed cargo produces a
+visible blocked result. Human changes and expired tickets remain subject to
+normal native validation.
+
+Fenced `suspend ID EPOCH GENERATION TASK_ID` and
+`resume ID EPOCH GENERATION TASK_ID` operations are idempotent. Suspension
+advances the dispatch generation after relinquishing input. The queue journals
+the barrier and retained request before sending it, including recovery after a
+harness restart. `cancel_current` retains other suspended tasks for scoped
+replacement, while Stop cancels all work. Removed suspended entries are released
+using `forget_task`. Game and kitchen changes invalidate suspended work.
+
+The Jev compiler offers interruption when the connected bridge advertises this
+support. Requests such as “deliver the order right now” select interruption.
+Ordinary requests append, “do this next” waits for the current task, and explicit
+cancellation retains its replacement meaning. Preview acceptance still applies.

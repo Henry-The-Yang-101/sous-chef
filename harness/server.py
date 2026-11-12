@@ -296,14 +296,19 @@ class HarnessBridge:
                 raise HarnessError('Bridge disconnected; command was not retried') from error
 
     def queue_io(self, operation, entry):
-        if operation == 'cancel':
+        if operation in ('cancel', 'suspend'):
             # A separate socket bypasses a normal action/catalog request waiting
             # on I/O. Native priority and fences decide the actual ordering.
             with self.factory() as client:
                 ctx = entry['context']
                 if client.hello['sessionId'] != ctx['session']:
                     raise HarnessError('Bridge session changed during cancellation')
-                receipt = client.cancel(entry['id'], ctx['epoch'], ctx['fence'])
+                if operation == 'suspend':
+                    receipt = client.suspend_task(entry['id'], ctx['epoch'], ctx['fence'], entry['requestId'])
+                elif entry.get('preserveTasks') and self.value['control'].get('taskSuspensionVersion'):
+                    receipt = client.cancel(entry['id'], ctx['epoch'], ctx['fence'], preserve_tasks=True)
+                else:
+                    receipt = client.cancel(entry['id'], ctx['epoch'], ctx['fence'])
                 self._publish({}, client.last_response['control'], client.hello)
                 return receipt
         with self.io_lock:
@@ -312,7 +317,11 @@ class HarnessBridge:
                 ctx = entry['context']
                 if client.hello['sessionId'] != ctx['session']:
                     raise HarnessError('Bridge session changed; dispatch was withheld')
-                if operation == 'receipt':
+                if operation == 'forget':
+                    receipt = client.forget_task(entry['id'], ctx['epoch'], ctx['fence'], entry['requestId'])
+                elif operation == 'resume':
+                    receipt = client.resume_task(entry['resumeId'], ctx['epoch'], ctx['fence'], entry['requestId'])
+                elif operation == 'receipt':
                     receipt = client.receipt(entry['requestId'])
                 else:
                     spec = entry['spec']

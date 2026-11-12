@@ -90,6 +90,36 @@ namespace SousChef.Plugin.Actions
             nextRecoveryAttempt += seconds; if (dropStableSince >= 0) dropStableSince += seconds;
             lastTick = Time.realtimeSinceStartup;
         }
+        // Preserve observation baselines across preemption. A committed button
+        // edge must settle before another job can change its observed cargo.
+        public void AbandonSuspended(string reason)
+        {
+            if (interactable != null && triggered != null) interactable.UnregisterTriggerCallbacks(triggered);
+            if (launchObserver != null && launchCallback != null) launchObserver.UnregisterThrowCallback(launchCallback);
+            interactable = null; triggered = null; launchObserver = null; launchCallback = null;
+            throws.CancelPlanning(); Run.Finish("cancelled", reason);
+        }
+        public bool SuspendTask()
+        {
+            if (!Run.Running) return true;
+            if (pressed && command.Operation != "work_at") return false;
+            if (command.Operation == "work_at")
+                ActionObservations.EndOwnedInteraction(chef, target);
+            input(0);
+            if (navigation.Action.State == "navigating") navigation.Stop("task_suspended");
+            return true;
+        }
+        public void ResumeTask(float seconds)
+        {
+            ResumeAfterPause(seconds);
+            if (!Run.Running) return;
+            // Reapproach from the chef's new position, retaining the original
+            // work item, progress baseline and all transfer observations.
+            pressed = false;
+            string error = navigation.Start(chef, Run.Owner, WalkDestination(), true);
+            if (error != null) RecoverNavigation(error);
+            else SetPhase("navigating");
+        }
         private string WalkDestination()
         { return command.Operation == "pick_up" ? navigation.RegisterItem(ActionObservations.PickupApproach(target)) : command.Destination; }
         public static string[] Offered(PlayerControls chef, GameObject go)
