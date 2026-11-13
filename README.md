@@ -1,8 +1,8 @@
 # Sous Chef
 
-Sous Chef gives you a teammate in Overcooked! 2 local co-op. You play one chef
-while Sous Chef controls Player 2. Ask it to chop ingredients, wash plates, or
-serve dishes using the browser controls or a typed or spoken request.
+Sous Chef is a voice controlled Jev-based AI agent that can play as your assistant chef. Ask it to prepare and toss you ingredients, assemble dishes, deliver dishes, wash dishes, etc. 
+
+Currently in assistant mode only, automatic multi-agent mode coming soon...
 
 ## Architecture
 
