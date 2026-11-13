@@ -98,9 +98,12 @@ class ThrowAuditTests(unittest.TestCase):
         self.assertFalse(audit.container_transfer(snap(0), snap(1, ingredient='Meat'), cargo, 1, 'SushiRice'))
         self.assertFalse(audit.container_transfer(snap(0), snap(1), cargo, 1, 'Meat'))
 
-    def test_fixture_names_are_unique_and_keep_functional_success_expectations(self):
+    def test_fixtures_are_unique_and_keep_functional_success_expectations(self):
         cases = json.loads((Path(__file__).parent / 'actions/native-throw-cases.json').read_text())
         self.assertEqual(len({case['name'] for case in cases}), len(cases))
+        scenarios = [json.dumps({key: value for key, value in case.items() if key != 'name'}, sort_keys=True)
+                     for case in cases]
+        self.assertEqual(len(set(scenarios)), len(cases))
         ordinary = [case for case in cases if case['name'].startswith('cheese-')]
         self.assertEqual(len(ordinary), 4)
         self.assertTrue(all(case['expected'] == 'throw_received' for case in ordinary))

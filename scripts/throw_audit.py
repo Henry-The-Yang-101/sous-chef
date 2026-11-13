@@ -377,9 +377,17 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--runtime', required=True, type=Path)
     parser.add_argument('--cases', required=True, type=Path)
+    parser.add_argument('--case', action='append', help='Run only this named case. Repeat to select multiple cases.')
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument('--timeout', type=float, default=35)
     args = parser.parse_args()
+    cases = json.loads(args.cases.read_text())
+    if args.case:
+        selected = set(args.case)
+        unknown = selected - {case['name'] for case in cases}
+        if unknown:
+            parser.error('Unknown cases: ' + ', '.join(sorted(unknown)))
+        cases = [case for case in cases if case['name'] in selected]
     args.runtime = args.runtime.resolve()
     args.output = args.output.resolve()
     if args.runtime == sim.DEFAULT_RUNTIME.resolve() or not sim.is_running(args.runtime):
@@ -389,7 +397,7 @@ def main():
     process = json.loads((args.runtime / 'process.json').read_text())
     dll = args.runtime / 'BepInEx/plugins/SousChef.Bridge.dll'
     report = {'process': process, 'loadedBridgeSha256': hashlib.sha256(dll.read_bytes()).hexdigest(), 'results': []}
-    for index, case in enumerate(json.loads(args.cases.read_text()), 1):
+    for index, case in enumerate(cases, 1):
         result = run_case(args, case, index)
         report['results'].append(result)
         write(args.output / 'report.json', report)

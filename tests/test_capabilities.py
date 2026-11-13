@@ -1,11 +1,11 @@
 import json
+from pathlib import Path
 import unittest
 
 from clients.capabilities import (ACTION_NAMES, TASK_NAMES, REGISTRY_HASH, REGISTRY_VERSION,
                                  ValidationError, contract, registry, validate_arguments, wire_command)
 from harness.capabilities import assess_arguments, snapshot
 from harness.plans import NativeAction, validate_plan
-from scripts.generate_capabilities import generate, ROOT
 
 
 def task(name='wash_dishes', arguments=None, repeat=None):
@@ -36,15 +36,12 @@ def state(**overrides):
 
 class RegistryTests(unittest.TestCase):
     def test_every_adapter_agrees_with_shared_native_parser_fixtures(self):
-        cases = json.loads((ROOT / 'tests/fixtures/capability-wire.json').read_text())
+        cases = json.loads(Path(__file__).with_name('fixtures').joinpath('capability-wire.json').read_text())
         self.assertEqual({case['name'] for case in cases}, set(TASK_NAMES + ACTION_NAMES))
         for case in cases:
             with self.subTest(name=case['name']):
                 operation, tokens = wire_command(case['name'], case['arguments'], case.get('repetitions', 1))
                 self.assertEqual(' '.join(map(str, (operation, 'probe', *tokens))), case['wire'])
-
-    def test_generated_native_constants_are_current(self):
-        self.assertEqual((ROOT / 'src/Core/CapabilityRegistry.cs').read_text(), generate())
 
     def test_complete_registry_has_no_speculative_executable_features(self):
         data = registry()

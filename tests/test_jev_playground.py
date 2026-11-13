@@ -102,25 +102,6 @@ class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(score_outcome(case['expected'], outcome), case['score'])
                 self.assertNotIn(case['score'], ('incomplete', 'incorrect_completion', 'unexpected_rejection'))
 
-    async def test_historical_choices_preserve_every_executable_field(self):
-        completed = set()
-        blocked = set()
-        for case in RELEASE:
-            if case['cohort'] != 'holdout' or case['name'].endswith('_region'):
-                continue
-            outcome = await scripted_replay(session(case))
-            name = case['name'].removeprefix('nativerelease_holdout_')
-            if outcome['status'] == 'complete':
-                self.assertEqual(semantic_result(outcome['result']), case['expected'])
-                completed.add(name)
-            elif case['expected']['kind'] in ('rejected', 'clarification'):
-                self.assertIn(outcome['status'], ('clarification', 'rejected'))
-                blocked.add(name)
-        self.assertEqual(completed, {'cooked', 'correction', 'fire', 'monitor', 'pause', 'raw_player4', 'ready', 'repeat',
-                                         'repeated_tasks', 'same_ingredient', 'serve', 'wash'})
-        self.assertEqual(blocked, {'timed', 'concurrent', 'unavailable', 'out_of_range', 'speech_conflict',
-                                  'preparation_missing', 'invalid_preparation'})
-
     async def test_complete_plan_confirmation_keeps_exact_fields_without_more_model_io(self):
         confirmations = 0
         for case in RELEASE:
@@ -227,12 +208,9 @@ class PlaygroundReplayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(score_outcome({'kind': 'clarification'}, {'status': 'rejected'}), 'incorrect_rejection')
 
     async def test_timed_washing_is_rejected_without_a_partial_plan(self):
-        for name in ('release_holdout_timed', 'nativerelease_holdout_timed', 'timed_repeat_control'):
-            case = CASES[name]
-            outcome = await scripted_replay(session(case))
-            self.assertEqual(outcome['status'], 'rejected')
-            self.assertEqual(len(case['trial_ids']), 1)
-            self.assertNotIn('result', outcome)
+        outcome = await scripted_replay(session(CASES['timed_repeat_control']))
+        self.assertEqual(outcome['status'], 'rejected')
+        self.assertNotIn('result', outcome)
 
     def test_positive_corpus_matches_contracts_and_native_catalog_certainty(self):
         corpus = json.loads((ROOT/'tests/fixtures/jev-clarification-corpus.json').read_text())

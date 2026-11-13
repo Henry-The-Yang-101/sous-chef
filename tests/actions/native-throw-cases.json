@@ -326,5 +326,184 @@
     "target": 1,
     "expected": "native_throw_observed",
     "expectRetained": false
+  },
+  {
+    "name": "chocolate-counter",
+    "level": "s_wizard_school_3_4",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Chocolate"
+      }
+    ],
+    "operation": "throw_to",
+    "target": "countertop_01_standard_gold (13)",
+    "expected": "throw_received"
+  },
+  {
+    "name": "flour-counter",
+    "level": "s_wizard_school_3_4",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Flour"
+      }
+    ],
+    "operation": "throw_to",
+    "target": "countertop_01_standard_gold (13)",
+    "expected": "throw_received"
+  },
+  {
+    "name": "chocolate-player-outside-catch-scan",
+    "level": "s_wizard_school_3_4",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Chocolate"
+      }
+    ],
+    "operation": "throw_to_player",
+    "target": 1,
+    "expected": "no_reachable_throw_position",
+    "expectationReason": "No supported release stance in this fixture satisfies the receiver's native forward PI/2 catch scan.",
+    "expectOffered": false
+  },
+  {
+    "name": "flour-player-outside-catch-scan",
+    "level": "s_wizard_school_3_4",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Flour"
+      }
+    ],
+    "operation": "throw_to_player",
+    "target": 1,
+    "expected": "no_reachable_throw_position",
+    "expectationReason": "No supported release stance in this fixture satisfies the receiver's native forward PI/2 catch scan.",
+    "expectOffered": false
+  },
+  {
+    "name": "airborne-stop",
+    "level": "s_wizard_5_5",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Cheese_Raw"
+      }
+    ],
+    "operation": "throw_to_player",
+    "target": 1,
+    "expected": "stopped",
+    "cancelAt": "flight",
+    "expectRetained": false
+  },
+  {
+    "name": "airborne-disconnect",
+    "level": "s_wizard_5_5",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Cheese_Raw"
+      }
+    ],
+    "operation": "throw_to_player",
+    "target": 1,
+    "expected": "control_lost",
+    "cancelAt": "flight",
+    "expectRetained": false,
+    "cancelMode": "disconnect"
+  },
+  {
+    "name": "busy-player",
+    "level": "s_wizard_5_5",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Cheese_Raw"
+      },
+      {
+        "operation": "throw_to_player",
+        "target": 1
+      },
+      {
+        "operation": "pick_up",
+        "target": "Meat"
+      }
+    ],
+    "operation": "throw_to_player",
+    "target": 1,
+    "expected": "player_cannot_catch",
+    "expectOffered": false
+  },
+  {
+    "name": "flour-incompatible-receiver",
+    "level": "s_wizard_school_3_4",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Flour"
+      }
+    ],
+    "operation": "throw_to",
+    "target": "countertop_01_standard_gold (11)",
+    "expected": "target_cannot_catch",
+    "expectationReason": "The selected counter has a native receiver that cannot catch this ingredient."
+  },
+  {
+    "name": "flour-constrained-counter",
+    "level": "s_wizard_school_3_4",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Flour"
+      }
+    ],
+    "operation": "throw_to",
+    "target": "countertop_01_standard_gold (14)",
+    "expected": [
+      "no_reachable_throw_position",
+      "throw_received"
+    ],
+    "expectationReason": "Either certify and deliver through the constrained geometry, or retain cargo; a released miss is a failure."
+  },
+  {
+    "name": "egg-player-outside-catch-scan",
+    "level": "s_wizard_school_3_4",
+    "fps": 60,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Egg"
+      }
+    ],
+    "operation": "throw_to_player",
+    "target": 1,
+    "expected": "no_reachable_throw_position",
+    "expectationReason": "No supported release stance in this fixture satisfies the receiver's native forward PI/2 catch scan.",
+    "expectOffered": false
+  },
+  {
+    "name": "lettuce-player-20",
+    "level": "s_wizard_5_5",
+    "fps": 20,
+    "setup": [
+      {
+        "operation": "pick_up",
+        "target": "Lettuce"
+      }
+    ],
+    "operation": "throw_to_player",
+    "target": 1,
+    "expected": "throw_received"
   }
 ]

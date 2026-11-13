@@ -8,12 +8,17 @@ from harness.voice.game_input import GamePushToTalk
 from harness.voice.service import VoiceService
 
 
-class GameVoiceInputTests(unittest.TestCase):
+class _VoiceTestCase(unittest.TestCase):
     def setUp(self):
         self.voice = VoiceService()
         self.addCleanup(self.voice.close)
         self.send = self.enterContext(patch.object(self.voice, '_send'))
         self.enterContext(patch.object(self.voice, '_ensure_helper'))
+
+
+class GameVoiceInputTests(_VoiceTestCase):
+    def setUp(self):
+        super().setUp()
         self.listener = self.enterContext(socket.socket())
         self.listener.bind(('127.0.0.1', 0))
         self.listener.listen()
@@ -86,6 +91,8 @@ class GameVoiceInputTests(unittest.TestCase):
         self.assertTrue(self.voice.snapshot()['muted'])
         self.assertEqual([call.args[0] for call in self.send.call_args_list], ['begin', 'arm', 'begin'])
 
+
+class VoiceServiceTests(_VoiceTestCase):
     def test_local_inspection_only_keeps_the_latest_finalized_turn(self):
         self.voice.command({'operation': 'arm_text', 'generation': self.voice.gate.generation}, 'browser')
         generation = self.voice.gate.generation
