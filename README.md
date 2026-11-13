@@ -19,7 +19,7 @@ flowchart LR
 
 - **Plugin.** A C# plugin runs inside the game via BepInEx. It reads the live
   kitchen state and sends inputs to Player 2.
-- **LLF scheduler.** Least Laxity First uses slack, the time until a deadline
+- **OS-inspired LLF task scheduler.** Least Laxity First uses slack, the time until a deadline
   minus the estimated work left. The scheduler favors ready tasks with less
   slack and can switch to prep work while food cooks.
 - **Programmatic pathfinding.** The navigator uses the game's physics to check
