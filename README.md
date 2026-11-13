@@ -1,6 +1,6 @@
 # Sous Chef
 
-Sous Chef is a voice controlled Jev-based AI agent that can play as your assistant chef. Ask it to prepare and toss you ingredients, assemble dishes, deliver dishes, wash dishes, etc. 
+Sous Chef is a voice controlled Jev-based AI agent that can play as your assistant chef. Ask it to prepare and toss you ingredients, assemble dishes, deliver dishes, wash dishes, etc.
 
 Currently in assistant mode only, automatic multi-agent mode coming soon...
 
@@ -16,6 +16,7 @@ flowchart LR
         B[Game bridge] --> S[LLF scheduler] --> N[Pathfinding and Player 2 inputs]
     end
 ```
+This architecture is far more effective, cheap, fast and reliable compared to using any LLM workflow. All of the intricacies for the agent's behaviour is programmed, not speculated by Jev. Jev is only used to make high level decisions on what should be done based on your voice input. Thus, on average, most Overcooked rounds using this agent costs less than $0.008, even with many voice commands, while being more than capable enough to be able to assist the human player with getting three stars on most levels.
 
 - **Plugin.** A C# plugin runs inside the game via BepInEx. It reads the live
   kitchen state and sends inputs to Player 2.
